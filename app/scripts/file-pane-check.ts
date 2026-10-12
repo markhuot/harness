@@ -26,6 +26,8 @@ mkdirSync(join(projectDir, "src"), { recursive: true });
 writeFileSync(join(projectDir, "src/app.ts"), lines.join("\n") + "\n");
 writeFileSync(join(projectDir, "src/clean.ts"), "export function clean() {\n  return 1;\n}\n");
 writeFileSync(join(projectDir, "src/long.ts"), Array.from({ length: 200 }, (_, i) => `const long${i + 1} = "row ${i + 1}";`).join("\n") + "\n");
+const crlf = Array.from({ length: 30 }, (_, i) => `const crlf${i + 1} = ${i + 1};`).join("\r\n") + "\r\n";
+writeFileSync(join(projectDir, "src/crlf.ts"), crlf);
 writeFileSync(join(projectDir, ".gitignore"), "debug.log\n");
 git("init", "-q", "-b", "main");
 git("add", ".");
@@ -59,7 +61,7 @@ try {
   const spec = [
     "Look at [app.ts:10-20](harness://file/src/app.ts#L10-L20) first,",
     "then [the tail](harness://file/src/app.ts#L100-L104), [long.ts:150-152](src/long.ts#L150-L152), [clean.ts](src/clean.ts#L2),",
-    "the log [debug.log](debug.log) and [a missing one](harness://file/nope.ts).",
+    "the log [debug.log](debug.log), [crlf.ts](src/crlf.ts) and [a missing one](harness://file/nope.ts).",
   ].join(" ");
   const ticket = await api<Ticket>("POST", "/tickets", { projectId: project.id, spec, driver: "dummy", start: false });
 
@@ -77,7 +79,7 @@ try {
   check("flipping the toggle sets saveOnBlur on the service", !!flipped);
   await api("PATCH", "/settings", { saveOnBlur: false });
   await go(`#/board/${project.id}/ticket/${ticket.key}`);
-  await until("the spec's file links render", () => js<number>(`document.querySelectorAll('.pane-ticket [data-testid="file-link"]').length`).then((n) => n >= 6 && n), 10000); // the dummy plan run may repeat them
+  await until("the spec's file links render", () => js<number>(`document.querySelectorAll('.pane-ticket [data-testid="file-link"]').length`).then((n) => n >= 7 && n), 10000); // the dummy plan run may repeat them
 
   const clickLink = (text: string) =>
     js<boolean>(`(() => { const a = [...document.querySelectorAll('.pane-ticket [data-testid="file-link"]')].find(e => e.textContent.includes(${JSON.stringify(text)})); a?.click(); return !!a; })()`);
@@ -125,7 +127,7 @@ try {
   check("the error offers Reload window", (await js<string>(`document.querySelector('[data-testid="file-retry"]')?.textContent ?? ""`)).includes("Reload window"));
   await js(`document.querySelector('[data-testid="file-retry"]').click()`);
   check("reloading restores the pane with the editor", !!(await until("editor after reload", () => js<boolean>(`!!document.querySelector('[data-testid="file-editor"] .cm-editor')`), 15000).catch(() => false)));
-  await until("spec links after reload", () => js<number>(`document.querySelectorAll('.pane-ticket [data-testid="file-link"]').length`).then((n) => n >= 6 && n), 10000);
+  await until("spec links after reload", () => js<number>(`document.querySelectorAll('.pane-ticket [data-testid="file-link"]').length`).then((n) => n >= 7 && n), 10000);
 
   // 1. A ranged link opens the file beside the ticket, highlighted and scrolled to, with no selection.
   check("clicked app.ts:10-20", await clickLink("app.ts:10-20"));
@@ -275,6 +277,60 @@ try {
   await shot("file-pane-diff-switched");
   await js(`harness.setTheme({ preference: ${JSON.stringify(theme)} })`);
   await until("theme restored", async () => (await bg())[2] === app1, 10000);
+
+  // 6c. Switching to the Diff tab never unmounts the editor: edits survive it, with no question asked.
+  await js(`document.querySelector('.file-tabs [data-tab="file"]').click()`);
+  await until("file tab", () => js<boolean>(`!!document.querySelector('[data-testid="file-editor"]') && !document.querySelector('.file-editor-slot').hidden`));
+  asked.length = 0;
+  await typeInEditor("// kept across tabs\n");
+  await until("dirty before the tab switch", dirty, 5000);
+  await js(`document.querySelector('.file-tabs [data-tab="diff"]').click()`);
+  await until("diff shows with unsaved edits", () => exists('[data-testid="file-diff"] .cm-mergeView'));
+  check("the Diff tab doesn't ask about unsaved edits", asked.length === 0, asked.join("|"));
+  check("the editor stays mounted (hidden) under the Diff tab, still dirty", (await exists('[data-testid="file-editor"]')) && (await dirty()) && (await js<boolean>(`document.querySelector('.file-editor-slot').hidden`)));
+  await js(`document.querySelector('.file-tabs [data-tab="file"]').click()`);
+  check("back on the File tab the edits are still there", (await editorDoc()).startsWith("// kept across tabs\n") && (await dirty()));
+
+  // 6d. A refetch that fails keeps the editor and its edits, with a banner; the next good one clears it.
+  await app.cdp("Network.setBlockedURLs", { urls: ["*file?path=*"] });
+  await js(`window.dispatchEvent(new Event("focus"))`);
+  const stale = await until("refresh failure banner", () => js<string>(`document.querySelector('[data-testid="file-stale"]')?.textContent ?? ""`), 5000).catch(() => "");
+  check("a failed refresh shows a banner", stale.includes("Couldn't refresh"), stale);
+  await shot("file-pane-stale");
+  check("…and keeps the editor with its unsaved edits", (await exists('[data-testid="file-editor"] .cm-editor')) && (await dirty()) && (await editorDoc()).startsWith("// kept across tabs\n") && asked.length === 0, asked.join("|"));
+  await app.cdp("Network.setBlockedURLs", { urls: [] });
+  await js(`window.dispatchEvent(new Event("focus"))`);
+  await until("banner gone", () => js<boolean>(`!document.querySelector('[data-testid="file-stale"]')`), 5000);
+  check("a later good refresh clears the banner and keeps the edits", (await dirty()) && (await editorDoc()).startsWith("// kept across tabs\n"));
+
+  // 6e. Another file replacing this dirty pane asks first, while Cancel can still keep it; Discard lets it go.
+  const appBefore = onDisk("src/app.ts");
+  asked.length = 0;
+  answers.push(false, false);
+  check("clicked crlf.ts over a dirty pane", await clickLink("crlf.ts"));
+  await until("two questions", async () => asked.length >= 2, 5000).catch(() => {});
+  await Bun.sleep(300);
+  check("replacing a dirty pane asks to save, then to discard", asked.length === 2 && asked[0]!.includes("Save changes") && asked[1]!.includes("Discard"), asked.join("|"));
+  check("declining both keeps the file, its edits and the dirty marker", (await js<string>(`document.querySelector(".file-pane")?.dataset.file`)) === "src/app.ts" && (await dirty()) && (await editorDoc()).startsWith("// kept across tabs\n"));
+  asked.length = 0;
+  answers.push(false, true);
+  check("clicked crlf.ts again", await clickLink("crlf.ts"));
+  await until("crlf.ts shown", () => js<boolean>(`document.querySelector(".file-pane")?.dataset.file === "src/crlf.ts" && !!document.querySelector('.cm-content')?.textContent.includes("crlf1 =")`), 10000);
+  check("discarding lets the other file in without writing", onDisk("src/app.ts") === appBefore);
+
+  // 6f. A CRLF file keeps its line endings through a save, and a refocus doesn't reset the cursor.
+  await js(`(() => { const v = document.querySelector('[data-testid="file-editor"] .cm-content').cmTile.root.view; v.focus(); v.dispatch({ selection: { anchor: 12 } }); })()`);
+  await js(`window.dispatchEvent(new Event("focus"))`);
+  await Bun.sleep(900);
+  check("refocusing a clean CRLF file leaves the cursor where it was", (await js<number>(`document.querySelector('[data-testid="file-editor"] .cm-content').cmTile.root.view.state.selection.main.anchor`)) === 12);
+  await typeInEditor("// crlf ");
+  await until("dirty", dirty, 5000);
+  await app.key("s", "KeyS", 83, 4);
+  await until("saved", async () => !(await dirty()), 5000);
+  const crlfOnDisk = onDisk("src/crlf.ts");
+  check("saving a CRLF file writes CRLF back", crlfOnDisk === "// crlf " + crlf, JSON.stringify(crlfOnDisk.slice(0, 40)));
+  check("…with no lone LF anywhere", !/(^|[^\r])\n/.test(crlfOnDisk));
+  writeFileSync(join(projectDir, "src/crlf.ts"), crlf);
 
   // 7. A clean file: no Diff tab; the link replaces the file pane beside the ticket.
   check("clicked clean.ts", await clickLink("clean.ts"));

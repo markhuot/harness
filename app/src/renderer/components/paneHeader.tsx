@@ -7,6 +7,7 @@ import { commandKeys } from "../state/keys";
 import { useStore } from "../state/store";
 import { Icon } from "./Icon";
 import { useBoardScope, usePaneScope, usePopout } from "./paneContext";
+import { confirmLeave } from "./draftClose";
 import { dragProps } from "./paneDrag";
 import { popBackIn, popOutToWindow } from "./popoutOpen";
 
@@ -70,7 +71,7 @@ export function MovePaneItems({ paneId, onDone }: { paneId: string; onDone: () =
                 data-testid={`move-pane-${zone}-${t.id}`}
                 aria-label={`Move pane ${word} ${name}`}
                 title={`Move pane ${word} ${name}`}
-                onClick={() => (onDone(), updatePanes(scope, (s) => movePane(s, paneId, t.id, zone)))}
+                onClick={() => (onDone(), confirmLeave([paneId]) && updatePanes(scope, (s) => movePane(s, paneId, t.id, zone)))}
               >
                 {glyph}
               </button>

@@ -21,7 +21,7 @@ import { MenuButton } from "../components/bits";
 import { usePaneScope, usePopout } from "../components/paneContext";
 import { MovePaneItems, PaneGrip, PaneWindowButton } from "../components/paneHeader";
 import { ChunkBoundary, retryableLazy } from "../components/lazyRetry";
-import { requestClosePane, registerDraftCloser } from "../components/draftClose";
+import { requestClosePane, registerDraftCloser, registerLeaveGuard } from "../components/draftClose";
 import { closePane, fileRootTicket, paneLabel, setFileView, toggleZoom, updatePanes, type FileContent, type FileTab } from "../state/panes";
 import { focusPaneBy } from "../components/paneFocus";
 import { useStore } from "../state/store";
@@ -34,7 +34,7 @@ const FileEditor = fileEditor.Component;
 const FileChanges = fileChanges.Component;
 
 type Failure = { status: number; message: string };
-type Fetched<T> = { data: T | null; error: Failure | null; loading: boolean; /** When the request that produced `data` was sent */ at?: number };
+type Fetched<T> = { data: T | null; error: Failure | null; loading: boolean; /** Which request produced `data` (a sequence number, see FilePane's `seq`) */ at?: number };
 
 const failureOf = (e: unknown): Failure => ({ status: (e as { status?: number }).status ?? 0, message: (e as Error).message || String(e) });
 
@@ -42,6 +42,23 @@ export function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10 * 1024 ? 1 : 0)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+/**
+ * Writes to one file go through one queue, across panes: a save, a write on closing and the next
+ * pane's read of that file all run in the order they were asked, so an older write never lands over
+ * a newer one and a reopened file never reads what the write hasn't reached yet.
+ */
+const queues = new Map<string, Promise<unknown>>();
+function enqueue<T>(key: string, run: () => Promise<T>): Promise<T> {
+  const result = (queues.get(key) ?? Promise.resolve()).then(run);
+  const tail = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  queues.set(key, tail);
+  void tail.then(() => queues.get(key) === tail && queues.delete(key));
+  return result;
 }
 
 export function FilePane({ paneId, content, zoomed }: { paneId: string; content: FileContent; zoomed: boolean }) {
@@ -63,15 +80,23 @@ export function FilePane({ paneId, content, zoomed }: { paneId: string; content:
   }, []);
   const [file, setFile] = useState<Fetched<FileView>>({ data: null, error: null, loading: true });
   const rootKey = ticketKey ? `t:${ticketKey}` : `p:${projectId}`;
+  const writeKey = `${rootKey}\u0000${path}`;
+  /** Orders fetches against saves (one counter, so two events never tie, which a clock can't promise). */
+  const seq = useRef(0);
   useEffect(() => {
     let live = true;
     setFile((f) => ({ ...f, loading: true }));
-    const at = Date.now();
-    const req = ticketKey ? client.ticketFile(ticketKey, path) : client.projectFile(projectId!, path);
-    req.then(
-      (data) => live && setFile({ data, error: null, loading: false, at }),
-      (e) => live && setFile({ data: null, error: failureOf(e), loading: false }),
-    );
+    // After any write to this file that's still going.
+    (queues.get(writeKey) ?? Promise.resolve()).then(() => {
+      if (!live) return;
+      const at = ++seq.current;
+      const req = ticketKey ? client.ticketFile(ticketKey, path) : client.projectFile(projectId!, path);
+      req.then(
+        (data) => live && setFile({ data, error: null, loading: false, at }),
+        // What's on screen stays: the editor may hold edits, which a failed refresh mustn't unmount.
+        (e) => live && setFile((f) => ({ ...f, error: failureOf(e), loading: false })),
+      );
+    });
     return () => void (live = false);
   }, [client, rootKey, path, epoch, bump, ticket?.workdir, ticket?.branch]);
 
@@ -103,11 +128,12 @@ export function FilePane({ paneId, content, zoomed }: { paneId: string; content:
   const handle = useRef<EditorHandle | null>(null);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
-  /** When the last save finished: a fetch sent before it may predate the edits and must not replace them. */
+  /** Which save finished last (in `seq` order): a fetch sent before it may predate the edits and must not replace them. */
   const savedAt = useRef(0);
   /** Set when the user chose to throw the edits away, so closing doesn't save or ask again. */
   const discarded = useRef(false);
-  const writing = useRef<Promise<unknown>>(Promise.resolve());
+  /** Set when the user chose to save on being replaced or moved, so the editor's last write doesn't ask again. */
+  const leaveSave = useRef(false);
   const writeFile = useCallback(
     (file: { ticketKey: string | null; projectId: string | null; path: string }, contents: string) =>
       file.ticketKey ? client.writeTicketFile(file.ticketKey, file.path, contents) : client.writeProjectFile(file.projectId!, file.path, contents),
@@ -116,18 +142,24 @@ export function FilePane({ paneId, content, zoomed }: { paneId: string; content:
   const target = { ticketKey, projectId, path: view?.path ?? path };
   const targetRef = useRef(target);
   targetRef.current = target;
+  const writeKeyRef = useRef(writeKey);
+  writeKeyRef.current = writeKey;
   /** Writes the editor's text, one write at a time; true when it's on disk (or there was nothing to write). */
   const save = useCallback((): Promise<boolean> => {
     const h = handle.current;
     if (!h || !h.isDirty()) return Promise.resolve(true);
-    const contents = h.getContents();
     const file = targetRef.current;
-    const run = writing.current.then(async () => {
+    return enqueue(writeKeyRef.current, async () => {
+      // Asked twice at once (the editor and the window both blurring), or the editor went away
+      // meanwhile (its last write is queued behind this one): nothing left for this one to do.
+      if (handle.current !== h) return false;
+      if (!h.isDirty()) return true;
+      const contents = h.getContents();
       setSaving(true);
       try {
         await writeFile(file, contents);
-        savedAt.current = Date.now();
-        h.markSaved(contents);
+        savedAt.current = ++seq.current;
+        if (handle.current === h) h.markSaved(contents);
         // The git badge and Diff tab follow what's now on disk.
         setBump((n) => n + 1);
         return true;
@@ -138,8 +170,6 @@ export function FilePane({ paneId, content, zoomed }: { paneId: string; content:
         setSaving(false);
       }
     });
-    writing.current = run;
-    return run;
   }, [writeFile, toast]);
   const saveIfOnBlur = useCallback(() => {
     if (saveOnBlurRef.current) void save();
@@ -160,8 +190,8 @@ export function FilePane({ paneId, content, zoomed }: { paneId: string; content:
       setDirty(false);
       if (!last.dirty || discarded.current) return;
       const file = targetRef.current;
-      const write = () => void writeFile(file, last.contents).catch((e) => toast(`Couldn't save ${file.path}: ${(e as Error).message}`, "error"));
-      if (saveOnBlurRef.current || confirm(`Save changes to ${file.path}?`)) write();
+      const write = () => void enqueue(writeKeyRef.current, () => writeFile(file, last.contents)).catch((e) => toast(`Couldn't save ${file.path}: ${(e as Error).message}`, "error"));
+      if (saveOnBlurRef.current || leaveSave.current || confirm(`Save changes to ${file.path}?`)) write();
     },
     [writeFile, toast],
   );
@@ -187,12 +217,41 @@ export function FilePane({ paneId, content, zoomed }: { paneId: string; content:
   const requestClose = (keyboard: boolean) => {
     if (!handle.current?.isDirty()) return doClose(keyboard);
     const label = targetRef.current.path;
-    if (saveOnBlurRef.current || confirm(`Save changes to ${label} before closing?`)) return void save().then((ok) => ok && doClose(keyboard));
+    // Typing during the save keeps the pane open: that's not saved yet.
+    if (saveOnBlurRef.current || confirm(`Save changes to ${label} before closing?`)) return void save().then((ok) => ok && !handle.current?.isDirty() && doClose(keyboard));
     if (confirm(`Discard your unsaved changes to ${label}?`)) doClose(keyboard);
   };
   const requestCloseRef = useRef(requestClose);
   requestCloseRef.current = requestClose;
   useEffect(() => registerDraftCloser(paneId, (keyboard) => requestCloseRef.current(keyboard)), [paneId]);
+  // Another file replacing this one, or the pane moving (it remounts): ask now, while Cancel can still
+  // keep things as they are. With save on blur the editor's last write covers it.
+  useEffect(
+    () =>
+      registerLeaveGuard(paneId, () => {
+        if (!handle.current?.isDirty() || saveOnBlurRef.current) return true;
+        const label = targetRef.current.path;
+        if (confirm(`Save changes to ${label}?`)) {
+          leaveSave.current = true;
+          return true;
+        }
+        if (!confirm(`Discard your unsaved changes to ${label}?`)) return false;
+        discarded.current = true;
+        return true;
+      }),
+    [paneId],
+  );
+  // Reloading or quitting with unsaved edits asks (the main process offers Leave or Stay), except with
+  // save on blur, where the window losing focus has written them already.
+  useEffect(() => {
+    if (!dirty || saveOnBlur) return;
+    const guard = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    addEventListener("beforeunload", guard);
+    return () => removeEventListener("beforeunload", guard);
+  }, [dirty, saveOnBlur]);
   const close = () => requestClosePane(scope, paneId);
   const zoom = () => updatePanes(scope, (s) => toggleZoom(s, paneId));
   // A pop-out window holds just this pane: nothing to maximize over.
@@ -304,53 +363,64 @@ export function FilePane({ paneId, content, zoomed }: { paneId: string; content:
         </nav>
       )}
       <div className="file-body selectable" data-testid="file-body" data-tab={tab}>
-        {file.error ? (
+        {file.error && view && (
+          <div className="file-note" data-testid="file-stale">
+            {file.error.status === 404 ? `${shownPath} is gone from disk; saving writes it again.` : `Couldn't refresh ${shownPath}: ${file.error.message}`}{" "}
+            What's shown is the last copy that loaded.
+          </div>
+        )}
+        {file.error && !view ? (
           <FileProblem icon="alert" title={file.error.status === 404 ? `${shownPath} not found` : `Couldn't open ${shownPath}`} detail={file.error.status === 404 ? `There's no such file in ${where || "this project"}.` : file.error.message} />
         ) : !view ? (
           <div className="empty" style={{ flex: 1 }}>
             <div className="spinner" />
           </div>
-        ) : tab === "diff" ? (
-          diff.error ? (
-            <FileProblem icon="alert" title="Couldn't load the diff" detail={diff.error.message} />
-          ) : !diff.data ? (
-            <div className="empty" style={{ flex: 1 }}>
-              <div className="spinner" />
-            </div>
-          ) : diff.data.tooLarge ? (
-            <FileProblem icon="fileText" title="This diff is too large to show" detail="The changes are over 4 MB." />
-          ) : !diff.data.patch ? (
-            <FileProblem icon="checkCircle" title="No uncommitted changes" detail="The file matches HEAD." />
-          ) : (
-            <ChunkBoundary lazies={[fileChanges]} fallback={viewerFailed}>
-              <Suspense fallback={null}>
-                <FileChanges name={view.path} diff={diff.data} />
-              </Suspense>
-            </ChunkBoundary>
-          )
-        ) : view.binary ? (
-          <FileProblem icon="image" title="Binary file" detail={`${formatSize(view.size)}; it can't be shown as text.`} />
-        ) : view.tooLarge || view.contents === null ? (
-          <FileProblem icon="fileText" title="This file is too large to show" detail={`${formatSize(view.size)}; the viewer shows files up to 2 MB.`} />
         ) : (
           <>
-            {view.truncated && <div className="file-note">The file grew while it was read; this is only its start, so it can't be edited.</div>}
-            <ChunkBoundary lazies={[fileEditor]} fallback={viewerFailed}>
-              <Suspense fallback={null}>
-                <FileEditor
-                  key={`${view.root}\u0000${view.path}`}
-                  name={view.path}
-                  contents={view.contents}
-                  range={selected}
-                  readOnly={view.truncated}
-                  onHandle={(h) => (handle.current = h)}
-                  onDirty={setDirty}
-                  onSave={() => void save()}
-                  onBlur={saveIfOnBlur}
-                  onDispose={onDispose}
-                />
-              </Suspense>
-            </ChunkBoundary>
+            {tab === "diff" &&
+              (diff.error ? (
+                <FileProblem icon="alert" title="Couldn't load the diff" detail={diff.error.message} />
+              ) : !diff.data ? (
+                <div className="empty" style={{ flex: 1 }}>
+                  <div className="spinner" />
+                </div>
+              ) : diff.data.tooLarge ? (
+                <FileProblem icon="fileText" title="This diff is too large to show" detail="The changes are over 4 MB." />
+              ) : !diff.data.patch ? (
+                <FileProblem icon="checkCircle" title="No uncommitted changes" detail="The file matches HEAD." />
+              ) : (
+                <ChunkBoundary lazies={[fileChanges]} fallback={viewerFailed}>
+                  <Suspense fallback={null}>
+                    <FileChanges name={view.path} diff={diff.data} />
+                  </Suspense>
+                </ChunkBoundary>
+              ))}
+            {view.binary ? (
+              tab === "file" && <FileProblem icon="image" title="Binary file" detail={`${formatSize(view.size)}; it can't be shown as text.`} />
+            ) : view.tooLarge || view.contents === null ? (
+              tab === "file" && <FileProblem icon="fileText" title="This file is too large to show" detail={`${formatSize(view.size)}; the viewer shows files up to 2 MB.`} />
+            ) : (
+              // Stays mounted under the Diff tab (hidden): unmounting it would end the editor, and with it any unsaved edits.
+              <div className="file-editor-slot" hidden={tab === "diff"}>
+                {view.truncated && <div className="file-note">The file grew while it was read; this is only its start, so it can't be edited.</div>}
+                <ChunkBoundary lazies={[fileEditor]} fallback={viewerFailed}>
+                  <Suspense fallback={null}>
+                    <FileEditor
+                      key={`${view.root}\u0000${view.path}`}
+                      name={view.path}
+                      contents={view.contents}
+                      range={selected}
+                      readOnly={view.truncated}
+                      onHandle={(h) => (handle.current = h)}
+                      onDirty={setDirty}
+                      onSave={() => void save()}
+                      onBlur={saveIfOnBlur}
+                      onDispose={onDispose}
+                    />
+                  </Suspense>
+                </ChunkBoundary>
+              </div>
+            )}
           </>
         )}
       </div>

@@ -333,7 +333,13 @@ function keepInApp(win: BrowserWindow) {
       if (/^https?:\/\//.test(url)) void shell.openExternal(url);
     }
   });
-  win.webContents.on("preload-error", (_e, path, error) => console.error(`preload error in ${path}:`, error));
+  // A page that blocks unloading (a file pane with unsaved edits, on reload or close) is Electron's to
+  // arbitrate: without a handler the reload or close silently does nothing.
+  win.webContents.on("will-prevent-unload", (e) => {
+    const stay = dialog.showMessageBoxSync(win, { type: "question", buttons: ["Leave", "Stay"], defaultId: 1, cancelId: 1, message: "You have unsaved changes.", detail: "Leaving discards edits that haven't been saved." });
+    if (stay === 0) e.preventDefault();
+  });
+  win.webContents.on("preload-error",(_e, path, error) => console.error(`preload error in ${path}:`, error));
 }
 
 function createWindow(route?: string) {

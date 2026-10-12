@@ -75,6 +75,16 @@
 .file-tabs + .file-body {
   border-top: 0;
 }
+/* Holds the editor (and its note), which stays mounted under the Diff tab. */
+.file-editor-slot {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.file-editor-slot[hidden] {
+  display: none;
+}
 .file-editor {
   flex: 1;
   min-height: 0;

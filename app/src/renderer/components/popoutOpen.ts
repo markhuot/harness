@@ -25,6 +25,7 @@ import {
 const leavesOf = (s: PaneState) => leaves(s.root).map((l) => l.id);
 import { boardRoute, formatRoute } from "../state/route";
 import type { PopoutInfo } from "./paneContext";
+import { confirmLeave } from "./draftClose";
 import { paneElement } from "./paneFocus";
 
 /** A point on the screen (a drag released outside the window), where a pop-out opens under the pointer. */
@@ -44,6 +45,7 @@ export function popOutToWindow(scope: string, paneId: string, at?: ScreenPoint):
   const bridge = window.harness?.popout;
   const leaf = findLeaf(getPanes(scope).root, paneId);
   if (!bridge || !leaf || !canPopOut(leaf.content) || isPopoutScope(scope)) return false;
+  if (!confirmLeave([paneId])) return false;
   const bounds = screenBoxOf(paneId);
   const id = crypto.randomUUID();
   if (!popOutPane(scope, paneId, id)) return false;
@@ -88,6 +90,7 @@ export function popBackIn({ id, fromScope }: PopoutInfo, projects: Readonly<Reco
   const group = scopeGroup(fromScope);
   const exists = group !== null ? projectGroups(Object.values(projects)).includes(group) : fromScope === ALL_SCOPE || !!projects[fromScope];
   const to = exists ? fromScope : ALL_SCOPE;
+  if (!confirmLeave(leavesOf(getPanes(popoutScope(id))))) return;
   popInPane(id, to);
   void window.harness?.popout.showMain(formatRoute(boardRoute(to)));
 }

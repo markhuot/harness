@@ -29,7 +29,9 @@ import {
   forgetProjectPanes,
   getPanes,
   getPaneStore,
+  fileKey,
   isPopoutScope,
+  leaves,
   newComposeContent,
   newTerminalContent,
   openCompose as openComposePane,
@@ -45,7 +47,9 @@ import {
   updatePanes,
   usePanes,
   watchPaneStore,
+  type FileContent,
 } from "./panes";
+import { confirmLeave } from "../components/draftClose";
 import { terminalCwd, terminalScope } from "./terminal";
 import { fileContentFor, type FileLinkContext } from "./fileOpen";
 import type { HarnessBridge } from "../../main/types";
@@ -525,10 +529,17 @@ export function StoreProvider({
     (link, from = {}) => {
       const content = fileContentFor(link, from);
       if (!content) return toast(`Can't tell which project ${link.path} is in.`, "error");
-      if (from.paneId && from.scope) return updatePanes(from.scope, (s) => openFilePane(s, content, from.paneId, workspaceWidth()));
+      const open = (scope: string, fromPaneId: string | null) => {
+        // A file pane showing another file takes this one's place: let one with unsaved edits ask first.
+        const before = getPanes(scope);
+        const after = openFilePane(before, content, fromPaneId, workspaceWidth());
+        const replaced = leaves(before.root).filter((l) => l.content.kind === "file" && leaves(after.root).some((n) => n.id === l.id && (n.content.kind !== "file" || fileKey(n.content) !== fileKey(l.content as FileContent))));
+        if (confirmLeave(replaced.map((l) => l.id))) updatePanes(scope, (s) => openFilePane(s, content, fromPaneId, workspaceWidth()));
+      };
+      if (from.paneId && from.scope) return open(from.scope, from.paneId);
       const r = parseRoute(location.hash);
       const scope = terminalScope(r, scopeRef.current);
-      updatePanes(scope, (s) => openFilePane(s, content, null, workspaceWidth()));
+      open(scope, null);
       if (paneScopeOf(r) !== scope) navigate(boardRoute(scope));
     },
     [navigate, toast],

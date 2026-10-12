@@ -1,7 +1,7 @@
 // A CodeMirror 6 editor and merge view with a framework-free handle. The Mac renderer imports this;
 // iOS loads the same code from a bundled web view through bridge.ts.
 
-import { Compartment, EditorState, StateEffect, StateField, Transaction, type Extension, type Text } from "@codemirror/state";
+import { Annotation, Compartment, EditorState, StateEffect, StateField, Text, Transaction, type Extension } from "@codemirror/state";
 import { Decoration, EditorView, drawSelection, highlightActiveLine, keymap, lineNumbers, type DecorationSet } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { bracketMatching, indentOnInput } from "@codemirror/language";
@@ -62,6 +62,8 @@ function emitter<A extends unknown[]>() {
 // --- reveal highlight -----------------------------------------------------------------------
 
 const setReveal = StateEffect.define<LineRange | null>();
+/** A reload of what's on disk: edits that don't clear the highlight, since the lines it marks mostly stay put. */
+const reload = Annotation.define<boolean>();
 const lineMark = Decoration.line({ class: "cm-revealed-line" });
 
 function clampRange(doc: Text, range: LineRange): LineRange {
@@ -72,7 +74,7 @@ function clampRange(doc: Text, range: LineRange): LineRange {
   return { start, end };
 }
 
-/** Marks the revealed lines until the next edit. */
+/** Marks the revealed lines until the next edit (a reload keeps them, moved along with the text). */
 const revealField = StateField.define<DecorationSet>({
   create: () => Decoration.none,
   update(deco, tr) {
@@ -85,7 +87,8 @@ const revealField = StateField.define<DecorationSet>({
         return Decoration.set(marks);
       }
     }
-    return tr.docChanged ? Decoration.none : deco;
+    if (!tr.docChanged) return deco;
+    return tr.annotation(reload) ? deco.map(tr.changes) : Decoration.none;
   },
   provide: (f) => EditorView.decorations.from(f),
 });
@@ -144,9 +147,18 @@ function themeController(host: () => HTMLElement[], initialDark: boolean, setDar
 
 // --- editor ---------------------------------------------------------------------------------
 
+/** "\r\n" for a file whose every line break is CRLF, else null (CodeMirror's default splits on any and writes LF). */
+function detectEol(contents: string): "\r\n" | null {
+  return contents.includes("\r\n") && !/(^|[^\r])\n/.test(contents) ? "\r\n" : null;
+}
+const eolExtension = (eol: "\r\n" | null): Extension => (eol ? EditorState.lineSeparator.of(eol) : []);
+
 export function createEditor(parent: HTMLElement, options: EditorOptions): EditorHandle {
   const initial = normalizeTheme(options.theme);
   const base = baseExtensions(options.language, initial.appearance === "dark");
+  // A CRLF file keeps its line breaks: the document is split and joined on them, so saving writes what was read.
+  let eol = detectEol(options.contents);
+  const eolCompartment = new Compartment();
   let saved: Text = EditorState.create({ doc: options.contents }).doc;
   let dirty = false;
   /** True while setContents replaces the document, so a reload isn't reported as an edit. */
@@ -169,6 +181,7 @@ export function createEditor(parent: HTMLElement, options: EditorOptions): Edito
     state: EditorState.create({
       doc: options.contents,
       extensions: [
+        eolCompartment.of(eolExtension(eol)),
         lineNumbers(),
         history(),
         drawSelection(),
@@ -183,7 +196,7 @@ export function createEditor(parent: HTMLElement, options: EditorOptions): Edito
             preventDefault: true,
             run: () => {
               if (view.state.readOnly) return false;
-              save.emit(view.state.doc.toString());
+              save.emit(view.state.sliceDoc());
               return true;
             },
           },
@@ -199,7 +212,7 @@ export function createEditor(parent: HTMLElement, options: EditorOptions): Edito
         EditorView.updateListener.of((u) => {
           if (!u.docChanged || quiet) return;
           syncDirty(u.view);
-          change.emit(u.state.doc.toString());
+          change.emit(u.state.sliceDoc());
         }),
       ],
     }),
@@ -218,15 +231,29 @@ export function createEditor(parent: HTMLElement, options: EditorOptions): Edito
     view,
     setTheme: apply,
     reveal: (range) => revealIn(view, range),
-    getContents: () => view.state.doc.toString(),
+    getContents: () => view.state.sliceDoc(),
     setContents(contents) {
+      const next = detectEol(contents);
+      if (next !== eol) {
+        // The file's line breaks changed on disk: switch before the text goes in, so it splits right.
+        eol = next;
+        view.dispatch({ effects: eolCompartment.reconfigure(eolExtension(eol)) });
+      }
+      // Only the span that differs is replaced, so the cursor, scroll position and highlight stay where
+      // they are. Compared as the document counts it, a line break being one character.
+      const current = view.state.doc.sliceString(0, undefined, "\n");
+      const incoming = contents.split(/\r\n|\r|\n/).join("\n");
+      let from = 0;
+      const max = Math.min(current.length, incoming.length);
+      while (from < max && current.charCodeAt(from) === incoming.charCodeAt(from)) from++;
+      let tail = 0;
+      while (tail < max - from && current.charCodeAt(current.length - 1 - tail) === incoming.charCodeAt(incoming.length - 1 - tail)) tail++;
       quiet = true;
       try {
         // Not in undo history: Cmd+Z must never bring back the buffer this reload replaced.
         view.dispatch({
-          changes: { from: 0, to: view.state.doc.length, insert: contents },
-          effects: setReveal.of(null),
-          annotations: Transaction.addToHistory.of(false),
+          changes: { from, to: current.length - tail, insert: Text.of(incoming.slice(from, incoming.length - tail).split("\n")) },
+          annotations: [Transaction.addToHistory.of(false), reload.of(true)],
         });
       } finally {
         quiet = false;

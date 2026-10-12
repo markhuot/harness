@@ -124,6 +124,38 @@ describe("dirty", () => {
     expect(h.isDirty()).toBe(false);
     expect(changes).toEqual(["a" + text]);
   });
+
+  test("a CRLF file reads and writes CRLF, and is the same text as the disk's", () => {
+    const disk = "one\r\ntwo\r\nthree\r\n";
+    const h = make({ contents: disk });
+    expect(h.getContents()).toBe(disk);
+    expect(h.view.state.doc.lines).toBe(4);
+    h.view.dispatch({ changes: { from: 0, insert: "zero\r\n" } });
+    expect(h.getContents()).toBe("zero\r\n" + disk);
+    h.setContents(disk);
+    expect(h.getContents()).toBe(disk);
+    expect(h.isDirty()).toBe(false);
+  });
+
+  test("a reload that changes the line breaks takes them", () => {
+    const h = make({ contents: "a\r\nb\r\n" });
+    h.setContents("a\nb\nc\n");
+    expect(h.getContents()).toBe("a\nb\nc\n");
+    expect(h.view.state.doc.lines).toBe(4);
+    h.setContents("x\r\ny\r\n");
+    expect(h.getContents()).toBe("x\r\ny\r\n");
+  });
+
+  test("a reload replaces only what changed: the cursor and the highlight stay", () => {
+    const h = make({ contents: "a\nb\nc\nd\ne\n", range: { start: 4, end: 4 } });
+    h.view.dispatch({ selection: { anchor: 6 } });
+    h.setContents("a\nb\nc\nd\ne\nf\n");
+    expect(h.view.state.selection.main.anchor).toBe(6);
+    expect(h.view.dom.querySelectorAll(".cm-revealed-line").length).toBe(1);
+    h.setContents("new\na\nb\nc\nd\ne\nf\n");
+    expect(h.view.state.selection.main.anchor).toBe(10);
+    expect(h.view.dom.querySelector(".cm-revealed-line")?.textContent).toBe("d");
+  });
 });
 
 describe("events", () => {
