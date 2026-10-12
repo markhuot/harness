@@ -98,7 +98,10 @@ struct DockGhostCard: View {
         .offset(y: armed || reduceMotion ? 0 : DockMetrics.height)
         .animation(.snappy(duration: 0.2), value: armed)
         .allowsHitTesting(false)
-        .accessibilityHidden(true)
+        // Only there while armed; sim-check reads it to see the hold arm.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Dock card, \(title)")
+        .accessibilityHidden(!armed)
         .accessibilityIdentifier("dock-ghost")
     }
 }
