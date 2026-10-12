@@ -11,7 +11,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Added
 
-- Nothing changes on screen yet. For people working on Harness, a new `editor/` package holds a CodeMirror 6 editor and side-by-side merge view that the Mac renderer imports and the iPhone and iPad web view will load as a single bundle (`bun run --cwd editor build`). It themes from the app's CSS variables or a token map, picks a language from the file name, reveals a line range without leaving a selection, and reports change, dirty, save (Cmd/Ctrl+S) and blur events, with a `mount(window, post)` bridge for the web view. It is covered by unit tests in `editor/`.
+- Nothing changes on screen yet. For people working on Harness, a new `editor/` package holds a CodeMirror 6 editor and side-by-side merge view that the Mac renderer imports and the iPhone and iPad web view will load as a single bundle (`bun run --cwd editor build`). It themes from the app's CSS variables or a token map, picks a language from the file name, reveals a line range without leaving a selection, and reports change, dirty, save (Cmd/Ctrl+S) and blur events, with a `mount(window, post)` bridge for the web view. It is covered by unit tests in `editor/`. Saving confirms the exact contents that were written, so keystrokes typed during an async save stay dirty; a reload from disk can't be undone back to the stale text; diff colours follow the theme tokens (red on the original side, green on the modified); and the web view bridge remembers the last theme and reports bad commands as `error` events.
 
 ### Changed
 

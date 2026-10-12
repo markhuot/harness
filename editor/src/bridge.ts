@@ -12,7 +12,7 @@ export type BridgeCommand =
   | { type: "theme"; theme: ThemeInput }
   | { type: "reveal"; range: LineRange }
   | { type: "setContents"; contents: string }
-  | { type: "markSaved" }
+  | { type: "markSaved"; contents?: string }
   | { type: "focus" }
   | { type: "getContents"; id?: string };
 
@@ -22,6 +22,7 @@ export type BridgeEvent =
   | { type: "dirty"; dirty: boolean }
   | { type: "save"; contents: string }
   | { type: "blur" }
+  | { type: "error"; message: string }
   | { type: "contents"; id?: string; contents: string };
 
 export interface Mounted {
@@ -34,6 +35,8 @@ export function mount(win: Window, post: (event: BridgeEvent) => void, parent?: 
   let editor: EditorHandle | undefined;
   let diff: DiffEditorHandle | undefined;
   let offs: Array<() => void> = [];
+  /** The last theme pushed, for an editor opened after it. */
+  let lastTheme: ThemeInput | undefined;
 
   const clear = () => {
     for (const off of offs) off();
@@ -46,10 +49,20 @@ export function mount(win: Window, post: (event: BridgeEvent) => void, parent?: 
 
   const mounted: Mounted = {
     receive(cmd) {
+      try {
+        dispatch(cmd);
+      } catch (error) {
+        post({ type: "error", message: error instanceof Error ? error.message : String(error) });
+      }
+    },
+    destroy: clear,
+  };
+  const dispatch = (cmd: BridgeCommand) => {
       switch (cmd.type) {
         case "open": {
+          if (cmd.theme) lastTheme = cmd.theme;
           clear();
-          const e = createEditor(root, cmd);
+          const e = createEditor(root, { ...cmd, theme: cmd.theme ?? lastTheme });
           editor = e;
           offs.push(
             e.onChange((contents) => post({ type: "change", contents, dirty: e.isDirty() })),
@@ -60,10 +73,12 @@ export function mount(win: Window, post: (event: BridgeEvent) => void, parent?: 
           break;
         }
         case "diff":
+          if (cmd.theme) lastTheme = cmd.theme;
           clear();
-          diff = createDiffEditor(root, cmd);
+          diff = createDiffEditor(root, { ...cmd, theme: cmd.theme ?? lastTheme });
           break;
         case "theme":
+          lastTheme = cmd.theme;
           editor?.setTheme(cmd.theme);
           diff?.setTheme(cmd.theme);
           break;
@@ -74,7 +89,7 @@ export function mount(win: Window, post: (event: BridgeEvent) => void, parent?: 
           editor?.setContents(cmd.contents);
           break;
         case "markSaved":
-          editor?.markSaved();
+          editor?.markSaved(cmd.contents);
           break;
         case "focus":
           editor?.focus();
@@ -83,8 +98,6 @@ export function mount(win: Window, post: (event: BridgeEvent) => void, parent?: 
           post({ type: "contents", id: cmd.id, contents: editor?.getContents() ?? diff?.getContents() ?? "" });
           break;
       }
-    },
-    destroy: clear,
   };
   (win as unknown as { harnessEditor?: Mounted }).harnessEditor = mounted;
   post({ type: "ready" });

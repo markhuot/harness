@@ -1,3 +1,4 @@
+import { undo } from "@codemirror/commands";
 import { afterEach, describe, expect, test } from "bun:test";
 import { createDiffEditor, createEditor, type EditorHandle } from "./editor";
 import { languageName, resolveLanguage } from "./language";
@@ -77,6 +78,32 @@ describe("dirty", () => {
     h.markSaved();
     expect(h.isDirty()).toBe(false);
     expect(seen).toEqual([true, false]);
+  });
+
+  test("typing after a save event stays dirty when the host confirms the old contents", () => {
+    const h = make({ contents: "abc" });
+    let saved = "";
+    h.onSave((c) => (saved = c));
+    h.view.dispatch({ changes: { from: 3, insert: "d" } });
+    h.view.contentDOM.dispatchEvent(new KeyboardEvent("keydown", { key: "s", [/Mac|iPhone|iPad/.test(navigator.platform) ? "metaKey" : "ctrlKey"]: true, bubbles: true, cancelable: true }));
+    expect(saved).toBe("abcd");
+    h.view.dispatch({ changes: { from: 4, insert: "e" } });
+    h.markSaved(saved);
+    expect(h.isDirty()).toBe(true);
+    h.markSaved(h.getContents());
+    expect(h.isDirty()).toBe(false);
+  });
+
+  test("setContents is not undoable, and edits after it still emit change", () => {
+    const h = make({ contents: "old" });
+    insert(h, "x");
+    h.setContents("new from disk");
+    undo(h.view);
+    expect(h.getContents()).toBe("new from disk");
+    const changes: string[] = [];
+    h.onChange((c) => changes.push(c));
+    insert(h, "y");
+    expect(changes.length).toBe(1);
   });
 
   test("typing back to the saved text is clean", () => {
@@ -174,7 +201,41 @@ describe("language", () => {
   });
 });
 
+describe("reveal input", () => {
+  test("a missing or NaN end reveals just the start line instead of throwing", () => {
+    const h = make();
+    h.reveal({ start: 5 } as never);
+    expect(host.querySelectorAll(".cm-revealed-line").length).toBe(1);
+    h.reveal({ start: 6, end: NaN });
+    expect(host.querySelectorAll(".cm-revealed-line").length).toBe(1);
+  });
+});
+
+describe("theme appearance", () => {
+  test("a bare token map keeps the current appearance, and setTheme reuses one stylesheet", () => {
+    const h = make({ theme: { appearance: "dark" } });
+    const dark = h.view.dom.className;
+    h.setTheme({ bg: "#000" });
+    expect(h.view.dom.className).toBe(dark);
+    const sheets = document.head.querySelectorAll("style").length;
+    for (let i = 0; i < 3; i++) h.setTheme({ appearance: i % 2 ? "dark" : "light", tokens: {} });
+    expect(document.head.querySelectorAll("style").length).toBe(sheets);
+  });
+});
+
 describe("bridge", () => {
+  test("a theme pushed before open applies, and a bad command posts an error", () => {
+    const events: BridgeEvent[] = [];
+    const m = mount(window, (e) => events.push(e));
+    m.receive({ type: "theme", theme: { appearance: "dark", tokens: { bg: "#123456" } } });
+    m.receive({ type: "open", contents: "x" });
+    expect(document.querySelector<HTMLElement>(".cm-editor")!.style.getPropertyValue("--bg")).toBe("#123456");
+    m.receive({ type: "reveal", range: { start: 1 } as never });
+    m.receive({ type: "open", contents: 5 as never });
+    expect(events.some((e) => e.type === "error")).toBe(true);
+    m.destroy();
+  });
+
   test("open, edit, save and getContents round-trip as JSON events", () => {
     const events: BridgeEvent[] = [];
     const m = mount(window, (e) => events.push(e));

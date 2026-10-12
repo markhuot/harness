@@ -27,8 +27,8 @@ export function normalizeTheme(input: ThemeInput | undefined): EditorTheme {
 
 const v = (token: ThemeToken, fallback: string) => `var(${CSS_VAR[token]}, ${fallback})`;
 
-export function editorTheme(dark: boolean): Extension {
-  return EditorView.theme(
+const buildTheme = (dark: boolean): Extension =>
+  EditorView.theme(
     {
       "&": {
         color: v("text", "#222"),
@@ -58,14 +58,21 @@ export function editorTheme(dark: boolean): Extension {
         boxShadow: `inset 2px 0 0 ${v("accent", "#06f")}`,
       },
       // Merge view
-      ".cm-changedLine": { backgroundColor: v("diffAddSoft", "rgba(0,160,0,.1)") },
-      ".cm-deletedChunk": { backgroundColor: v("diffDelSoft", "rgba(220,0,0,.1)") },
-      ".cm-insertedLine, .cm-changedText": { backgroundColor: v("diffAddSoft", "rgba(0,160,0,.2)") },
-      ".cm-deletedLine, .cm-deletedChunk .cm-changedText": { backgroundColor: v("diffDelSoft", "rgba(220,0,0,.2)") },
+      // Side by side, a is the original (deletions) and b the modified (additions); the merge
+      // view's own rules are `&.cm-merge-a/b`-qualified, so these must be too to win.
+      "&.cm-merge-a .cm-changedLine, &.cm-merge-a .cm-changedLineGutter": { backgroundColor: v("diffDelSoft", "rgba(220,0,0,.1)") },
+      "&.cm-merge-b .cm-changedLine, &.cm-merge-b .cm-changedLineGutter": { backgroundColor: v("diffAddSoft", "rgba(0,160,0,.1)") },
+      "&.cm-merge-a .cm-changedText, &.cm-merge-a .cm-deletedLine": { backgroundColor: v("diffDelSoft", "rgba(220,0,0,.25)") },
+      "&.cm-merge-b .cm-changedText, &.cm-merge-b .cm-insertedLine": { backgroundColor: v("diffAddSoft", "rgba(0,160,0,.25)") },
     },
     { dark },
   );
-}
+
+const LIGHT = buildTheme(false);
+const DARK = buildTheme(true);
+
+/** The shared light or dark theme extension (one stylesheet each, however often the theme changes). */
+export const editorTheme = (dark: boolean): Extension => (dark ? DARK : LIGHT);
 
 // Syntax colors come from the same tokens: violet for keywords, green for strings, amber for
 // numbers and types, the accent for functions, and the muted text for comments.

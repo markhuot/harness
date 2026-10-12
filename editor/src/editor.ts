@@ -1,7 +1,7 @@
 // A CodeMirror 6 editor and merge view with a framework-free handle. The Mac renderer imports this;
 // iOS loads the same code from a bundled web view through bridge.ts.
 
-import { Compartment, EditorState, StateEffect, StateField, type Extension, type Text } from "@codemirror/state";
+import { Compartment, EditorState, StateEffect, StateField, Transaction, type Extension, type Text } from "@codemirror/state";
 import { Decoration, EditorView, drawSelection, highlightActiveLine, keymap, lineNumbers, type DecorationSet } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { bracketMatching, indentOnInput } from "@codemirror/language";
@@ -32,7 +32,8 @@ export interface EditorHandle {
   /** Replaces the document and treats it as saved: a clean reload of what's on disk. */
   setContents(contents: string): void;
   isDirty(): boolean;
-  markSaved(): void;
+  /** Marks `contents` (what onSave handed out; default: the document now) as saved. Stays dirty if the document has moved on since. */
+  markSaved(contents?: string): void;
   focus(): void;
   setReadOnly(readOnly: boolean): void;
   onChange(fn: (contents: string) => void): () => void;
@@ -64,8 +65,10 @@ const setReveal = StateEffect.define<LineRange | null>();
 const lineMark = Decoration.line({ class: "cm-revealed-line" });
 
 function clampRange(doc: Text, range: LineRange): LineRange {
-  const start = Math.min(Math.max(1, Math.floor(range.start)), doc.lines);
-  const end = Math.min(Math.max(start, Math.floor(range.end)), doc.lines);
+  const first = Number.isFinite(range.start) ? Math.floor(range.start) : 1;
+  const last = Number.isFinite(range.end) ? Math.floor(range.end) : first;
+  const start = Math.min(Math.max(1, first), doc.lines);
+  const end = Math.min(Math.max(start, last), doc.lines);
   return { start, end };
 }
 
@@ -123,13 +126,19 @@ function baseExtensions(language: string | undefined, dark: boolean) {
 const readOnlyExt = (on: boolean): Extension => (on ? [EditorState.readOnly.of(true), EditorView.editable.of(false)] : []);
 
 /** Keeps the token map on the editor's own element and the dark flag in the theme compartment. */
-function themeController(host: () => HTMLElement[], setDark: (dark: boolean) => void) {
+function themeController(host: () => HTMLElement[], initialDark: boolean, setDark: (dark: boolean) => void) {
   let tokens: TokenMap | undefined;
+  let dark = initialDark;
   return (input: ThemeInput | undefined) => {
     const theme: EditorTheme = normalizeTheme(input);
     for (const el of host()) applyTokens(el, theme.tokens, tokens);
     tokens = theme.tokens;
-    setDark(theme.appearance === "dark");
+    // A bare token map says nothing about appearance: keep the current one.
+    const next = theme.appearance === undefined ? dark : theme.appearance === "dark";
+    if (next !== dark) {
+      dark = next;
+      setDark(dark);
+    }
   };
 }
 
@@ -173,6 +182,7 @@ export function createEditor(parent: HTMLElement, options: EditorOptions): Edito
             key: "Mod-s",
             preventDefault: true,
             run: () => {
+              if (view.state.readOnly) return false;
               save.emit(view.state.doc.toString());
               return true;
             },
@@ -198,6 +208,7 @@ export function createEditor(parent: HTMLElement, options: EditorOptions): Edito
 
   const apply = themeController(
     () => [view.dom],
+    initial.appearance === "dark",
     (dark) => view.dispatch({ effects: base.theme.reconfigure(editorTheme(dark)) }),
   );
   apply(initial);
@@ -210,17 +221,22 @@ export function createEditor(parent: HTMLElement, options: EditorOptions): Edito
     getContents: () => view.state.doc.toString(),
     setContents(contents) {
       quiet = true;
-      view.dispatch({
-        changes: { from: 0, to: view.state.doc.length, insert: contents },
-        effects: setReveal.of(null),
-      });
-      quiet = false;
+      try {
+        // Not in undo history: Cmd+Z must never bring back the buffer this reload replaced.
+        view.dispatch({
+          changes: { from: 0, to: view.state.doc.length, insert: contents },
+          effects: setReveal.of(null),
+          annotations: Transaction.addToHistory.of(false),
+        });
+      } finally {
+        quiet = false;
+      }
       saved = view.state.doc;
       syncDirty(view);
     },
     isDirty: () => dirty,
-    markSaved() {
-      saved = view.state.doc;
+    markSaved(contents) {
+      saved = contents === undefined ? view.state.doc : EditorState.create({ doc: contents }).doc;
       syncDirty(view);
     },
     focus: () => view.focus(),
@@ -267,6 +283,7 @@ export function createDiffEditor(parent: HTMLElement, options: DiffEditorOptions
   });
   const apply = themeController(
     () => [view.dom],
+    initial.appearance === "dark",
     (dark) => {
       view.a.dispatch({ effects: sides[0].theme.reconfigure(editorTheme(dark)) });
       view.b.dispatch({ effects: sides[1].theme.reconfigure(editorTheme(dark)) });
