@@ -8904,7 +8904,7 @@ The ticket was approved to land as a pull request. The pull request is the end o
 2. Check that gh can reach the host: \`gh auth status --hostname ghe.acme.com\`. If it fails, call \`block\` saying so (the human needs to run \`gh auth login\`).
 3. Push the branch: \`git -C /Users/me/.harness/worktrees/NYT-3 push -u upstream harness/nyt-3\`. If the push is rejected because \`upstream/harness/nyt-3\` has commits you don't, fetch and merge them, then push again. Never force-push.
 4. This ticket already has these pull requests:
-- https://ghe.acme.com/web/site/pull/7 (Split the secrets out of checkout)
+- https://ghe.acme.com/web/site/pull/7 (title: "Split the secrets out of checkout")
 - https://ghe.acme.com/web/site/pull/8
 The one for \`harness/nyt-3\` is \`gh pr view harness/nyt-3 --repo ghe.acme.com/web/site --json url,state\`: while it is open, the push updated it, so add a short comment on what changed with \`gh pr comment\`. If it was closed or merged, open a new one as below. Otherwise open one: \`gh pr create --repo ghe.acme.com/web/site --base main --head harness/nyt-3 --title <title> --body-file <file>\`. Use the ticket's title, and build the body from the spec (\`read_spec\`): its Goal, what changed and why, and how it was verified from its Status. Leave out its Open questions unless they're still open. When the repository has a pull request template (\`.github/pull_request_template.md\` or similar), follow it. Open it ready for review, not as a draft, unless the instructions say otherwise.
 5. Call \`record_pull_request\` { url, head } with the pull request's link and the full hash of the commit you pushed (\`git -C /Users/me/.harness/worktrees/NYT-3 rev-parse HEAD\`), whether you opened the pull request or updated it. The ticket is only done once it's recorded, and its Changes tab shows that commit's diff from then on.
@@ -8934,7 +8934,7 @@ exports[`built-in system prompts complete · pr · enterprise, existing pull req
 "NYT-3 "Add dark mode" is approved to land as a pull request.
 
 Its pull requests are:
-- https://ghe.acme.com/web/site/pull/7 (Split the secrets out of checkout)
+- https://ghe.acme.com/web/site/pull/7 (title: "Split the secrets out of checkout")
 - https://ghe.acme.com/web/site/pull/8
 
 Push \`harness/nyt-3\` to upstream and update the one for it (\`gh pr view harness/nyt-3 --json url\`), then call \`record_pull_request\` with its link. Don't merge it: teammates review and merge it. If you can't (gh login, push access), call \`block\` with what's wrong.
@@ -9088,7 +9088,7 @@ The ticket was approved to land as a pull request. The pull request is the end o
 2. Check that gh can reach the host: \`gh auth status --hostname ghe.acme.com\`. If it fails, call \`block\` saying so (the human needs to run \`gh auth login\`).
 3. Push the branch: \`git -C /Users/me/elsewhere push -u upstream medl-1\`. If the push is rejected because \`upstream/medl-1\` has commits you don't, fetch and merge them, then push again. Never force-push.
 4. This ticket already has these pull requests:
-- https://ghe.acme.com/web/site/pull/7 (Split the secrets out of checkout)
+- https://ghe.acme.com/web/site/pull/7 (title: "Split the secrets out of checkout")
 - https://ghe.acme.com/web/site/pull/8
 The one for \`medl-1\` is \`gh pr view medl-1 --repo ghe.acme.com/web/site --json url,state\`: while it is open, the push updated it, so add a short comment on what changed with \`gh pr comment\`. If it was closed or merged, open a new one as below. Otherwise open one: \`gh pr create --repo ghe.acme.com/web/site --base main --head medl-1 --title <title> --body-file <file>\`. Use the ticket's title, and build the body from the spec (\`read_spec\`): its Goal, what changed and why, and how it was verified from its Status. Leave out its Open questions unless they're still open. When the repository has a pull request template (\`.github/pull_request_template.md\` or similar), follow it. Open it ready for review, not as a draft, unless the instructions say otherwise.
 5. Call \`record_pull_request\` { url, head } with the pull request's link and the full hash of the commit you pushed (\`git -C /Users/me/elsewhere rev-parse HEAD\`), whether you opened the pull request or updated it. The ticket is only done once it's recorded, and its Changes tab shows that commit's diff from then on.
@@ -9118,7 +9118,7 @@ exports[`built-in system prompts complete · pr · enterprise, existing pull req
 "NYT-3 "Add dark mode" is approved to land as a pull request.
 
 Its pull requests are:
-- https://ghe.acme.com/web/site/pull/7 (Split the secrets out of checkout)
+- https://ghe.acme.com/web/site/pull/7 (title: "Split the secrets out of checkout")
 - https://ghe.acme.com/web/site/pull/8
 
 Push \`medl-1\` to upstream and update the one for it (\`gh pr view medl-1 --json url\`), then call \`record_pull_request\` with its link. Don't merge it: teammates review and merge it. If you can't (gh login, push access), call \`block\` with what's wrong.
@@ -10622,7 +10622,7 @@ Base branch: main (the default from Settings); the work lands on it when the tic
 
 ## This run: completion (clean up)
 The ticket was approved to clean up: its work has landed (merged by hand) or lives on its branch. Don't merge or open a pull request. Its pull requests are:
-- https://github.com/nytimes/web/pull/12 (Address the form)
+- https://github.com/nytimes/web/pull/12 (title: "Address the form")
 Make sure the branch is pushed, then remove only what the harness made for the ticket, and only when nothing would be lost:
 1. In the worktree (/Users/me/.harness/worktrees/NYT-3), run \`git status\`. If there are uncommitted changes, stop here: don't commit or discard them, leave the worktree and branch in place, and call \`block\` listing the changes.
 2. Push \`harness/nyt-3\` when it has work to keep: when it has commits that \`main\` doesn't (\`git -C /Users/me/.harness/worktrees/NYT-3 log --oneline main..harness/nyt-3\`), or when upstream already has it (\`git -C /Users/me/.harness/worktrees/NYT-3 ls-remote --heads upstream harness/nyt-3\`); otherwise there is nothing to push. Push with \`git -C /Users/me/.harness/worktrees/NYT-3 push -u upstream harness/nyt-3\`. If the push is rejected because \`upstream/harness/nyt-3\` has commits you don't, fetch and merge them, then push again. Never force-push. The push updates the pull request for \`harness/nyt-3\` (\`gh pr view harness/nyt-3 --json url\`): call \`record_pull_request\` { url, head } with its link and the full hash of the commit you pushed (\`git -C /Users/me/.harness/worktrees/NYT-3 rev-parse HEAD\`), so the ticket's Changes keep showing it.
@@ -10654,7 +10654,7 @@ exports[`built-in system prompts complete · cleanup · a remote, existing pull 
 "NYT-3 "Add dark mode" is approved to clean up: push its branch when it has work to keep, then remove what the harness made for it. Don't merge or open a pull request.
 
 Its pull requests are:
-- https://github.com/nytimes/web/pull/12 (Address the form)
+- https://github.com/nytimes/web/pull/12 (title: "Address the form")
 
 Push \`harness/nyt-3\` to upstream when it has commits \`main\` doesn't, or when upstream already has it (it updates the pull request for it, found with \`gh pr view harness/nyt-3 --json url\`: call \`record_pull_request\` with its link and the commit you pushed); never force-push. Check that nothing on \`harness/nyt-3\` would be lost: no uncommitted changes, and no commits missing from every remote branch and from \`main\`. Then remove the worktree, and delete \`harness/nyt-3\`. If something would be lost, leave everything in place and call \`block\` listing it.
 
@@ -10714,7 +10714,7 @@ Base branch: main (the default from Settings); the work lands on it when the tic
 
 ## This run: completion (clean up)
 The ticket was approved to clean up: its work is on \`main\`, which is its base branch. Don't merge or open a pull request. Its pull requests are:
-- https://github.com/nytimes/web/pull/12 (Address the form)
+- https://github.com/nytimes/web/pull/12 (title: "Address the form")
 Make sure the branch is pushed, then remove only what the harness made for the ticket, and only when nothing would be lost:
 1. In the worktree (/Users/me/.harness/worktrees/NYT-3), run \`git status\`. If there are uncommitted changes, stop here: don't commit or discard them, leave the worktree and branch in place, and call \`block\` listing the changes.
 2. Push \`main\` when it has work to keep: when upstream already has it (\`git -C /Users/me/.harness/worktrees/NYT-3 ls-remote --heads upstream main\`); otherwise there is nothing to push. Push with \`git -C /Users/me/.harness/worktrees/NYT-3 push -u upstream main\`. If the push is rejected because \`upstream/main\` has commits you don't, fetch and merge them, then push again. Never force-push. The push updates the pull request for \`main\` (\`gh pr view main --json url\`): call \`record_pull_request\` { url, head } with its link and the full hash of the commit you pushed (\`git -C /Users/me/.harness/worktrees/NYT-3 rev-parse HEAD\`), so the ticket's Changes keep showing it.
@@ -10746,7 +10746,7 @@ exports[`built-in system prompts complete · cleanup · a remote, existing pull 
 "NYT-3 "Add dark mode" is approved to clean up: push its branch when it has work to keep, then remove what the harness made for it. Don't merge or open a pull request.
 
 Its pull requests are:
-- https://github.com/nytimes/web/pull/12 (Address the form)
+- https://github.com/nytimes/web/pull/12 (title: "Address the form")
 
 Push \`main\` to upstream when upstream already has it (it updates the pull request for it, found with \`gh pr view main --json url\`: call \`record_pull_request\` with its link and the commit you pushed); never force-push. Check that nothing on \`main\` would be lost: no uncommitted changes, and no commits missing from every remote branch. Then remove the worktree, and keep \`main\`: the harness didn't create it. If something would be lost, leave everything in place and call \`block\` listing it.
 
@@ -10806,7 +10806,7 @@ Base branch: main (set on this ticket); the work lands on it when the ticket com
 
 ## This run: completion (clean up)
 The ticket was approved to clean up: its work has landed (merged by hand) or lives on its branch. Don't merge or open a pull request. Its pull requests are:
-- https://github.com/nytimes/web/pull/12 (Address the form)
+- https://github.com/nytimes/web/pull/12 (title: "Address the form")
 Make sure the branch is pushed, then remove only what the harness made for the ticket, and only when nothing would be lost:
 1. In the worktree (/Users/me/elsewhere), run \`git status\`. If there are uncommitted changes, stop here: don't commit or discard them, leave the worktree and branch in place, and call \`block\` listing the changes.
 2. Push \`medl-1\` when it has work to keep: when it has commits that \`main\` doesn't (\`git -C /Users/me/elsewhere log --oneline main..medl-1\`), or when upstream already has it (\`git -C /Users/me/elsewhere ls-remote --heads upstream medl-1\`); otherwise there is nothing to push. Push with \`git -C /Users/me/elsewhere push -u upstream medl-1\`. If the push is rejected because \`upstream/medl-1\` has commits you don't, fetch and merge them, then push again. Never force-push. The push updates the pull request for \`medl-1\` (\`gh pr view medl-1 --json url\`): call \`record_pull_request\` { url, head } with its link and the full hash of the commit you pushed (\`git -C /Users/me/elsewhere rev-parse HEAD\`), so the ticket's Changes keep showing it.
@@ -10840,7 +10840,7 @@ exports[`built-in system prompts complete · cleanup · a remote, existing pull 
 "NYT-3 "Add dark mode" is approved to clean up: push its branch when it has work to keep, then remove what the harness made for it. Don't merge or open a pull request.
 
 Its pull requests are:
-- https://github.com/nytimes/web/pull/12 (Address the form)
+- https://github.com/nytimes/web/pull/12 (title: "Address the form")
 
 Push \`medl-1\` to upstream when it has commits \`main\` doesn't, or when upstream already has it (it updates the pull request for it, found with \`gh pr view medl-1 --json url\`: call \`record_pull_request\` with its link and the commit you pushed); never force-push. Check that nothing on \`medl-1\` would be lost: no uncommitted changes, and no commits missing from every remote branch and from \`main\`. Then leave the worktree in place: the harness didn't create it, and keep \`medl-1\`: the harness didn't create it. If something would be lost, leave everything in place and call \`block\` listing it.
 
@@ -10923,7 +10923,7 @@ exports[`built-in system prompts complete · cleanup · a remote, existing pull 
 "NYT-3 "Add dark mode" is approved to clean up: its work has already landed, so there is nothing to merge or push.
 
 Its pull requests are:
-- https://github.com/nytimes/web/pull/12 (Address the form)
+- https://github.com/nytimes/web/pull/12 (title: "Address the form")
 
 There is no ticket branch or worktree to clean up: confirm the working directory is in a sensible state, and stop.
 
@@ -11005,7 +11005,7 @@ exports[`built-in system prompts complete · cleanup · a remote, existing pull 
 "NYT-3 "Add dark mode" is approved to clean up: its work has already landed, so there is nothing to merge or push.
 
 Its pull requests are:
-- https://github.com/nytimes/web/pull/12 (Address the form)
+- https://github.com/nytimes/web/pull/12 (title: "Address the form")
 
 There is no ticket branch or worktree to clean up: confirm the working directory is in a sensible state, and stop.
 
@@ -14692,7 +14692,7 @@ exports[`built-in run prompts reopenPrompt · with a pull request 1`] = `
 Address the review comments.
 
 The earlier work was pushed to \`harness/nyt-3\` and is in these pull requests:
-- https://github.com/nytimes/web/pull/12 (Address the form)
+- https://github.com/nytimes/web/pull/12 (title: "Address the form")
 They may have review comments to address (\`gh pr view harness/nyt-3 --comments\` shows the one for this branch). Commit on \`harness/nyt-3\` as usual; when the ticket completes again the new commits go to the same pull request.
 
 Do the work and verify it the way a work run does: a test for each behaviour change, the tests and typecheck passing, screenshots in Status for visible changes. The spec is at revision 3: add what the human wants to its Goal as requirements, rewriting any requirement it changes, and rewrite the Status statements the work changes so they describe the current state, with no section for this round. Then call \`submit_for_review\` again with \`spec_is_up_to_date\` true. The submit note covers only these changes."

@@ -5,6 +5,9 @@ import { existsSync, rmSync, statSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { createHash, randomBytes } from "node:crypto";
 import { fetchPullRequestTitle, PULL_REQUEST_URL } from "../pull-requests";
+
+/** gh processes that run at once for pull request titles, across all tickets */
+const TITLE_FETCH_SLOTS = 4;
 import type {
   Subagent,
   PhaseModels,
@@ -526,6 +529,11 @@ export class Orchestrator {
   private resumeTimer: ReturnType<typeof setTimeout> | null = null;
   private now: () => number;
   private fetchTitle: (url: string) => Promise<string | null>;
+  /** Title lookups running now, and the ones waiting for a slot (withTitleSlot) */
+  private titleSlotsInUse = 0;
+  private titleSlotWaiters: (() => void)[] = [];
+  /** Tickets with a refresh of their titles still running, so a repeated refresh starts nothing new */
+  private titleRefreshesInFlight = new Set<string>();
   /** Fire-and-forget async work (scheduling, worktree setup) that idle() must wait for */
   private background = new Set<Promise<unknown>>();
   private modelCatalog: ModelCatalog;
@@ -1665,22 +1673,59 @@ export class Orchestrator {
    * Look up these links' titles in the background (saving never waits on GitHub), then write them
    * onto the links still in the list and tell the apps. idle() waits for it.
    */
-  private fetchPullRequestTitles(ticketId: string, urls: string[]) {
-    if (!urls.length) return;
+  private fetchPullRequestTitles(ticketId: string, urls: string[]): Promise<void> {
+    if (!urls.length) return Promise.resolve();
     const job = (async () => {
       const titles = new Map<string, string | null>();
-      for (const url of urls) titles.set(url, await this.fetchTitle(url).catch(() => null));
+      for (const url of urls) {
+        // A fetch that couldn't run (gh missing, spawn failed) leaves the link unchecked, so the next
+        // start's backfill tries it again. A null title means gh answered without one.
+        const title = await this.withTitleSlot(() => this.fetchTitle(url)).catch((err) => {
+          this.log(`pull request title for ${url} couldn't be fetched: ${errMsg(err)}`);
+          return undefined;
+        });
+        if (title !== undefined) titles.set(url, title);
+      }
       const ticket = this.store.tickets.applyPullRequestTitles(ticketId, titles, this.now());
       if (ticket) this.bus.emit({ kind: "ticket.upserted", ticket });
     })().catch((err) => this.log(`pull request titles for ${ticketId} failed: ${errMsg(err)}`));
     this.background.add(job);
     void job.finally(() => this.background.delete(job));
+    return job;
   }
 
-  /** Fetch every pull request title on the ticket again (POST /tickets/:key/pull-requests/refresh). */
+  /**
+   * Runs at most TITLE_FETCH_SLOTS title lookups (gh processes) at once, across all tickets, so a
+   * start that backfills many links or a burst of saves doesn't spawn them all together.
+   */
+  private async withTitleSlot<T>(run: () => Promise<T>): Promise<T> {
+    if (this.titleSlotsInUse >= TITLE_FETCH_SLOTS) {
+      await new Promise<void>((wake) => this.titleSlotWaiters.push(wake));
+    } else {
+      this.titleSlotsInUse++;
+    }
+    try {
+      return await run();
+    } finally {
+      // Hand the slot straight to the next waiter; it stays in use.
+      const next = this.titleSlotWaiters.shift();
+      if (next) next();
+      else this.titleSlotsInUse--;
+    }
+  }
+
+  /**
+   * Fetch every pull request title on the ticket again (POST /tickets/:key/pull-requests/refresh).
+   * A refresh already running for the ticket answers with the same ticket and starts nothing new,
+   * so repeated taps don't stack gh batches.
+   */
   refreshPullRequestTitles(key: string): Ticket {
     const ticket = this.requireTicket(key);
-    this.fetchPullRequestTitles(ticket.id, ticket.pullRequests.map((pr) => pr.url));
+    if (this.titleRefreshesInFlight.has(ticket.id)) return ticket;
+    const urls = ticket.pullRequests.map((pr) => pr.url);
+    if (!urls.length) return ticket;
+    this.titleRefreshesInFlight.add(ticket.id);
+    void this.fetchPullRequestTitles(ticket.id, urls)!.finally(() => this.titleRefreshesInFlight.delete(ticket.id));
     return ticket;
   }
 
@@ -3244,7 +3289,9 @@ ${numberLines(r.body)}`;
   private ownWorkPullRequests(ctx: ToolContext, key: string, fields: string[]): Ticket | null {
     if (ctx.runKind !== "work" || fields.length !== 1 || fields[0] !== "pullRequestUrls") return null;
     const own = this.ctxTicket(ctx);
-    return own.key === String(key).trim().toUpperCase() ? own : null;
+    // Resolved like ownPlanTarget does, so an earlier key (alias) of this ticket counts too. A remote ID never identifies a ticket.
+    const target = this.agentLookup(String(key ?? "").trim())?.ticket;
+    return target?.id === own.id ? own : null;
   }
 
   async updateTicket_(ctx: ToolContext, key: string, input: UpdateTicketInput): Promise<Ticket> {
@@ -3454,12 +3501,15 @@ ${numberLines(r.body)}`;
     const repo = [t.workdir, this.store.projects.get(t.projectId)?.path].find((d): d is string => !!d && existsSync(d));
     const resolved = repo ? await git(["rev-parse", "--verify", "--quiet", `${h}^{commit}`], repo) : null;
     if (!resolved || resolved.code !== 0 || !resolved.stdout) throw new Error(`head ${h} isn't a commit in this ticket's repository`);
-    // Appends the link (a link the ticket already has keeps its place); its title is fetched below.
-    const urls = t.pullRequests.map((pr) => pr.url);
-    const change = this.store.tickets.setPullRequestUrls(t.id, urls.includes(u) ? urls : [...urls, u])!;
+    // Appends the link, or moves a link the ticket already has to the end, so the last link is the one
+    // whose head is pinned (pullRequestUrl mirrors the last link). Any link still without a title is
+    // fetched again, since its earlier fetch may have failed.
+    const urls = t.pullRequests.map((pr) => pr.url).filter((url) => url !== u);
+    const change = this.store.tickets.setPullRequestUrls(t.id, [...urls, u])!;
+    const untitled = change.ticket.pullRequests.filter((pr) => pr.title === null).map((pr) => pr.url);
     const updated = this.store.tickets.update(t.id, { pullRequestHead: resolved.stdout })!;
     this.bus.emit({ kind: "ticket.upserted", ticket: updated });
-    this.fetchPullRequestTitles(t.id, change.added);
+    this.fetchPullRequestTitles(t.id, [...new Set([...change.added, ...untitled])]);
     this.appendStatus(t.sessionId, ctx.runId, `Pull request: ${u}`);
     const a = this.ctxActive(ctx);
     if (a) a.pullRequest = true;

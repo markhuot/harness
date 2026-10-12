@@ -547,10 +547,20 @@ describe("pull requests (pull_request_urls, titles)", () => {
     expect(h.get(me).pullRequests.map((pr) => pr.url)).toEqual([A]);
   });
 
-  test("each added link's title is fetched in the background; a failed fetch leaves its title empty", async () => {
+  test("a work run names its own ticket by an earlier key (after a project rename) and edits its pull requests", async () => {
+    const h = await setup();
+    const me = await h.make("me", { status: "in_progress" });
+    const oldKey = me.key;
+    h.orch.updateProject(h.store.projects.get(me.projectId)!.id, { key: "NEW" });
+    const res = await executeTool(tools, "update_ticket", { key: oldKey, pull_request_urls: [A] }, h.ctx("work", me));
+    expect(res.isError).toBeFalsy();
+    expect(h.get(me).pullRequests.map((pr) => pr.url)).toEqual([A]);
+  });
+
+  test("each added link's title is fetched in the background; a lookup that can't run leaves its link unchecked", async () => {
     const h = await setup({
       fetchPullRequestTitle: async (url) => {
-        if (url === B) throw new Error("gh: not logged in");
+        if (url === B) throw new Error("spawn gh ENOENT");
         return "Split the secrets";
       },
     });
@@ -561,6 +571,82 @@ describe("pull requests (pull_request_urls, titles)", () => {
       { url: A, title: "Split the secrets" },
       { url: B, title: null },
     ]);
+    expect(h.store.tickets.unfetchedPullRequestUrls()).toEqual([{ id: t.id, url: B }]);
+  });
+
+  test("gh answering without a title stamps the link as checked, so the start backfill doesn't retry it", async () => {
+    const h = await setup({ fetchPullRequestTitle: async () => null });
+    const t = await h.make("t");
+    await h.orch.updateTicket(t.key, { pullRequestUrls: [A] });
+    await h.orch.idle();
+    expect(h.store.tickets.unfetchedPullRequestUrls()).toEqual([]);
+  });
+
+  test("a failed lookup on refresh keeps the title already stored", async () => {
+    let answer: string | null = "Split the secrets";
+    const h = await setup({ fetchPullRequestTitle: async () => answer });
+    const t = await h.make("t");
+    await h.orch.updateTicket(t.key, { pullRequestUrls: [A] });
+    await h.orch.idle();
+    answer = null;
+    h.orch.refreshPullRequestTitles(t.key);
+    await h.orch.idle();
+    expect(h.get(t).pullRequests).toEqual([{ url: A, title: "Split the secrets" }]);
+  });
+
+  test("a title write bumps updated_at, so a board snapshot taken before it can't replace the titled copy", async () => {
+    const h = await setup({ fetchPullRequestTitle: async () => "Split the secrets" });
+    const t = await h.make("t");
+    h.store.tickets.setPullRequestUrls(t.id, [A]);
+    const before = h.get(t).updatedAt;
+    await Bun.sleep(5);
+    h.store.tickets.applyPullRequestTitles(t.id, new Map([[A, "Split the secrets"]]), Date.now());
+    expect(h.get(t).updatedAt).toBeGreaterThan(before);
+  });
+
+  test("title lookups run four at a time across tickets", async () => {
+    let inFlight = 0;
+    let most = 0;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const h = await setup({
+      fetchPullRequestTitle: async () => {
+        most = Math.max(most, ++inFlight);
+        await gate;
+        inFlight--;
+        return "Titled";
+      },
+    });
+    const tickets = [await h.make("a"), await h.make("b"), await h.make("c"), await h.make("d"), await h.make("e"), await h.make("f")];
+    for (const [i, t] of tickets.entries()) void h.orch.updateTicket(t.key, { pullRequestUrls: [`https://github.com/acme/web/pull/${100 + i}`] });
+    await Bun.sleep(5);
+    expect(inFlight).toBe(4);
+    release();
+    await h.orch.idle();
+    expect(most).toBe(4);
+    expect(tickets.map((t) => h.get(t).pullRequests[0]?.title)).toEqual(Array(6).fill("Titled"));
+  });
+
+  test("repeated refreshes while one is running start a single batch", async () => {
+    let calls = 0;
+    const h = await setup({
+      fetchPullRequestTitle: async () => {
+        calls++;
+        return "Titled";
+      },
+    });
+    const t = await h.make("t");
+    await h.orch.updateTicket(t.key, { pullRequestUrls: [A] });
+    await h.orch.idle();
+    expect(calls).toBe(1);
+    h.orch.refreshPullRequestTitles(t.key);
+    h.orch.refreshPullRequestTitles(t.key);
+    h.orch.refreshPullRequestTitles(t.key);
+    await h.orch.idle();
+    expect(calls).toBe(2);
+    h.orch.refreshPullRequestTitles(t.key);
+    await h.orch.idle();
+    expect(calls).toBe(3);
   });
 
   test("a title that arrives after its link was removed doesn't bring the link back", async () => {

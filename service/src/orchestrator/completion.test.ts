@@ -258,6 +258,26 @@ describe("pull request completions", () => {
     expect(h.get(t).status).toBe("done");
   });
 
+  test("record_pull_request moves a link the ticket already has to the end, and looks up every link still untitled", async () => {
+    const h = await setup();
+    const a = "https://github.com/acme/web/pull/1";
+    const b = "https://github.com/acme/web/pull/2";
+    const t = await h.inReview();
+    // Both links were saved without a title lookup (a failed one, or before the lookup existed).
+    h.store.tickets.setPullRequestUrls(t.id, [a, b]);
+    h.driver.script = async function* (req) {
+      if (req.kind !== "complete") return;
+      const head = (await runGit(["rev-parse", "HEAD"], req.cwd)).stdout.trim();
+      await req.toolContext.ops.recordPullRequest(req.toolContext, a, head);
+      await h.git("worktree", "remove", req.toolContext.ticket!.workdir!);
+      await h.git("branch", "-D", "harness/web-1");
+    };
+    h.orch.humanReview(t.key, { decision: "approve" });
+    await h.orch.idle();
+    expect(h.get(t).pullRequests.map((pr) => pr.url)).toEqual([b, a]);
+    expect(h.store.tickets.unfetchedPullRequestUrls()).toEqual([]);
+  });
+
   test("record_pull_request wants the hash of a commit the repo has, and stores it in full", async () => {
     const h = await setup();
     const tried: string[] = [];

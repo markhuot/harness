@@ -683,14 +683,18 @@ export class TicketRepo {
   /**
    * Write fetched titles onto the ticket's links, keyed by URL, and stamp each checked link. Only
    * URLs still in the list are written, so a link removed while its title was fetched stays gone.
+   * A null title means the fetch failed (gh logged out, timeout, rate limit, or not a PR), so the
+   * title already stored stays and only the check time moves on. Any write bumps updated_at, so a
+   * board snapshot taken before this write can't replace the titled copy.
    */
   applyPullRequestTitles(id: string, titles: Map<string, string | null>, checkedAt: number): Ticket | null {
     const row = this.db.query("SELECT pull_requests FROM tickets WHERE id = $id").get({ id }) as { pull_requests: string } | null;
     if (!row) return null;
-    const stored = fromJson<StoredPullRequest[]>(row.pull_requests, []).map((pr) =>
-      titles.has(pr.url) ? { ...pr, title: titles.get(pr.url) ?? null, titleCheckedAt: checkedAt } : pr,
-    );
-    this.db.query("UPDATE tickets SET pull_requests = $list WHERE id = $id").run({ id, list: toJson(stored) });
+    const stored = fromJson<StoredPullRequest[]>(row.pull_requests, []).map((pr) => {
+      if (!titles.has(pr.url)) return pr;
+      return { ...pr, title: titles.get(pr.url) ?? pr.title, titleCheckedAt: checkedAt };
+    });
+    this.db.query("UPDATE tickets SET pull_requests = $list, updated_at = $t WHERE id = $id").run({ id, list: toJson(stored), t: now() });
     return this.get(id);
   }
 

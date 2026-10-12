@@ -664,6 +664,24 @@ describe("migration 42: the pull request list", () => {
     expect(after.tickets.get(linked.id)!.pullRequests).toEqual([{ url: "https://github.com/a/b/pull/1", title: null }]);
     expect(after.tickets.get(bare.id)!.pullRequests).toEqual([]);
   });
+
+  test("a stored link with stray whitespace is saved trimmed, so it matches the same link typed without it", () => {
+    const db = new Database(":memory:", { strict: true });
+    for (const [v, sql] of MIGRATIONS.slice(0, 41).entries()) {
+      db.exec(sql);
+      db.exec(`PRAGMA user_version = ${v + 1}`);
+    }
+    db.exec(`INSERT INTO projects (id, key, name, path, next_seq, created_at, updated_at) VALUES ('p1', 'OLD', 'old', '/old', 1, 0, 0)`);
+    const s = new Store(db);
+    const padded = ticketFor(s, "p1", "OLD-1");
+    db.query("UPDATE tickets SET pull_request_url = $url WHERE id = $id").run({ url: " https://github.com/a/b/pull/1 ", id: padded.id });
+    db.exec(MIGRATIONS[41]!);
+    const after = new Store(db);
+    const [pr] = after.tickets.get(padded.id)!.pullRequests;
+    expect(pr!.url).toBe("https://github.com/a/b/pull/1");
+    // Setting the same link without the padding keeps it, rather than adding a near-duplicate.
+    expect(after.tickets.setPullRequestUrls(padded.id, ["https://github.com/a/b/pull/1"])!.added).toEqual([]);
+  });
 });
 
 describe("migration 19: drafts", () => {

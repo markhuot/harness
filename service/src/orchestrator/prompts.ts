@@ -630,9 +630,21 @@ export function changesRequestedPrompt(notes: string, by: "agent" | "human" | "c
   );
 }
 
-/** A ticket's pull requests as the completion and reopen prompts list them: "- url (title)" per line, or empty. */
+/** Longest title the prompts carry; a title comes from GitHub, where anyone can set it. */
+const PULL_REQUEST_TITLE_LIMIT = 120;
+
+/**
+ * A ticket's pull requests as the completion and reopen prompts list them: "- url (title)" per line,
+ * or empty. A title is one line, cut to PULL_REQUEST_TITLE_LIMIT, and quoted as data, so a title on
+ * a public repo can't pose as instructions.
+ */
 export function pullRequestList(pullRequests: { url: string; title: string | null }[]): string {
-  return pullRequests.map((pr) => `- ${pr.url}${pr.title ? ` (${pr.title})` : ""}`).join("\n");
+  return pullRequests
+    .map((pr) => {
+      const title = pr.title?.replace(/\s+/g, " ").trim().slice(0, PULL_REQUEST_TITLE_LIMIT);
+      return `- ${pr.url}${title ? ` (title: ${JSON.stringify(title)})` : ""}`;
+    })
+    .join("\n");
 }
 
 /** A done ticket sent back to in progress by the human. */

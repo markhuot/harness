@@ -752,7 +752,7 @@ export const MIGRATIONS: string[] = [
   //     read or written.
   `
   ALTER TABLE tickets ADD COLUMN pull_requests TEXT NOT NULL DEFAULT '[]';
-  UPDATE tickets SET pull_requests = json_array(json_object('url', pull_request_url, 'title', NULL, 'titleCheckedAt', NULL))
+  UPDATE tickets SET pull_requests = json_array(json_object('url', trim(pull_request_url), 'title', NULL, 'titleCheckedAt', NULL))
     WHERE pull_request_url IS NOT NULL AND trim(pull_request_url) <> '';
   `,
 ];
