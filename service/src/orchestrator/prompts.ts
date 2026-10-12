@@ -255,7 +255,7 @@ function instructionsSection(info: PromptInfo, o: PromptOverrides | null | undef
             prHost: pr?.host ?? "github.com",
             remoteName: pr?.remote ?? "origin",
             repo: pr?.repo ?? "<host>/<owner>/<repo>",
-            pullRequestUrl: ticket?.pullRequestUrl ?? "",
+            pullRequests: pullRequestList(ticket?.pullRequests ?? []),
           },
           o,
         );
@@ -277,7 +277,7 @@ function instructionsSection(info: PromptInfo, o: PromptOverrides | null | undef
             leftoverBranch: b.leftover?.branch ?? "",
             leftoverIsHarness: !!b.leftover?.branch && b.leftover.branch === harness,
             remoteName: b.pushRemote ?? "",
-            pullRequestUrl: ticket?.pullRequestUrl ?? "",
+            pullRequests: pullRequestList(ticket?.pullRequests ?? []),
           },
           o,
         );
@@ -592,7 +592,7 @@ export function completePrompt(
           baseBranch: v.baseBranch,
           onBase: v.onBase,
           remoteName: b.pullRequest?.remote ?? "origin",
-          pullRequestUrl: ticket.pullRequestUrl ?? "",
+          pullRequests: pullRequestList(ticket.pullRequests),
           instructions: text,
         },
         overrides,
@@ -600,7 +600,7 @@ export function completePrompt(
     case "cleanup":
       return renderPrompt(
         "run.complete_cleanup",
-        { ticket: label, branch: v.branch, baseBranch: v.baseBranch, onBase: v.onBase, ownsWorktree: v.ownsWorktree, isHarnessBranch: v.isHarnessBranch, remoteName: b.pushRemote ?? "", pullRequestUrl: ticket.pullRequestUrl ?? "", instructions: text },
+        { ticket: label, branch: v.branch, baseBranch: v.baseBranch, onBase: v.onBase, ownsWorktree: v.ownsWorktree, isHarnessBranch: v.isHarnessBranch, remoteName: b.pushRemote ?? "", pullRequests: pullRequestList(ticket.pullRequests), instructions: text },
         overrides,
       );
     case "custom":
@@ -630,6 +630,23 @@ export function changesRequestedPrompt(notes: string, by: "agent" | "human" | "c
   );
 }
 
+/** Longest title the prompts carry; a title comes from GitHub, where anyone can set it. */
+const PULL_REQUEST_TITLE_LIMIT = 120;
+
+/**
+ * A ticket's pull requests as the completion and reopen prompts list them: "- url (title)" per line,
+ * or empty. A title is one line, cut to PULL_REQUEST_TITLE_LIMIT, and quoted as data, so a title on
+ * a public repo can't pose as instructions.
+ */
+export function pullRequestList(pullRequests: { url: string; title: string | null }[]): string {
+  return pullRequests
+    .map((pr) => {
+      const title = pr.title?.replace(/\s+/g, " ").trim().slice(0, PULL_REQUEST_TITLE_LIMIT);
+      return `- ${pr.url}${title ? ` (title: ${JSON.stringify(title)})` : ""}`;
+    })
+    .join("\n");
+}
+
 /** A done ticket sent back to in progress by the human. */
 export function reopenPrompt(ticket: Ticket, notes: string, base?: string, overrides?: PromptOverrides | null): string {
   return renderPrompt(
@@ -641,7 +658,7 @@ export function reopenPrompt(ticket: Ticket, notes: string, base?: string, overr
       branch: ticket.branch ?? "",
       baseBranch: base ?? "",
       isHarnessBranch: !!ticket.branch && ticket.branch === harnessBranch(ticket.key),
-      pullRequestUrl: ticket.pullRequestUrl ?? "",
+      pullRequests: pullRequestList(ticket.pullRequests),
     },
     overrides,
   );

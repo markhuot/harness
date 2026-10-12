@@ -157,6 +157,7 @@ Do the ticket's work in the working directory, autonomously: decide for yourself
 * Where a project's app check separates validating from screenshots, validate the area you changed and take screenshots of just the screens you changed, never a whole-gallery run.
 * A check that fails for an environmental reason (missing dependencies, a tool that won't start) is part of the work: fix it. If it truly can't run, call \`block\` and ask. Never submit work as unverified, or note in Status that a check was skipped.
 Right before you submit, confirm three things: tests were added or updated, tests and typecheck pass, and Status shows screenshots for every visible change.
+If you open a pull request for this ticket yourself, add its link to the ticket's pull requests with \`update_ticket\` { key, pull_request_urls } (the whole list, including the ones it already has), so the card shows it.
 If the request is conversational or trivial (e.g. "hello world" or a quick question), answer it in text and call \`submit_for_review\` with the answer as the note and \`spec_is_up_to_date\` true{{#if canSkipReview}}{{#if skipAgentReview}}{{else}} and \`skip_agent_review\` true{{/if}}{{/if}}. Don't create files unless asked.
 {{#if branch}}Gitignored dependencies (\`node_modules\`, \`vendor\` and the like) aren't in a new worktree. Before you build or test, confirm they're present, and set them up if not: install the declared dependencies or follow the project's instructions.
 {{#if onBase}}You're in this ticket's worktree on \`{{branch}}\`, which is also its base branch: the work lands there directly and completion only removes the worktree. Commit in logical steps with clear messages. Push only when the ticket asks (e.g. an existing pull request's head branch); never force-push. Don't switch branches, merge or rebase unless asked.{{else}}You're in this ticket's worktree on \`{{branch}}\`. Commit in logical steps with clear messages. Don't switch branches, merge, rebase or push unless the ticket asks (e.g. a release the project's instructions describe): the completion run lands the work. To move the work to another branch, use \`update_branch\` (see Branches).{{/if}}{{else}}You're in the project checkout, not a worktree. Don't commit, switch branches or push unless the ticket asks.{{/if}}
@@ -246,14 +247,16 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
       prHost: "The host gh opens the pull request on, e.g. github.com",
       remoteName: "The git remote to push to, e.g. origin",
       repo: "The repository for gh --repo: host/owner/repo",
-      pullRequestUrl: "The pull request this ticket opened earlier, or empty",
+      pullRequests: "The ticket's pull requests, one per line as - <url> (<title>), or empty",
     },
     template: `## This run: completion (pull request)
 {{#if branch}}The ticket was approved to land as a pull request. The pull request is the end of this ticket: teammates review and merge it on {{prHost}}, so never merge into \`{{baseBranch}}\` yourself.
 {{#if onBase}}\`{{branch}}\` is the base branch itself, so there is no branch to open a pull request from. Don't push; call \`block\` saying so.{{else}}1. In the worktree ({{#if workdir}}{{workdir}}{{else}}the working directory{{/if}}), make sure there are no uncommitted changes; commit any that belong to the work to \`{{branch}}\`.
 2. Check that gh can reach the host: \`gh auth status --hostname {{prHost}}\`. If it fails, call \`block\` saying so (the human needs to run \`gh auth login\`).
 3. Push the branch: \`git -C {{#if workdir}}{{workdir}}{{else}}<worktree path>{{/if}} push -u {{remoteName}} {{branch}}\`. If the push is rejected because \`{{remoteName}}/{{branch}}\` has commits you don't, fetch and merge them, then push again. Never force-push.
-4. {{#if pullRequestUrl}}This ticket already opened {{pullRequestUrl}}. Check it with \`gh pr view {{branch}} --repo {{repo}} --json url,state\`: while it is open, the push updated it, so add a short comment on what changed with \`gh pr comment\`. If it was closed or merged, open a new one as below.{{else}}Check for an open pull request first: \`gh pr view {{branch}} --repo {{repo}} --json url,state\`. When there is one, the push updated it; add a short comment on what changed with \`gh pr comment\`.{{/if}} Otherwise open one: \`gh pr create --repo {{repo}} --base {{baseBranch}} --head {{branch}} --title <title> --body-file <file>\`. Use the ticket's title, and build the body from the spec (\`read_spec\`): its Goal, what changed and why, and how it was verified from its Status. Leave out its Open questions unless they're still open. When the repository has a pull request template (\`.github/pull_request_template.md\` or similar), follow it. Open it ready for review, not as a draft, unless the instructions say otherwise.
+4. {{#if pullRequests}}This ticket already has these pull requests:
+{{pullRequests}}
+The one for \`{{branch}}\` is \`gh pr view {{branch}} --repo {{repo}} --json url,state\`: while it is open, the push updated it, so add a short comment on what changed with \`gh pr comment\`. If it was closed or merged, open a new one as below.{{else}}Check for an open pull request first: \`gh pr view {{branch}} --repo {{repo}} --json url,state\`. When there is one, the push updated it; add a short comment on what changed with \`gh pr comment\`.{{/if}} Otherwise open one: \`gh pr create --repo {{repo}} --base {{baseBranch}} --head {{branch}} --title <title> --body-file <file>\`. Use the ticket's title, and build the body from the spec (\`read_spec\`): its Goal, what changed and why, and how it was verified from its Status. Leave out its Open questions unless they're still open. When the repository has a pull request template (\`.github/pull_request_template.md\` or similar), follow it. Open it ready for review, not as a draft, unless the instructions say otherwise.
 5. Call \`record_pull_request\` { url, head } with the pull request's link and the full hash of the commit you pushed (\`git -C {{#if workdir}}{{workdir}}{{else}}<worktree path>{{/if}} rev-parse HEAD\`), whether you opened the pull request or updated it. The ticket is only done once it's recorded, and its Changes tab shows that commit's diff from then on.
 6. {{#if ownsWorktree}}Remove the worktree (\`git -C {{mainCheckout}} worktree remove {{#if workdir}}{{workdir}}{{else}}<worktree path>{{/if}}\`){{else}}Leave the worktree at {{#if workdir}}{{workdir}}{{else}}<worktree path>{{/if}} in place: the harness didn't create it{{/if}}, and keep \`{{branch}}\`: the pull request needs it.{{/if}}
 
@@ -279,12 +282,14 @@ Finish by calling \`post_note\` with what you did. The note MUST be one short li
       leftoverBranch: "That leftover worktree's branch, or empty",
       leftoverIsHarness: "True when the leftover worktree's branch is the harness's own",
       remoteName: "The git remote the branch is pushed to (origin, or the only remote), or empty when the repo has none",
-      pullRequestUrl: "The pull request this ticket opened earlier, or empty",
+      pullRequests: "The ticket's pull requests, one per line as - <url> (<title>), or empty",
     },
     template: `## This run: completion (clean up)
-{{#if branch}}The ticket was approved to clean up: {{#if onBase}}its work is on \`{{branch}}\`, which is its base branch{{else}}its work has landed (merged by hand) or lives on its branch{{/if}}{{#if pullRequestUrl}}, and it has the pull request {{pullRequestUrl}}{{/if}}. Don't merge or open a pull request. {{#if remoteName}}Make sure the branch is pushed, then remove{{else}}Remove{{/if}} only what the harness made for the ticket, and only when nothing would be lost:
+{{#if branch}}The ticket was approved to clean up: {{#if onBase}}its work is on \`{{branch}}\`, which is its base branch{{else}}its work has landed (merged by hand) or lives on its branch{{/if}}. Don't merge or open a pull request. {{#if pullRequests}}Its pull requests are:
+{{pullRequests}}
+{{/if}}{{#if remoteName}}Make sure the branch is pushed, then remove{{else}}Remove{{/if}} only what the harness made for the ticket, and only when nothing would be lost:
 1. In the worktree ({{#if workdir}}{{workdir}}{{else}}the working directory{{/if}}), run \`git status\`. If there are uncommitted changes, stop here: don't commit or discard them, leave the worktree and branch in place, and call \`block\` listing the changes.
-{{#if remoteName}}2. Push \`{{branch}}\` when it has work to keep: when {{#if onBase}}{{else}}it has commits that \`{{baseBranch}}\` doesn't (\`git -C {{#if workdir}}{{workdir}}{{else}}<worktree path>{{/if}} log --oneline {{baseBranch}}..{{branch}}\`), or when {{/if}}{{remoteName}} already has it (\`git -C {{#if workdir}}{{workdir}}{{else}}<worktree path>{{/if}} ls-remote --heads {{remoteName}} {{branch}}\`); otherwise there is nothing to push. Push with \`git -C {{#if workdir}}{{workdir}}{{else}}<worktree path>{{/if}} push -u {{remoteName}} {{branch}}\`. If the push is rejected because \`{{remoteName}}/{{branch}}\` has commits you don't, fetch and merge them, then push again. Never force-push.{{#if pullRequestUrl}} The push updates the pull request {{pullRequestUrl}}: call \`record_pull_request\` { url: "{{pullRequestUrl}}", head } with the full hash of the commit you pushed (\`git -C {{#if workdir}}{{workdir}}{{else}}<worktree path>{{/if}} rev-parse HEAD\`), so the ticket's Changes keep showing it.{{/if}}
+{{#if remoteName}}2. Push \`{{branch}}\` when it has work to keep: when {{#if onBase}}{{else}}it has commits that \`{{baseBranch}}\` doesn't (\`git -C {{#if workdir}}{{workdir}}{{else}}<worktree path>{{/if}} log --oneline {{baseBranch}}..{{branch}}\`), or when {{/if}}{{remoteName}} already has it (\`git -C {{#if workdir}}{{workdir}}{{else}}<worktree path>{{/if}} ls-remote --heads {{remoteName}} {{branch}}\`); otherwise there is nothing to push. Push with \`git -C {{#if workdir}}{{workdir}}{{else}}<worktree path>{{/if}} push -u {{remoteName}} {{branch}}\`. If the push is rejected because \`{{remoteName}}/{{branch}}\` has commits you don't, fetch and merge them, then push again. Never force-push.{{#if pullRequests}} The push updates the pull request for \`{{branch}}\` (\`gh pr view {{branch}} --json url\`): call \`record_pull_request\` { url, head } with its link and the full hash of the commit you pushed (\`git -C {{#if workdir}}{{workdir}}{{else}}<worktree path>{{/if}} rev-parse HEAD\`), so the ticket's Changes keep showing it.{{/if}}
 3.{{else}}2.{{/if}} Fetch (\`git -C {{#if workdir}}{{workdir}}{{else}}<worktree path>{{/if}} fetch --all --prune\`), then list the commits that would be lost: \`git -C {{#if workdir}}{{workdir}}{{else}}<worktree path>{{/if}} log --oneline {{branch}} --not --remotes{{#if onBase}}{{else}} {{baseBranch}}{{/if}}\`{{#if onBase}} (commits on no remote branch){{else}} (commits on no remote branch and not in \`{{baseBranch}}\`){{/if}}. If it lists any, stop here: leave the worktree and branch in place, and call \`block\` listing those commits.
 {{#if remoteName}}4.{{else}}3.{{/if}} {{#if ownsWorktree}}Remove the worktree: \`git -C {{mainCheckout}} worktree remove {{#if workdir}}{{workdir}}{{else}}<worktree path>{{/if}}\`.{{else}}Leave the worktree at {{#if workdir}}{{workdir}}{{else}}<worktree path>{{/if}} in place: the harness didn't create it.{{/if}}
 {{#if remoteName}}5.{{else}}4.{{/if}} {{#if isHarnessBranch}}Delete \`{{branch}}\`: \`git -C {{mainCheckout}} branch -D {{branch}}\`. The check above proved its commits are safe; \`-d\` would refuse a branch whose commits are only on a remote.{{else}}Keep \`{{branch}}\`: the harness didn't create it{{#if onBase}}, and it is the base branch{{/if}}.{{/if}}{{#if leftoverPath}}
@@ -671,12 +676,15 @@ When you are finished, call \`post_note\` with what you did.`,
       baseBranch: BASE,
       onBase: ON_BASE,
       remoteName: "The git remote to push to, e.g. origin",
-      pullRequestUrl: "The pull request this ticket opened earlier, or empty",
+      pullRequests: "The ticket's pull requests, one per line as - <url> (<title>), or empty",
       instructions: INSTRUCTIONS,
     },
     template: `{{ticket}} is approved to land as a pull request.
 
-{{#if branch}}{{#if onBase}}Branch \`{{branch}}\` is the base branch itself, so there is no branch to open a pull request from: call \`block\` saying so.{{else}}Push \`{{branch}}\` to {{remoteName}} and {{#if pullRequestUrl}}update its pull request {{pullRequestUrl}}{{else}}open a pull request into \`{{baseBranch}}\`{{/if}}, then call \`record_pull_request\` with its link. Don't merge it: teammates review and merge it. If you can't (gh login, push access), call \`block\` with what's wrong.{{/if}}{{else}}There is no ticket branch to open a pull request from: call \`block\` saying so.{{/if}}{{#if instructions}}
+{{#if branch}}{{#if onBase}}Branch \`{{branch}}\` is the base branch itself, so there is no branch to open a pull request from: call \`block\` saying so.{{else}}{{#if pullRequests}}Its pull requests are:
+{{pullRequests}}
+
+{{/if}}Push \`{{branch}}\` to {{remoteName}} and {{#if pullRequests}}update the one for it (\`gh pr view {{branch}} --json url\`){{else}}open a pull request into \`{{baseBranch}}\`{{/if}}, then call \`record_pull_request\` with its link. Don't merge it: teammates review and merge it. If you can't (gh login, push access), call \`block\` with what's wrong.{{/if}}{{else}}There is no ticket branch to open a pull request from: call \`block\` saying so.{{/if}}{{#if instructions}}
 
 ## Instructions from the human
 {{instructions}}{{/if}}
@@ -696,12 +704,15 @@ When you are finished, call \`post_note\` with what you did.`,
       ownsWorktree: "True when the harness created the ticket's worktree, so the completion removes it",
       isHarnessBranch: "True when the ticket's branch is the harness's own (so it is deleted)",
       remoteName: "The git remote the branch is pushed to (origin, or the only remote), or empty when the repo has none",
-      pullRequestUrl: "The pull request this ticket opened earlier, or empty",
+      pullRequests: "The ticket's pull requests, one per line as - <url> (<title>), or empty",
       instructions: INSTRUCTIONS,
     },
     template: `{{ticket}} is approved to clean up: {{#if remoteName}}push its branch when it has work to keep, then remove what the harness made for it. Don't merge or open a pull request.{{else}}its work has already landed, so there is nothing to merge or push.{{/if}}
 
-{{#if branch}}{{#if remoteName}}Push \`{{branch}}\` to {{remoteName}} when {{#if onBase}}{{else}}it has commits \`{{baseBranch}}\` doesn't, or when {{/if}}{{remoteName}} already has it{{#if pullRequestUrl}} (it updates the pull request {{pullRequestUrl}}: call \`record_pull_request\` with its link and the commit you pushed){{/if}}; never force-push. {{/if}}Check that nothing on \`{{branch}}\` would be lost: no uncommitted changes, and no commits missing from every remote branch{{#if onBase}}{{else}} and from \`{{baseBranch}}\`{{/if}}. Then {{#if ownsWorktree}}remove the worktree{{else}}leave the worktree in place: the harness didn't create it{{/if}}, and {{#if isHarnessBranch}}delete \`{{branch}}\`{{else}}keep \`{{branch}}\`: the harness didn't create it{{/if}}. If something would be lost, leave everything in place and call \`block\` listing it.{{else}}There is no ticket branch or worktree to clean up: confirm the working directory is in a sensible state, and stop.{{/if}}{{#if instructions}}
+{{#if pullRequests}}Its pull requests are:
+{{pullRequests}}
+
+{{/if}}{{#if branch}}{{#if remoteName}}Push \`{{branch}}\` to {{remoteName}} when {{#if onBase}}{{else}}it has commits \`{{baseBranch}}\` doesn't, or when {{/if}}{{remoteName}} already has it{{#if pullRequests}} (it updates the pull request for it, found with \`gh pr view {{branch}} --json url\`: call \`record_pull_request\` with its link and the commit you pushed){{/if}}; never force-push. {{/if}}Check that nothing on \`{{branch}}\` would be lost: no uncommitted changes, and no commits missing from every remote branch{{#if onBase}}{{else}} and from \`{{baseBranch}}\`{{/if}}. Then {{#if ownsWorktree}}remove the worktree{{else}}leave the worktree in place: the harness didn't create it{{/if}}, and {{#if isHarnessBranch}}delete \`{{branch}}\`{{else}}keep \`{{branch}}\`: the harness didn't create it{{/if}}. If something would be lost, leave everything in place and call \`block\` listing it.{{else}}There is no ticket branch or worktree to clean up: confirm the working directory is in a sensible state, and stop.{{/if}}{{#if instructions}}
 
 ## Instructions from the human
 {{instructions}}{{/if}}
@@ -771,14 +782,16 @@ Address every point and verify the fix the way a work run does: a test for each 
       branch: BRANCH,
       baseBranch: "The base branch the earlier work merged into, or empty when unknown",
       isHarnessBranch: "True when the ticket's branch is the harness's own (recreated from the base branch)",
-      pullRequestUrl: "The pull request the ticket's completion opened, or empty",
+      pullRequests: "The ticket's pull requests, one per line as - <url> (<title>), or empty",
     },
     template: `{{ticket}} was done, and the human has re-opened it.
 
 ## What the human wants
 {{notes}}
 
-{{#if pullRequestUrl}}The earlier work was pushed to \`{{branch}}\` and is in the pull request {{pullRequestUrl}}, which may have review comments to address (\`gh pr view {{pullRequestUrl}} --comments\`). Commit on \`{{branch}}\` as usual; when the ticket completes again the new commits go to the same pull request.{{else if branch}}The earlier work was probably merged into {{#if baseBranch}}\`{{baseBranch}}\`{{else}}the base branch{{/if}} when the ticket was completed, and the worktree may have been recreated on \`{{branch}}\`{{#if isHarnessBranch}} from {{#if baseBranch}}\`{{baseBranch}}\`{{else}}the base branch{{/if}}{{/if}}. Check \`git log\` to see what is already there before you change anything.{{else}}Check the current state of the working tree before you change anything; the earlier work is already in it.{{/if}}
+{{#if pullRequests}}The earlier work was pushed to \`{{branch}}\` and is in these pull requests:
+{{pullRequests}}
+They may have review comments to address (\`gh pr view {{branch}} --comments\` shows the one for this branch). Commit on \`{{branch}}\` as usual; when the ticket completes again the new commits go to the same pull request.{{else if branch}}The earlier work was probably merged into {{#if baseBranch}}\`{{baseBranch}}\`{{else}}the base branch{{/if}} when the ticket was completed, and the worktree may have been recreated on \`{{branch}}\`{{#if isHarnessBranch}} from {{#if baseBranch}}\`{{baseBranch}}\`{{else}}the base branch{{/if}}{{/if}}. Check \`git log\` to see what is already there before you change anything.{{else}}Check the current state of the working tree before you change anything; the earlier work is already in it.{{/if}}
 
 Do the work and verify it the way a work run does: a test for each behaviour change, the tests and typecheck passing, screenshots in Status for visible changes. The spec is at revision {{specRevision}}: add what the human wants to its Goal as requirements, rewriting any requirement it changes, and rewrite the Status statements the work changes so they describe the current state, with no section for this round. Then call \`submit_for_review\` again with \`spec_is_up_to_date\` true. The submit note covers only these changes.`,
   },

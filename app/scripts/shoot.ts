@@ -173,6 +173,7 @@ const shots: { name: string; route: string; delay?: number; setup?: string }[] =
   { name: "done", route: "#/board/all/ticket/NYTIMES-5" },
   { name: "reopen", route: "#/board/all/ticket/NYTIMES-5", setup: `[...document.querySelectorAll(".actions button")].find((b) => b.textContent?.includes("Re-open"))?.click()` },
   { name: "details", route: "#/board/all/ticket/HARNESS-1/details" },
+  { name: "details-pull-requests", route: "#/board/all/ticket/NYTIMES-5/details", setup: scrollToEl("[data-testid=pull-requests]") },
   // A ticket in planning: its branch can still change (no worktree yet).
   { name: "details-planning", route: "#/board/all/ticket/NYTIMES-2/details" },
   // The notes start collapsed: open them, then scroll to them.

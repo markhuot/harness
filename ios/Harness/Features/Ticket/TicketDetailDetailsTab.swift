@@ -87,6 +87,11 @@ struct TicketDetailDetailsTab: View {
                 readOnlyRows(state)
             }
             .listRowBackground(c.bgElev)
+            // A draft has no pull requests yet, as it has no remote ID row (TicketSettingsForm).
+            if ticket.draft != true {
+                TicketPullRequestsSection(ticket: ticket)
+                    .listRowBackground(c.bgElev)
+            }
             let runs = TicketDetailLogic.runs(state, sessionId: ticket.sessionId)
             if !runs.isEmpty {
                 Section("Runs") {
@@ -145,17 +150,6 @@ struct TicketDetailDetailsTab: View {
                 .foregroundStyle(ticket.workdir != nil ? c.text : c.text3)
                 .multilineTextAlignment(.trailing)
                 .textSelection(.enabled)
-        }
-        if let url = ticket.pullRequestUrl.optional {
-            LabeledContent("Pull request") {
-                Button(TicketDetailLogic.pullRequestShort(url)) { if let u = URL(string: url) { openURL(u) } }
-                    .font(.scaled(size: 14))
-                    .foregroundStyle(c.accentText)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .buttonStyle(.plain)
-                    .accessibilityAddTraits(.isLink)
-            }
         }
         if let ref = ticket.externalRef {
             LabeledContent("External") {

@@ -13,14 +13,22 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 - The service log (`service.log`) now records every push decision: the ticket, the event, and whether it was sent or skipped and why. When a Mac or iPhone was showing the ticket, the line names the device that held the push back, so a missing push can be explained from the log.
 - `GET /notifications` also lists who is connected right now: each client's device id, platform, whether it is visible and the tickets it shows.
+- A ticket can have several pull requests. Agents set the list with `update_ticket`'s `pull_request_urls` (including their own ticket during a work run, for a pull request they opened outside the completion), and a completion's `record_pull_request` adds to it instead of replacing it. Each pull request shows its title, fetched from GitHub with `gh`: the Mac and web app's Details tab has a "Pull requests" row to add, remove and refresh them, the iPhone and iPad Details tab has the same, and the ticket shows one "PR #n" badge per link, with the title as its tooltip. `get_ticket` and `list_tickets` return each pull request's URL and title. A title stays empty when `gh` is missing, not logged in to the host, or the link isn't a pull request; refresh tries again.
 
 ### Changed
 
 - The Agent notes on a ticket's Details tab start collapsed, on the Mac and on iPhone and iPad. Click or tap "Agent notes" to open them and again to close them; a ticket with no notes still shows no field. For people working on Harness, `app/scripts/agent-notes-check.ts` covers the Mac toggle and a sim-check `agent-notes` chain covers the iPhone one, so a change that opens the notes by default fails them.
+- Recording a pull request the ticket already lists moves it to the end of the list, so the Changes tab's commit and the card's PR badge name the same pull request. The completion and reopen prompts quote each pull request title on one line, cut at 120 characters, so a long or odd title on GitHub can't change what the agent is told.
+- For the people working on Harness: the pull request title lookup and refresh now have tests for failed lookups, retries on start, the four-lookup limit and repeated refreshes.
 - On iPhone and iPad, the ticket detail sheet now shows the status indicator (colored dot and label) on its own line above the title when expanded, pushing the title down. When collapsed, the status indicator is hidden and only the truncated title shows.
+- On the Mac, the ticket's "Pull requests" row keeps each pull request on one line: the "PR #n" label, then its title cut with an ellipsis when the panel is narrow (the full title and URL are in the tooltip), then its remove button. The add field, Refresh titles and the hint below it stay on one line too.
 
 ### Fixed
 
+- A ticket's pull request title is no longer erased when a refresh can't reach GitHub: the title already shown stays until a lookup answers. A lookup that couldn't run (`gh` missing, timed out) leaves its pull request untitled until the next start retries it, instead of showing no title for good.
+- A pull request URL with stray spaces is saved trimmed, so it matches the same link typed without them and doesn't show up twice.
+- A pull request title that arrives while an older copy of the ticket is on its way to the board is no longer replaced by that copy, so the badge keeps its title.
+- An agent in a work run can name its own ticket by an earlier key (after a project rename) when it edits the ticket's pull requests.
 - Pushes no longer go missing while the Mac app is open and the Mac is away. The Mac app used to count a sleeping display as "on screen" and silenced pushes for every ticket on its board; it now reports nothing on screen while the screen is locked, the Mac is asleep, or you've been idle for a minute, and reports again as soon as you're back.
 
 ## [app-20261011.1314](https://github.com/markhuot/harness/releases/tag/app-20261011.1314) - 2026-10-11

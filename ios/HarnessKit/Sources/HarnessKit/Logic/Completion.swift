@@ -5,8 +5,8 @@ import Foundation
 // (which build the Approve menu).
 //
 // JS truthiness matters: `project?.completionActions` is truthy for an empty list (so [] wins over
-// the client's guess), while `pullRequestHost`, `pullRequestUrl`, a parent's `branch` and a child's
-// `baseBranch` are falsy when "". Unknown actions (a newer service) have no label: TS reads
+// the client's guess), while `pullRequestHost`, a parent's `branch` and a child's `baseBranch` are
+// falsy when "", and an empty `pullRequests` list is falsy too. Unknown actions (a newer service) have no label: TS reads
 // `COMPLETION_ACTION_LABELS[action]` as undefined, so `label(for:)` and `approveLabel` return nil.
 
 public enum Completion {
@@ -32,7 +32,8 @@ public enum Completion {
     /// The ticket fields completion reads (TS `TicketLike`).
     public struct TicketInfo: Codable, Sendable, Equatable {
         public var completionAction: CompletionAction?
-        public var pullRequestUrl: String?
+        /// The ticket's pull requests (Ticket.pullRequests); a non-empty list counts as an open PR.
+        @DefaultEmpty public var pullRequests: [PullRequestLink]
         public var baseBranch: String?
         /// The ticket's own branch (its worktree's). `.null` means it has none (`hasNoBranch`);
         /// `.absent` means the caller didn't say.
@@ -40,16 +41,16 @@ public enum Completion {
         /// Whether its worktree has anything to land (Ticket.hasChanges); only false matters.
         public var hasChanges: Bool?
 
-        public init(completionAction: CompletionAction? = nil, pullRequestUrl: String? = nil, baseBranch: String? = nil, branch: Patch<String> = .absent, hasChanges: Bool? = nil) {
+        public init(completionAction: CompletionAction? = nil, pullRequests: [PullRequestLink] = [], baseBranch: String? = nil, branch: Patch<String> = .absent, hasChanges: Bool? = nil) {
             self.completionAction = completionAction
-            self.pullRequestUrl = pullRequestUrl
+            self.pullRequests = pullRequests
             self.baseBranch = baseBranch
             self.branch = branch
             self.hasChanges = hasChanges
         }
 
         public init(_ ticket: Ticket) {
-            self.init(completionAction: ticket.completionAction.optional, pullRequestUrl: ticket.pullRequestUrl.optional, baseBranch: ticket.baseBranch.optional, branch: Patch(ticket.branch), hasChanges: ticket.hasChanges.optional)
+            self.init(completionAction: ticket.completionAction.optional, pullRequests: ticket.pullRequests, baseBranch: ticket.baseBranch.optional, branch: Patch(ticket.branch), hasChanges: ticket.hasChanges.optional)
         }
     }
 
@@ -165,7 +166,7 @@ public enum Completion {
         var defaultAction = actions.contains(projectDefault) ? projectDefault : actions.first ?? .custom
         if let earlier = ticket?.completionAction, !earlier.rawValue.isEmpty, actions.contains(earlier) {
             defaultAction = earlier
-        } else if nonEmpty(ticket?.pullRequestUrl) != nil, actions.contains(.cleanup) {
+        } else if ticket?.pullRequests.isEmpty == false, actions.contains(.cleanup) {
             defaultAction = .cleanup
         }
         return Options(actions: actions, defaultAction: defaultAction, parentBranch: nil)

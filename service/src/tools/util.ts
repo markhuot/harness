@@ -298,7 +298,7 @@ export function ticketView(t: Ticket) {
     requestedBranch: t.requestedBranch ?? null,
     baseBranch: t.baseBranch ?? null,
     completionAction: t.completionAction ?? null,
-    pullRequestUrl: t.pullRequestUrl ?? null,
+    pullRequests: t.pullRequests,
   };
 }
 

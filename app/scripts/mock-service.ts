@@ -4,6 +4,12 @@
 //   bun app/scripts/mock-service.ts        (MOCK_PORT=7799 MOCK_TOKEN=mock-token MOCK_QUIET=1)
 //   HARNESS_URL=http://127.0.0.1:7799 HARNESS_TOKEN=mock-token bun run --cwd app dev
 
+/** The title GitHub would give a pull request, canned: the mock doesn't call gh. */
+function mockPullRequestTitle(url: string): string {
+  const n = /\/pull\/(\d+)/.exec(url)?.[1];
+  return n ? `Mock pull request ${n}` : "Mock pull request";
+}
+
 import { readFileSync } from "node:fs";
 import { deflateSync } from "node:zlib";
 import type { ServerWebSocket } from "bun";
@@ -595,6 +601,7 @@ function seedTicket(s: SeedTicket): Ticket {
   const worktree = s.status !== "planning" && s.project.useWorktrees && s.project.isGit !== false;
   const t: Ticket = {
     id,
+    pullRequests: [],
     key,
     projectId: s.project.id,
     kind: s.kind ?? "task",
@@ -896,7 +903,10 @@ function seed() {
   }); // NYTIMES-5
   // Completed with "Approve and open PR": the card shows a PR chip, the ticket a PR link.
   upgrade.completionAction = "pr";
-  upgrade.pullRequestUrl = "https://github.com/markhuot/nytimes/pull/318";
+  upgrade.pullRequests = [
+    { url: "https://github.com/markhuot/nytimes/pull/318", title: "Split the secrets out of checkout" },
+    { url: "https://github.com/markhuot/nytimes/pull/319", title: null },
+  ];
   seedTicket({
     project: ny,
     title: "Paywall meter counts AMP pageviews twice",
@@ -1472,8 +1482,11 @@ function completeRun(t: Ticket, instructions = t.completionInstructions ?? "") {
   const prompt = { merge: "Finalize: merge the worktree branch.", pr: "Finalize: push the branch and open a pull request.", cleanup: "Finalize: remove the worktree and branch.", custom: "Finalize the work as instructed." }[action];
   const result = { merge: "Merged the branch and cleaned up the worktree.", pr: "Pushed the branch and opened a pull request.", cleanup: "Removed the worktree and the harness branch.", custom: instructions ? `Done: ${instructions}` : "Wrapped up." }[action];
   simulateRun(t, "complete", `${prompt} ${instructions}`.trim(), result, (cur) => {
-    if (action === "pr" && !cur.pullRequestUrl) cur.pullRequestUrl = `https://${project?.pullRequestHost ?? "github.com"}/markhuot/${project?.name ?? "repo"}/pull/${400 + tickets.size}`;
-    addActivity(cur.sessionId, cur.id, "note", "agent", action === "pr" ? `Completed. Opened ${cur.pullRequestUrl}` : "Completed.");
+    if (action === "pr" && !cur.pullRequests.length) {
+      const url = `https://${project?.pullRequestHost ?? "github.com"}/markhuot/${project?.name ?? "repo"}/pull/${400 + tickets.size}`;
+      cur.pullRequests = [{ url, title: mockPullRequestTitle(url) }];
+    }
+    addActivity(cur.sessionId, cur.id, "note", "agent", action === "pr" ? `Completed. Opened ${cur.pullRequests.at(-1)?.url}` : "Completed.");
     setStatus(cur, "done");
   });
 }
@@ -1503,6 +1516,7 @@ function createTicket(body: Record<string, any>): Ticket {
   const worktree = (body.useWorktree ?? project.useWorktrees) && project.isGit !== false;
   const t: Ticket = {
     id,
+    pullRequests: [],
     key,
     projectId: project.id,
     kind: body.kind ?? "task",
@@ -1733,6 +1747,10 @@ async function route(req: Request, url: URL): Promise<Response> {
       throw new HttpError(404, `Ticket ${b} not found`);
     }
     const t = found.ticket;
+    if (c === "pull-requests" && method === "POST" && url.pathname.endsWith("/refresh")) {
+      t.pullRequests = t.pullRequests.map((pr) => ({ ...pr, title: mockPullRequestTitle(pr.url) }));
+      return ok(ticketDetail(t, found.alias));
+    }
     if (!c) {
       if (method === "GET") return ok(ticketDetail(t, found.alias));
       if (method === "PATCH") {
@@ -1787,6 +1805,12 @@ async function route(req: Request, url: URL): Promise<Response> {
             if (url && !/^https?:\/\//i.test(url)) throw new HttpError(400, "externalRef.url must be an http(s) URL");
             t.externalRef = { source: "manual", key, url, raw: null };
           }
+        }
+        if (body.pullRequestUrls !== undefined) {
+          if (!Array.isArray(body.pullRequestUrls)) throw new HttpError(400, "pullRequestUrls must be a list of pull request URLs");
+          const urls = [...new Set((body.pullRequestUrls as string[]).map((u) => String(u).trim()).filter(Boolean))];
+          for (const u of urls) if (!/^https?:\/\//i.test(u)) throw new HttpError(400, `Not a pull request link: ${u} (it must start with http:// or https://)`);
+          t.pullRequests = urls.map((u) => ({ url: u, title: t.pullRequests.find((pr) => pr.url === u)?.title ?? mockPullRequestTitle(u) }));
         }
         if (body.branch !== undefined) {
           if (t.branch) throw new HttpError(409, `${t.key} already has a worktree on ${t.branch}; ask its agent to move it with update_branch`);

@@ -74,6 +74,7 @@ export const project = (id: string, key: string, over: Partial<Project> = {}): P
 
 export const ticket = (id: string, over: Partial<Ticket> = {}): Ticket => ({
   id,
+  pullRequests: [],
   key: id.toUpperCase(),
   projectId: "p1",
   kind: "task",

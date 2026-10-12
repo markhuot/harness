@@ -129,7 +129,7 @@ const ticket: P.Ticket = {
   skipHumanReview: true,
   completionAction: "pr",
   completionInstructions: "Squash before opening the PR",
-  pullRequestUrl: "https://github.com/nytimes/app/pull/812",
+  pullRequests: [{ url: "https://github.com/nytimes/app/pull/812", title: "Split the secrets out of checkout" }],
   draft: false,
   blockedReason: "Should HarnessEvent decode unknown kinds or drop them?",
   busy: true,
@@ -148,6 +148,7 @@ const ticket: P.Ticket = {
 /** A planning ticket from an older service: no optional fields at all. */
 const plainTicket: P.Ticket = {
   id: "tkt_2",
+  pullRequests: [],
   key: "SCRATCH-2",
   projectId: "prj_00a1",
   kind: "task",
@@ -192,7 +193,7 @@ export const Ticket: P.Ticket[] = [
     skipHumanReview: false,
     completionAction: null,
     completionInstructions: null,
-    pullRequestUrl: null,
+    pullRequests: [],
     draft: true,
     messageDraft: null,
     promptAttachments: [

@@ -11,6 +11,7 @@ export function fakeTicket(overrides: Partial<Ticket> = {}): Ticket {
   return {
     id: "t_1",
     key: "TEST-1",
+    pullRequests: [],
     projectId: "p_1",
     kind: "task",
     title: "A ticket",

@@ -577,6 +577,8 @@ export function makeOrchestrator(opts: Partial<OrchestratorOptions> & { driver?:
     browser,
     paths,
     tools: opts.tools ?? (() => []),
+    // No gh in tests: a pull request's title is null unless a test says otherwise.
+    fetchPullRequestTitle: opts.fetchPullRequestTitle ?? (async () => null),
     baseUrl: opts.baseUrl ?? (() => "http://127.0.0.1:9"),
     watchers: opts.watchers === undefined ? null : opts.watchers,
     log: opts.log ?? (() => {}),

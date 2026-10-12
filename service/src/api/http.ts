@@ -248,6 +248,7 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
   });
   add("GET", "/tickets/:key", ({ params }) => o.ticketDetail(params.key!));
   add("PATCH", "/tickets/:key", async ({ params, body }) => o.updateTicket(params.key!, await body()));
+  add("POST", "/tickets/:key/pull-requests/refresh", ({ params }) => o.refreshPullRequestTitles(params.key!));
   add("DELETE", "/tickets/:key", async ({ params }) => (await o.deleteTicket(params.key!), ok));
   add("POST", "/tickets/:key/start", ({ params }) => o.startTicket(params.key!));
   add("POST", "/tickets/:key/submit", async ({ params, body }) => o.submitTicket(params.key!, (await body()) ?? {}));

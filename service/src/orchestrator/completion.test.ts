@@ -258,6 +258,26 @@ describe("pull request completions", () => {
     expect(h.get(t).status).toBe("done");
   });
 
+  test("record_pull_request moves a link the ticket already has to the end, and looks up every link still untitled", async () => {
+    const h = await setup();
+    const a = "https://github.com/acme/web/pull/1";
+    const b = "https://github.com/acme/web/pull/2";
+    const t = await h.inReview();
+    // Both links were saved without a title lookup (a failed one, or before the lookup existed).
+    h.store.tickets.setPullRequestUrls(t.id, [a, b]);
+    h.driver.script = async function* (req) {
+      if (req.kind !== "complete") return;
+      const head = (await runGit(["rev-parse", "HEAD"], req.cwd)).stdout.trim();
+      await req.toolContext.ops.recordPullRequest(req.toolContext, a, head);
+      await h.git("worktree", "remove", req.toolContext.ticket!.workdir!);
+      await h.git("branch", "-D", "harness/web-1");
+    };
+    h.orch.humanReview(t.key, { decision: "approve" });
+    await h.orch.idle();
+    expect(h.get(t).pullRequests.map((pr) => pr.url)).toEqual([b, a]);
+    expect(h.store.tickets.unfetchedPullRequestUrls()).toEqual([]);
+  });
+
   test("record_pull_request wants the hash of a commit the repo has, and stores it in full", async () => {
     const h = await setup();
     const tried: string[] = [];
@@ -418,12 +438,15 @@ describe("cleanup completions", () => {
     const h = await setup();
     const t = await h.inReview();
     const url = "https://github.com/acme/web/pull/1";
-    h.store.tickets.update(t.id, { pullRequestUrl: url });
+    const earlier = "https://github.com/acme/web/pull/0";
+    h.store.tickets.setPullRequestUrls(t.id, [earlier]);
     let recorded = "";
     h.driver.script = async function* (req) {
       if (req.kind !== "complete") return;
       const head = (await runGit(["rev-parse", "HEAD"], req.cwd)).stdout.trim();
       recorded = await req.toolContext.ops.recordPullRequest(req.toolContext, url, head);
+      // Recording a link the ticket already has leaves its list as it was.
+      await req.toolContext.ops.recordPullRequest(req.toolContext, url, head);
       await h.git("worktree", "remove", req.toolContext.ticket!.workdir!);
       await h.git("branch", "-D", "harness/web-1");
     };
@@ -431,11 +454,12 @@ describe("cleanup completions", () => {
     h.orch.humanReview(t.key, { decision: "approve" });
     await h.orch.idle();
     const run = h.completes()[0]!;
-    expect(h.get(t)).toMatchObject({ status: "done", completionAction: "cleanup", pullRequestUrl: url, pullRequestHead: head });
+    // record_pull_request appends its link to the ticket's list, after the one it already had.
+    expect(h.get(t)).toMatchObject({ status: "done", completionAction: "cleanup", pullRequests: [{ url: earlier, title: null }, { url, title: null }], pullRequestHead: head });
     expect(recorded).toContain(url);
     expect(run.runContext).toContain("## This run: completion (clean up)");
     expect(run.runContext).toContain("push -u origin harness/web-1`");
-    expect(run.runContext).toContain(`record_pull_request\` { url: "${url}", head }`);
+    expect(run.runContext).toContain("(`gh pr view harness/web-1 --json url`): call `record_pull_request` { url, head }");
     expect(run.prompt).toContain("Push `harness/web-1` to origin");
   });
 

@@ -22,6 +22,7 @@ struct TicketDetailHero: View {
     @Environment(\.isPresented) private var isPresented
     @Environment(Actions.self) private var actions
     @Environment(\.palette) private var c
+    @Environment(\.openURL) private var openURL
     @State private var localExpanded = false
     /// Runs the actions and hosts what they ask for (the notes and instructions sheets, the delete confirmation).
     @State private var runner = TicketActionRunner()
@@ -64,7 +65,7 @@ struct TicketDetailHero: View {
                 if state.hasCustomDriver(ticket) { DriverBadge(driver: ticket.driver, drivers: state.drivers) }
                 ModelBadge(ticket: ticket, state: state)
                 if let branch = ticket.branch { Badge(branch, outline: true, icon: "branch") }
-                if let url = ticket.pullRequestUrl.optional { pullRequestBadge(url) }
+                ForEach(ticket.pullRequests, id: \.url) { pullRequestBadge($0) }
                 if ticket.status == .review {
                     ReviewMark(who: .agent, state: ticket.agentReview)
                     ReviewMark(who: .human, state: ticket.humanReview)
@@ -187,12 +188,13 @@ struct TicketDetailHero: View {
         .accessibilityHint(expanded ? "Hides the ticket's status and actions" : "Shows the ticket's status and actions")
     }
 
-    /// The PR a "pr" completion opened, as a tappable badge.
-    private func pullRequestBadge(_ url: String) -> some View {
-        Link(destination: URL(string: url) ?? URL(string: "about:blank")!) {
-            Badge(TicketDetailLogic.pullRequestBadge(url), tone: .violet, icon: "external")
+    /// One of the ticket's pull requests, as a tappable badge. The title lives in the label, not on the
+    /// badge, to keep the row short.
+    private func pullRequestBadge(_ link: PullRequestLink) -> some View {
+        Link(destination: URL(string: link.url) ?? URL(string: "about:blank")!) {
+            Badge(TicketDetailLogic.pullRequestBadge(link.url), tone: .violet, icon: "external")
         }
-        .accessibilityLabel(TicketDetailLogic.pullRequestNumber(url).map { "Pull request #\($0)" } ?? "Pull request")
+        .accessibilityLabel(TicketDetailLogic.pullRequestAccessibilityLabel(link))
         .accessibilityHint("Opens it in the browser")
     }
 
@@ -255,6 +257,12 @@ struct TicketDetailHero: View {
     /// review, where Approve and take no action does it), Cancel run while a run is busy, and Delete.
     private func moreMenu(_ set: TicketActionSet) -> some View {
         Menu {
+            // One per pull request, titled when it has a title, then the rest of the menu.
+            ForEach(ticket.pullRequests, id: \.url) { link in
+                Button(TicketDetailLogic.pullRequestMenuTitle(link), systemImage: "arrow.up.right.square") {
+                    if let url = URL(string: link.url) { openURL(url) }
+                }
+            }
             ForEach(Array(set.more.enumerated()), id: \.offset) { _, item in
                 Button(item.action.title, systemImage: item.action.symbol, role: item.action.isDestructive ? .destructive : nil) { run(item.action) }
                     .disabled(!item.enabled)

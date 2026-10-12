@@ -222,6 +222,8 @@ export interface UpdateTicketInput {
   remoteId?: string | null;
   /** The remote item's link; null clears it. Alone, it changes the link of the remote ID the ticket carries. */
   remoteUrl?: string | null;
+  /** The ticket's pull request URLs, the whole list ([] clears it); titles are fetched, never passed */
+  pullRequestUrls?: string[];
 }
 
 /**

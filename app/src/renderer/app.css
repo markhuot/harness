@@ -1196,6 +1196,49 @@ html[data-input="keyboard"] .card.cursor:not(:focus) {
   flex-direction: column;
   gap: 2px;
 }
+/* Pull requests: each link, the add field and the hint sit on one line. The title gives way to an ellipsis. */
+.pull-requests-row,
+.pull-request-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.pull-request-item {
+  min-width: 0;
+  white-space: nowrap;
+}
+.pull-request-item > .mono {
+  flex: none;
+}
+.pull-request-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pull-requests-add {
+  min-width: 0;
+}
+.pull-requests-add .pull-request-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.pull-requests-add > .btn {
+  flex: none;
+  white-space: nowrap;
+}
+.pull-requests-hint {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .ticket-link {
   display: flex;
   align-items: center;

@@ -2230,6 +2230,7 @@
               "detail": {
                 "ticket": {
                   "id": "t1",
+                  "pullRequests": [],
                   "key": "T1",
                   "projectId": "p1",
                   "kind": "task",
@@ -2350,6 +2351,7 @@
             "tickets": {
               "t1": {
                 "id": "t1",
+                "pullRequests": [],
                 "key": "T1",
                 "projectId": "p1",
                 "kind": "task",
@@ -3140,6 +3142,7 @@
                 "kind": "ticket.upserted",
                 "ticket": {
                   "id": "t1",
+                  "pullRequests": [],
                   "key": "T1",
                   "projectId": "p1",
                   "kind": "task",
@@ -3257,6 +3260,7 @@
                 "kind": "ticket.upserted",
                 "ticket": {
                   "id": "t1",
+                  "pullRequests": [],
                   "key": "T1",
                   "projectId": "p1",
                   "kind": "task",
@@ -3319,6 +3323,7 @@
                 "kind": "ticket.upserted",
                 "ticket": {
                   "id": "t1",
+                  "pullRequests": [],
                   "key": "T1",
                   "projectId": "p1",
                   "kind": "task",
@@ -3355,6 +3360,7 @@
                 "kind": "ticket.upserted",
                 "ticket": {
                   "id": "t1",
+                  "pullRequests": [],
                   "key": "T1",
                   "projectId": "p1",
                   "kind": "task",
@@ -3416,6 +3422,7 @@
                 "kind": "ticket.upserted",
                 "ticket": {
                   "id": "t2",
+                  "pullRequests": [],
                   "key": "T2",
                   "projectId": "p1",
                   "kind": "task",
@@ -3462,6 +3469,7 @@
             "tickets": {
               "t1": {
                 "id": "t1",
+                "pullRequests": [],
                 "key": "T1",
                 "projectId": "p1",
                 "kind": "task",
@@ -3491,6 +3499,7 @@
               },
               "t2": {
                 "id": "t2",
+                "pullRequests": [],
                 "key": "T2",
                 "projectId": "p1",
                 "kind": "task",
@@ -3583,6 +3592,7 @@
                 "kind": "ticket.upserted",
                 "ticket": {
                   "id": "t1",
+                  "pullRequests": [],
                   "key": "T1",
                   "projectId": "p1",
                   "kind": "task",
@@ -3618,6 +3628,7 @@
                 "kind": "ticket.upserted",
                 "ticket": {
                   "id": "t2",
+                  "pullRequests": [],
                   "key": "T2",
                   "projectId": "p1",
                   "kind": "task",
@@ -3725,6 +3736,7 @@
             "tickets": {
               "t1": {
                 "id": "t1",
+                "pullRequests": [],
                 "key": "T1",
                 "projectId": "p1",
                 "kind": "task",
@@ -3754,6 +3766,7 @@
               },
               "t2": {
                 "id": "t2",
+                "pullRequests": [],
                 "key": "T2",
                 "projectId": "p1",
                 "kind": "task",
@@ -3895,6 +3908,7 @@
             "tickets": {
               "t1": {
                 "id": "t1",
+                "pullRequests": [],
                 "key": "T1",
                 "projectId": "p1",
                 "kind": "task",
@@ -3924,6 +3938,7 @@
               },
               "t2": {
                 "id": "t2",
+                "pullRequests": [],
                 "key": "T2",
                 "projectId": "p1",
                 "kind": "task",
@@ -4019,6 +4034,7 @@
                 "kind": "ticket.upserted",
                 "ticket": {
                   "id": "t1",
+                  "pullRequests": [],
                   "key": "T1",
                   "projectId": "p1",
                   "kind": "task",
@@ -4053,6 +4069,7 @@
                 "kind": "ticket.upserted",
                 "ticket": {
                   "id": "t1",
+                  "pullRequests": [],
                   "key": "T1",
                   "projectId": "p1",
                   "kind": "task",
@@ -4090,6 +4107,7 @@
             "tickets": {
               "t1": {
                 "id": "t1",
+                "pullRequests": [],
                 "key": "T1",
                 "projectId": "p1",
                 "kind": "task",
@@ -4156,6 +4174,7 @@
             "tickets": {
               "t1": {
                 "id": "t1",
+                "pullRequests": [],
                 "key": "T1",
                 "projectId": "p1",
                 "kind": "task",
@@ -4298,6 +4317,7 @@
                 "kind": "ticket.upserted",
                 "ticket": {
                   "id": "t1",
+                  "pullRequests": [],
                   "key": "T1",
                   "projectId": "p1",
                   "kind": "task",
@@ -4332,6 +4352,7 @@
                 "kind": "ticket.upserted",
                 "ticket": {
                   "id": "t2",
+                  "pullRequests": [],
                   "key": "T2",
                   "projectId": "p2",
                   "kind": "task",
@@ -4393,6 +4414,7 @@
             "tickets": {
               "t2": {
                 "id": "t2",
+                "pullRequests": [],
                 "key": "T2",
                 "projectId": "p2",
                 "kind": "task",
@@ -4841,6 +4863,7 @@
                 "kind": "ticket.upserted",
                 "ticket": {
                   "id": "gone",
+                  "pullRequests": [],
                   "key": "GONE",
                   "projectId": "p1",
                   "kind": "task",
@@ -4881,6 +4904,7 @@
                 "tickets": [
                   {
                     "id": "t1",
+                    "pullRequests": [],
                     "key": "T1",
                     "projectId": "p1",
                     "kind": "task",
@@ -4923,6 +4947,7 @@
             "tickets": {
               "t1": {
                 "id": "t1",
+                "pullRequests": [],
                 "key": "T1",
                 "projectId": "p1",
                 "kind": "task",
@@ -4984,6 +5009,7 @@
                 "kind": "ticket.upserted",
                 "ticket": {
                   "id": "t1",
+                  "pullRequests": [],
                   "key": "T1",
                   "projectId": "p1",
                   "kind": "task",
@@ -5024,6 +5050,7 @@
                 "tickets": [
                   {
                     "id": "t1",
+                    "pullRequests": [],
                     "key": "T1",
                     "projectId": "p1",
                     "kind": "task",
@@ -5066,6 +5093,7 @@
             "tickets": {
               "t1": {
                 "id": "t1",
+                "pullRequests": [],
                 "key": "T1",
                 "projectId": "p1",
                 "kind": "task",
@@ -5123,6 +5151,7 @@
                 "tickets": [
                   {
                     "id": "t1",
+                    "pullRequests": [],
                     "key": "T1",
                     "projectId": "p1",
                     "kind": "task",
@@ -5165,6 +5194,7 @@
             "tickets": {
               "t1": {
                 "id": "t1",
+                "pullRequests": [],
                 "key": "T1",
                 "projectId": "p1",
                 "kind": "task",
@@ -5379,6 +5409,7 @@
                 "tickets": [
                   {
                     "id": "t1",
+                    "pullRequests": [],
                     "key": "T1",
                     "projectId": "p1",
                     "kind": "task",
@@ -5407,6 +5438,7 @@
                   },
                   {
                     "id": "t2",
+                    "pullRequests": [],
                     "key": "T2",
                     "projectId": "p1",
                     "kind": "task",
@@ -5523,6 +5555,7 @@
             "tickets": {
               "t1": {
                 "id": "t1",
+                "pullRequests": [],
                 "key": "T1",
                 "projectId": "p1",
                 "kind": "task",
@@ -5551,6 +5584,7 @@
               },
               "t2": {
                 "id": "t2",
+                "pullRequests": [],
                 "key": "T2",
                 "projectId": "p1",
                 "kind": "task",
@@ -6021,6 +6055,7 @@
               "detail": {
                 "ticket": {
                   "id": "t",
+                  "pullRequests": [],
                   "key": "T",
                   "projectId": "p1",
                   "kind": "task",
@@ -6138,6 +6173,7 @@
             "tickets": {
               "t": {
                 "id": "t",
+                "pullRequests": [],
                 "key": "T",
                 "projectId": "p1",
                 "kind": "task",
@@ -6263,6 +6299,7 @@
                 "tickets": [
                   {
                     "id": "kid",
+                    "pullRequests": [],
                     "key": "KID",
                     "projectId": "p1",
                     "kind": "task",
@@ -6306,6 +6343,7 @@
               "detail": {
                 "ticket": {
                   "id": "cond",
+                  "pullRequests": [],
                   "key": "COND",
                   "projectId": "p1",
                   "kind": "conductor",
@@ -6367,6 +6405,7 @@
                 "children": [
                   {
                     "id": "kid",
+                    "pullRequests": [],
                     "key": "KID",
                     "projectId": "p1",
                     "kind": "task",
@@ -6395,6 +6434,7 @@
                   },
                   {
                     "id": "k2",
+                    "pullRequests": [],
                     "key": "K2",
                     "projectId": "p1",
                     "kind": "task",
@@ -6474,6 +6514,7 @@
             "tickets": {
               "kid": {
                 "id": "kid",
+                "pullRequests": [],
                 "key": "KID",
                 "projectId": "p1",
                 "kind": "task",
@@ -6502,6 +6543,7 @@
               },
               "cond": {
                 "id": "cond",
+                "pullRequests": [],
                 "key": "COND",
                 "projectId": "p1",
                 "kind": "conductor",
@@ -6530,6 +6572,7 @@
               },
               "k2": {
                 "id": "k2",
+                "pullRequests": [],
                 "key": "K2",
                 "projectId": "p1",
                 "kind": "task",
@@ -6683,6 +6726,7 @@
               "detail": {
                 "ticket": {
                   "id": "r",
+                  "pullRequests": [],
                   "key": "NEW-7",
                   "projectId": "p1",
                   "kind": "task",
@@ -6761,6 +6805,7 @@
             "tickets": {
               "r": {
                 "id": "r",
+                "pullRequests": [],
                 "key": "NEW-7",
                 "projectId": "p1",
                 "kind": "task",
@@ -6839,6 +6884,7 @@
               "detail": {
                 "ticket": {
                   "id": "q",
+                  "pullRequests": [],
                   "key": "Q-1",
                   "projectId": "p1",
                   "kind": "task",
@@ -6895,6 +6941,7 @@
             "tickets": {
               "r": {
                 "id": "r",
+                "pullRequests": [],
                 "key": "NEW-7",
                 "projectId": "p1",
                 "kind": "task",
@@ -6923,6 +6970,7 @@
               },
               "q": {
                 "id": "q",
+                "pullRequests": [],
                 "key": "Q-1",
                 "projectId": "p1",
                 "kind": "task",
@@ -7022,6 +7070,7 @@
               "detail": {
                 "ticket": {
                   "id": "r",
+                  "pullRequests": [],
                   "key": "NEW-7",
                   "projectId": "p1",
                   "kind": "task",
@@ -7094,6 +7143,7 @@
             "tickets": {
               "r": {
                 "id": "r",
+                "pullRequests": [],
                 "key": "NEW-7",
                 "projectId": "p1",
                 "kind": "task",
@@ -7176,6 +7226,7 @@
                 "kind": "ticket.upserted",
                 "ticket": {
                   "id": "t1",
+                  "pullRequests": [],
                   "key": "T1",
                   "projectId": "p1",
                   "kind": "task",
@@ -7209,6 +7260,7 @@
               "detail": {
                 "ticket": {
                   "id": "t1",
+                  "pullRequests": [],
                   "key": "T1",
                   "projectId": "p1",
                   "kind": "task",
@@ -7264,6 +7316,7 @@
             "tickets": {
               "t1": {
                 "id": "t1",
+                "pullRequests": [],
                 "key": "T1",
                 "projectId": "p1",
                 "kind": "task",
@@ -7344,6 +7397,7 @@
                 "kind": "ticket.upserted",
                 "ticket": {
                   "id": "a",
+                  "pullRequests": [],
                   "key": "A",
                   "projectId": "p1",
                   "kind": "task",
@@ -7377,6 +7431,7 @@
               "tickets": [
                 {
                   "id": "a",
+                  "pullRequests": [],
                   "key": "A",
                   "projectId": "p1",
                   "kind": "task",
@@ -7405,6 +7460,7 @@
                 },
                 {
                   "id": "b",
+                  "pullRequests": [],
                   "key": "B",
                   "projectId": "p1",
                   "kind": "task",
@@ -7443,6 +7499,7 @@
               "tickets": [
                 {
                   "id": "a",
+                  "pullRequests": [],
                   "key": "A",
                   "projectId": "p1",
                   "kind": "task",
@@ -7484,6 +7541,7 @@
             "tickets": {
               "a": {
                 "id": "a",
+                "pullRequests": [],
                 "key": "A",
                 "projectId": "p1",
                 "kind": "task",
@@ -7512,6 +7570,7 @@
               },
               "b": {
                 "id": "b",
+                "pullRequests": [],
                 "key": "B",
                 "projectId": "p1",
                 "kind": "task",
@@ -7657,6 +7716,7 @@
                 "kind": "ticket.upserted",
                 "ticket": {
                   "id": "a",
+                  "pullRequests": [],
                   "key": "A",
                   "projectId": "p1",
                   "kind": "task",
@@ -7691,6 +7751,7 @@
                 "kind": "ticket.upserted",
                 "ticket": {
                   "id": "b",
+                  "pullRequests": [],
                   "key": "B",
                   "projectId": "p1",
                   "kind": "task",
@@ -7725,6 +7786,7 @@
                 "kind": "ticket.upserted",
                 "ticket": {
                   "id": "c",
+                  "pullRequests": [],
                   "key": "C",
                   "projectId": "p2",
                   "kind": "task",
@@ -7759,6 +7821,7 @@
                 "kind": "ticket.upserted",
                 "ticket": {
                   "id": "d",
+                  "pullRequests": [],
                   "key": "D",
                   "projectId": "p2",
                   "kind": "task",
@@ -7793,6 +7856,7 @@
                 "kind": "ticket.upserted",
                 "ticket": {
                   "id": "e",
+                  "pullRequests": [],
                   "key": "E",
                   "projectId": "p1",
                   "kind": "task",
@@ -7923,6 +7987,7 @@
             "tickets": {
               "a": {
                 "id": "a",
+                "pullRequests": [],
                 "key": "A",
                 "projectId": "p1",
                 "kind": "task",
@@ -7951,6 +8016,7 @@
               },
               "b": {
                 "id": "b",
+                "pullRequests": [],
                 "key": "B",
                 "projectId": "p1",
                 "kind": "task",
@@ -7979,6 +8045,7 @@
               },
               "c": {
                 "id": "c",
+                "pullRequests": [],
                 "key": "C",
                 "projectId": "p2",
                 "kind": "task",
@@ -8007,6 +8074,7 @@
               },
               "d": {
                 "id": "d",
+                "pullRequests": [],
                 "key": "D",
                 "projectId": "p2",
                 "kind": "task",
@@ -8035,6 +8103,7 @@
               },
               "e": {
                 "id": "e",
+                "pullRequests": [],
                 "key": "E",
                 "projectId": "p1",
                 "kind": "task",
@@ -8096,6 +8165,7 @@
                 "kind": "ticket.upserted",
                 "ticket": {
                   "id": "a",
+                  "pullRequests": [],
                   "key": "A",
                   "projectId": "p1",
                   "kind": "task",
@@ -8130,6 +8200,7 @@
                 "kind": "ticket.upserted",
                 "ticket": {
                   "id": "b",
+                  "pullRequests": [],
                   "key": "B",
                   "projectId": "p1",
                   "kind": "task",
@@ -8164,6 +8235,7 @@
                 "kind": "ticket.upserted",
                 "ticket": {
                   "id": "c",
+                  "pullRequests": [],
                   "key": "C",
                   "projectId": "p2",
                   "kind": "task",
@@ -8198,6 +8270,7 @@
                 "kind": "ticket.upserted",
                 "ticket": {
                   "id": "d",
+                  "pullRequests": [],
                   "key": "D",
                   "projectId": "p2",
                   "kind": "task",
@@ -8232,6 +8305,7 @@
                 "kind": "ticket.upserted",
                 "ticket": {
                   "id": "e",
+                  "pullRequests": [],
                   "key": "E",
                   "projectId": "p1",
                   "kind": "task",
@@ -8266,6 +8340,7 @@
                 "kind": "ticket.upserted",
                 "ticket": {
                   "id": "f",
+                  "pullRequests": [],
                   "key": "F",
                   "projectId": "p1",
                   "kind": "task",
@@ -8337,6 +8412,7 @@
             "tickets": {
               "a": {
                 "id": "a",
+                "pullRequests": [],
                 "key": "A",
                 "projectId": "p1",
                 "kind": "task",
@@ -8365,6 +8441,7 @@
               },
               "b": {
                 "id": "b",
+                "pullRequests": [],
                 "key": "B",
                 "projectId": "p1",
                 "kind": "task",
@@ -8393,6 +8470,7 @@
               },
               "c": {
                 "id": "c",
+                "pullRequests": [],
                 "key": "C",
                 "projectId": "p2",
                 "kind": "task",
@@ -8421,6 +8499,7 @@
               },
               "d": {
                 "id": "d",
+                "pullRequests": [],
                 "key": "D",
                 "projectId": "p2",
                 "kind": "task",
@@ -8449,6 +8528,7 @@
               },
               "e": {
                 "id": "e",
+                "pullRequests": [],
                 "key": "E",
                 "projectId": "p1",
                 "kind": "task",
@@ -8477,6 +8557,7 @@
               },
               "f": {
                 "id": "f",
+                "pullRequests": [],
                 "key": "F",
                 "projectId": "p1",
                 "kind": "task",
@@ -8592,6 +8673,7 @@
               "args": [
                 {
                   "id": "a",
+                  "pullRequests": [],
                   "key": "A",
                   "projectId": "p1",
                   "kind": "task",
@@ -8626,6 +8708,7 @@
               "args": [
                 {
                   "id": "a",
+                  "pullRequests": [],
                   "key": "A",
                   "projectId": "p1",
                   "kind": "task",
@@ -8784,6 +8867,7 @@
               "args": [
                 {
                   "id": "a",
+                  "pullRequests": [],
                   "key": "A",
                   "projectId": "p1",
                   "kind": "task",
@@ -8818,6 +8902,7 @@
               "args": [
                 {
                   "id": "a",
+                  "pullRequests": [],
                   "key": "A",
                   "projectId": "p1",
                   "kind": "task",
@@ -8919,6 +9004,7 @@
               "args": [
                 {
                   "id": "a",
+                  "pullRequests": [],
                   "key": "A",
                   "projectId": "p1",
                   "kind": "task",
@@ -9067,6 +9153,7 @@
               "args": [
                 {
                   "id": "a",
+                  "pullRequests": [],
                   "key": "A",
                   "projectId": "p1",
                   "kind": "task",
@@ -9101,6 +9188,7 @@
               "args": [
                 {
                   "id": "a",
+                  "pullRequests": [],
                   "key": "A",
                   "projectId": "p1",
                   "kind": "task",
@@ -9135,6 +9223,7 @@
               "args": [
                 {
                   "id": "a",
+                  "pullRequests": [],
                   "key": "A",
                   "projectId": "p1",
                   "kind": "task",
@@ -9169,6 +9258,7 @@
               "args": [
                 {
                   "id": "a",
+                  "pullRequests": [],
                   "key": "A",
                   "projectId": "p1",
                   "kind": "task",
@@ -9203,6 +9293,7 @@
               "args": [
                 {
                   "id": "a",
+                  "pullRequests": [],
                   "key": "A",
                   "projectId": "p1",
                   "kind": "task",
@@ -9237,6 +9328,7 @@
               "args": [
                 {
                   "id": "a",
+                  "pullRequests": [],
                   "key": "A",
                   "projectId": "p1",
                   "kind": "task",
@@ -9271,6 +9363,7 @@
               "args": [
                 {
                   "id": "b",
+                  "pullRequests": [],
                   "key": "B",
                   "projectId": "p2",
                   "kind": "task",
@@ -9305,6 +9398,7 @@
               "args": [
                 {
                   "id": "b",
+                  "pullRequests": [],
                   "key": "B",
                   "projectId": "p2",
                   "kind": "task",
@@ -9525,6 +9619,7 @@
               "args": [
                 {
                   "id": "a",
+                  "pullRequests": [],
                   "key": "A",
                   "projectId": "p1",
                   "kind": "task",
@@ -9559,6 +9654,7 @@
               "args": [
                 {
                   "id": "a",
+                  "pullRequests": [],
                   "key": "A",
                   "projectId": "p1",
                   "kind": "task",
@@ -9604,6 +9700,7 @@
               "args": [
                 {
                   "id": "a",
+                  "pullRequests": [],
                   "key": "A",
                   "projectId": "p1",
                   "kind": "task",
@@ -9649,6 +9746,7 @@
               "args": [
                 {
                   "id": "a",
+                  "pullRequests": [],
                   "key": "A",
                   "projectId": "p1",
                   "kind": "task",
@@ -9689,6 +9787,7 @@
               "args": [
                 {
                   "id": "a",
+                  "pullRequests": [],
                   "key": "A",
                   "projectId": "p1",
                   "kind": "task",
@@ -9812,6 +9911,7 @@
               "args": [
                 {
                   "id": "a",
+                  "pullRequests": [],
                   "key": "A",
                   "projectId": "p1",
                   "kind": "task",
@@ -10379,6 +10479,7 @@
                 "kind": "ticket.upserted",
                 "ticket": {
                   "id": "t1",
+                  "pullRequests": [],
                   "key": "BAR-1",
                   "projectId": "p1",
                   "kind": "task",
@@ -10489,6 +10590,7 @@
             "tickets": {
               "t1": {
                 "id": "t1",
+                "pullRequests": [],
                 "key": "BAR-1",
                 "projectId": "p1",
                 "kind": "task",
@@ -10699,6 +10801,7 @@
                 "kind": "ticket.upserted",
                 "ticket": {
                   "id": "k2",
+                  "pullRequests": [],
                   "key": "K2",
                   "projectId": "p1",
                   "kind": "task",
@@ -10733,6 +10836,7 @@
                 "kind": "ticket.upserted",
                 "ticket": {
                   "id": "k1",
+                  "pullRequests": [],
                   "key": "K1",
                   "projectId": "p1",
                   "kind": "task",
@@ -10767,6 +10871,7 @@
                 "kind": "ticket.upserted",
                 "ticket": {
                   "id": "x",
+                  "pullRequests": [],
                   "key": "X",
                   "projectId": "p1",
                   "kind": "task",
@@ -10822,6 +10927,7 @@
             "tickets": {
               "k2": {
                 "id": "k2",
+                "pullRequests": [],
                 "key": "K2",
                 "projectId": "p1",
                 "kind": "task",
@@ -10850,6 +10956,7 @@
               },
               "k1": {
                 "id": "k1",
+                "pullRequests": [],
                 "key": "K1",
                 "projectId": "p1",
                 "kind": "task",
@@ -10878,6 +10985,7 @@
               },
               "x": {
                 "id": "x",
+                "pullRequests": [],
                 "key": "X",
                 "projectId": "p1",
                 "kind": "task",

@@ -33,12 +33,27 @@ public enum TicketDetailLogic {
         pullRequestNumber(url).map { "PR #\($0)" } ?? "Pull request"
     }
 
-    /// The Details row's link text: the URL without its scheme (`/^https?:\/\//`).
-    public static func pullRequestShort(_ url: String) -> String {
-        for scheme in ["https://", "http://"] where url.unicodeScalars.starts(with: scheme.unicodeScalars) {
-            return String(String.UnicodeScalarView(url.unicodeScalars.dropFirst(scheme.unicodeScalars.count)))
-        }
-        return url
+    /// The pull request's title when it has one (trimmed; "" counts as none), else nil.
+    public static func pullRequestTitle(_ link: PullRequestLink) -> String? {
+        let title = link.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return title.isEmpty ? nil : title
+    }
+
+    /// The Details row's subtitle: the title, or "No title" when the pull request has none.
+    public static func pullRequestSubtitle(_ link: PullRequestLink) -> String {
+        pullRequestTitle(link) ?? "No title"
+    }
+
+    /// The hero badge's VoiceOver label: "Pull request #12: Split the secrets out", naming the title
+    /// when there is one. Without a number it's "Pull request" plus the title.
+    public static func pullRequestAccessibilityLabel(_ link: PullRequestLink) -> String {
+        let base = pullRequestNumber(link.url).map { "Pull request #\($0)" } ?? "Pull request"
+        return pullRequestTitle(link).map { "\(base): \($0)" } ?? base
+    }
+
+    /// The More menu's item for a pull request: its title, else "Open pull request #12".
+    public static func pullRequestMenuTitle(_ link: PullRequestLink) -> String {
+        pullRequestTitle(link) ?? (pullRequestNumber(link.url).map { "Open pull request #\($0)" } ?? "Open pull request")
     }
 
     // MARK: Review actions

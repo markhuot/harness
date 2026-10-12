@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import type { CompletionAction, ExternalRef, MessageDraft, PendingApproval, PermissionMode, PhaseModels, Attachment, ReviewState, Ticket, TicketKind, TicketPage, TicketStatus } from "@harness/shared";
+import type { CompletionAction, ExternalRef, MessageDraft, PendingApproval, PermissionMode, PhaseModels, Attachment, PullRequestLink, ReviewState, Ticket, TicketKind, TicketPage, TicketStatus } from "@harness/shared";
 import { isCompletionAction, resolvePhaseChoice } from "@harness/shared";
 import { hasSearchIndex } from "../db";
 import { clampLimit, decodeCursor, DEFAULT_PAGE_LIMIT, DEFAULT_SEARCH_LIMIT, encodeCursor, ftsQuery, keyCandidate, likePattern, searchTerms } from "./search";
@@ -43,7 +43,7 @@ interface TicketRow {
   skip_human_review?: number;
   completion_action?: string | null;
   completion_instructions?: string | null;
-  pull_request_url?: string | null;
+  pull_requests?: string | null;
   pull_request_head?: string | null;
   has_changes?: number | null;
   draft?: number;
@@ -158,7 +158,6 @@ export type TicketPatch = Partial<{
   skipHumanReview: boolean;
   completionAction: CompletionAction | null;
   completionInstructions: string | null;
-  pullRequestUrl: string | null;
   pullRequestHead: string | null;
   hasChanges: boolean | null;
   draft: boolean;
@@ -192,7 +191,6 @@ const COLUMNS: Record<string, string> = {
   skipHumanReview: "skip_human_review",
   completionAction: "completion_action",
   completionInstructions: "completion_instructions",
-  pullRequestUrl: "pull_request_url",
   pullRequestHead: "pull_request_head",
   hasChanges: "has_changes",
   draft: "draft",
@@ -204,6 +202,14 @@ const COLUMNS: Record<string, string> = {
 };
 
 const JSON_FIELDS = new Set(["pendingApproval", "allowedTools", "promptAttachments", "phaseModels"]);
+
+/**
+ * A pull request as stored: the link, its fetched title, and when the service last tried to fetch
+ * the title (null: never). A failed fetch leaves the title null with titleCheckedAt set.
+ */
+export interface StoredPullRequest extends PullRequestLink {
+  titleCheckedAt: number | null;
+}
 
 /** Narrow a page or search to one project, or to the projects in a group (a group's board). */
 function projectFilter(opts: { projectId?: string; group?: string }, where: string[], params: SqlParams) {
@@ -263,7 +269,9 @@ export class TicketRepo {
   private map(rows: TicketRow[]): Ticket[] {
     const deps = this.deps(rows.map((r) => r.id));
     const choices = this.legacyChoices(rows);
-    return rows.map((r) => ({
+    return rows.map((r) => {
+      const stored = fromJson<StoredPullRequest[]>(r.pull_requests ?? null, []);
+      return {
       id: r.id,
       key: r.key,
       projectId: r.project_id,
@@ -303,7 +311,8 @@ export class TicketRepo {
       skipHumanReview: bool(r.skip_human_review ?? 0),
       completionAction: isCompletionAction(r.completion_action) ? r.completion_action : null,
       completionInstructions: r.completion_instructions ?? null,
-      pullRequestUrl: r.pull_request_url ?? null,
+      pullRequests: stored.map(({ url, title }) => ({ url, title })),
+      pullRequestUrl: stored.at(-1)?.url ?? null,
       pullRequestHead: r.pull_request_head ?? null,
       hasChanges: r.has_changes === null || r.has_changes === undefined ? null : bool(r.has_changes),
       draft: bool(r.draft ?? 0),
@@ -315,7 +324,8 @@ export class TicketRepo {
       completedAt: r.completed_at ?? null,
       createdAt: r.created_at,
       updatedAt: r.updated_at,
-    }));
+      };
+    });
   }
 
   /** `drafts: false` leaves drafts out (what agents see). */
@@ -651,6 +661,51 @@ export class TicketRepo {
       .query("UPDATE tickets SET external_ref = $ref, external_key = $key, updated_at = $t WHERE id = $id")
       .run({ id, ref: toJson(externalRef), key: externalRef?.key ?? null, t: now() });
     return this.get(id);
+  }
+
+  /**
+   * Set the ticket's pull request URLs to this list, in this order (the whole list, like
+   * dependsOn). A URL that stays keeps its stored title and check time; a new one starts with no
+   * title. `added` and `removed` are what changed, for the Activity line and for title fetches.
+   */
+  setPullRequestUrls(id: string, urls: string[]): { ticket: Ticket; added: string[]; removed: string[] } | null {
+    const row = this.db.query("SELECT pull_requests FROM tickets WHERE id = $id").get({ id }) as { pull_requests: string } | null;
+    if (!row) return null;
+    const stored = fromJson<StoredPullRequest[]>(row.pull_requests, []);
+    const byUrl = new Map(stored.map((pr) => [pr.url, pr]));
+    const next = urls.map((url) => byUrl.get(url) ?? { url, title: null, titleCheckedAt: null });
+    const added = urls.filter((url) => !byUrl.has(url));
+    const removed = stored.map((pr) => pr.url).filter((url) => !urls.includes(url));
+    this.db.query("UPDATE tickets SET pull_requests = $list, updated_at = $t WHERE id = $id").run({ id, list: toJson(next), t: now() });
+    return { ticket: this.get(id)!, added, removed };
+  }
+
+  /**
+   * Write fetched titles onto the ticket's links, keyed by URL, and stamp each checked link. Only
+   * URLs still in the list are written, so a link removed while its title was fetched stays gone.
+   * A null title means the fetch failed (gh logged out, timeout, rate limit, or not a PR), so the
+   * title already stored stays and only the check time moves on. Any write bumps updated_at, so a
+   * board snapshot taken before this write can't replace the titled copy.
+   */
+  applyPullRequestTitles(id: string, titles: Map<string, string | null>, checkedAt: number): Ticket | null {
+    const row = this.db.query("SELECT pull_requests FROM tickets WHERE id = $id").get({ id }) as { pull_requests: string } | null;
+    if (!row) return null;
+    const stored = fromJson<StoredPullRequest[]>(row.pull_requests, []).map((pr) => {
+      if (!titles.has(pr.url)) return pr;
+      return { ...pr, title: titles.get(pr.url) ?? pr.title, titleCheckedAt: checkedAt };
+    });
+    this.db.query("UPDATE tickets SET pull_requests = $list, updated_at = $t WHERE id = $id").run({ id, list: toJson(stored), t: now() });
+    return this.get(id);
+  }
+
+  /** The pull request links whose title was never fetched (titleCheckedAt null), by ticket. */
+  unfetchedPullRequestUrls(): { id: string; url: string }[] {
+    return this.db
+      .query(
+        `SELECT t.id AS id, json_extract(j.value, '$.url') AS url FROM tickets t, json_each(t.pull_requests) j
+         WHERE json_extract(j.value, '$.titleCheckedAt') IS NULL`,
+      )
+      .all() as { id: string; url: string }[];
   }
 
   /**

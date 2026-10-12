@@ -583,6 +583,7 @@ Do the ticket's work in the working directory, autonomously: decide for yourself
 * Where a project's app check separates validating from screenshots, validate the area you changed and take screenshots of just the screens you changed, never a whole-gallery run.
 * A check that fails for an environmental reason (missing dependencies, a tool that won't start) is part of the work: fix it. If it truly can't run, call \`block\` and ask. Never submit work as unverified, or note in Status that a check was skipped.
 Right before you submit, confirm three things: tests were added or updated, tests and typecheck pass, and Status shows screenshots for every visible change.
+If you open a pull request for this ticket yourself, add its link to the ticket's pull requests with \`update_ticket\` { key, pull_request_urls } (the whole list, including the ones it already has), so the card shows it.
 If the request is conversational or trivial (e.g. "hello world" or a quick question), answer it in text and call \`submit_for_review\` with the answer as the note and \`spec_is_up_to_date\` true and \`skip_agent_review\` true. Don't create files unless asked.
 You're in the project checkout, not a worktree. Don't commit, switch branches or push unless the ticket asks.
 End the run with exactly one of these, never both, then stop:
@@ -690,6 +691,7 @@ Do the ticket's work in the working directory, autonomously: decide for yourself
 * Where a project's app check separates validating from screenshots, validate the area you changed and take screenshots of just the screens you changed, never a whole-gallery run.
 * A check that fails for an environmental reason (missing dependencies, a tool that won't start) is part of the work: fix it. If it truly can't run, call \`block\` and ask. Never submit work as unverified, or note in Status that a check was skipped.
 Right before you submit, confirm three things: tests were added or updated, tests and typecheck pass, and Status shows screenshots for every visible change.
+If you open a pull request for this ticket yourself, add its link to the ticket's pull requests with \`update_ticket\` { key, pull_request_urls } (the whole list, including the ones it already has), so the card shows it.
 If the request is conversational or trivial (e.g. "hello world" or a quick question), answer it in text and call \`submit_for_review\` with the answer as the note and \`spec_is_up_to_date\` true and \`skip_agent_review\` true. Don't create files unless asked.
 You're in the project checkout, not a worktree. Don't commit, switch branches or push unless the ticket asks.
 End the run with exactly one of these, never both, then stop:
@@ -797,6 +799,7 @@ Do the ticket's work in the working directory, autonomously: decide for yourself
 * Where a project's app check separates validating from screenshots, validate the area you changed and take screenshots of just the screens you changed, never a whole-gallery run.
 * A check that fails for an environmental reason (missing dependencies, a tool that won't start) is part of the work: fix it. If it truly can't run, call \`block\` and ask. Never submit work as unverified, or note in Status that a check was skipped.
 Right before you submit, confirm three things: tests were added or updated, tests and typecheck pass, and Status shows screenshots for every visible change.
+If you open a pull request for this ticket yourself, add its link to the ticket's pull requests with \`update_ticket\` { key, pull_request_urls } (the whole list, including the ones it already has), so the card shows it.
 If the request is conversational or trivial (e.g. "hello world" or a quick question), answer it in text and call \`submit_for_review\` with the answer as the note and \`spec_is_up_to_date\` true and \`skip_agent_review\` true. Don't create files unless asked.
 You're in the project checkout, not a worktree. Don't commit, switch branches or push unless the ticket asks.
 End the run with exactly one of these, never both, then stop:
@@ -904,6 +907,7 @@ Do the ticket's work in the working directory, autonomously: decide for yourself
 * Where a project's app check separates validating from screenshots, validate the area you changed and take screenshots of just the screens you changed, never a whole-gallery run.
 * A check that fails for an environmental reason (missing dependencies, a tool that won't start) is part of the work: fix it. If it truly can't run, call \`block\` and ask. Never submit work as unverified, or note in Status that a check was skipped.
 Right before you submit, confirm three things: tests were added or updated, tests and typecheck pass, and Status shows screenshots for every visible change.
+If you open a pull request for this ticket yourself, add its link to the ticket's pull requests with \`update_ticket\` { key, pull_request_urls } (the whole list, including the ones it already has), so the card shows it.
 If the request is conversational or trivial (e.g. "hello world" or a quick question), answer it in text and call \`submit_for_review\` with the answer as the note and \`spec_is_up_to_date\` true and \`skip_agent_review\` true. Don't create files unless asked.
 You're in the project checkout, not a worktree. Don't commit, switch branches or push unless the ticket asks.
 End the run with exactly one of these, never both, then stop:
@@ -1011,6 +1015,7 @@ Do the ticket's work in the working directory, autonomously: decide for yourself
 * Where a project's app check separates validating from screenshots, validate the area you changed and take screenshots of just the screens you changed, never a whole-gallery run.
 * A check that fails for an environmental reason (missing dependencies, a tool that won't start) is part of the work: fix it. If it truly can't run, call \`block\` and ask. Never submit work as unverified, or note in Status that a check was skipped.
 Right before you submit, confirm three things: tests were added or updated, tests and typecheck pass, and Status shows screenshots for every visible change.
+If you open a pull request for this ticket yourself, add its link to the ticket's pull requests with \`update_ticket\` { key, pull_request_urls } (the whole list, including the ones it already has), so the card shows it.
 If the request is conversational or trivial (e.g. "hello world" or a quick question), answer it in text and call \`submit_for_review\` with the answer as the note and \`spec_is_up_to_date\` true and \`skip_agent_review\` true. Don't create files unless asked.
 Gitignored dependencies (\`node_modules\`, \`vendor\` and the like) aren't in a new worktree. Before you build or test, confirm they're present, and set them up if not: install the declared dependencies or follow the project's instructions.
 You're in this ticket's worktree on \`harness/nyt-3\`. Commit in logical steps with clear messages. Don't switch branches, merge, rebase or push unless the ticket asks (e.g. a release the project's instructions describe): the completion run lands the work. To move the work to another branch, use \`update_branch\` (see Branches).
@@ -1125,6 +1130,7 @@ Do the ticket's work in the working directory, autonomously: decide for yourself
 * Where a project's app check separates validating from screenshots, validate the area you changed and take screenshots of just the screens you changed, never a whole-gallery run.
 * A check that fails for an environmental reason (missing dependencies, a tool that won't start) is part of the work: fix it. If it truly can't run, call \`block\` and ask. Never submit work as unverified, or note in Status that a check was skipped.
 Right before you submit, confirm three things: tests were added or updated, tests and typecheck pass, and Status shows screenshots for every visible change.
+If you open a pull request for this ticket yourself, add its link to the ticket's pull requests with \`update_ticket\` { key, pull_request_urls } (the whole list, including the ones it already has), so the card shows it.
 If the request is conversational or trivial (e.g. "hello world" or a quick question), answer it in text and call \`submit_for_review\` with the answer as the note and \`spec_is_up_to_date\` true and \`skip_agent_review\` true. Don't create files unless asked.
 Gitignored dependencies (\`node_modules\`, \`vendor\` and the like) aren't in a new worktree. Before you build or test, confirm they're present, and set them up if not: install the declared dependencies or follow the project's instructions.
 You're in this ticket's worktree on \`harness/nyt-3\`. Commit in logical steps with clear messages. Don't switch branches, merge, rebase or push unless the ticket asks (e.g. a release the project's instructions describe): the completion run lands the work. To move the work to another branch, use \`update_branch\` (see Branches).
@@ -1239,6 +1245,7 @@ Do the ticket's work in the working directory, autonomously: decide for yourself
 * Where a project's app check separates validating from screenshots, validate the area you changed and take screenshots of just the screens you changed, never a whole-gallery run.
 * A check that fails for an environmental reason (missing dependencies, a tool that won't start) is part of the work: fix it. If it truly can't run, call \`block\` and ask. Never submit work as unverified, or note in Status that a check was skipped.
 Right before you submit, confirm three things: tests were added or updated, tests and typecheck pass, and Status shows screenshots for every visible change.
+If you open a pull request for this ticket yourself, add its link to the ticket's pull requests with \`update_ticket\` { key, pull_request_urls } (the whole list, including the ones it already has), so the card shows it.
 If the request is conversational or trivial (e.g. "hello world" or a quick question), answer it in text and call \`submit_for_review\` with the answer as the note and \`spec_is_up_to_date\` true and \`skip_agent_review\` true. Don't create files unless asked.
 Gitignored dependencies (\`node_modules\`, \`vendor\` and the like) aren't in a new worktree. Before you build or test, confirm they're present, and set them up if not: install the declared dependencies or follow the project's instructions.
 You're in this ticket's worktree on \`harness/nyt-3\`. Commit in logical steps with clear messages. Don't switch branches, merge, rebase or push unless the ticket asks (e.g. a release the project's instructions describe): the completion run lands the work. To move the work to another branch, use \`update_branch\` (see Branches).
@@ -1353,6 +1360,7 @@ Do the ticket's work in the working directory, autonomously: decide for yourself
 * Where a project's app check separates validating from screenshots, validate the area you changed and take screenshots of just the screens you changed, never a whole-gallery run.
 * A check that fails for an environmental reason (missing dependencies, a tool that won't start) is part of the work: fix it. If it truly can't run, call \`block\` and ask. Never submit work as unverified, or note in Status that a check was skipped.
 Right before you submit, confirm three things: tests were added or updated, tests and typecheck pass, and Status shows screenshots for every visible change.
+If you open a pull request for this ticket yourself, add its link to the ticket's pull requests with \`update_ticket\` { key, pull_request_urls } (the whole list, including the ones it already has), so the card shows it.
 If the request is conversational or trivial (e.g. "hello world" or a quick question), answer it in text and call \`submit_for_review\` with the answer as the note and \`spec_is_up_to_date\` true and \`skip_agent_review\` true. Don't create files unless asked.
 Gitignored dependencies (\`node_modules\`, \`vendor\` and the like) aren't in a new worktree. Before you build or test, confirm they're present, and set them up if not: install the declared dependencies or follow the project's instructions.
 You're in this ticket's worktree on \`feature/x\`. Commit in logical steps with clear messages. Don't switch branches, merge, rebase or push unless the ticket asks (e.g. a release the project's instructions describe): the completion run lands the work. To move the work to another branch, use \`update_branch\` (see Branches).
@@ -1467,6 +1475,7 @@ Do the ticket's work in the working directory, autonomously: decide for yourself
 * Where a project's app check separates validating from screenshots, validate the area you changed and take screenshots of just the screens you changed, never a whole-gallery run.
 * A check that fails for an environmental reason (missing dependencies, a tool that won't start) is part of the work: fix it. If it truly can't run, call \`block\` and ask. Never submit work as unverified, or note in Status that a check was skipped.
 Right before you submit, confirm three things: tests were added or updated, tests and typecheck pass, and Status shows screenshots for every visible change.
+If you open a pull request for this ticket yourself, add its link to the ticket's pull requests with \`update_ticket\` { key, pull_request_urls } (the whole list, including the ones it already has), so the card shows it.
 If the request is conversational or trivial (e.g. "hello world" or a quick question), answer it in text and call \`submit_for_review\` with the answer as the note and \`spec_is_up_to_date\` true and \`skip_agent_review\` true. Don't create files unless asked.
 Gitignored dependencies (\`node_modules\`, \`vendor\` and the like) aren't in a new worktree. Before you build or test, confirm they're present, and set them up if not: install the declared dependencies or follow the project's instructions.
 You're in this ticket's worktree on \`medl-1\`. Commit in logical steps with clear messages. Don't switch branches, merge, rebase or push unless the ticket asks (e.g. a release the project's instructions describe): the completion run lands the work. To move the work to another branch, use \`update_branch\` (see Branches).
@@ -1581,6 +1590,7 @@ Do the ticket's work in the working directory, autonomously: decide for yourself
 * Where a project's app check separates validating from screenshots, validate the area you changed and take screenshots of just the screens you changed, never a whole-gallery run.
 * A check that fails for an environmental reason (missing dependencies, a tool that won't start) is part of the work: fix it. If it truly can't run, call \`block\` and ask. Never submit work as unverified, or note in Status that a check was skipped.
 Right before you submit, confirm three things: tests were added or updated, tests and typecheck pass, and Status shows screenshots for every visible change.
+If you open a pull request for this ticket yourself, add its link to the ticket's pull requests with \`update_ticket\` { key, pull_request_urls } (the whole list, including the ones it already has), so the card shows it.
 If the request is conversational or trivial (e.g. "hello world" or a quick question), answer it in text and call \`submit_for_review\` with the answer as the note and \`spec_is_up_to_date\` true and \`skip_agent_review\` true. Don't create files unless asked.
 Gitignored dependencies (\`node_modules\`, \`vendor\` and the like) aren't in a new worktree. Before you build or test, confirm they're present, and set them up if not: install the declared dependencies or follow the project's instructions.
 You're in this ticket's worktree on \`medl-1\`. Commit in logical steps with clear messages. Don't switch branches, merge, rebase or push unless the ticket asks (e.g. a release the project's instructions describe): the completion run lands the work. To move the work to another branch, use \`update_branch\` (see Branches).
@@ -1695,6 +1705,7 @@ Do the ticket's work in the working directory, autonomously: decide for yourself
 * Where a project's app check separates validating from screenshots, validate the area you changed and take screenshots of just the screens you changed, never a whole-gallery run.
 * A check that fails for an environmental reason (missing dependencies, a tool that won't start) is part of the work: fix it. If it truly can't run, call \`block\` and ask. Never submit work as unverified, or note in Status that a check was skipped.
 Right before you submit, confirm three things: tests were added or updated, tests and typecheck pass, and Status shows screenshots for every visible change.
+If you open a pull request for this ticket yourself, add its link to the ticket's pull requests with \`update_ticket\` { key, pull_request_urls } (the whole list, including the ones it already has), so the card shows it.
 If the request is conversational or trivial (e.g. "hello world" or a quick question), answer it in text and call \`submit_for_review\` with the answer as the note and \`spec_is_up_to_date\` true and \`skip_agent_review\` true. Don't create files unless asked.
 Gitignored dependencies (\`node_modules\`, \`vendor\` and the like) aren't in a new worktree. Before you build or test, confirm they're present, and set them up if not: install the declared dependencies or follow the project's instructions.
 You're in this ticket's worktree on \`harness/nyt-3\`. Commit in logical steps with clear messages. Don't switch branches, merge, rebase or push unless the ticket asks (e.g. a release the project's instructions describe): the completion run lands the work. To move the work to another branch, use \`update_branch\` (see Branches).
@@ -1809,6 +1820,7 @@ Do the ticket's work in the working directory, autonomously: decide for yourself
 * Where a project's app check separates validating from screenshots, validate the area you changed and take screenshots of just the screens you changed, never a whole-gallery run.
 * A check that fails for an environmental reason (missing dependencies, a tool that won't start) is part of the work: fix it. If it truly can't run, call \`block\` and ask. Never submit work as unverified, or note in Status that a check was skipped.
 Right before you submit, confirm three things: tests were added or updated, tests and typecheck pass, and Status shows screenshots for every visible change.
+If you open a pull request for this ticket yourself, add its link to the ticket's pull requests with \`update_ticket\` { key, pull_request_urls } (the whole list, including the ones it already has), so the card shows it.
 If the request is conversational or trivial (e.g. "hello world" or a quick question), answer it in text and call \`submit_for_review\` with the answer as the note and \`spec_is_up_to_date\` true and \`skip_agent_review\` true. Don't create files unless asked.
 Gitignored dependencies (\`node_modules\`, \`vendor\` and the like) aren't in a new worktree. Before you build or test, confirm they're present, and set them up if not: install the declared dependencies or follow the project's instructions.
 You're in this ticket's worktree on \`main\`, which is also its base branch: the work lands there directly and completion only removes the worktree. Commit in logical steps with clear messages. Push only when the ticket asks (e.g. an existing pull request's head branch); never force-push. Don't switch branches, merge or rebase unless asked.
@@ -1923,6 +1935,7 @@ Do the ticket's work in the working directory, autonomously: decide for yourself
 * Where a project's app check separates validating from screenshots, validate the area you changed and take screenshots of just the screens you changed, never a whole-gallery run.
 * A check that fails for an environmental reason (missing dependencies, a tool that won't start) is part of the work: fix it. If it truly can't run, call \`block\` and ask. Never submit work as unverified, or note in Status that a check was skipped.
 Right before you submit, confirm three things: tests were added or updated, tests and typecheck pass, and Status shows screenshots for every visible change.
+If you open a pull request for this ticket yourself, add its link to the ticket's pull requests with \`update_ticket\` { key, pull_request_urls } (the whole list, including the ones it already has), so the card shows it.
 If the request is conversational or trivial (e.g. "hello world" or a quick question), answer it in text and call \`submit_for_review\` with the answer as the note and \`spec_is_up_to_date\` true and \`skip_agent_review\` true. Don't create files unless asked.
 Gitignored dependencies (\`node_modules\`, \`vendor\` and the like) aren't in a new worktree. Before you build or test, confirm they're present, and set them up if not: install the declared dependencies or follow the project's instructions.
 You're in this ticket's worktree on \`main\`, which is also its base branch: the work lands there directly and completion only removes the worktree. Commit in logical steps with clear messages. Push only when the ticket asks (e.g. an existing pull request's head branch); never force-push. Don't switch branches, merge or rebase unless asked.
@@ -2037,6 +2050,7 @@ Do the ticket's work in the working directory, autonomously: decide for yourself
 * Where a project's app check separates validating from screenshots, validate the area you changed and take screenshots of just the screens you changed, never a whole-gallery run.
 * A check that fails for an environmental reason (missing dependencies, a tool that won't start) is part of the work: fix it. If it truly can't run, call \`block\` and ask. Never submit work as unverified, or note in Status that a check was skipped.
 Right before you submit, confirm three things: tests were added or updated, tests and typecheck pass, and Status shows screenshots for every visible change.
+If you open a pull request for this ticket yourself, add its link to the ticket's pull requests with \`update_ticket\` { key, pull_request_urls } (the whole list, including the ones it already has), so the card shows it.
 If the request is conversational or trivial (e.g. "hello world" or a quick question), answer it in text and call \`submit_for_review\` with the answer as the note and \`spec_is_up_to_date\` true and \`skip_agent_review\` true. Don't create files unless asked.
 Gitignored dependencies (\`node_modules\`, \`vendor\` and the like) aren't in a new worktree. Before you build or test, confirm they're present, and set them up if not: install the declared dependencies or follow the project's instructions.
 You're in this ticket's worktree on \`harness/nyt-3\`. Commit in logical steps with clear messages. Don't switch branches, merge, rebase or push unless the ticket asks (e.g. a release the project's instructions describe): the completion run lands the work. To move the work to another branch, use \`update_branch\` (see Branches).
@@ -2150,6 +2164,7 @@ Do the ticket's work in the working directory, autonomously: decide for yourself
 * Where a project's app check separates validating from screenshots, validate the area you changed and take screenshots of just the screens you changed, never a whole-gallery run.
 * A check that fails for an environmental reason (missing dependencies, a tool that won't start) is part of the work: fix it. If it truly can't run, call \`block\` and ask. Never submit work as unverified, or note in Status that a check was skipped.
 Right before you submit, confirm three things: tests were added or updated, tests and typecheck pass, and Status shows screenshots for every visible change.
+If you open a pull request for this ticket yourself, add its link to the ticket's pull requests with \`update_ticket\` { key, pull_request_urls } (the whole list, including the ones it already has), so the card shows it.
 If the request is conversational or trivial (e.g. "hello world" or a quick question), answer it in text and call \`submit_for_review\` with the answer as the note and \`spec_is_up_to_date\` true and \`skip_agent_review\` true. Don't create files unless asked.
 You're in the project checkout, not a worktree. Don't commit, switch branches or push unless the ticket asks.
 End the run with exactly one of these, never both, then stop:
@@ -2255,6 +2270,7 @@ Do the ticket's work in the working directory, autonomously: decide for yourself
 * Where a project's app check separates validating from screenshots, validate the area you changed and take screenshots of just the screens you changed, never a whole-gallery run.
 * A check that fails for an environmental reason (missing dependencies, a tool that won't start) is part of the work: fix it. If it truly can't run, call \`block\` and ask. Never submit work as unverified, or note in Status that a check was skipped.
 Right before you submit, confirm three things: tests were added or updated, tests and typecheck pass, and Status shows screenshots for every visible change.
+If you open a pull request for this ticket yourself, add its link to the ticket's pull requests with \`update_ticket\` { key, pull_request_urls } (the whole list, including the ones it already has), so the card shows it.
 If the request is conversational or trivial (e.g. "hello world" or a quick question), answer it in text and call \`submit_for_review\` with the answer as the note and \`spec_is_up_to_date\` true and \`skip_agent_review\` true. Don't create files unless asked.
 You're in the project checkout, not a worktree. Don't commit, switch branches or push unless the ticket asks.
 End the run with exactly one of these, never both, then stop:
@@ -2365,6 +2381,7 @@ Do the ticket's work in the working directory, autonomously: decide for yourself
 * Where a project's app check separates validating from screenshots, validate the area you changed and take screenshots of just the screens you changed, never a whole-gallery run.
 * A check that fails for an environmental reason (missing dependencies, a tool that won't start) is part of the work: fix it. If it truly can't run, call \`block\` and ask. Never submit work as unverified, or note in Status that a check was skipped.
 Right before you submit, confirm three things: tests were added or updated, tests and typecheck pass, and Status shows screenshots for every visible change.
+If you open a pull request for this ticket yourself, add its link to the ticket's pull requests with \`update_ticket\` { key, pull_request_urls } (the whole list, including the ones it already has), so the card shows it.
 If the request is conversational or trivial (e.g. "hello world" or a quick question), answer it in text and call \`submit_for_review\` with the answer as the note and \`spec_is_up_to_date\` true and \`skip_agent_review\` true. Don't create files unless asked.
 Gitignored dependencies (\`node_modules\`, \`vendor\` and the like) aren't in a new worktree. Before you build or test, confirm they're present, and set them up if not: install the declared dependencies or follow the project's instructions.
 You're in this ticket's worktree on \`harness/nyt-3\`. Commit in logical steps with clear messages. Don't switch branches, merge, rebase or push unless the ticket asks (e.g. a release the project's instructions describe): the completion run lands the work. To move the work to another branch, use \`update_branch\` (see Branches).
@@ -2480,6 +2497,7 @@ Do the ticket's work in the working directory, autonomously: decide for yourself
 * Where a project's app check separates validating from screenshots, validate the area you changed and take screenshots of just the screens you changed, never a whole-gallery run.
 * A check that fails for an environmental reason (missing dependencies, a tool that won't start) is part of the work: fix it. If it truly can't run, call \`block\` and ask. Never submit work as unverified, or note in Status that a check was skipped.
 Right before you submit, confirm three things: tests were added or updated, tests and typecheck pass, and Status shows screenshots for every visible change.
+If you open a pull request for this ticket yourself, add its link to the ticket's pull requests with \`update_ticket\` { key, pull_request_urls } (the whole list, including the ones it already has), so the card shows it.
 If the request is conversational or trivial (e.g. "hello world" or a quick question), answer it in text and call \`submit_for_review\` with the answer as the note and \`spec_is_up_to_date\` true and \`skip_agent_review\` true. Don't create files unless asked.
 You're in the project checkout, not a worktree. Don't commit, switch branches or push unless the ticket asks.
 End the run with exactly one of these, never both, then stop:
@@ -7808,6 +7826,7 @@ Do the ticket's work in the working directory, autonomously: decide for yourself
 * Where a project's app check separates validating from screenshots, validate the area you changed and take screenshots of just the screens you changed, never a whole-gallery run.
 * A check that fails for an environmental reason (missing dependencies, a tool that won't start) is part of the work: fix it. If it truly can't run, call \`block\` and ask. Never submit work as unverified, or note in Status that a check was skipped.
 Right before you submit, confirm three things: tests were added or updated, tests and typecheck pass, and Status shows screenshots for every visible change.
+If you open a pull request for this ticket yourself, add its link to the ticket's pull requests with \`update_ticket\` { key, pull_request_urls } (the whole list, including the ones it already has), so the card shows it.
 If the request is conversational or trivial (e.g. "hello world" or a quick question), answer it in text and call \`submit_for_review\` with the answer as the note and \`spec_is_up_to_date\` true and \`skip_agent_review\` true. Don't create files unless asked.
 You're in the project checkout, not a worktree. Don't commit, switch branches or push unless the ticket asks.
 End the run with exactly one of these, never both, then stop:
@@ -7926,6 +7945,7 @@ Do the ticket's work in the working directory, autonomously: decide for yourself
 * Where a project's app check separates validating from screenshots, validate the area you changed and take screenshots of just the screens you changed, never a whole-gallery run.
 * A check that fails for an environmental reason (missing dependencies, a tool that won't start) is part of the work: fix it. If it truly can't run, call \`block\` and ask. Never submit work as unverified, or note in Status that a check was skipped.
 Right before you submit, confirm three things: tests were added or updated, tests and typecheck pass, and Status shows screenshots for every visible change.
+If you open a pull request for this ticket yourself, add its link to the ticket's pull requests with \`update_ticket\` { key, pull_request_urls } (the whole list, including the ones it already has), so the card shows it.
 If the request is conversational or trivial (e.g. "hello world" or a quick question), answer it in text and call \`submit_for_review\` with the answer as the note and \`spec_is_up_to_date\` true and \`skip_agent_review\` true. Don't create files unless asked.
 Gitignored dependencies (\`node_modules\`, \`vendor\` and the like) aren't in a new worktree. Before you build or test, confirm they're present, and set them up if not: install the declared dependencies or follow the project's instructions.
 You're in this ticket's worktree on \`harness/nyt-3\`. Commit in logical steps with clear messages. Don't switch branches, merge, rebase or push unless the ticket asks (e.g. a release the project's instructions describe): the completion run lands the work. To move the work to another branch, use \`update_branch\` (see Branches).
@@ -8051,6 +8071,7 @@ Do the ticket's work in the working directory, autonomously: decide for yourself
 * Where a project's app check separates validating from screenshots, validate the area you changed and take screenshots of just the screens you changed, never a whole-gallery run.
 * A check that fails for an environmental reason (missing dependencies, a tool that won't start) is part of the work: fix it. If it truly can't run, call \`block\` and ask. Never submit work as unverified, or note in Status that a check was skipped.
 Right before you submit, confirm three things: tests were added or updated, tests and typecheck pass, and Status shows screenshots for every visible change.
+If you open a pull request for this ticket yourself, add its link to the ticket's pull requests with \`update_ticket\` { key, pull_request_urls } (the whole list, including the ones it already has), so the card shows it.
 If the request is conversational or trivial (e.g. "hello world" or a quick question), answer it in text and call \`submit_for_review\` with the answer as the note and \`spec_is_up_to_date\` true and \`skip_agent_review\` true. Don't create files unless asked.
 You're in the project checkout, not a worktree. Don't commit, switch branches or push unless the ticket asks.
 End the run with exactly one of these, never both, then stop:
@@ -8826,7 +8847,7 @@ There is no ticket branch to open a pull request from: call \`block\` saying so.
 When you are finished, call \`post_note\` with what you did."
 `;
 
-exports[`built-in system prompts complete · pr · enterprise, existing pull request · harness worktree 1`] = `
+exports[`built-in system prompts complete · pr · enterprise, existing pull requests · harness worktree 1`] = `
 "You are an autonomous coding agent running inside Harness. A human follows your ticket on a kanban board and can message you at any time. Harness tools may carry a client prefix (e.g. \`mcp__harness__\`); the names below are base names.
 
 ## Session
@@ -8882,7 +8903,10 @@ The ticket was approved to land as a pull request. The pull request is the end o
 1. In the worktree (/Users/me/.harness/worktrees/NYT-3), make sure there are no uncommitted changes; commit any that belong to the work to \`harness/nyt-3\`.
 2. Check that gh can reach the host: \`gh auth status --hostname ghe.acme.com\`. If it fails, call \`block\` saying so (the human needs to run \`gh auth login\`).
 3. Push the branch: \`git -C /Users/me/.harness/worktrees/NYT-3 push -u upstream harness/nyt-3\`. If the push is rejected because \`upstream/harness/nyt-3\` has commits you don't, fetch and merge them, then push again. Never force-push.
-4. This ticket already opened https://ghe.acme.com/web/site/pull/7. Check it with \`gh pr view harness/nyt-3 --repo ghe.acme.com/web/site --json url,state\`: while it is open, the push updated it, so add a short comment on what changed with \`gh pr comment\`. If it was closed or merged, open a new one as below. Otherwise open one: \`gh pr create --repo ghe.acme.com/web/site --base main --head harness/nyt-3 --title <title> --body-file <file>\`. Use the ticket's title, and build the body from the spec (\`read_spec\`): its Goal, what changed and why, and how it was verified from its Status. Leave out its Open questions unless they're still open. When the repository has a pull request template (\`.github/pull_request_template.md\` or similar), follow it. Open it ready for review, not as a draft, unless the instructions say otherwise.
+4. This ticket already has these pull requests:
+- https://ghe.acme.com/web/site/pull/7 (title: "Split the secrets out of checkout")
+- https://ghe.acme.com/web/site/pull/8
+The one for \`harness/nyt-3\` is \`gh pr view harness/nyt-3 --repo ghe.acme.com/web/site --json url,state\`: while it is open, the push updated it, so add a short comment on what changed with \`gh pr comment\`. If it was closed or merged, open a new one as below. Otherwise open one: \`gh pr create --repo ghe.acme.com/web/site --base main --head harness/nyt-3 --title <title> --body-file <file>\`. Use the ticket's title, and build the body from the spec (\`read_spec\`): its Goal, what changed and why, and how it was verified from its Status. Leave out its Open questions unless they're still open. When the repository has a pull request template (\`.github/pull_request_template.md\` or similar), follow it. Open it ready for review, not as a draft, unless the instructions say otherwise.
 5. Call \`record_pull_request\` { url, head } with the pull request's link and the full hash of the commit you pushed (\`git -C /Users/me/.harness/worktrees/NYT-3 rev-parse HEAD\`), whether you opened the pull request or updated it. The ticket is only done once it's recorded, and its Changes tab shows that commit's diff from then on.
 6. Remove the worktree (\`git -C /Users/me/Sites/nyt worktree remove /Users/me/.harness/worktrees/NYT-3\`), and keep \`harness/nyt-3\`: the pull request needs it.
 
@@ -8906,10 +8930,14 @@ The spec tells a human what the change is, why, and where it stands. It is at re
 (the run prompt)"
 `;
 
-exports[`built-in system prompts complete · pr · enterprise, existing pull request · harness worktree 2`] = `
+exports[`built-in system prompts complete · pr · enterprise, existing pull requests · harness worktree 2`] = `
 "NYT-3 "Add dark mode" is approved to land as a pull request.
 
-Push \`harness/nyt-3\` to upstream and update its pull request https://ghe.acme.com/web/site/pull/7, then call \`record_pull_request\` with its link. Don't merge it: teammates review and merge it. If you can't (gh login, push access), call \`block\` with what's wrong.
+Its pull requests are:
+- https://ghe.acme.com/web/site/pull/7 (title: "Split the secrets out of checkout")
+- https://ghe.acme.com/web/site/pull/8
+
+Push \`harness/nyt-3\` to upstream and update the one for it (\`gh pr view harness/nyt-3 --json url\`), then call \`record_pull_request\` with its link. Don't merge it: teammates review and merge it. If you can't (gh login, push access), call \`block\` with what's wrong.
 
 ## Instructions from the human
 Add the design label.
@@ -8917,7 +8945,7 @@ Add the design label.
 When you are finished, call \`post_note\` with what you did."
 `;
 
-exports[`built-in system prompts complete · pr · enterprise, existing pull request · branch is the base branch 1`] = `
+exports[`built-in system prompts complete · pr · enterprise, existing pull requests · branch is the base branch 1`] = `
 "You are an autonomous coding agent running inside Harness. A human follows your ticket on a kanban board and can message you at any time. Harness tools may carry a client prefix (e.g. \`mcp__harness__\`); the names below are base names.
 
 ## Session
@@ -8992,7 +9020,7 @@ The spec tells a human what the change is, why, and where it stands. It is at re
 (the run prompt)"
 `;
 
-exports[`built-in system prompts complete · pr · enterprise, existing pull request · branch is the base branch 2`] = `
+exports[`built-in system prompts complete · pr · enterprise, existing pull requests · branch is the base branch 2`] = `
 "NYT-3 "Add dark mode" is approved to land as a pull request.
 
 Branch \`main\` is the base branch itself, so there is no branch to open a pull request from: call \`block\` saying so.
@@ -9003,7 +9031,7 @@ Add the design label.
 When you are finished, call \`post_note\` with what you did."
 `;
 
-exports[`built-in system prompts complete · pr · enterprise, existing pull request · outside worktree with leftover harness worktree 1`] = `
+exports[`built-in system prompts complete · pr · enterprise, existing pull requests · outside worktree with leftover harness worktree 1`] = `
 "You are an autonomous coding agent running inside Harness. A human follows your ticket on a kanban board and can message you at any time. Harness tools may carry a client prefix (e.g. \`mcp__harness__\`); the names below are base names.
 
 ## Session
@@ -9059,7 +9087,10 @@ The ticket was approved to land as a pull request. The pull request is the end o
 1. In the worktree (/Users/me/elsewhere), make sure there are no uncommitted changes; commit any that belong to the work to \`medl-1\`.
 2. Check that gh can reach the host: \`gh auth status --hostname ghe.acme.com\`. If it fails, call \`block\` saying so (the human needs to run \`gh auth login\`).
 3. Push the branch: \`git -C /Users/me/elsewhere push -u upstream medl-1\`. If the push is rejected because \`upstream/medl-1\` has commits you don't, fetch and merge them, then push again. Never force-push.
-4. This ticket already opened https://ghe.acme.com/web/site/pull/7. Check it with \`gh pr view medl-1 --repo ghe.acme.com/web/site --json url,state\`: while it is open, the push updated it, so add a short comment on what changed with \`gh pr comment\`. If it was closed or merged, open a new one as below. Otherwise open one: \`gh pr create --repo ghe.acme.com/web/site --base main --head medl-1 --title <title> --body-file <file>\`. Use the ticket's title, and build the body from the spec (\`read_spec\`): its Goal, what changed and why, and how it was verified from its Status. Leave out its Open questions unless they're still open. When the repository has a pull request template (\`.github/pull_request_template.md\` or similar), follow it. Open it ready for review, not as a draft, unless the instructions say otherwise.
+4. This ticket already has these pull requests:
+- https://ghe.acme.com/web/site/pull/7 (title: "Split the secrets out of checkout")
+- https://ghe.acme.com/web/site/pull/8
+The one for \`medl-1\` is \`gh pr view medl-1 --repo ghe.acme.com/web/site --json url,state\`: while it is open, the push updated it, so add a short comment on what changed with \`gh pr comment\`. If it was closed or merged, open a new one as below. Otherwise open one: \`gh pr create --repo ghe.acme.com/web/site --base main --head medl-1 --title <title> --body-file <file>\`. Use the ticket's title, and build the body from the spec (\`read_spec\`): its Goal, what changed and why, and how it was verified from its Status. Leave out its Open questions unless they're still open. When the repository has a pull request template (\`.github/pull_request_template.md\` or similar), follow it. Open it ready for review, not as a draft, unless the instructions say otherwise.
 5. Call \`record_pull_request\` { url, head } with the pull request's link and the full hash of the commit you pushed (\`git -C /Users/me/elsewhere rev-parse HEAD\`), whether you opened the pull request or updated it. The ticket is only done once it's recorded, and its Changes tab shows that commit's diff from then on.
 6. Leave the worktree at /Users/me/elsewhere in place: the harness didn't create it, and keep \`medl-1\`: the pull request needs it.
 
@@ -9083,10 +9114,14 @@ The spec tells a human what the change is, why, and where it stands. It is at re
 (the run prompt)"
 `;
 
-exports[`built-in system prompts complete · pr · enterprise, existing pull request · outside worktree with leftover harness worktree 2`] = `
+exports[`built-in system prompts complete · pr · enterprise, existing pull requests · outside worktree with leftover harness worktree 2`] = `
 "NYT-3 "Add dark mode" is approved to land as a pull request.
 
-Push \`medl-1\` to upstream and update its pull request https://ghe.acme.com/web/site/pull/7, then call \`record_pull_request\` with its link. Don't merge it: teammates review and merge it. If you can't (gh login, push access), call \`block\` with what's wrong.
+Its pull requests are:
+- https://ghe.acme.com/web/site/pull/7 (title: "Split the secrets out of checkout")
+- https://ghe.acme.com/web/site/pull/8
+
+Push \`medl-1\` to upstream and update the one for it (\`gh pr view medl-1 --json url\`), then call \`record_pull_request\` with its link. Don't merge it: teammates review and merge it. If you can't (gh login, push access), call \`block\` with what's wrong.
 
 ## Instructions from the human
 Add the design label.
@@ -9094,7 +9129,7 @@ Add the design label.
 When you are finished, call \`post_note\` with what you did."
 `;
 
-exports[`built-in system prompts complete · pr · enterprise, existing pull request · checkout (no worktree) 1`] = `
+exports[`built-in system prompts complete · pr · enterprise, existing pull requests · checkout (no worktree) 1`] = `
 "You are an autonomous coding agent running inside Harness. A human follows your ticket on a kanban board and can message you at any time. Harness tools may carry a client prefix (e.g. \`mcp__harness__\`); the names below are base names.
 
 ## Session
@@ -9166,7 +9201,7 @@ The spec tells a human what the change is, why, and where it stands. It is at re
 (the run prompt)"
 `;
 
-exports[`built-in system prompts complete · pr · enterprise, existing pull request · checkout (no worktree) 2`] = `
+exports[`built-in system prompts complete · pr · enterprise, existing pull requests · checkout (no worktree) 2`] = `
 "NYT-3 "Add dark mode" is approved to land as a pull request.
 
 There is no ticket branch to open a pull request from: call \`block\` saying so.
@@ -9177,7 +9212,7 @@ Add the design label.
 When you are finished, call \`post_note\` with what you did."
 `;
 
-exports[`built-in system prompts complete · pr · enterprise, existing pull request · not git 1`] = `
+exports[`built-in system prompts complete · pr · enterprise, existing pull requests · not git 1`] = `
 "You are an autonomous coding agent running inside Harness. A human follows your ticket on a kanban board and can message you at any time. Harness tools may carry a client prefix (e.g. \`mcp__harness__\`); the names below are base names.
 
 ## Session
@@ -9248,7 +9283,7 @@ The spec tells a human what the change is, why, and where it stands. It is at re
 (the run prompt)"
 `;
 
-exports[`built-in system prompts complete · pr · enterprise, existing pull request · not git 2`] = `
+exports[`built-in system prompts complete · pr · enterprise, existing pull requests · not git 2`] = `
 "NYT-3 "Add dark mode" is approved to land as a pull request.
 
 There is no ticket branch to open a pull request from: call \`block\` saying so.
@@ -10586,9 +10621,11 @@ Git branch: harness/nyt-3 (a worktree dedicated to this ticket)
 Base branch: main (the default from Settings); the work lands on it when the ticket completes
 
 ## This run: completion (clean up)
-The ticket was approved to clean up: its work has landed (merged by hand) or lives on its branch, and it has the pull request https://github.com/nytimes/web/pull/12. Don't merge or open a pull request. Make sure the branch is pushed, then remove only what the harness made for the ticket, and only when nothing would be lost:
+The ticket was approved to clean up: its work has landed (merged by hand) or lives on its branch. Don't merge or open a pull request. Its pull requests are:
+- https://github.com/nytimes/web/pull/12 (title: "Address the form")
+Make sure the branch is pushed, then remove only what the harness made for the ticket, and only when nothing would be lost:
 1. In the worktree (/Users/me/.harness/worktrees/NYT-3), run \`git status\`. If there are uncommitted changes, stop here: don't commit or discard them, leave the worktree and branch in place, and call \`block\` listing the changes.
-2. Push \`harness/nyt-3\` when it has work to keep: when it has commits that \`main\` doesn't (\`git -C /Users/me/.harness/worktrees/NYT-3 log --oneline main..harness/nyt-3\`), or when upstream already has it (\`git -C /Users/me/.harness/worktrees/NYT-3 ls-remote --heads upstream harness/nyt-3\`); otherwise there is nothing to push. Push with \`git -C /Users/me/.harness/worktrees/NYT-3 push -u upstream harness/nyt-3\`. If the push is rejected because \`upstream/harness/nyt-3\` has commits you don't, fetch and merge them, then push again. Never force-push. The push updates the pull request https://github.com/nytimes/web/pull/12: call \`record_pull_request\` { url: "https://github.com/nytimes/web/pull/12", head } with the full hash of the commit you pushed (\`git -C /Users/me/.harness/worktrees/NYT-3 rev-parse HEAD\`), so the ticket's Changes keep showing it.
+2. Push \`harness/nyt-3\` when it has work to keep: when it has commits that \`main\` doesn't (\`git -C /Users/me/.harness/worktrees/NYT-3 log --oneline main..harness/nyt-3\`), or when upstream already has it (\`git -C /Users/me/.harness/worktrees/NYT-3 ls-remote --heads upstream harness/nyt-3\`); otherwise there is nothing to push. Push with \`git -C /Users/me/.harness/worktrees/NYT-3 push -u upstream harness/nyt-3\`. If the push is rejected because \`upstream/harness/nyt-3\` has commits you don't, fetch and merge them, then push again. Never force-push. The push updates the pull request for \`harness/nyt-3\` (\`gh pr view harness/nyt-3 --json url\`): call \`record_pull_request\` { url, head } with its link and the full hash of the commit you pushed (\`git -C /Users/me/.harness/worktrees/NYT-3 rev-parse HEAD\`), so the ticket's Changes keep showing it.
 3. Fetch (\`git -C /Users/me/.harness/worktrees/NYT-3 fetch --all --prune\`), then list the commits that would be lost: \`git -C /Users/me/.harness/worktrees/NYT-3 log --oneline harness/nyt-3 --not --remotes main\` (commits on no remote branch and not in \`main\`). If it lists any, stop here: leave the worktree and branch in place, and call \`block\` listing those commits.
 4. Remove the worktree: \`git -C /Users/me/Sites/nyt worktree remove /Users/me/.harness/worktrees/NYT-3\`.
 5. Delete \`harness/nyt-3\`: \`git -C /Users/me/Sites/nyt branch -D harness/nyt-3\`. The check above proved its commits are safe; \`-d\` would refuse a branch whose commits are only on a remote.
@@ -10616,7 +10653,10 @@ The spec tells a human what the change is, why, and where it stands. It is at re
 exports[`built-in system prompts complete · cleanup · a remote, existing pull request · harness worktree 2`] = `
 "NYT-3 "Add dark mode" is approved to clean up: push its branch when it has work to keep, then remove what the harness made for it. Don't merge or open a pull request.
 
-Push \`harness/nyt-3\` to upstream when it has commits \`main\` doesn't, or when upstream already has it (it updates the pull request https://github.com/nytimes/web/pull/12: call \`record_pull_request\` with its link and the commit you pushed); never force-push. Check that nothing on \`harness/nyt-3\` would be lost: no uncommitted changes, and no commits missing from every remote branch and from \`main\`. Then remove the worktree, and delete \`harness/nyt-3\`. If something would be lost, leave everything in place and call \`block\` listing it.
+Its pull requests are:
+- https://github.com/nytimes/web/pull/12 (title: "Address the form")
+
+Push \`harness/nyt-3\` to upstream when it has commits \`main\` doesn't, or when upstream already has it (it updates the pull request for it, found with \`gh pr view harness/nyt-3 --json url\`: call \`record_pull_request\` with its link and the commit you pushed); never force-push. Check that nothing on \`harness/nyt-3\` would be lost: no uncommitted changes, and no commits missing from every remote branch and from \`main\`. Then remove the worktree, and delete \`harness/nyt-3\`. If something would be lost, leave everything in place and call \`block\` listing it.
 
 When you are finished, call \`post_note\` with what you did."
 `;
@@ -10673,9 +10713,11 @@ Git branch: main (a worktree dedicated to this ticket)
 Base branch: main (the default from Settings); the work lands on it when the ticket completes
 
 ## This run: completion (clean up)
-The ticket was approved to clean up: its work is on \`main\`, which is its base branch, and it has the pull request https://github.com/nytimes/web/pull/12. Don't merge or open a pull request. Make sure the branch is pushed, then remove only what the harness made for the ticket, and only when nothing would be lost:
+The ticket was approved to clean up: its work is on \`main\`, which is its base branch. Don't merge or open a pull request. Its pull requests are:
+- https://github.com/nytimes/web/pull/12 (title: "Address the form")
+Make sure the branch is pushed, then remove only what the harness made for the ticket, and only when nothing would be lost:
 1. In the worktree (/Users/me/.harness/worktrees/NYT-3), run \`git status\`. If there are uncommitted changes, stop here: don't commit or discard them, leave the worktree and branch in place, and call \`block\` listing the changes.
-2. Push \`main\` when it has work to keep: when upstream already has it (\`git -C /Users/me/.harness/worktrees/NYT-3 ls-remote --heads upstream main\`); otherwise there is nothing to push. Push with \`git -C /Users/me/.harness/worktrees/NYT-3 push -u upstream main\`. If the push is rejected because \`upstream/main\` has commits you don't, fetch and merge them, then push again. Never force-push. The push updates the pull request https://github.com/nytimes/web/pull/12: call \`record_pull_request\` { url: "https://github.com/nytimes/web/pull/12", head } with the full hash of the commit you pushed (\`git -C /Users/me/.harness/worktrees/NYT-3 rev-parse HEAD\`), so the ticket's Changes keep showing it.
+2. Push \`main\` when it has work to keep: when upstream already has it (\`git -C /Users/me/.harness/worktrees/NYT-3 ls-remote --heads upstream main\`); otherwise there is nothing to push. Push with \`git -C /Users/me/.harness/worktrees/NYT-3 push -u upstream main\`. If the push is rejected because \`upstream/main\` has commits you don't, fetch and merge them, then push again. Never force-push. The push updates the pull request for \`main\` (\`gh pr view main --json url\`): call \`record_pull_request\` { url, head } with its link and the full hash of the commit you pushed (\`git -C /Users/me/.harness/worktrees/NYT-3 rev-parse HEAD\`), so the ticket's Changes keep showing it.
 3. Fetch (\`git -C /Users/me/.harness/worktrees/NYT-3 fetch --all --prune\`), then list the commits that would be lost: \`git -C /Users/me/.harness/worktrees/NYT-3 log --oneline main --not --remotes\` (commits on no remote branch). If it lists any, stop here: leave the worktree and branch in place, and call \`block\` listing those commits.
 4. Remove the worktree: \`git -C /Users/me/Sites/nyt worktree remove /Users/me/.harness/worktrees/NYT-3\`.
 5. Keep \`main\`: the harness didn't create it, and it is the base branch.
@@ -10703,7 +10745,10 @@ The spec tells a human what the change is, why, and where it stands. It is at re
 exports[`built-in system prompts complete · cleanup · a remote, existing pull request · branch is the base branch 2`] = `
 "NYT-3 "Add dark mode" is approved to clean up: push its branch when it has work to keep, then remove what the harness made for it. Don't merge or open a pull request.
 
-Push \`main\` to upstream when upstream already has it (it updates the pull request https://github.com/nytimes/web/pull/12: call \`record_pull_request\` with its link and the commit you pushed); never force-push. Check that nothing on \`main\` would be lost: no uncommitted changes, and no commits missing from every remote branch. Then remove the worktree, and keep \`main\`: the harness didn't create it. If something would be lost, leave everything in place and call \`block\` listing it.
+Its pull requests are:
+- https://github.com/nytimes/web/pull/12 (title: "Address the form")
+
+Push \`main\` to upstream when upstream already has it (it updates the pull request for it, found with \`gh pr view main --json url\`: call \`record_pull_request\` with its link and the commit you pushed); never force-push. Check that nothing on \`main\` would be lost: no uncommitted changes, and no commits missing from every remote branch. Then remove the worktree, and keep \`main\`: the harness didn't create it. If something would be lost, leave everything in place and call \`block\` listing it.
 
 When you are finished, call \`post_note\` with what you did."
 `;
@@ -10760,9 +10805,11 @@ Git branch: medl-1 (a worktree outside the harness that has this branch checked 
 Base branch: main (set on this ticket); the work lands on it when the ticket completes
 
 ## This run: completion (clean up)
-The ticket was approved to clean up: its work has landed (merged by hand) or lives on its branch, and it has the pull request https://github.com/nytimes/web/pull/12. Don't merge or open a pull request. Make sure the branch is pushed, then remove only what the harness made for the ticket, and only when nothing would be lost:
+The ticket was approved to clean up: its work has landed (merged by hand) or lives on its branch. Don't merge or open a pull request. Its pull requests are:
+- https://github.com/nytimes/web/pull/12 (title: "Address the form")
+Make sure the branch is pushed, then remove only what the harness made for the ticket, and only when nothing would be lost:
 1. In the worktree (/Users/me/elsewhere), run \`git status\`. If there are uncommitted changes, stop here: don't commit or discard them, leave the worktree and branch in place, and call \`block\` listing the changes.
-2. Push \`medl-1\` when it has work to keep: when it has commits that \`main\` doesn't (\`git -C /Users/me/elsewhere log --oneline main..medl-1\`), or when upstream already has it (\`git -C /Users/me/elsewhere ls-remote --heads upstream medl-1\`); otherwise there is nothing to push. Push with \`git -C /Users/me/elsewhere push -u upstream medl-1\`. If the push is rejected because \`upstream/medl-1\` has commits you don't, fetch and merge them, then push again. Never force-push. The push updates the pull request https://github.com/nytimes/web/pull/12: call \`record_pull_request\` { url: "https://github.com/nytimes/web/pull/12", head } with the full hash of the commit you pushed (\`git -C /Users/me/elsewhere rev-parse HEAD\`), so the ticket's Changes keep showing it.
+2. Push \`medl-1\` when it has work to keep: when it has commits that \`main\` doesn't (\`git -C /Users/me/elsewhere log --oneline main..medl-1\`), or when upstream already has it (\`git -C /Users/me/elsewhere ls-remote --heads upstream medl-1\`); otherwise there is nothing to push. Push with \`git -C /Users/me/elsewhere push -u upstream medl-1\`. If the push is rejected because \`upstream/medl-1\` has commits you don't, fetch and merge them, then push again. Never force-push. The push updates the pull request for \`medl-1\` (\`gh pr view medl-1 --json url\`): call \`record_pull_request\` { url, head } with its link and the full hash of the commit you pushed (\`git -C /Users/me/elsewhere rev-parse HEAD\`), so the ticket's Changes keep showing it.
 3. Fetch (\`git -C /Users/me/elsewhere fetch --all --prune\`), then list the commits that would be lost: \`git -C /Users/me/elsewhere log --oneline medl-1 --not --remotes main\` (commits on no remote branch and not in \`main\`). If it lists any, stop here: leave the worktree and branch in place, and call \`block\` listing those commits.
 4. Leave the worktree at /Users/me/elsewhere in place: the harness didn't create it.
 5. Keep \`medl-1\`: the harness didn't create it.
@@ -10792,7 +10839,10 @@ The spec tells a human what the change is, why, and where it stands. It is at re
 exports[`built-in system prompts complete · cleanup · a remote, existing pull request · outside worktree with leftover harness worktree 2`] = `
 "NYT-3 "Add dark mode" is approved to clean up: push its branch when it has work to keep, then remove what the harness made for it. Don't merge or open a pull request.
 
-Push \`medl-1\` to upstream when it has commits \`main\` doesn't, or when upstream already has it (it updates the pull request https://github.com/nytimes/web/pull/12: call \`record_pull_request\` with its link and the commit you pushed); never force-push. Check that nothing on \`medl-1\` would be lost: no uncommitted changes, and no commits missing from every remote branch and from \`main\`. Then leave the worktree in place: the harness didn't create it, and keep \`medl-1\`: the harness didn't create it. If something would be lost, leave everything in place and call \`block\` listing it.
+Its pull requests are:
+- https://github.com/nytimes/web/pull/12 (title: "Address the form")
+
+Push \`medl-1\` to upstream when it has commits \`main\` doesn't, or when upstream already has it (it updates the pull request for it, found with \`gh pr view medl-1 --json url\`: call \`record_pull_request\` with its link and the commit you pushed); never force-push. Check that nothing on \`medl-1\` would be lost: no uncommitted changes, and no commits missing from every remote branch and from \`main\`. Then leave the worktree in place: the harness didn't create it, and keep \`medl-1\`: the harness didn't create it. If something would be lost, leave everything in place and call \`block\` listing it.
 
 When you are finished, call \`post_note\` with what you did."
 `;
@@ -10872,6 +10922,9 @@ The spec tells a human what the change is, why, and where it stands. It is at re
 exports[`built-in system prompts complete · cleanup · a remote, existing pull request · checkout (no worktree) 2`] = `
 "NYT-3 "Add dark mode" is approved to clean up: its work has already landed, so there is nothing to merge or push.
 
+Its pull requests are:
+- https://github.com/nytimes/web/pull/12 (title: "Address the form")
+
 There is no ticket branch or worktree to clean up: confirm the working directory is in a sensible state, and stop.
 
 When you are finished, call \`post_note\` with what you did."
@@ -10950,6 +11003,9 @@ The spec tells a human what the change is, why, and where it stands. It is at re
 
 exports[`built-in system prompts complete · cleanup · a remote, existing pull request · not git 2`] = `
 "NYT-3 "Add dark mode" is approved to clean up: its work has already landed, so there is nothing to merge or push.
+
+Its pull requests are:
+- https://github.com/nytimes/web/pull/12 (title: "Address the form")
 
 There is no ticket branch or worktree to clean up: confirm the working directory is in a sensible state, and stop.
 
@@ -12776,6 +12832,7 @@ Do the ticket's work in the working directory, autonomously: decide for yourself
 * Where a project's app check separates validating from screenshots, validate the area you changed and take screenshots of just the screens you changed, never a whole-gallery run.
 * A check that fails for an environmental reason (missing dependencies, a tool that won't start) is part of the work: fix it. If it truly can't run, call \`block\` and ask. Never submit work as unverified, or note in Status that a check was skipped.
 Right before you submit, confirm three things: tests were added or updated, tests and typecheck pass, and Status shows screenshots for every visible change.
+If you open a pull request for this ticket yourself, add its link to the ticket's pull requests with \`update_ticket\` { key, pull_request_urls } (the whole list, including the ones it already has), so the card shows it.
 If the request is conversational or trivial (e.g. "hello world" or a quick question), answer it in text and call \`submit_for_review\` with the answer as the note and \`spec_is_up_to_date\` true and \`skip_agent_review\` true. Don't create files unless asked.
 You're in the project checkout, not a worktree. Don't commit, switch branches or push unless the ticket asks.
 End the run with exactly one of these, never both, then stop:
@@ -13072,6 +13129,7 @@ Do the ticket's work in the working directory, autonomously: decide for yourself
 * Where a project's app check separates validating from screenshots, validate the area you changed and take screenshots of just the screens you changed, never a whole-gallery run.
 * A check that fails for an environmental reason (missing dependencies, a tool that won't start) is part of the work: fix it. If it truly can't run, call \`block\` and ask. Never submit work as unverified, or note in Status that a check was skipped.
 Right before you submit, confirm three things: tests were added or updated, tests and typecheck pass, and Status shows screenshots for every visible change.
+If you open a pull request for this ticket yourself, add its link to the ticket's pull requests with \`update_ticket\` { key, pull_request_urls } (the whole list, including the ones it already has), so the card shows it.
 If the request is conversational or trivial (e.g. "hello world" or a quick question), answer it in text and call \`submit_for_review\` with the answer as the note and \`spec_is_up_to_date\` true and \`skip_agent_review\` true. Don't create files unless asked.
 You're in the project checkout, not a worktree. Don't commit, switch branches or push unless the ticket asks.
 End the run with exactly one of these, never both, then stop:
@@ -13624,6 +13682,7 @@ Do the ticket's work in the working directory, autonomously: decide for yourself
 * Where a project's app check separates validating from screenshots, validate the area you changed and take screenshots of just the screens you changed, never a whole-gallery run.
 * A check that fails for an environmental reason (missing dependencies, a tool that won't start) is part of the work: fix it. If it truly can't run, call \`block\` and ask. Never submit work as unverified, or note in Status that a check was skipped.
 Right before you submit, confirm three things: tests were added or updated, tests and typecheck pass, and Status shows screenshots for every visible change.
+If you open a pull request for this ticket yourself, add its link to the ticket's pull requests with \`update_ticket\` { key, pull_request_urls } (the whole list, including the ones it already has), so the card shows it.
 If the request is conversational or trivial (e.g. "hello world" or a quick question), answer it in text and call \`submit_for_review\` with the answer as the note and \`spec_is_up_to_date\` true and \`skip_agent_review\` true. Don't create files unless asked.
 You're in the project checkout, not a worktree. Don't commit, switch branches or push unless the ticket asks.
 End the run with exactly one of these, never both, then stop:
@@ -13725,6 +13784,7 @@ Do the ticket's work in the working directory, autonomously: decide for yourself
 * Where a project's app check separates validating from screenshots, validate the area you changed and take screenshots of just the screens you changed, never a whole-gallery run.
 * A check that fails for an environmental reason (missing dependencies, a tool that won't start) is part of the work: fix it. If it truly can't run, call \`block\` and ask. Never submit work as unverified, or note in Status that a check was skipped.
 Right before you submit, confirm three things: tests were added or updated, tests and typecheck pass, and Status shows screenshots for every visible change.
+If you open a pull request for this ticket yourself, add its link to the ticket's pull requests with \`update_ticket\` { key, pull_request_urls } (the whole list, including the ones it already has), so the card shows it.
 If the request is conversational or trivial (e.g. "hello world" or a quick question), answer it in text and call \`submit_for_review\` with the answer as the note and \`spec_is_up_to_date\` true and \`skip_agent_review\` true. Don't create files unless asked.
 You're in the project checkout, not a worktree. Don't commit, switch branches or push unless the ticket asks.
 End the run with exactly one of these, never both, then stop:
@@ -14631,7 +14691,9 @@ exports[`built-in run prompts reopenPrompt · with a pull request 1`] = `
 ## What the human wants
 Address the review comments.
 
-The earlier work was pushed to \`harness/nyt-3\` and is in the pull request https://github.com/nytimes/web/pull/12, which may have review comments to address (\`gh pr view https://github.com/nytimes/web/pull/12 --comments\`). Commit on \`harness/nyt-3\` as usual; when the ticket completes again the new commits go to the same pull request.
+The earlier work was pushed to \`harness/nyt-3\` and is in these pull requests:
+- https://github.com/nytimes/web/pull/12 (title: "Address the form")
+They may have review comments to address (\`gh pr view harness/nyt-3 --comments\` shows the one for this branch). Commit on \`harness/nyt-3\` as usual; when the ticket completes again the new commits go to the same pull request.
 
 Do the work and verify it the way a work run does: a test for each behaviour change, the tests and typecheck passing, screenshots in Status for visible changes. The spec is at revision 3: add what the human wants to its Goal as requirements, rewriting any requirement it changes, and rewrite the Status statements the work changes so they describe the current state, with no section for this round. Then call \`submit_for_review\` again with \`spec_is_up_to_date\` true. The submit note covers only these changes."
 `;

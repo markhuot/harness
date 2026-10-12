@@ -1308,6 +1308,7 @@
               "detail": {
                 "ticket": {
                   "id": "t",
+                  "pullRequests": [],
                   "key": "T-1",
                   "projectId": "p1",
                   "kind": "task",
@@ -1432,6 +1433,7 @@
             "tickets": {
               "t": {
                 "id": "t",
+                "pullRequests": [],
                 "key": "T-1",
                 "projectId": "p1",
                 "kind": "task",
@@ -1554,6 +1556,7 @@
               "detail": {
                 "ticket": {
                   "id": "t",
+                  "pullRequests": [],
                   "key": "T-1",
                   "projectId": "p1",
                   "kind": "task",
@@ -1618,6 +1621,7 @@
               "detail": {
                 "ticket": {
                   "id": "t",
+                  "pullRequests": [],
                   "key": "T-1",
                   "projectId": "p1",
                   "kind": "task",
@@ -1682,6 +1686,7 @@
             "tickets": {
               "t": {
                 "id": "t",
+                "pullRequests": [],
                 "key": "T-1",
                 "projectId": "p1",
                 "kind": "task",

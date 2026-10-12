@@ -625,9 +625,10 @@ describe("migration 18: completion actions", () => {
     const s = new Store(db);
     expect(s.projects.get("p1")!.completionAction).toBe("merge");
     const t = ticketFor(s, "p1", "OLD-1");
-    expect(t).toMatchObject({ completionAction: null, completionInstructions: null, pullRequestUrl: null });
-    const u = s.tickets.update(t.id, { completionAction: "pr", completionInstructions: "label it", pullRequestUrl: "https://github.com/a/b/pull/1" })!;
-    expect(u).toMatchObject({ completionAction: "pr", completionInstructions: "label it", pullRequestUrl: "https://github.com/a/b/pull/1" });
+    expect(t).toMatchObject({ completionAction: null, completionInstructions: null, pullRequests: [] });
+    s.tickets.update(t.id, { completionAction: "pr", completionInstructions: "label it" });
+    s.tickets.setPullRequestUrls(t.id, ["https://github.com/a/b/pull/1"]);
+    expect(s.tickets.get(t.id)).toMatchObject({ completionAction: "pr", completionInstructions: "label it", pullRequests: [{ url: "https://github.com/a/b/pull/1", title: null }] });
     expect(s.projects.update("p1", { completionAction: "custom" })!.completionAction).toBe("custom");
     expect(s.projects.update("p1", { name: "renamed" })!.completionAction).toBe("custom");
   });
@@ -643,6 +644,43 @@ describe("migration 18: completion actions", () => {
     db2.query("INSERT INTO settings (key, value) VALUES ('prompts', $v)").run({ v: JSON.stringify({ "system.complete": "old", "system.complete_merge": "new" }) });
     migrate(db2);
     expect(new Store(db2).settings.all().prompts).toEqual({ "system.complete_merge": "new" });
+  });
+});
+
+describe("migration 42: the pull request list", () => {
+  test("a ticket's one pull request becomes a one-item list with no title; no link becomes an empty list", () => {
+    const db = new Database(":memory:", { strict: true });
+    for (const [v, sql] of MIGRATIONS.slice(0, 41).entries()) {
+      db.exec(sql);
+      db.exec(`PRAGMA user_version = ${v + 1}`);
+    }
+    db.exec(`INSERT INTO projects (id, key, name, path, next_seq, created_at, updated_at) VALUES ('p1', 'OLD', 'old', '/old', 1, 0, 0)`);
+    const s = new Store(db);
+    const linked = ticketFor(s, "p1", "OLD-1");
+    const bare = ticketFor(s, "p1", "OLD-2");
+    db.query("UPDATE tickets SET pull_request_url = $url WHERE id = $id").run({ url: "https://github.com/a/b/pull/1", id: linked.id });
+    db.exec(MIGRATIONS[41]!);
+    const after = new Store(db);
+    expect(after.tickets.get(linked.id)!.pullRequests).toEqual([{ url: "https://github.com/a/b/pull/1", title: null }]);
+    expect(after.tickets.get(bare.id)!.pullRequests).toEqual([]);
+  });
+
+  test("a stored link with stray whitespace is saved trimmed, so it matches the same link typed without it", () => {
+    const db = new Database(":memory:", { strict: true });
+    for (const [v, sql] of MIGRATIONS.slice(0, 41).entries()) {
+      db.exec(sql);
+      db.exec(`PRAGMA user_version = ${v + 1}`);
+    }
+    db.exec(`INSERT INTO projects (id, key, name, path, next_seq, created_at, updated_at) VALUES ('p1', 'OLD', 'old', '/old', 1, 0, 0)`);
+    const s = new Store(db);
+    const padded = ticketFor(s, "p1", "OLD-1");
+    db.query("UPDATE tickets SET pull_request_url = $url WHERE id = $id").run({ url: " https://github.com/a/b/pull/1 ", id: padded.id });
+    db.exec(MIGRATIONS[41]!);
+    const after = new Store(db);
+    const [pr] = after.tickets.get(padded.id)!.pullRequests;
+    expect(pr!.url).toBe("https://github.com/a/b/pull/1");
+    // Setting the same link without the padding keeps it, rather than adding a near-duplicate.
+    expect(after.tickets.setPullRequestUrls(padded.id, ["https://github.com/a/b/pull/1"])!.added).toEqual([]);
   });
 });
 

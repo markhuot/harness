@@ -82,9 +82,13 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
     public var completionAction: Patch<CompletionAction>
     /// The approver's instructions for the completion run, kept with `completionAction`.
     public var completionInstructions: Patch<String>
-    /// The pull request a "pr" completion opened (the agent records it with record_pull_request).
-    /// Later approvals of the ticket default to "pr", so they update the same pull request.
+    /// The last of `pullRequests`, a read-only mirror kept for older clients. Edit the list instead.
     public var pullRequestUrl: Patch<String>
+    /// The pull requests the ticket is linked to, in order, each with its title (null until the
+    /// service fetches it). A "pr" completion adds the one it opened; the human edits the list
+    /// (UpdateTicketBody.pullRequestUrls). Later approvals default to "cleanup" while there's one.
+    /// Decodes as [] when an older service leaves the key out.
+    @DefaultEmpty public var pullRequests: [PullRequestLink]
     /// Whether the ticket's worktree has anything to land: uncommitted changes, or commits its base
     /// branch doesn't have. The service checks with git when the ticket moves to review and when it's
     /// opened. false drops "merge" and "pr" from its completion choices (`Completion.completionOptions`);
@@ -145,7 +149,7 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
         branch: String? = nil, requestedBranch: Patch<String> = .absent, baseBranch: Patch<String> = .absent,
         useWorktree: Patch<Bool> = .absent, skipAgentReview: Bool? = nil, skipHumanReview: Bool? = nil,
         completionAction: Patch<CompletionAction> = .absent, completionInstructions: Patch<String> = .absent,
-        pullRequestUrl: Patch<String> = .absent, hasChanges: Patch<Bool> = .absent, draft: Bool? = nil, promptAttachments: [Attachment]? = nil, messageDraft: Patch<MessageDraft> = .absent, blockedReason: String? = nil, resumeAt: Patch<Timestamp> = .absent, busy: Bool = false,
+        pullRequestUrl: Patch<String> = .absent, pullRequests: [PullRequestLink] = [], hasChanges: Patch<Bool> = .absent, draft: Bool? = nil, promptAttachments: [Attachment]? = nil, messageDraft: Patch<MessageDraft> = .absent, blockedReason: String? = nil, resumeAt: Patch<Timestamp> = .absent, busy: Bool = false,
         compacting: Bool? = nil, context: Patch<ContextUsage> = .absent,
         pendingApproval: PendingApproval? = nil, allowedTools: [String] = [], permissionMode: PermissionMode? = nil,
         model: String? = nil, position: Double = 0, completedAt: Patch<Timestamp> = .absent,
@@ -182,6 +186,7 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
         self.completionAction = completionAction
         self.completionInstructions = completionInstructions
         self.pullRequestUrl = pullRequestUrl
+        self.pullRequests = pullRequests
         self.hasChanges = hasChanges
         self.draft = draft
         self.promptAttachments = promptAttachments
@@ -203,6 +208,18 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
 
     /// `HarnessProtocol.isConductor(kind:childCount:)` for this ticket.
     public var isConductor: Bool { HarnessProtocol.isConductor(kind: kind, childCount: childCount) }
+}
+
+/// A pull request a ticket is linked to (Ticket.pullRequests). `title` is null until the service has
+/// fetched it, and stays null when the pull request has none.
+public struct PullRequestLink: Codable, Sendable, Equatable {
+    public var url: String
+    public var title: String?
+
+    public init(url: String, title: String? = nil) {
+        self.url = url
+        self.title = title
+    }
 }
 
 /// A ticket's unsent message (Ticket.messageDraft, DESIGN.md "Message drafts"): one per ticket,

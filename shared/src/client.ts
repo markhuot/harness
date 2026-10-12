@@ -211,6 +211,10 @@ export class HarnessClient {
    * A PATCH with `spec` needs `baseRevision` (outside drafts). When the spec moved on since,
    * it rejects with a HarnessApiError of status 409 whose `data` is a SpecConflict; see specConflict().
    */
+  /** Fetch every pull request title on the ticket again (Ticket.pullRequests). */
+  refreshPullRequests(key: string) {
+    return this.request<Ticket>("POST", `/tickets/${key}/pull-requests/refresh`);
+  }
   updateTicket(key: string, body: UpdateTicketBody) {
     return this.request<Ticket>("PATCH", `/tickets/${key}`, body);
   }

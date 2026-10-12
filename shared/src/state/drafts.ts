@@ -45,6 +45,7 @@ export function blankDraftTicket(project: DraftProject, settings: DraftSettings 
   return {
     id: "",
     key,
+    pullRequests: [],
     projectId: project.id,
     kind: "task",
     title: "",
