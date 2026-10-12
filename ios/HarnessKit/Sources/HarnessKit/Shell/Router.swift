@@ -570,6 +570,13 @@ public struct TicketSheet: Hashable, Sendable, Identifiable {
         return nil
     }
 
+    /// Every ticket the sheet shows: the root's and the ones pushed above it.
+    public var ticketKeys: [String] {
+        var keys = rootKey.map { [$0] } ?? []
+        for case let .ticket(key, _) in path { keys.append(key) }
+        return keys
+    }
+
     /// The root's ticket key; nil for New session.
     public var rootKey: String? {
         if case let .ticket(key, _) = root { return key }

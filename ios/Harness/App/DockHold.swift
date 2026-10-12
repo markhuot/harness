@@ -14,7 +14,7 @@ import UIKit
 
     /// The finger's progress toward the way out (a fraction of the screen along that axis) and how
     /// far the surface is from rest; nil when there's nothing to read.
-    @ObservationIgnored var sample: () -> (progress: Double, displacement: Double)? = { nil }
+    @ObservationIgnored private var sample: () -> (progress: Double, displacement: Double)? = { nil }
 
     @ObservationIgnored private var arming = DockArming()
     @ObservationIgnored private var timer: Task<Void, Never>?
@@ -22,7 +22,10 @@ import UIKit
 
     static var now: TimeInterval { ProcessInfo.processInfo.systemUptime }
 
-    func touchDown() {
+    /// A touch began on a surface; `sample` reads that surface for as long as the touch lasts.
+    func touchDown(sample: @escaping () -> (progress: Double, displacement: Double)?) {
+        self.sample = sample
+        haptic.prepare()
         arming.touchDown()
         publish()
         evaluate()
@@ -171,7 +174,8 @@ struct DockHoldHost: UIViewRepresentable {
 
     func updateUIView(_ view: Probe, context: Context) {
         view.dockAnyway = dockAnyway
-        view.ghost?.rootView = AnyView(ghost)
+        view.lastGhost = AnyView(ghost)
+        view.ghost?.rootView = view.lastGhost
     }
 
     var ghost: some View {
@@ -198,6 +202,7 @@ struct DockHoldHost: UIViewRepresentable {
         let hold: DockHold
         var dockAnyway: () -> Void = {}
         var ghost: UIHostingController<AnyView>?
+        var lastGhost = AnyView(EmptyView())
         private let recognizer = DockHoldRecognizer()
         /// Where the sheet's top edge rests, the highest it has been at a touch-down.
         private var restTop: CGFloat = .infinity
@@ -233,8 +238,9 @@ struct DockHoldHost: UIViewRepresentable {
             // controller's view, and UIKit rejects the pairing.
             container.addSubview(host.view)
             ghost = host
+            // Whatever the hosting representable last said, so the ghost is never empty.
+            host.rootView = lastGhost
             restTop = .infinity
-            hold.sample = { [weak self] in self?.reading() }
         }
 
         /// The view controller the sheet presents: the outermost one above this view.
@@ -268,7 +274,7 @@ struct DockHoldHost: UIViewRepresentable {
         private func began() {
             if let top { restTop = min(restTop, top) }
             container?.bringSubviewToFront(ghost?.view ?? UIView())
-            hold.touchDown()
+            hold.touchDown { [weak self] in self?.reading() }
         }
 
         private func ended() {
@@ -277,10 +283,21 @@ struct DockHoldHost: UIViewRepresentable {
             // release is still latched, dock programmatically.
             let controller = presentedController
             DispatchQueue.main.async { [weak self] in
-                guard let coordinator = controller?.transitionCoordinator else { return }
-                coordinator.notifyWhenInteractionChanges { context in
+                guard let coordinator = controller?.transitionCoordinator else {
+                    // No dismissal under way: nothing will take the latched release, so drop it
+                    // rather than let an escape or VoiceOver dismissal inside its window dock.
+                    self?.hold.cancelled()
+                    return
+                }
+                let settle: (UIViewControllerTransitionCoordinatorContext) -> Void = { context in
                     guard context.isCancelled else { return }
                     MainActor.assumeIsolated { if self?.hold.takeIntent() == true { self?.dockAnyway() } }
+                }
+                if coordinator.isInteractive {
+                    coordinator.notifyWhenInteractionChanges(settle)
+                } else {
+                    // The interaction already ended: its outcome arrives with the transition.
+                    coordinator.animate(alongsideTransition: nil, completion: settle)
                 }
             }
         }

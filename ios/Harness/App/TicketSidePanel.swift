@@ -36,6 +36,8 @@ struct TicketSidePanel<Content: View>: View {
     @State private var flingOffset: CGFloat = 0
     /// Where the finger and the panel are mid-drag, for the hold-to-dock gesture's samples.
     @State private var drag = PanelDrag()
+    /// True while the fling's drag is live: its reset without an `onEnded` is a cancelled drag.
+    @GestureState private var dragLive = false
     @Environment(DockHold.self) private var hold
 
     var body: some View {
@@ -55,6 +57,17 @@ struct TicketSidePanel<Content: View>: View {
         .onAppear { flingOffset = 0 }
         // A fling has already carried it off the edge; restored, it comes back from its place.
         .onChange(of: docked) { flingOffset = 0 }
+        // The drag ended without `onEnded` (the system cancelled it): disarm the hold and let the
+        // panel back to rest. A normal end has already cleared `drag.active` by the next turn.
+        .onChange(of: dragLive) { _, live in
+            guard !live else { return }
+            DispatchQueue.main.async {
+                guard drag.active else { return }
+                drag.active = false
+                hold.cancelled()
+                withAnimation(Self.slide(velocity: 0, distance: -flingOffset)) { flingOffset = 0 }
+            }
+        }
     }
 
     private func panel(width: CGFloat, window: CGFloat) -> some View {
@@ -124,6 +137,7 @@ struct TicketSidePanel<Content: View>: View {
     /// (DockHold), which arms the ghost dock card, and a release then slides the panel to the card.
     private func fling(width: CGFloat, window: CGFloat) -> some Gesture {
         DragGesture(minimumDistance: 12, coordinateSpace: .global)
+            .updating($dragLive) { _, live, _ in live = true }
             .onChanged { value in
                 // Only toward the edge: the panel doesn't drag out past its resting place.
                 flingOffset = max(0, value.translation.width)
@@ -132,8 +146,7 @@ struct TicketSidePanel<Content: View>: View {
                 drag.window = window
                 if !drag.active {
                     drag.active = true
-                    hold.sample = { [drag] in drag.window > 0 ? (drag.x / drag.window, drag.offset) : nil }
-                    hold.touchDown()
+                    hold.touchDown { [drag] in drag.window > 0 ? (drag.x / drag.window, drag.offset) : nil }
                 }
                 hold.evaluate()
             }
@@ -160,7 +173,8 @@ struct TicketSidePanel<Content: View>: View {
     /// A spring that starts at the finger's release speed (`velocity`, pt/s toward the trailing edge),
     /// for a slide of `distance` points: SwiftUI takes the speed as a fraction of the distance.
     static func slide(velocity: Double, distance: Double) -> Animation {
-        let ratio = abs(distance) < 1 ? 0 : velocity / distance
+        // Bounded: a few points to cover at a flick's speed would otherwise overshoot wildly.
+        let ratio = abs(distance) < 1 ? 0 : min(20, max(-20, velocity / distance))
         return .interpolatingSpring(Spring(duration: 0.4, bounce: 0.1), initialVelocity: ratio)
     }
 

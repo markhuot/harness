@@ -285,6 +285,8 @@ extension View {
     ///
     /// `restores`: the tab comes back scrolled to where it was left, after its sheet was dismissed
     /// (TicketViewMemory). Not on feeds that stick to the bottom, which follow the latest instead.
+    /// The memory key is the ticket's tab, so one page with two restoring scroll views (or one
+    /// pushed inside it) would share a key: give all but one `restores: false`.
     func ticketHeroScroll(restores: Bool = true) -> some View { modifier(TicketDetailHeroScroll(restores: restores)) }
 
     /// On a ScrollView whose newest content is last: opens at the bottom,
@@ -329,9 +331,13 @@ private struct TicketDetailHeroScroll: ViewModifier {
     @State private var pending = ScrollTrack<(y: Double, until: TimeInterval)?>(nil)
     @State private var started = ScrollTrack(false)
 
-    func body(content: Content) -> some View {
+    @ViewBuilder func body(content: Content) -> some View {
+        // Only a restoring scroll view owns its position: the stick-to-bottom feeds attach their own.
+        if restores { tracked(content.scrollPosition($position)) } else { tracked(content) }
+    }
+
+    private func tracked(_ content: some View) -> some View {
         content
-            .scrollPosition($position)
             .onScrollGeometryChange(for: ScrollMetrics.self, of: scrollMetrics) { _, m in
                 track.metrics = m
                 hero?.send(.scroll(m))
@@ -354,6 +360,8 @@ private struct TicketDetailHeroScroll: ViewModifier {
                 }
             }
             .onScrollPhaseChange { old, new in
+                // The person's own scroll wins over a restore still looking for its offset.
+                if new == .interacting { started.value = true; pending.value = nil }
                 for e in HeroCollapse.events(from: scrollPhase(old), to: scrollPhase(new), metrics: track.metrics) { hero?.send(e) }
             }
     }

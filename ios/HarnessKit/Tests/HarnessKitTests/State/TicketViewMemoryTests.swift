@@ -33,6 +33,15 @@ struct TicketViewMemoryTests {
         #expect(!m.wasFocused(key: "A-1"))
     }
 
+    @Test func theFocusRestoreHappensOnlyOnce() {
+        let m = TicketViewMemory()
+        m.focusChanged(true, key: "A-1", at: 1)
+        m.focusChanged(false, key: "A-1", at: 2)
+        m.composerDisappeared(key: "A-1", at: 2.1)
+        #expect(m.consumeFocus(key: "A-1"))
+        #expect(!m.consumeFocus(key: "A-1"))
+    }
+
     @Test func scrollAndFocusAreKeptPerTicketUntilForgotten() {
         let m = TicketViewMemory()
         m.setOffset(320, for: "A-1/spec")

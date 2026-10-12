@@ -19,6 +19,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 ### Fixed
 
 - Flicking the ticket sheet away on iPhone no longer stutters on release, and a tiny flick no longer closes the iPad ticket panel.
+- Hold-to-dock is sturdier: an interrupted drag on the iPad panel no longer leaves the "Dock" card stuck, a dismissal the system cancels after an armed release still docks, a small flick can't make the panel's spring-back overshoot, and a reopened ticket no longer snaps back a scroll you make right away, raises the keyboard when you come Back from a child ticket, or keeps stale scroll positions for tickets you pushed inside a closed sheet.
 - On the Mac, dragging an open pane now previews the drop on the pane under the pointer, where it is on screen, instead of on the layout as if the dragged pane had already left. The box is the size the pane will have: half of the pane, 40% of the board, or, when you reorder a pane within its own row or column, the dragged pane's own width or height. For people working on Harness, `pane-resize-check` holds a drag and checks the preview's position and size.
 
 ## [app-20261012.0049](https://github.com/markhuot/harness/releases/tag/app-20261012.0049) - 2026-10-12

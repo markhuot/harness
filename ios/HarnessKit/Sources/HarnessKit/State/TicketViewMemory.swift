@@ -47,6 +47,15 @@ public final class TicketViewMemory {
         return focused[key] ?? false
     }
 
+    /// `wasFocused`, once: the restore belongs to the sheet's first appearance after a dismissal, so
+    /// a later one (going Back from a pushed child ticket, a sheet mounted behind the top one)
+    /// doesn't raise the keyboard again.
+    public func consumeFocus(key: String) -> Bool {
+        let was = wasFocused(key: key)
+        focused[key] = nil
+        return was
+    }
+
     /// The ticket's sheet closed for good: nothing to restore.
     public func forget(key: String) {
         // Scroll offsets are kept per tab, "<ticket>/<tab>".

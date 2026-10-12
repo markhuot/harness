@@ -201,7 +201,7 @@ private struct TicketDetailBody: View {
         // The iPhone's sheet is torn down when dismissed: the keyboard comes back if the composer had
         // it (TicketViewMemory). Its draft is the store's, already there.
         .task(id: ticket.key) {
-            guard !inTicketPanel, TicketViewMemory.shared.wasFocused(key: ticket.key) else { return }
+            guard !inTicketPanel, TicketViewMemory.shared.consumeFocus(key: ticket.key) else { return }
             try? await Task.sleep(for: .milliseconds(600))
             if !Task.isCancelled { focusComposer += 1 }
         }
