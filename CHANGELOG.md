@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261012.0049](https://github.com/markhuot/harness/releases/tag/app-20261012.0049) - 2026-10-12
+
 ### Added
 
 - The service log (`service.log`) now records every push decision: the ticket, the event, and whether it was sent or skipped and why. When a Mac or iPhone was showing the ticket, the line names the device that held the push back, so a missing push can be explained from the log.
