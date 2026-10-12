@@ -282,7 +282,10 @@ struct AnnotatorOpener: Sendable {
 extension View {
     /// On a tab body's ScrollView or List: a forward drag or fling collapses the ticket hero; nothing
     /// a scroll does expands it. Does nothing outside a ticket screen.
-    func ticketHeroScroll() -> some View { modifier(TicketDetailHeroScroll()) }
+    ///
+    /// `restores`: the tab comes back scrolled to where it was left, after its sheet was dismissed
+    /// (TicketViewMemory). Not on feeds that stick to the bottom, which follow the latest instead.
+    func ticketHeroScroll(restores: Bool = true) -> some View { modifier(TicketDetailHeroScroll(restores: restores)) }
 
     /// On a ScrollView whose newest content is last: opens at the bottom,
     /// follows new content while the user is at the bottom, stays put once they scroll up, and
@@ -316,14 +319,39 @@ private final class ScrollTrack<Value> {
 }
 
 private struct TicketDetailHeroScroll: ViewModifier {
+    let restores: Bool
     @Environment(\.ticketDetailHero) private var hero
+    @Environment(\.scrollMemoryKey) private var memoryKey
     @State private var track = ScrollTrack(())
+    @State private var position = ScrollPosition()
+    /// Where the person left this tab (TicketViewMemory) and until when it keeps trying to get
+    /// back there: the content may still be loading when the screen comes up.
+    @State private var pending = ScrollTrack<(y: Double, until: TimeInterval)?>(nil)
+    @State private var started = ScrollTrack(false)
 
     func body(content: Content) -> some View {
         content
+            .scrollPosition($position)
             .onScrollGeometryChange(for: ScrollMetrics.self, of: scrollMetrics) { _, m in
                 track.metrics = m
                 hero?.send(.scroll(m))
+            }
+            .onScrollGeometryChange(for: Double.self, of: { Double($0.contentOffset.y) }) { _, y in
+                guard restores, let key = memoryKey else { return }
+                // The first reading, before anything is written over the saved offset.
+                if !started.value {
+                    started.value = true
+                    if let saved = TicketViewMemory.shared.offset(for: key), abs(saved) > 2 {
+                        pending.value = (saved, DockHold.now + 1.5)
+                        position.scrollTo(y: saved)
+                        return
+                    }
+                }
+                if let wanted = pending.value {
+                    if abs(y - wanted.y) < 2 || DockHold.now > wanted.until { pending.value = nil } else { position.scrollTo(y: wanted.y) }
+                } else {
+                    TicketViewMemory.shared.setOffset(y, for: key)
+                }
             }
             .onScrollPhaseChange { old, new in
                 for e in HeroCollapse.events(from: scrollPhase(old), to: scrollPhase(new), metrics: track.metrics) { hero?.send(e) }
@@ -357,3 +385,13 @@ private struct TicketDetailStickToBottom: ViewModifier {
     }
 }
 
+
+extension EnvironmentValues {
+    /// Names the tab on screen for TicketViewMemory, "<ticket>/<tab>"; nil where nothing is kept.
+    @Entry var scrollMemoryKey: String?
+}
+
+extension TicketViewMemory {
+    /// What the iPhone's ticket sheets remember across a dismissal.
+    @MainActor static let shared = TicketViewMemory()
+}

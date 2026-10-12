@@ -32,7 +32,7 @@ struct TicketDetailActivityTab: View {
         }
         .scrollDismissesKeyboard(.interactively)
         .ticketStickToBottom()
-        .ticketHeroScroll()
+        .ticketHeroScroll(restores: false)
     }
 }
 

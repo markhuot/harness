@@ -42,7 +42,12 @@ struct RootView: View {
             .onChange(of: app.store != nil, initial: true) { _, connected in
                 if connected { router.restorePersistedDock(from: UserDefaults.standard) }
             }
-            .onChange(of: router.dockedSheets) { router.savePersistedDock(to: UserDefaults.standard) }
+            .onChange(of: router.dockedSheets) { old, new in
+                router.savePersistedDock(to: UserDefaults.standard)
+                // A ticket that closed for good comes back fresh: nothing of its screen is kept.
+                let open = Set(new.compactMap(\.rootKey))
+                for key in old.compactMap(\.rootKey) where !open.contains(key) { TicketViewMemory.shared.forget(key: key) }
+            }
     }
 
     @ViewBuilder private var content: some View {

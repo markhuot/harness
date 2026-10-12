@@ -146,6 +146,7 @@ private struct TicketDetailBody: View {
     /// The latest readings, which become `pageMaxY` and `composerTop` once the sheet is at rest.
     @State private var settling = PageSettling()
     @Environment(\.sheetResting) private var sheetResting
+    @Environment(\.inTicketPanel) private var inTicketPanel
     /// The annotator a tab body opened (the Browser tab's Annotate): presented here, outside the
     /// pager, so a page redrawing under it can't take it down.
     @State private var annotating: AnnotationRequest?
@@ -196,6 +197,13 @@ private struct TicketDetailBody: View {
                     .modifier(PagerSlide(hero: hero))
             }
             .zIndex(1)
+        }
+        // The iPhone's sheet is torn down when dismissed: the keyboard comes back if the composer had
+        // it (TicketViewMemory). Its draft is the store's, already there.
+        .task(id: ticket.key) {
+            guard !inTicketPanel, TicketViewMemory.shared.wasFocused(key: ticket.key) else { return }
+            try? await Task.sleep(for: .milliseconds(600))
+            if !Task.isCancelled { focusComposer += 1 }
         }
         .task(id: SpecAttachmentsTrigger(key: ticket.key, revision: ticket.specRevision, epoch: store.epoch)) {
             guard let api = store.api, let detail = try? await api.getTicket(ticket.key), !Task.isCancelled else { return }
@@ -274,6 +282,7 @@ private struct TicketDetailBody: View {
                         readPageMaxY(y)
                     }
                     .environment(\.ticketDetailHero, page == strip ? hero : nil)
+                    .environment(\.scrollMemoryKey, "\(ticket.key)/\(page.rawValue)")
                     .background { PagerYieldsToBackSwipe(hero: hero) }
                     // Opaque, as the page slides over the hero on the pager's layer.
                     .background(c.bg)

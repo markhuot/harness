@@ -1633,6 +1633,42 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
     lastUrl.set(udid, BOARD);
     return "gone, no dock";
   });
+  await check("a ticket docked with the keyboard up reopens from its card at its scroll position with its draft", async () => {
+    // The ticket whose long spec scrolls (the first child). The sheet is torn down on dismissal, so
+    // what comes back is TicketViewMemory's scroll offset and the board store's composer draft. (A
+    // ticket that is closed, not docked, comes back fresh; its draft is the store's.)
+    const link = `harness://ticket/${encodeURIComponent(kid.key)}?tab=spec`;
+    // The spec is one text block starting "Paragraph 1:": its top edge says how far it's scrolled.
+    const specTop = async () => (await nodes(udid)).find((n) => n.AXLabel?.startsWith("Paragraph 1:"))?.frame.y;
+    await goto(udid, link);
+    await until("the long spec", async () => (await specTop()) !== undefined, 8000);
+    await Bun.sleep(600);
+    const start = (await specTop())!;
+    const x = String(Math.round(W / 2));
+    for (let i = 0; i < 3; i++)
+      await axe("swipe", "--start-x", x, "--start-y", String(Math.round(H * 0.7)), "--end-x", x, "--end-y", String(Math.round(H * 0.3)), "--duration", "0.6", "--udid", udid);
+    await Bun.sleep(600);
+    const before = (await specTop())!;
+    if (!(start - before > 100)) throw new Error(`the spec didn't scroll: its top went from ${start} to ${before}`);
+    await tapWhere(udid, (l) => l.startsWith("Message the agent"));
+    await axe("type", "draft kept", "--udid", udid);
+    // With the keyboard up, the hold docks it: the sheet is dismissed and its view torn down.
+    await dockSheet(udid);
+    await until("the sheet gone", async () => (await specTop()) === undefined && onBoard(await labels(udid)), 8000);
+    await tapWhere(udid, isDock);
+    moved(udid);
+    await until("the spec again", async () => (await specTop()) !== undefined, 8000);
+    await Bun.sleep(1500); // the restore keeps trying while the content settles
+    const after = (await specTop())!;
+    // Not to the point: the hero, which is expanded again on the way back, moves the text under it
+    // by about its collapse. Scrolled most of the way it was, rather than back at the top.
+    if (!(start - after > (start - before) * 0.7)) throw new Error(`the spec reopened with its top at ${Math.round(after)}, not near ${Math.round(before)} where it was left (${Math.round(start)} unscrolled)`);
+    const field = (await nodes(udid)).find((n) => n.AXLabel?.startsWith("Message the agent")) as (AXNode & { AXValue?: string | null }) | undefined;
+    if (!field?.AXValue?.toLowerCase().includes("draft kept")) throw new Error(`the composer reads "${field?.AXValue ?? ""}", not the draft`);
+    if (shotsWanted) await shot(udid, "sheet-reopened-restored");
+    await goto(udid, BOARD);
+    return `scrolled ${Math.round(start - before)}pt, back at ${Math.round(start - after)}pt; draft kept`;
+  });
 }
 
 /** Tickets of their own to dock, each with a title long enough to truncate in the dock. */
