@@ -2383,6 +2383,49 @@ async function panelChecks(udid: string, s: { project: Project; conductor: Ticke
     await until("the panel back", async () => panelOn(await labels(udid), key), 8000);
     return "sprang back, then a fast fling closed it";
   });
+  await check("a panel dragged partly off the window keeps its width: its title doesn't reflow to the visible sliver", async () => {
+    // The resize check left the panel at its 25% floor, where the title wraps whatever happens: widen it first.
+    await dragPanelEdge(udid, 300);
+    const { leading, W } = await panelFraction(udid);
+    const close = (await nodes(udid)).find((n) => n.AXUniqueId === "ticket-panel-close");
+    if (!close) throw new Error("no close button in the panel");
+    const y = String(Math.round(close.frame.y - 4 + 6));
+    /** The panel's leading edge and its title's size, where the title is the widest tall label in the header. */
+    const read = (ns: AXNode[]) => {
+      const handle = ns.find((n) => n.AXLabel === RESIZE);
+      const title = ns
+        .filter((n) => handle && n.AXLabel && n.frame.x > handle.frame.x && n.frame.width > 100 && n.frame.y < 200 && n.frame.height > 40 && !/^(Dock|Open|Close|Resize)/.test(n.AXLabel))
+        .sort((a, b) => b.frame.width - a.frame.width)[0];
+      return handle && title ? { x: handle.frame.x, w: title.frame.width, h: title.frame.height } : null;
+    };
+    const rest = read(await nodes(udid));
+    if (!rest) throw new Error("couldn't read the panel's title at rest");
+    // Slow, and ending short of the dock zone (the trailing 40%) so it can't arm: the panel ends up
+    // about 190 pt off its place, a third of it past the window's edge, then springs back.
+    const drag = axe("swipe", "--start-x", String(Math.round(leading + 20)), "--start-y", y, "--end-x", String(Math.round(W * 0.58)), "--end-y", y, "--duration", "5", "--udid", udid);
+    const seen: NonNullable<ReturnType<typeof read>>[] = [];
+    let shotTaken = false;
+    const started = Date.now();
+    while (Date.now() - started < 4500) {
+      const r = read(await nodes(udid));
+      if (r && r.x >= rest.x + 100) {
+        seen.push(r);
+        if (shotsWanted && !shotTaken) {
+          shotTaken = true;
+          await shot(udid, "panel-drag-width");
+        }
+      }
+    }
+    await drag;
+    await Bun.sleep(1000);
+    if (!seen.length) throw new Error(`the panel's title wasn't readable while it was dragged clear of rest (x ${rest.x})`);
+    const bad = seen.find((r) => Math.abs(r.w - rest.w) > 2 || Math.abs(r.h - rest.h) > 4);
+    if (bad) throw new Error(`the panel's content reflowed mid-drag: title ${rest.w}×${rest.h} at rest, ${bad.w}×${bad.h} with the panel at x ${bad.x} (rest ${rest.x}), ${seen.length} readings`);
+    if (!panelOn(await labels(udid), key)) throw new Error("the slow drag short of halfway didn't spring back");
+    // Narrow again for the hold check after this one, which is timed for the narrow panel.
+    await dragPanelEdge(udid, W - 20);
+    return `title ${rest.w}×${rest.h} held through ${seen.length} readings, up to ${Math.round(Math.max(...seen.map((r) => r.x)) - rest.x)} pt off its place`;
+  });
   await check("holding the dragged panel in the trailing 40% shows the ghost card and docks it on release; the card restores it at its root", async () => {
     // The fling lives on a thin strip along the panel's top and the buttons' corner (no title bar).
     const { leading, W } = await panelFraction(udid);

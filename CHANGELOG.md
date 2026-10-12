@@ -11,7 +11,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
-- On iPad, dragging the ticket panel toward the trailing edge no longer squeezes its content into the visible sliver: the panel keeps its width and just slides.
+- On iPad, the ticket panel's content ignores the horizontal safe area, so dragging the panel toward the trailing edge can't squeeze it into the visible sliver. The iPad sim-check now drags the panel partly off the window and fails if its title reflows.
 
 ### Changed
 
