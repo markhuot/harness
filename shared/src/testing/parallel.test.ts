@@ -8,7 +8,7 @@ describe("cost lines", () => {
   });
 
   test("heaviest files go by CPU, not wall time, and the total sums every file's spawns", () => {
-    const results = [
+    const results: Parameters<typeof heaviestLines>[0] = [
       { file: "waits.test.ts", ms: 20_000, cpuMs: 1_000, spawns: {} },
       { file: "git.test.ts", ms: 5_000, cpuMs: 9_000, spawns: { git: 300 } },
       { file: "chrome.test.ts", ms: 10_000, cpuMs: 15_000, spawns: { git: 1, "Google Chrome": 1 } },
