@@ -714,6 +714,14 @@ describe("systemPrompt file links", () => {
     });
   }
 
+  test("the file-link rule covers every mentioned file, with a wrong/right example", () => {
+    const text = sys("work", ticket(worktree));
+    expect(text).toMatch(/Every file you mention .* is a markdown link/);
+    expect(text).toMatch(/not only when you quote code/);
+    expect(text).toContain("Wrong: `src/app.ts:102` in backticks.");
+    expect(text).toContain("Right: `[src/app.ts:102](harness://file/src/app.ts#L102)`.");
+  });
+
   test("triage runs get no file-link guidance", () => {
     const text = sys("triage", null, { project: null, session: { ...session, kind: "triage", key: "TRIAGE-1", ticketId: null } });
     expect(text).not.toContain("harness://file");
