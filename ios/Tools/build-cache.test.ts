@@ -70,7 +70,7 @@ test("the bundle input lists cover every repo file the bundlers import", async (
     { name: "editor", entry: join(root, "editor/src/index.ts"), list: listed(inputs.editor) },
   ];
   for (const b of bundles) {
-    const r = await esbuild({ entryPoints: [b.entry], bundle: true, write: false, metafile: true, platform: "browser", logLevel: "silent" });
+    const r = await esbuild({ entryPoints: [b.entry], bundle: true, write: false, metafile: true, platform: "browser", logLevel: "silent", absWorkingDir: root });
     const metafile = r.metafile;
     const missing = Object.keys(metafile.inputs)
       .map((f) => resolve(root, f))
