@@ -46,7 +46,7 @@ one runtime and a small pool of simulators (two by default).
   (iPhone 18 Pros on iOS 27.0; `with-lock` takes whichever is free) and, for `sim-check --ipad`, `harness-shared-ipad` (an iPad Pro 11-inch, kept booted
   between runs so each iPad run skips creating and installing on a fresh one), through `bun run sim` (`ios/Tools/sim.ts`). `bun run sim ensure` creates the first one
   the first time, boots it and prints its UDID; the second is created only when the first is held
-  and `bun run sim disk` passes. With less disk free, a run waits for a held simulator instead. Don't use, shut down, or delete simulators that
+  and 8 GiB is free (more than `bun run sim disk` needs, since a simulator grows), one creation at a time. With less disk free, a run waits for a held simulator instead. Don't use, shut down, or delete simulators that
   someone else owns (`harness-HARNESS-*`, `sim-check *`).
 - Run everything that touches the simulator (install, launch, screenshots, AXe taps, sim-check,
   dev-sim) under its lock, so two agents never install different builds over each other:
