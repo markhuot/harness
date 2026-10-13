@@ -80,14 +80,15 @@ withChrome("BrowserManager restarts and stopping Chrome (real Chrome)", () => {
       expect(service.chromePid).not.toBe(pid);
       expect(isAlive(pid)).toBe(false);
       // The watched tab came back with its page; the other waits, suspended, until it's used.
-      await until(async () => {
-        const first = (await service.tabs("rb"))[0];
-        return !!first && !first.suspended && first.url === `${base}/?rb-1`;
-      }, "the watched tab reopening at its URL", 10_000);
-      expect((await service.tabs("rb")).map((t) => [t.id, t.url, !!t.suspended])).toEqual([
+      // The tab list is read until it settles: a tab's URL reads empty for a moment while its page
+      // reloads, so one reading that matches can be followed by one that doesn't.
+      const expected = [
         [1, `${base}/?rb-1`, false],
         [2, `${base}/page2?rb-2`, true],
-      ]);
+      ];
+      const listed = async () => (await service.tabs("rb")).map((t) => [t.id, t.url, !!t.suspended]);
+      await until(async () => JSON.stringify(await listed()) === JSON.stringify(expected), "the watched tab reopening at its URL", 10_000);
+      expect(await listed()).toEqual(expected);
       expect(await service.content("rb", { selector: "h1", tab: 2 })).toBe("Second page");
     } finally {
       await service.shutdown();

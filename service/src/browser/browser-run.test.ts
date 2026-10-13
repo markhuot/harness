@@ -33,7 +33,7 @@ withChrome("waits and browser_run (real Chrome)", () => {
   afterAll(async () => {
     await browser?.shutdown();
     void server?.stop(true);
-  }, 30_000); // closing Chrome can take a while on a busy machine
+  });
 
   describe("browser_run", () => {
     /** Poll a job to its end; every report's text, in order. */
@@ -325,5 +325,10 @@ return "ok";`;
       expect(all(other)).toContain(`No browser_run job ${job} in this session`);
     }, 30_000);
   });
-});
 
+  // Closes Chrome here, as the file's last test, because a hook gets only 5 s and a busy machine can
+  // take longer; the afterAll above then finds nothing left to close.
+  test("closes Chrome", async () => {
+    await browser.shutdown();
+  }, 30_000);
+});

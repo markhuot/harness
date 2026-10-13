@@ -24,7 +24,7 @@ withChrome("BrowserManager tab lifecycle (real Chrome)", () => {
   afterAll(async () => {
     await browser?.shutdown();
     void server?.stop(true);
-  }, 30_000); // closing Chrome can take a while on a busy machine
+  });
 
   const pages = () => chromePages(browser);
 
@@ -191,5 +191,11 @@ withChrome("BrowserManager tab lifecycle (real Chrome)", () => {
     await browser.reapIdleTabs();
     expect(ids(await browser.tabs("lc-two"))).toEqual(["1z", "2z", "3"]);
     await browser.unsubscribe("lc-two", "w");
+  }, 30_000);
+
+  // Closes Chrome here, as the file's last test, because a hook gets only 5 s and a busy machine can
+  // take longer; the afterAll above then finds nothing left to close.
+  test("closes Chrome", async () => {
+    await browser.shutdown();
   }, 30_000);
 });

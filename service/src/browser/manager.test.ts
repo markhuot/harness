@@ -40,7 +40,7 @@ withChrome("BrowserManager (real Chrome)", () => {
   afterAll(async () => {
     await browser?.shutdown();
     void server?.stop(true);
-  }, 30_000); // closing Chrome can take a while on a busy machine
+  });
 
   test("state is null before a session has a tab; open returns title and url", async () => {
     expect(await browser.state("s-open")).toBeNull();
@@ -436,4 +436,10 @@ withChrome("BrowserManager (real Chrome)", () => {
       await browser.close("t-size");
     }, 30_000);
   });
+
+  // Closes Chrome here, as the file's last test, because a hook gets only 5 s and a busy machine can
+  // take longer; the afterAll above then finds nothing left to close.
+  test("closes Chrome", async () => {
+    await browser.shutdown();
+  }, 30_000);
 });

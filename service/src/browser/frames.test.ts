@@ -173,7 +173,7 @@ withChrome("iframes, refs, keys, select and upload (real Chrome)", () => {
     await browser?.shutdown();
     void checkout?.stop(true);
     void card?.stop(true);
-  }, 30_000); // closing Chrome can take a while on a busy machine
+  });
 
   test("the card iframe really runs out of process, and its own document can't be reached from the page", async () => {
     const ctx = await ctxAt();
@@ -390,6 +390,11 @@ return [await content("#status"), await evaluate(() => document.getElementById("
       expect(await run(browserEval, { expression: "document.title", frame: '["#card-frame","#tds"]' }, ctx)).toBe('"Challenge"');
     }, 30_000);
   });
+  // Closes Chrome here, as the file's last test, because a hook gets only 5 s and a busy machine can
+  // take longer; the afterAll above then finds nothing left to close.
+  test("closes Chrome", async () => {
+    await browser.shutdown();
+  }, 30_000);
 });
 
 describe("resolveUploadPaths", () => {
