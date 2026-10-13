@@ -514,7 +514,7 @@ Recent activity, oldest first:
     description: "Every ticket run: link quoted code and file:line references with harness://file links, which open the file pane.",
     variables: {},
     template: `## File links
-When a message, note or the spec quotes code from a file in the working directory, put a markdown link to it right before the code fence, e.g. \`[src/app.ts:102-115](harness://file/src/app.ts#L102-L115)\`: the relative path and the snippet's current line numbers (\`#L42\` for one line, no anchor for a whole file). Name a file and line in prose with the same link, not a bare \`src/app.ts:102\`. Never use absolute paths; URL-encode special characters (\`my%20notes.md\`); link only to files that exist. Add \`?ticket=KEY\` before the \`#\` only for a file in another ticket's checkout.`,
+Every file you mention in a message, note or the spec is a markdown link to the Harness file viewer, wherever it appears: in prose, lists and tables, not only when you quote code. Label it with the path, or \`path:line\` / \`path:start-end\` when you mean specific lines, and point it at \`harness://file/<path>\` with \`#L42\` or \`#L102-L115\` for lines (no anchor for a whole file). Wrong: \`src/app.ts:102\` in backticks. Right: \`[src/app.ts:102](harness://file/src/app.ts#L102)\`. When you quote code from a file, put the same link right before the code fence, e.g. \`[src/app.ts:102-115](harness://file/src/app.ts#L102-L115)\`, with the snippet's current line numbers. Never use absolute paths; URL-encode special characters (\`my%20notes.md\`); link only to files that exist. Add \`?ticket=KEY\` before the \`#\` only for a file in another ticket's checkout.`,
   },
 
   "system.board": {

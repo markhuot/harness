@@ -35,6 +35,9 @@ import {
   writeRunOwner,
   type Runtime,
   type Simctl,
+  exportDeveloperDir,
+  xcodeDeveloperDir,
+  XCODE_27_DEVELOPER_DIR,
 } from "./sim";
 
 const iphone = { identifier: "com.apple.CoreSimulator.SimDeviceType.iPhone-18-Pro", name: "iPhone 18 Pro" };
@@ -626,4 +629,24 @@ test("keptSlots ignores kept states whose daemon is dead", async () => {
   keep("dead-newer", 2, "U-" + B);
   keep("live-older", 1, "U-" + A);
   expect(await keptSlots(tmp, async () => [slotDev(A), slotDev(B)], async (s) => s.daemonPid === 1)).toEqual([A]);
+});
+
+test("xcodeDeveloperDir defaults to Xcode 27.0 and keeps a caller's value", () => {
+  expect(xcodeDeveloperDir({})).toBe(XCODE_27_DEVELOPER_DIR);
+  expect(xcodeDeveloperDir({ DEVELOPER_DIR: "" })).toBe(XCODE_27_DEVELOPER_DIR);
+  expect(xcodeDeveloperDir({ DEVELOPER_DIR: "/x/Developer" })).toBe("/x/Developer");
+});
+
+test("exportDeveloperDir leaves DEVELOPER_DIR set in the env children inherit", async () => {
+  const env: Record<string, string | undefined> = {};
+  expect(exportDeveloperDir(env)).toBe(XCODE_27_DEVELOPER_DIR);
+  expect(env.DEVELOPER_DIR).toBe(XCODE_27_DEVELOPER_DIR);
+  const kept: Record<string, string | undefined> = { DEVELOPER_DIR: "/x/Developer" };
+  exportDeveloperDir(kept);
+  expect(kept.DEVELOPER_DIR).toBe("/x/Developer");
+  // Bun.spawn without an env option uses the environment from startup, not later process.env writes; a child spawned with env: process.env sees it.
+  const real = { ...process.env };
+  delete real.DEVELOPER_DIR;
+  const p = Bun.spawn(["bun", "-e", `import { exportDeveloperDir } from ${JSON.stringify(import.meta.dir + "/sim")}; exportDeveloperDir(); console.log(Bun.spawnSync(["/usr/bin/env"], { env: process.env }).stdout.toString())`], { env: real, stdout: "pipe" });
+  expect(await new Response(p.stdout).text()).toContain(`DEVELOPER_DIR=${XCODE_27_DEVELOPER_DIR}`);
 });

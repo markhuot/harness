@@ -32,3 +32,14 @@ struct DockCardsTests {
         #expect(DockCards.split(count: 3, maxVisible: 0) == (0, 3))
     }
 }
+
+/// What a docked card says, which sim-check's JOINS check used to find by label.
+@Suite("Dock labels")
+struct DockLabelsTests {
+    @Test func aCardIsNamedByItsRefAndTitleThenDocked() {
+        #expect(DockLabels.accessibilityLabel(ref: "WEB-2", title: "Fix the footer") == "WEB-2, Fix the footer, docked")
+        #expect(DockLabels.accessibilityLabel(ref: "WEB-2", title: nil) == "WEB-2, docked")
+        #expect(DockLabels.menuLine(ref: "WEB-2", title: "Fix the footer") == "WEB-2 · Fix the footer")
+        #expect(DockLabels.menuLine(ref: "New session", title: nil) == "New session")
+    }
+}

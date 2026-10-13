@@ -1190,8 +1190,9 @@ goes to a permission prompt or the classifier. Plan, review and conductor runs g
 half. We don't reimplement the file tools for claude-code: the CLI's own are used as-is.
 
 File links: every ticket run (not triage) also gets a "File links" section (`system.file_links`)
-asking the model to put a `[path:start-end](harness://file/path#Lstart-Lend)` link before any code
-it quotes from the working directory, and to use the same link for a file:line named in prose.
+telling the model that every file it mentions (prose, lists, tables, not only quoted code) is a
+`[path:line](harness://file/path#Lline)` link, with a wrong/right example, and to put the same link
+before any code it quotes from the working directory.
 The apps open those links in the file pane (`shared/src/fileLinks.ts` defines the format). Claude
 Code's own prompt asks for bare `file_path:line_number` references; the section overrides that.
 
