@@ -96,11 +96,11 @@ desktop agree on keys, reducers, themes and markdown. See [ios/README.md](ios/RE
   (`sim-check --help` lists every flag; `bun run sim reap --kept` clears kept runs).
   `ios/build/screens/timings.json` shows where the time went.
   `bun ios/Tools/dev-sim.ts` is the dev loop: it seeds a daemon, installs a fresh build and pairs it.
-- **Simulator:** `bun run sim` (`ios/Tools/sim.ts`) manages the one simulator everyone shares.
-  `ensure` creates `harness-shared` (iPhone 18 Pro, pinned to the iOS 27.0 runtime; it never falls
+- **Simulator:** `bun run sim` (`ios/Tools/sim.ts`) manages the small pool of simulators everyone shares
+  (`harness-shared`, `harness-shared-2`; `HARNESS_SIM_POOL_SIZE` sets how many). `ensure` creates `harness-shared` (iPhone 18 Pro, pinned to the iOS 27.0 runtime; it never falls
   back to another runtime or downloads one), boots it and prints its UDID.
-  `with-lock -- <command>` waits for exclusive use, then runs the command with `SIM_UDID` set.
-  `status` shows who holds it, `shutdown` stops it once it's free, and `disk` fails below 5 GiB
+  `with-lock -- <command>` waits for a free simulator (the second is only created while there is disk for it), then runs the command with `SIM_UDID` set.
+  `status` shows who holds each, `shutdown` stops the free ones, and `disk` fails below 5 GiB
   free. Locks live in `~/.harness/tmp/sim-locks`; a lock whose process died is taken over. See
   CLAUDE.md → Simulators for the rules agents follow.
 
@@ -261,6 +261,7 @@ cd service && bun run test # store, orchestrator, drivers, tools, MCP, browser (
 cd app && bun test        # routes, theme resolution, CSS var coverage, keyboard registry, board and pane navigation, palette ranking
 cd ios/HarnessKit && swift test   # the iPhone app's protocol, client, logic and state, against the JSON fixtures
 cd ios && bun run test    # iOS build, simulator and highlighter tooling
+bun run sim snapshots     # the iPhone/iPad screens rendered from fixture models vs. reference PNGs (--record updates them, --out=<dir> writes the renders)
 cd release && bun run test # release prepare, publish checks, TestFlight, install page
 cd plugins/sdk && bun test   # plugin iframe bridge (connect)
 cd plugins/git && bun test   # git plugin routes against real temp repos

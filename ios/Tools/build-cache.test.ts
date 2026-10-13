@@ -37,6 +37,17 @@ test("the xcodegen hash follows project.yml and the globbed file names, not thei
   expect(xcodegenHash(ios)).not.toBe(added);
 });
 
+test("the xcodegen hash sees a new snapshot test file but not a re-recorded reference image", () => {
+  const ios = join(dir, "ios");
+  write(join(ios, "project.yml"), "name: Harness");
+  write(join(ios, "HarnessSnapshotTests/ScreenSnapshotTests.swift"));
+  const base = xcodegenHash(ios);
+  write(join(ios, "HarnessSnapshotTests/References/iphone/board-light.png"));
+  expect(xcodegenHash(ios)).toBe(base);
+  write(join(ios, "HarnessSnapshotTests/OtherTests.swift"));
+  expect(xcodegenHash(ios)).not.toBe(base);
+});
+
 test("bundle inputs list sources and the lockfile, skip tests, and are relative to ios/", () => {
   const ios = join(dir, "ios");
   write(join(dir, "bun.lock"));

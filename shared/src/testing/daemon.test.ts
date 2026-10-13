@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { startDaemon, until, freePort, stopProcess } from "./daemon";
+import { daemonAnswers, startDaemon, until, freePort, stopProcess } from "./daemon";
 import { tempDir } from "./tmp";
 
 const fixture = (name: string) => join(import.meta.dir, "__fixtures__", name);
@@ -106,6 +106,21 @@ describe("startDaemon's environment", () => {
         if (v === undefined) delete process.env[k];
         else process.env[k] = v;
       }
+    }
+  });
+});
+
+describe("daemonAnswers", () => {
+  test("is true for a live daemon with a token, false without the token or once it stops", async () => {
+    const d = await startDaemon();
+    try {
+      const state = { daemonPid: d.proc.pid, port: Number(new URL(d.base).port) };
+      expect(await daemonAnswers(state, d.home)).toBe(true);
+      expect(await daemonAnswers(state, tempDir("harness-no-token-"))).toBe(false);
+      await d.stop();
+      expect(await daemonAnswers(state, d.home)).toBe(false);
+    } finally {
+      await d.stop();
     }
   });
 });

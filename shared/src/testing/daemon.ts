@@ -53,6 +53,17 @@ export function freePort(pool?: { from: number; span: number }): number {
   return port;
 }
 
+/** A kept daemon that still runs: its pid is alive, its token file exists in `dir` and /health answers. */
+export async function daemonAnswers(s: { daemonPid: number; port: number }, dir: string): Promise<boolean> {
+  try {
+    process.kill(s.daemonPid, 0);
+  } catch {
+    return false;
+  }
+  if (!existsSync(join(dir, "token"))) return false;
+  return fetch(`http://127.0.0.1:${s.port}/health`, { signal: AbortSignal.timeout(2000) }).then((r) => r.ok, () => false);
+}
+
 type Killable = { exited: Promise<number>; kill(signal?: number | NodeJS.Signals): void };
 
 /** SIGTERM, then SIGKILL once `ms` pass. Resolves true when the process left on its own. */
