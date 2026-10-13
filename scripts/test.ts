@@ -15,7 +15,12 @@ async function main(args: string[]): Promise<number> {
     }
   };
   await Promise.all([pump(proc.stdout, process.stdout), pump(proc.stderr, process.stderr)]);
-  const code = await proc.exited;
+  let code = await proc.exited;
+  // The repo-root scripts (verify's path mapping) aren't a workspace, so they get their own run.
+  if (!args.length) {
+    const own = Bun.spawn([process.execPath, "test", "./scripts"], { stdout: "inherit", stderr: "inherit", stdin: "inherit" });
+    code ||= await own.exited;
+  }
   console.log(`\n${formatSkips(summarizeSkips(output))}`);
   return code;
 }

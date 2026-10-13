@@ -255,6 +255,12 @@ built-in plugin UIs, and the service also builds them on start when they're miss
 
 ## Tests
 
+`bun run verify` (repo root) runs the layers your diff needs: it maps the changed files to bun tests,
+typecheck, `swift test`, the matching Mac app check and the iPhone snapshot and sim-check runs, and
+exits non-zero if any fail. `--dry-run` prints the plan and why, `--all` runs everything, and
+`--base=<ref>` diffs against another branch. The mapping is `scripts/verify-plan.ts`. The layers
+by hand:
+
 ```sh
 cd shared && bun test     # key helpers, client state (reducer, conductor, models, bridge, markdown), themes (registry, WCAG contrast)
 cd service && bun run test # store, orchestrator, drivers, tools, MCP, browser (real Chrome), HTTP/WS e2e, CLI; files in parallel
