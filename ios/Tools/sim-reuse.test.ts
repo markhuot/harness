@@ -2,7 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { chooseKept, hashApp, hashService, listKept, planApp, planDeviceInstall, readReuseState, REUSE_VERSION, writeReuseState, type Kept, type ReuseState } from "./sim-reuse";
+import { chooseKept, hashApp, hashService, listKept, planApp, deviceAppUrl, planDeviceInstall, readReuseState, REUSE_VERSION, writeReuseState, type Kept, type ReuseState } from "./sim-reuse";
 
 const state = (over: Partial<ReuseState> = {}): ReuseState => ({
   version: REUSE_VERSION, savedAt: 1000, port: 7831, scratch: "/tmp/p", daemonPid: 42, modeKey: "sheets", seeds: [], seeded: { a: 1 }, udids: ["U1"], appHash: "h1", installed: ["i1"], repoRoot: "/repo", serviceHash: "s1", ...over,
@@ -126,10 +126,23 @@ test("state round-trips through a kept home; junk reads as no state; listKept ne
 });
 
 test("a device install is skipped only for the recorded build that is still on the device", () => {
-  const base = { installedHash: "h1", builtHash: "h1", onDevice: true };
+  const base = { installed: { hash: "h1", url: "file:///A/Harness.app" }, builtHash: "h1", deviceUrl: "file:///A/Harness.app" };
   expect(planDeviceInstall(base)).toEqual({ install: false });
   expect(planDeviceInstall({ ...base, builtHash: "h2" }).install).toBe(true);
-  expect(planDeviceInstall({ ...base, installedHash: null }).install).toBe(true);
+  expect(planDeviceInstall({ ...base, installed: null }).install).toBe(true);
   // Deleted from the phone since: the record alone doesn't count.
-  expect(planDeviceInstall({ ...base, onDevice: false }).install).toBe(true);
+  expect(planDeviceInstall({ ...base, deviceUrl: null }).install).toBe(true);
+  // Installed over by another worktree or Xcode: the device's location moved.
+  expect(planDeviceInstall({ ...base, deviceUrl: "file:///B/Harness.app" }).install).toBe(true);
+});
+
+test("deviceAppUrl matches the bundle id exactly and tolerates bad output", () => {
+  const json = JSON.stringify({ result: { apps: [
+    { bundleIdentifier: "com.markhuot.harness.widgets", url: "file:///W/" },
+    { bundleIdentifier: "com.markhuot.harness", url: "file:///A/Harness.app/" },
+  ] } });
+  expect(deviceAppUrl(json, "com.markhuot.harness")).toBe("file:///A/Harness.app/");
+  expect(deviceAppUrl(json, "com.markhuot")).toBeNull();
+  expect(deviceAppUrl("not json", "com.markhuot.harness")).toBeNull();
+  expect(deviceAppUrl("{}", "com.markhuot.harness")).toBeNull();
 });

@@ -43,12 +43,14 @@ export function xcodegenHash(ios: string): string {
 export function bundleInputs(ios: string): { highlighter: string[]; editor: string[] } {
   const root = resolve(ios, "..");
   const sources = (dir: string) =>
-    walk(join(root, dir)).filter((f) => /\.(ts|js|json)$/.test(f) && !/\.test\.ts$/.test(f)).map((f) => relative(ios, f));
+    walk(join(root, dir)).filter((f) => /\.(tsx?|[mc]?js|json|css)$/.test(f) && !/\.test\.tsx?$/.test(f)).map((f) => relative(ios, f));
   // bun.lock pins the Shiki and esbuild versions, so a dependency update reruns the phases.
   const shared = [relative(ios, join(root, "bun.lock")), relative(ios, join(root, "package.json"))].filter((f) => existsSync(join(ios, f)));
+  // Both bundles import @harness/shared (themes, diff); package.json's exports map resolves it.
+  const harnessShared = [...sources("shared/src"), "../shared/package.json"];
   return {
-    highlighter: [...shared, ...sources("ios/Tools/highlighter"), "Tools/build-highlighter.ts"],
-    editor: [...shared, ...sources("editor/src"), "../editor/scripts/build.ts", "../editor/package.json"],
+    highlighter: [...shared, ...harnessShared, ...sources("ios/Tools/highlighter"), "Tools/build-highlighter.ts"],
+    editor: [...shared, ...harnessShared, ...sources("editor/src"), "../editor/scripts/build.ts", "../editor/package.json"],
   };
 }
 

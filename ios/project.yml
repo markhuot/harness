@@ -44,9 +44,10 @@ targets:
         aps-environment: development
     # The syntax highlighter's JavaScriptCore bundle (Shiki, from Tools/highlighter/highlight.ts) is
     # generated, not committed: bun bundles it into the app (ARCHITECTURE.md § Syntax highlighting).
-    # Xcode skips each bundle phase while its output is newer than its inputs, which Tools/build.ts
-    # lists in build/bundle-*.xcfilelist before every build (build-cache.ts bundleInputs: the
-    # bundle's sources and bun.lock, which pins Shiki and esbuild).
+    # Xcode skips each bundle phase while its inputs (the files in build/bundle-*.xcfilelist) are
+    # unchanged and its output exists. Tools/build.ts writes those lists before every build
+    # (build-cache.ts bundleInputs: the bundle's sources, shared/src and bun.lock, which pins Shiki
+    # and esbuild). A plain xcodegen or Xcode build needs them, so run build.ts once first.
     preBuildScripts:
       - name: Bundle highlighter
         inputFileLists: [build/bundle-highlighter.xcfilelist]

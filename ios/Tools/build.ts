@@ -22,7 +22,7 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { bundleInputs, planXcodegen, xcfilelist, xcodegenHash } from "./build-cache";
-import { hashApp, planDeviceInstall } from "./sim-reuse";
+import { deviceAppUrl, hashApp, planDeviceInstall } from "./sim-reuse";
 
 export const IOS = resolve(import.meta.dir, "..");
 export const BUILD = join(IOS, "build");
@@ -274,20 +274,28 @@ function device(o: Extract<Options, { command: "device" }>): string {
   ]);
   const app = join(DERIVED_DATA, "Build/Products/Debug-iphoneos/Harness.app");
   const records = join(BUILD, "device-installs.json");
-  const recorded: Record<string, string> = existsSync(records) ? JSON.parse(readFileSync(records, "utf8")) : {};
-  const listed = Bun.spawnSync(["xcrun", "devicectl", "device", "info", "apps", "--device", o.device, "--bundle-id", BUNDLE_ID], { stdout: "pipe", stderr: "pipe" });
+  let recorded: Record<string, { hash: string; url: string }> = {};
+  try {
+    if (existsSync(records)) recorded = JSON.parse(readFileSync(records, "utf8")) ?? {};
+  } catch {} // a damaged record is no record: install again
+  const listing = join(BUILD, "device-apps.json");
+  rmSync(listing, { force: true });
+  const listed = Bun.spawnSync(["xcrun", "devicectl", "device", "info", "apps", "--device", o.device, "--bundle-id", BUNDLE_ID, "--json-output", listing], { stdout: "pipe", stderr: "pipe", timeout: 60_000 });
+  const deviceUrl = listed.exitCode === 0 && existsSync(listing) ? deviceAppUrl(readFileSync(listing, "utf8"), BUNDLE_ID) : null;
   const builtHash = hashApp(app);
-  const plan = planDeviceInstall({
-    installedHash: recorded[o.device] ?? null,
-    builtHash,
-    onDevice: listed.exitCode === 0 && listed.stdout.toString().includes(BUNDLE_ID),
-  });
+  const plan = planDeviceInstall({ installed: recorded[o.device] ?? null, builtHash, deviceUrl });
   if (plan.install) {
     log(`==> Installing on ${o.device} (${plan.reason})`);
     run("device-install", ["xcrun", "devicectl", "device", "install", "app", "--device", o.device, app]);
-    writeIfChanged(records, JSON.stringify({ ...recorded, [o.device]: builtHash }));
+    rmSync(listing, { force: true });
+    Bun.spawnSync(["xcrun", "devicectl", "device", "info", "apps", "--device", o.device, "--bundle-id", BUNDLE_ID, "--json-output", listing], { stdout: "pipe", stderr: "pipe", timeout: 60_000 });
+    const url = existsSync(listing) ? deviceAppUrl(readFileSync(listing, "utf8"), BUNDLE_ID) : null;
+    // Without the device's location there's nothing to compare next time, so leave no record.
+    const { [o.device]: _old, ...rest } = recorded;
+    writeIfChanged(records, JSON.stringify(url ? { ...rest, [o.device]: { hash: builtHash, url } } : rest));
   } else log(`==> ${o.device} already has this build; skipping the install`);
-  if (o.launch) run("device-launch", ["xcrun", "devicectl", "device", "process", "launch", "--device", o.device, BUNDLE_ID]);
+  // --terminate-existing: an unchanged build wasn't reinstalled, which used to restart the app.
+  if (o.launch) run("device-launch", ["xcrun", "devicectl", "device", "process", "launch", "--device", o.device, "--terminate-existing", BUNDLE_ID]);
   return app;
 }
 
