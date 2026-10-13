@@ -18,6 +18,7 @@
     "./testing/skip": "./src/testing/skip.ts",
     "./testing/daemon": "./src/testing/daemon.ts",
     "./testing/seed": "./src/testing/seed.ts",
-    "./testing/proxy": "./src/testing/proxy.ts"
+    "./testing/proxy": "./src/testing/proxy.ts",
+    "./testing/chrome-profile": "./src/testing/chrome-profile.ts"
   }
 }

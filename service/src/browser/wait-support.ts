@@ -9,11 +9,13 @@ import type { ToolResultContent } from "@harness/shared";
 import { tempDir } from "@harness/shared/testing";
 import type { ToolResult } from "../tools/types";
 import { describeIf } from "@harness/shared/testing/skip";
+import { seedChromeProfile } from "@harness/shared/testing/chrome-profile";
 import { findChrome } from "./chrome.ts";
 
 export const chromePath = findChrome();
 export const withChrome = describeIf(chromePath, "Chrome not found (set HARNESS_CHROME_PATH): wait and browser_run tests skipped");
 export const profileDir = chromePath ? tempDir("harness-wait-test-") : "";
+if (chromePath) await seedChromeProfile(profileDir, chromePath);
 export const scratch = tempDir("harness-wait-scratch-");
 
 const html = (body: string, title = "Fixture") =>

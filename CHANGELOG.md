@@ -50,6 +50,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
+- For people working on Harness: running the tests on a Mac whose Chrome is under cloud management no longer rewrites the web apps the organization's policy installs (such as Google Meet) in `~/Applications/Chrome Apps.localized`, where Finder had been keeping a numbered copy from each run. Test Chromes and test daemons now start from a profile that already holds the policy, warmed once per Chrome version in `node_modules/.cache/harness-chrome-profile`. That profile replaces the extension test's own policy profile.
 - For people working on Harness: `bun run typecheck` passes again; the seed library's settings test no longer fails `tsc -p service` and `tsc -p app`.
 - For people working on Harness: `sim-check` now runs every Xcode tool it spawns (including the `simctl` video recording) against Xcode 27.0 even when `DEVELOPER_DIR` is not exported in your shell, instead of failing a check with "unable to find utility simctl". `build.ts` and `dev-sim.ts` share the same resolver.
 - For people working on Harness: `bun run sim snapshots` (and `bun run verify`'s snapshot layer) now takes any free simulator of the pool, or the one a parent `sim with-lock` already holds, instead of always waiting on `harness-shared` while `harness-shared-2` sits idle.

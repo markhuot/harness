@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, utimesSync } from "node:fs"
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { describeIf } from "@harness/shared/testing/skip";
+import { seedChromeProfile } from "@harness/shared/testing/chrome-profile";
 import {
   ChromeProcess,
   chromeStartTimes,
@@ -96,7 +97,9 @@ const realChrome = describeIf(chromePath && codeSignCloneRoot(), "Chrome or its 
  */
 async function launchAttributed(prefix: string): Promise<ChromeProcess> {
   for (let attempt = 0; attempt < 8; attempt++) {
-    const chrome = await ChromeProcess.launch({ chromePath: chromePath!, profileDir: tempDir(prefix) });
+    const profileDir = tempDir(prefix);
+    await seedChromeProfile(profileDir, chromePath);
+    const chrome = await ChromeProcess.launch({ chromePath: chromePath!, profileDir });
     if (chrome.cloneDir) return chrome;
     await chrome.close();
     await Bun.sleep(200 + Math.random() * 600);

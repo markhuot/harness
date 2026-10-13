@@ -5,6 +5,7 @@
 
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { seedChromeProfile } from "./chrome-profile";
 import { tempDir } from "./tmp";
 
 export const repoRoot = resolve(import.meta.dir, "..", "..", "..");
@@ -214,6 +215,9 @@ export async function startDaemon(opts: StartDaemonOptions = {}): Promise<TestDa
   // A test daemon runs by itself: not under the app's launchd plist (which rewrites PATH and sends
   // its output to a log file) and not supervised (which would let it restart through the app's).
   const { HARNESS_LAUNCHD: _launchd, HARNESS_SUPERVISOR_PID: _supervisor, ...inherited } = process.env;
+  // The daemon's Chrome starts from a settled profile, so it doesn't rewrite the user's web-app
+  // shims (chrome-profile.ts). A home handed in keeps whatever profile it has.
+  await seedChromeProfile(join(home, "chrome-profile"), opts.env?.HARNESS_CHROME_PATH || process.env.HARNESS_CHROME_PATH || undefined);
   const proc = Bun.spawn(["bun", opts.entry ?? daemonEntry], {
     env: { ...inherited, HARNESS_HOME: home, HARNESS_PORT: String(port), HARNESS_DUMMY_DRIVER: "1", HARNESS_DUMMY_DELAY_MS: String(opts.delayMs ?? 1), ...opts.env },
     stdout: files ? Bun.file(join(home, "daemon.out")) : "inherit",

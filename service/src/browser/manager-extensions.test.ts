@@ -1,11 +1,12 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { Server } from "bun";
 import { codeSignCloneRoot } from "./chrome.ts";
 import { BrowserManager } from "./manager.ts";
 import { createBrowserService } from "./index.ts";
 import { testIf } from "@harness/shared/testing/skip";
+import { seedChromeProfile } from "@harness/shared/testing/chrome-profile";
 import { tempDir } from "@harness/shared/testing";
 import { chromePath, fixtures, html, isAlive, memoryTabStore, profileDir, until, withChrome } from "./test-support.ts";
 
@@ -42,36 +43,14 @@ withChrome("BrowserManager extensions (real Chrome)", () => {
   const mine = async (service: BrowserManager) => (await service.extensions()).extensions.filter((e) => e.source !== "chrome");
 
   // A Chrome enrolled in cloud management fetches its policy a few seconds after a new profile's
-  // first launch, and loads unpacked extensions until then. Let it fetch (and cache) the policy
-  // first, so the test sees what an established profile does. The settled profile is kept in
-  // node_modules/.cache, and later runs start from a copy of it: the poll below still decides
-  // whether a profile is settled, it just rarely has to wait.
-  const settledTemplate = join(import.meta.dir, "../../node_modules/.cache/chrome-policy-profile");
-  const cachedPolicy = (dir: string) => join(dir, "Policy", "Machine Level User Cloud Policy");
-  const withoutLocks = (src: string) => !/Singleton(Lock|Cookie|Socket)$/.test(src);
+  // first launch, and loads unpacked extensions until then. test-support seeds profileDir from a
+  // settled profile that already holds it (chrome-profile.ts), so the test sees what an
+  // established profile does. Seeding again covers a run of every file in one process, where an
+  // earlier file's cleanup removed the profile.
   async function settlePolicy() {
+    await seedChromeProfile(profileDir, chromePath);
     if (!existsSync("/Library/Managed Preferences/com.google.Chrome.plist")) return;
-    if (existsSync(cachedPolicy(settledTemplate))) {
-      cpSync(settledTemplate, profileDir, { recursive: true, filter: withoutLocks });
-      // A stale or corrupt template falls through to the poll below.
-      if (existsSync(cachedPolicy(profileDir))) return;
-      rmSync(profileDir, { recursive: true, force: true });
-      mkdirSync(profileDir, { recursive: true });
-      rmSync(settledTemplate, { recursive: true, force: true });
-    }
-    const warm = new BrowserManager({ profileDir, chromePath: chromePath!, tabStore: memoryTabStore() });
-    try {
-      await warm.open("warm", "about:blank");
-      const deadline = Date.now() + 20_000;
-      while (!existsSync(cachedPolicy(profileDir)) && Date.now() < deadline) await Bun.sleep(250);
-    } finally {
-      await warm.shutdown();
-    }
-    if (existsSync(cachedPolicy(profileDir))) {
-      rmSync(settledTemplate, { recursive: true, force: true });
-      mkdirSync(dirname(settledTemplate), { recursive: true });
-      cpSync(profileDir, settledTemplate, { recursive: true, filter: withoutLocks });
-    }
+    expect(existsSync(join(profileDir, "Policy", "Machine Level User Cloud Policy"))).toBe(true);
   }
 
   // On a computer whose Chrome policy doesn't allow unpacked extensions (a managed Mac), the test

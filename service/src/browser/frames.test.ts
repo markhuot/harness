@@ -27,6 +27,7 @@ import {
 import { fakeContext, fakeOps, fakeSession } from "../tools/fakes";
 import type { ToolContext, ToolResult } from "../tools/types";
 import { describeIf } from "@harness/shared/testing/skip";
+import { seedChromeProfile } from "@harness/shared/testing/chrome-profile";
 import { findChrome, QUIET_CHROME_ARGS } from "./chrome.ts";
 import { frameChain } from "./frames.ts";
 import { BrowserManager } from "./manager.ts";
@@ -35,6 +36,7 @@ import { checkCondition, describeCondition } from "./wait.ts";
 const chromePath = findChrome();
 const withChrome = describeIf(chromePath, "Chrome not found (set HARNESS_CHROME_PATH): frames tests skipped");
 const profileDir = chromePath ? tempDir("harness-frames-test-") : "";
+if (chromePath) await seedChromeProfile(profileDir, chromePath);
 const work = tempDir("harness-frames-work-");
 const scratch = tempDir("harness-frames-scratch-");
 

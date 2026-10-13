@@ -7,13 +7,16 @@ import type { BrowserManager } from "./manager.ts";
 import type { StoredBrowserTabs } from "./types.ts";
 import { tempDir } from "@harness/shared/testing";
 import { describeIf } from "@harness/shared/testing/skip";
+import { seedChromeProfile } from "@harness/shared/testing/chrome-profile";
 import { findChrome } from "./chrome.ts";
 
 export const chromePath = findChrome();
 export const withChrome = describeIf(chromePath, "Chrome not found (set HARNESS_CHROME_PATH): the real-Chrome browser tests skipped");
 
-// One Chrome profile per test file, so files running in parallel never share one.
+// One Chrome profile per test file, so files running in parallel never share one. Seeded from a
+// settled profile, so Chrome doesn't rewrite the user's web-app shims (chrome-profile.ts).
 export const profileDir = chromePath ? tempDir("harness-browser-test-") : "";
+if (chromePath) await seedChromeProfile(profileDir, chromePath);
 
 // The viewport tag a responsive site has, so a "mobile" tab lays the page out at its own width.
 export const html = (body: string, title = "Fixture", head = `<meta name="viewport" content="width=device-width, initial-scale=1">`) =>
