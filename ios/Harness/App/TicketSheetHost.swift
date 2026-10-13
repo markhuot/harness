@@ -264,7 +264,7 @@ struct DockedCardsOverlay: View {
                     }
                     VStack(spacing: DockedCardMetrics.spacing) {
                         if expanded {
-                            DockedCardList(sheets: others, total: router.dockedSheets.count, open: open, close: { router.closeSheet(id: $0.id) }, collapse: { expanded = false })
+                            DockedCardList(sheets: others, total: router.dockedSheets.count, open: open, close: { closeCard($0) }, collapse: { expanded = false })
                         } else {
                             stack(others)
                         }
@@ -294,7 +294,7 @@ struct DockedCardsOverlay: View {
 
     /// The top ticket's card, with the swipes and VoiceOver's actions.
     private func primary(_ sheet: TicketSheet) -> some View {
-        DockedCard(sheet: sheet, open: { TicketDock.open(router) }, close: { withAnimation(.snappy) { router.dismissSheet() } })
+        DockedCard(sheet: sheet, open: { TicketDock.open(router) }, close: { closeCard(sheet) })
             .accessibilityFocused($focused)
             // High priority: the card's button would otherwise keep a drag that stays inside it
             // and take its lift as a tap. A tap never travels the 24pt, so it still reaches the button.
@@ -304,7 +304,7 @@ struct DockedCardsOverlay: View {
                         if abs(v.translation.width) > abs(v.translation.height) {
                             TicketDock.step(router, v.translation.width < 0 ? .next : .previous)
                         } else if v.translation.height > 40 {
-                            withAnimation(.snappy) { router.dismissSheet() }
+                            closeCard(sheet)
                         }
                     }
             )
@@ -318,8 +318,20 @@ struct DockedCardsOverlay: View {
             if split.more > 0 { DockedMoreCard(count: split.more) { expanded = true } }
             // The rest of the visible cards, oldest at the top; the top ticket is the card below.
             ForEach(others.prefix(max(0, split.cards - 1)).reversed()) { sheet in
-                DockedCard(sheet: sheet, open: { open(sheet) }, close: { router.closeSheet(id: sheet.id) })
+                DockedCard(sheet: sheet, open: { open(sheet) }, close: { closeCard(sheet) })
             }
+        }
+    }
+
+    /// ✕ or a swipe down on a card. A file whose save failed as it went to the dock holds its edits
+    /// (`UnsavedEdits`) with nothing mounted to ask about them: it comes forward instead, with the
+    /// edits and the failure showing, and its own Close asks.
+    private func closeCard(_ sheet: TicketSheet) {
+        if case let .file(params) = sheet.root, let root = FileViewer.readFileParams(params)?.root,
+           let path = FileViewer.readFileParams(params)?.path, UnsavedEdits.shared.has(root, path: path) {
+            open(sheet)
+        } else {
+            withAnimation(.snappy) { router.closeSheet(id: sheet.id) }
         }
     }
 
