@@ -6,7 +6,7 @@
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import type { Ticket } from "@harness/shared";
+import type { HumanReviewBody, Ticket } from "@harness/shared";
 import { tempDir } from "@harness/shared/testing";
 import { clearPullRequestTargets } from "../store/projects";
 import { makeOrchestrator } from "../testing/fakes";
@@ -171,7 +171,7 @@ describe("choosing at approval", () => {
   test("every review body HarnessKit's Approve builds is accepted and stored as it says", async () => {
     const fixture = JSON.parse(
       readFileSync(resolve(import.meta.dir, "../../../ios/HarnessKit/Tests/HarnessKitTests/Fixtures/approve.json"), "utf8"),
-    ) as { approveRequestCases: { name: string; output: { via: string; body: { decision: string; action?: string; instructions?: string } } }[] };
+    ) as { approveRequestCases: { name: string; output: { via: string; body: HumanReviewBody & { action?: string } } }[] };
     const cases = fixture.approveRequestCases.filter((c) => c.output.via === "review");
     expect(cases.length).toBeGreaterThan(3);
     expect(cases.some((c) => c.output.body.instructions)).toBe(true);
@@ -179,7 +179,7 @@ describe("choosing at approval", () => {
     for (const c of cases) {
       const t = await h.orch.createTicket({ projectId: h.project.id, spec: `${c.name} [hold-review]` });
       while (h.driver.holding === 0) await Bun.sleep(1);
-      if (c.output.body.action && !h.project.completionActions.includes(c.output.body.action as never)) {
+      if (c.output.body.action && !(h.project.completionActions ?? []).includes(c.output.body.action as never)) {
         // The app passes an action it doesn't know through; the service is the one to refuse it.
         expectStatus(() => h.orch.humanReview(t.key, c.output.body), 400, /action must be one of/);
         expect(h.get(t).humanReview, c.name).toBe("pending");
