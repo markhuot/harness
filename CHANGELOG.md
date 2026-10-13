@@ -39,6 +39,9 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
+- For people working on Harness: a check script or dev tool that is killed (Ctrl-C, a tool timeout, `verify` stopping it) no longer leaves its test daemon and Chrome running. `startDaemon` stops the daemon and sweeps its Chrome on exit, SIGINT and SIGTERM before the temp home is removed, and `sim reap` now also stops orphaned daemons from those `harness-daemon-*` homes.
+- For people working on Harness: `sim-check --reuse` no longer attaches to the wrong daemon when a pid was recycled and another kept daemon sits on the port. It confirms the daemon accepts the home's own token before reusing it.
+- For people working on Harness: `bun run verify` and `bun run nightly` forward Ctrl-C/SIGTERM to the layer they are running and kill its whole process group, so sim-check and snapshot children release their simulator locks and the run stops instead of starting the next layer. Each layer also has a time limit (45 minutes; `HARNESS_LAYER_TIMEOUT_MS` changes it) after which it is killed and reported as timed out.
 - For people working on Harness: the clone-sweep test in `browser/chrome.test.ts` no longer fails when other test files launch Chrome at the same moment. It relaunches until Chrome's code-sign clone is attributed to it, which is best-effort when several Chromes start together.
 
 ### Removed

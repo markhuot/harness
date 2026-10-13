@@ -17,6 +17,7 @@
 
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
+import { runCommand } from "./run-layer";
 import { allLayers, planLayers, type PlannedLayer } from "./verify-plan";
 
 const root = join(import.meta.dir, "..");
@@ -73,21 +74,8 @@ interface Result {
 async function runLayer(layer: PlannedLayer, stream: boolean): Promise<Result> {
   const started = performance.now();
   const env = { ...process.env, DEVELOPER_DIR: process.env.DEVELOPER_DIR ?? "/Applications/Xcode-27.0.0.app/Contents/Developer" };
-  let output = "";
-  try {
-    const proc = Bun.spawn(layer.cmd, { cwd: root, env, stdout: "pipe", stderr: "pipe", stdin: "ignore" });
-    const pump = async (s: ReadableStream<Uint8Array>) => {
-      for await (const chunk of s) {
-        const text = Buffer.from(chunk).toString();
-        output += text;
-        if (stream) process.stdout.write(text);
-      }
-    };
-    const [, , code] = await Promise.all([pump(proc.stdout), pump(proc.stderr), proc.exited]);
-    return { layer, code, output, ms: performance.now() - started };
-  } catch (e) {
-    return { layer, code: 127, output: `${layer.cmd[0]} could not run: ${(e as Error).message}`, ms: performance.now() - started };
-  }
+  const r = await runCommand(layer.cmd, { cwd: root, env, onOutput: stream ? (t) => process.stdout.write(t) : undefined });
+  return { layer, code: r.code, output: r.output, ms: performance.now() - started };
 }
 
 const seconds = (ms: number) => `${(ms / 1000).toFixed(1)}s`;

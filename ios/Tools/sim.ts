@@ -461,6 +461,8 @@ export function poolNames(devices: readonly Device[], size = poolSize()): string
 /** sim-check's own devices ("sim-check 2", …). harness-shared and harness-shared-ipad are never reaped. */
 export const SIM_CHECK_DEVICE = /^sim-check /;
 export const HOME_PREFIX = "harness-sim-home-";
+/** startDaemon's default home (shared/src/testing/daemon.ts): its orphans are reaped like a sim-check home's. */
+export const TEST_DAEMON_HOME_PREFIX = "harness-daemon-";
 export const PROJECTS_PREFIX = "harness-sim-projects-";
 /** Written into a sim-check home: the run that owns it and its projects dir. */
 export const RUN_OWNER_FILE = "owner.json";
@@ -541,7 +543,7 @@ export function parseSimDaemons(ps: string): SimDaemon[] {
   for (const line of ps.split("\n")) {
     const m = /^\s*(\d+)\s+(\d+)\s+(\S+)\s+(.*)$/.exec(line);
     if (!m || !/\bservice\/src\/daemon\.ts\b/.test(m[4]!)) continue;
-    const home = new RegExp(`\\bHARNESS_HOME=(\\S*/${HOME_PREFIX}[\\w-]+)`).exec(m[4]!)?.[1];
+    const home = new RegExp(`\\bHARNESS_HOME=(\\S*/(?:${HOME_PREFIX}|${TEST_DAEMON_HOME_PREFIX})[\\w-]+)`).exec(m[4]!)?.[1];
     if (home) out.push({ pid: Number(m[1]), ppid: Number(m[2]), ageSec: etimeSeconds(m[3]!), home });
   }
   return out;

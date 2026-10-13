@@ -313,11 +313,13 @@ test("parseSimDaemons finds sim-check daemons by their HARNESS_HOME and reads th
     "  3374  3325 1-02:03:04 bun /w/HARNESS-174/service/src/daemon.ts HARNESS_HOME=/var/T/harness-sim-home-fiOcad",
     "   700     1 10:00 bun /Applications/Harness.app/service/src/daemon.ts HARNESS_HOME=/Users/me/.harness",
     "   701     1 10:00 bun test HARNESS_HOME=/var/T/harness-sim-home-zzz",
+    "  4400     1 20:00 bun /w/x/service/src/daemon.ts HARNESS_HOME=/var/T/harness-daemon-Ab12Cd HARNESS_PORT=1",
     "garbage",
   ].join("\n");
   expect(parseSimDaemons(ps)).toEqual([
     { pid: 9519, ppid: 1, ageSec: 3 * 3600 + 17 * 60 + 29, home: "/var/T/harness-sim-home-tf4UXu" },
     { pid: 3374, ppid: 3325, ageSec: 86400 + 2 * 3600 + 3 * 60 + 4, home: "/var/T/harness-sim-home-fiOcad" },
+    { pid: 4400, ppid: 1, ageSec: 1200, home: "/var/T/harness-daemon-Ab12Cd" },
   ]);
   expect(etimeSeconds("05")).toBe(5);
   expect(etimeSeconds("01:05")).toBe(65);

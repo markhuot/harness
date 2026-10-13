@@ -110,7 +110,51 @@ describe("startDaemon's environment", () => {
   });
 });
 
+describe("a check that dies leaves no daemon behind", () => {
+  async function runOrphanCheck(env: Record<string, string>, end: (proc: ReturnType<typeof Bun.spawn>) => void) {
+    const proc = Bun.spawn(["bun", fixture("orphan-check.ts")], { stdout: "pipe", stderr: "inherit", env: { ...process.env, ...env } });
+    const [pid, home] = (await proc.stdout.getReader().read().then((r) => new TextDecoder().decode(r.value))).trim().split(" ");
+    end(proc);
+    await proc.exited;
+    return { daemonPid: Number(pid), home: home! };
+  }
+  const gone = (pid: number) => {
+    try {
+      process.kill(pid, 0);
+      return false;
+    } catch {
+      return true;
+    }
+  };
+
+  test("SIGTERM to the check stops its daemon and removes the home", async () => {
+    const { daemonPid, home } = await runOrphanCheck({}, (p) => p.kill("SIGTERM"));
+    await until("daemon gone", async () => gone(daemonPid), 5000);
+    expect(existsSync(home)).toBe(false);
+  });
+
+  test("a check that just exits stops its daemon before the home goes", async () => {
+    const { daemonPid, home } = await runOrphanCheck({ EXIT_NOW: "1" }, () => {});
+    await until("daemon gone", async () => gone(daemonPid), 5000);
+    expect(existsSync(home)).toBe(false);
+  });
+});
+
 describe("daemonAnswers", () => {
+  test("is false when the home's token isn't the one the daemon on that port accepts", async () => {
+    const d = await startDaemon({ entry: fixture("auth-daemon.ts") });
+    try {
+      const state = { daemonPid: d.proc.pid, port: d.port };
+      expect(await daemonAnswers(state, d.home)).toBe(true);
+      // Another kept daemon on the port, as if the pid were recycled: the home's token is a stranger to it.
+      const other = tempDir("harness-other-home-");
+      await Bun.write(join(other, "token"), "someone-elses-token\n");
+      expect(await daemonAnswers(state, other)).toBe(false);
+    } finally {
+      await d.stop();
+    }
+  });
+
   test("is true for a live daemon with a token, false without the token or once it stops", async () => {
     const d = await startDaemon();
     try {
