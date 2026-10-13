@@ -927,7 +927,7 @@ async function startDaemon(want: Want) {
         FAKE_CLAUDE_RECORD: claudeRecord,
       }
     : {};
-  testDaemon = await startDaemonShared({ home, port, delayMs: 1, env: fakeClaude });
+  testDaemon = await startDaemonShared({ home, port, delayMs: 1, env: fakeClaude, stopOnExit: !keep });
   daemon = testDaemon.proc;
   daemonPid = daemon.pid;
 }

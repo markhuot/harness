@@ -308,17 +308,44 @@ test("planReap removes a stray projects dir only when no home claims it and it's
   expect(plan.remove).toEqual([`${T}/harness-sim-projects-stray`]);
 });
 
+test("planReap reaps an orphaned startDaemon home (harness-daemon-*) after a few minutes, and removes its dir", () => {
+  const T = "/tmp/x";
+  const home = (id: string, ageSec: number) => ({ path: `${T}/harness-daemon-${id}`, kind: "home" as const, ageSec, owner: null, ownerAlive: false, keep: false });
+  const d = (pid: number, id: string, ageSec: number, ppid = 1) => ({ pid, ppid, ageSec, home: `${T}/harness-daemon-${id}` });
+  const plan = planReap({
+    devices: [],
+    held: () => false,
+    dirs: [home("orphan", 600), home("young", 60), home("parented", 900)],
+    daemons: [d(1, "orphan", 600), d(2, "young", 60), d(3, "parented", 900, 999)],
+  });
+  expect(plan.kill.map((p) => p.pid)).toEqual([1]);
+  expect(plan.remove).toEqual([`${T}/harness-daemon-orphan`]);
+});
+
+test("reap lists harness-daemon-* dirs in the temp dir", async () => {
+  const tmp = tempDir("harness-reap-tmp-");
+  mkdirSync(join(tmp, "harness-daemon-stale"));
+  utimesSync(join(tmp, "harness-daemon-stale"), new Date(Date.now() - 3600_000), new Date(Date.now() - 3600_000));
+  mkdirSync(join(tmp, "harness-daemon-fresh"));
+  const done = await reap({ tmp, lockDir: tempDir("harness-locks-"), simctl: async () => JSON.stringify({ devices: {} }), ps: () => "", log: () => {} });
+  expect(done.remove).toEqual([join(tmp, "harness-daemon-stale")]);
+  expect(existsSync(join(tmp, "harness-daemon-stale"))).toBe(false);
+  expect(existsSync(join(tmp, "harness-daemon-fresh"))).toBe(true);
+});
+
 test("parseSimDaemons finds sim-check daemons by their HARNESS_HOME and reads their age", () => {
   const ps = [
     "  9519     1 03:17:29 bun /w/HARNESS-172/service/src/daemon.ts PATH=/bin HARNESS_HOME=/var/T/harness-sim-home-tf4UXu HARNESS_PORT=7848",
     "  3374  3325 1-02:03:04 bun /w/HARNESS-174/service/src/daemon.ts HARNESS_HOME=/var/T/harness-sim-home-fiOcad",
     "   700     1 10:00 bun /Applications/Harness.app/service/src/daemon.ts HARNESS_HOME=/Users/me/.harness",
     "   701     1 10:00 bun test HARNESS_HOME=/var/T/harness-sim-home-zzz",
+    "  4400     1 20:00 bun /w/x/service/src/daemon.ts HARNESS_HOME=/var/T/harness-daemon-Ab12Cd HARNESS_PORT=1",
     "garbage",
   ].join("\n");
   expect(parseSimDaemons(ps)).toEqual([
     { pid: 9519, ppid: 1, ageSec: 3 * 3600 + 17 * 60 + 29, home: "/var/T/harness-sim-home-tf4UXu" },
     { pid: 3374, ppid: 3325, ageSec: 86400 + 2 * 3600 + 3 * 60 + 4, home: "/var/T/harness-sim-home-fiOcad" },
+    { pid: 4400, ppid: 1, ageSec: 1200, home: "/var/T/harness-daemon-Ab12Cd" },
   ]);
   expect(etimeSeconds("05")).toBe(5);
   expect(etimeSeconds("01:05")).toBe(65);

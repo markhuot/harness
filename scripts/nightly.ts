@@ -13,6 +13,7 @@
 
 import { readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { runCommand } from "./run-layer";
 import { appCheck, simCheck, type Layer } from "./verify-plan";
 
 const root = resolve(import.meta.dir, "..");
@@ -104,17 +105,8 @@ export function formatReport(results: LayerResult[], date = new Date()): string 
 
 async function run(cmd: string[]): Promise<{ code: number; output: string }> {
   const env = { ...process.env, DEVELOPER_DIR: process.env.DEVELOPER_DIR ?? "/Applications/Xcode-27.0.0.app/Contents/Developer" };
-  let output = "";
-  try {
-    const proc = Bun.spawn(cmd, { cwd: root, env, stdout: "pipe", stderr: "pipe", stdin: "ignore" });
-    const pump = async (s: ReadableStream<Uint8Array>) => {
-      for await (const chunk of s) output += Buffer.from(chunk).toString();
-    };
-    const [, , code] = await Promise.all([pump(proc.stdout), pump(proc.stderr), proc.exited]);
-    return { code, output };
-  } catch (e) {
-    return { code: 127, output: `${cmd[0]} could not run: ${(e as Error).message}` };
-  }
+  const { code, output } = await runCommand(cmd, { cwd: root, env });
+  return { code, output };
 }
 
 export function parseArgs(argv: string[]): { only: string[] | null; list: boolean } {

@@ -110,7 +110,68 @@ describe("startDaemon's environment", () => {
   });
 });
 
+describe("a check that dies leaves no daemon behind", () => {
+  async function runOrphanCheck(env: Record<string, string>, end: (proc: ReturnType<typeof Bun.spawn>) => void) {
+    const proc = Bun.spawn(["bun", fixture("orphan-check.ts")], { stdout: "pipe", stderr: "inherit", env: { ...process.env, ...env } });
+    const [pid, home, pid2] = (await proc.stdout.getReader().read().then((r) => new TextDecoder().decode(r.value))).trim().split(" ");
+    end(proc);
+    const code = await proc.exited;
+    return { daemonPid: Number(pid), home: home!, secondPid: pid2 ? Number(pid2) : undefined, code };
+  }
+  const gone = (pid: number) => {
+    try {
+      process.kill(pid, 0);
+      return false;
+    } catch {
+      return true;
+    }
+  };
+
+  test("SIGTERM to the check stops its daemon and removes the home", async () => {
+    const { daemonPid, home } = await runOrphanCheck({}, (p) => p.kill("SIGTERM"));
+    await until("daemon gone", async () => gone(daemonPid), 5000);
+    expect(existsSync(home)).toBe(false);
+  });
+
+  test("a home the caller supplied is covered too: the daemon stops when the check is killed", async () => {
+    const { daemonPid } = await runOrphanCheck({ GIVEN_HOME: "1" }, (p) => p.kill("SIGTERM"));
+    await until("daemon gone", async () => gone(daemonPid), 5000);
+  });
+
+  test("SIGHUP (a closed terminal) stops the daemon", async () => {
+    const { daemonPid, code } = await runOrphanCheck({}, (p) => p.kill("SIGHUP"));
+    await until("daemon gone", async () => gone(daemonPid), 5000);
+    expect(code).toBe(129);
+  });
+
+  test("two daemons in one process both stop, and the signal still ends the process", async () => {
+    const { daemonPid, secondPid, code } = await runOrphanCheck({ TWO: "1" }, (p) => p.kill("SIGTERM"));
+    await until("both gone", async () => gone(daemonPid) && gone(secondPid!), 5000);
+    expect(code).toBe(143);
+  });
+
+  test("a check that just exits stops its daemon before the home goes", async () => {
+    const { daemonPid, home } = await runOrphanCheck({ EXIT_NOW: "1" }, () => {});
+    await until("daemon gone", async () => gone(daemonPid), 5000);
+    expect(existsSync(home)).toBe(false);
+  });
+});
+
 describe("daemonAnswers", () => {
+  test("is false when the home's token isn't the one the daemon on that port accepts", async () => {
+    const d = await startDaemon({ entry: fixture("auth-daemon.ts") });
+    try {
+      const state = { daemonPid: d.proc.pid, port: d.port };
+      expect(await daemonAnswers(state, d.home)).toBe(true);
+      // Another kept daemon on the port, as if the pid were recycled: the home's token is a stranger to it.
+      const other = tempDir("harness-other-home-");
+      await Bun.write(join(other, "token"), "someone-elses-token\n");
+      expect(await daemonAnswers(state, other)).toBe(false);
+    } finally {
+      await d.stop();
+    }
+  });
+
   test("is true for a live daemon with a token, false without the token or once it stops", async () => {
     const d = await startDaemon();
     try {

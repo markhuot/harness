@@ -469,6 +469,8 @@ export function poolNames(devices: readonly Device[], size = poolSize()): string
 /** sim-check's own devices ("sim-check 2", …). harness-shared and harness-shared-ipad are never reaped. */
 export const SIM_CHECK_DEVICE = /^sim-check /;
 export const HOME_PREFIX = "harness-sim-home-";
+/** startDaemon's default home (shared/src/testing/daemon.ts): its orphans are reaped like a sim-check home's. */
+export const TEST_DAEMON_HOME_PREFIX = "harness-daemon-";
 export const PROJECTS_PREFIX = "harness-sim-projects-";
 /** Written into a sim-check home: the run that owns it and its projects dir. */
 export const RUN_OWNER_FILE = "owner.json";
@@ -476,6 +478,9 @@ export const RUN_OWNER_FILE = "owner.json";
 export const KEEP_FILE = "keep";
 /** Homes from before owner.json (and their daemons) count as left behind only once this old. */
 export const LEGACY_HOME_AGE_SEC = 60 * 60;
+/** A startDaemon home has no owner file; its daemon reparented to launchd means its check is gone, so a few minutes of slack is plenty. */
+export const TEST_DAEMON_AGE_SEC = 5 * 60;
+const ownerlessAgeSec = (path: string) => (base(path).startsWith(TEST_DAEMON_HOME_PREFIX) ? TEST_DAEMON_AGE_SEC : LEGACY_HOME_AGE_SEC);
 /** Projects dirs no home claims count as left behind once this old (a sim-check run takes minutes). */
 export const STRAY_PROJECTS_AGE_SEC = 6 * 60 * 60;
 
@@ -515,14 +520,14 @@ export function planReap(input: ReapInput): ReapPlan {
     if (p.ppid !== 1) return false;
     const h = homes.get(base(p.home));
     if (h?.keep && !input.includeKept) return false;
-    return h?.owner ? !h.ownerAlive : p.ageSec > LEGACY_HOME_AGE_SEC;
+    return h?.owner ? !h.ownerAlive : p.ageSec > ownerlessAgeSec(p.home);
   });
   const killed = new Set(kill.map((p) => p.pid));
   const inUse = new Set(input.daemons.filter((p) => !killed.has(p.pid)).map((p) => base(p.home)));
   const remove: string[] = [];
   const claimed = new Set<string>();
   for (const h of homes.values()) {
-    const live = (h.keep && !input.includeKept) || inUse.has(base(h.path)) || (h.owner ? h.ownerAlive : h.ageSec <= LEGACY_HOME_AGE_SEC);
+    const live = (h.keep && !input.includeKept) || inUse.has(base(h.path)) || (h.owner ? h.ownerAlive : h.ageSec <= ownerlessAgeSec(h.path));
     if (h.owner) claimed.add(base(h.owner.scratch));
     if (live) continue;
     remove.push(h.path);
@@ -549,7 +554,7 @@ export function parseSimDaemons(ps: string): SimDaemon[] {
   for (const line of ps.split("\n")) {
     const m = /^\s*(\d+)\s+(\d+)\s+(\S+)\s+(.*)$/.exec(line);
     if (!m || !/\bservice\/src\/daemon\.ts\b/.test(m[4]!)) continue;
-    const home = new RegExp(`\\bHARNESS_HOME=(\\S*/${HOME_PREFIX}[\\w-]+)`).exec(m[4]!)?.[1];
+    const home = new RegExp(`\\bHARNESS_HOME=(\\S*/(?:${HOME_PREFIX}|${TEST_DAEMON_HOME_PREFIX})[\\w-]+)`).exec(m[4]!)?.[1];
     if (home) out.push({ pid: Number(m[1]), ppid: Number(m[2]), ageSec: etimeSeconds(m[3]!), home });
   }
   return out;
@@ -568,7 +573,7 @@ function listSimTempDirs(tmp: string): SimTempDir[] {
   const now = Date.now();
   const dirs: SimTempDir[] = [];
   for (const name of readdirSync(tmp)) {
-    const kind = name.startsWith(HOME_PREFIX) ? "home" : name.startsWith(PROJECTS_PREFIX) ? "projects" : null;
+    const kind = name.startsWith(HOME_PREFIX) || name.startsWith(TEST_DAEMON_HOME_PREFIX) ? "home" : name.startsWith(PROJECTS_PREFIX) ? "projects" : null;
     if (!kind) continue;
     const path = join(tmp, name);
     let ageSec: number;
