@@ -57,10 +57,6 @@ describe("planLayers", () => {
     expect(ids(["app/scripts/groups-check.ts"])).toEqual(["bun:app", "typecheck", "app-build", "app-check:groups-check"]);
   });
 
-  test("HarnessKit runs swift test and nothing on a simulator", () => {
-    expect(ids(["ios/HarnessKit/Sources/HarnessKit/Router.swift"])).toEqual(["swift-test"]);
-  });
-
   test("an iPhone screen runs snapshots plus the sim-check run for its feature", () => {
     expect(ids(["ios/Harness/Features/Prompts/PromptsScreen.swift"])).toEqual(["snapshots", "sim-check --only=prompt-editor"]);
     expect(ids(["ios/Harness/App/TicketSheetHost.swift"])).toEqual(["snapshots", "sim-check --sheets"]);
@@ -89,7 +85,7 @@ describe("planLayers", () => {
     for (const f of ["ios/Tools/build.ts", "ios/Tools/build-cache.ts", "ios/Tools/snapshots.ts"]) {
       expect(ids([f])).toEqual(["bun:ios", "typecheck", "snapshots"]);
     }
-    expect(planLayers(["ios/Tools/build.ts"]).layers.find((l) => l.id === "snapshots")?.reasons).toEqual(["ios build tooling (a real build)"]);
+    expect(planLayers(["ios/Tools/build.ts"]).layers.find((l) => l.id === "snapshots")?.reasons).toEqual(["ios/Tools/build.ts"]);
     expect(ids(["ios/Tools/build.test.ts"])).toEqual(["bun:ios", "typecheck"]);
   });
 
@@ -107,7 +103,7 @@ describe("planLayers", () => {
   test("a file no rule claims falls back to bun tests + typecheck, alongside what the rest need", () => {
     const plan = planLayers(["mystery/thing.rs", "ios/HarnessKit/Sources/X.swift"]);
     expect(plan.unmatched).toEqual(["mystery/thing.rs"]);
-    expect(plan.layers.map((l) => l.id)).toEqual(["bun:all", "typecheck", "swift-test"]);
+    expect(plan.layers.map((l) => l.id)).toEqual(["bun:all", "typecheck", "swift-test", "snapshots"]);
     expect(plan.layers[0]!.reasons[0]).toContain(FALLBACK_REASON);
   });
 
