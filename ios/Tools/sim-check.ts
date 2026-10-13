@@ -4452,14 +4452,20 @@ function interactionChains(s: Seeded): Chain[] {
         await shot(udid, "file-edit-dirty-light");
         const wd = (await ticketOf(s.fileLink.key)).workdir!;
         const onDisk = () => readFileSync(join(wd, GREETINGS_PATH), "utf8");
+        const original = onDisk();
         if (onDisk().includes(typed)) throw new Error("the edit reached the disk before Save");
         await tapWhere(udid, "Save");
         await until("the unsaved dot gone", async () => !(await dot()), 8000);
         const editor = (await probe(udid))?.editor;
         if (editor?.dirty) throw new Error("the unsaved dot is gone but the editor still says dirty");
-        if (!onDisk().includes(typed)) throw new Error("Save didn't write the edit to the file");
+        const saved = onDisk().includes(typed);
+        // The file is the ticket's, and the file-link chain reads it as clean: put it back.
+        writeFileSync(join(wd, GREETINGS_PATH), original);
+        if (!saved) throw new Error("Save didn't write the edit to the file");
         return "typed, unsaved dot, Save wrote the file";
       });
+      // The file screen stays pushed, and the chains after it start on top of it: the file-link tap then lands behind a prompt editor.
+      await goto(udid, BOARD);
     }),
   ];
 }
