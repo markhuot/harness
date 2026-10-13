@@ -1120,7 +1120,7 @@ for this app they come down to:
 
 ## Debug state probe
 
-A SIM_CHECK or DEBUG build (build.ts's simulator build sets `SIM_CHECK`; the device and archive builds
+A SIM_CHECK build (build.ts's simulator build sets `SIM_CHECK`; the device and archive builds
 never do, so a release has none of it) writes the app's state as JSON to
 `<app container>/tmp/harness-debug-state.json` about every 50 ms (`Harness/App/DebugProbe.swift`,
 written atomically). `ios/Tools/sim-check.ts` finds the container with `simctl get_app_container … data`

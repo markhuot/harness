@@ -3,7 +3,7 @@ import Foundation
 /// The debug state probe's JSON: what ios/Tools/sim-check.ts reads to assert on app state and to
 /// wait for the app to settle, instead of reading accessibility values and sleeping.
 ///
-/// The app writes it (only in a DEBUG or SIM_CHECK build, so never in a release) to
+/// The app writes it (only in a SIM_CHECK build, so never in a release) to
 /// `<app container>/tmp/harness-debug-state.json` about every 50 ms, atomically. The shape is
 /// stable: sim-check parses it, so changing a key means changing both. ios/ARCHITECTURE.md
 /// ("Debug state probe") documents it.
