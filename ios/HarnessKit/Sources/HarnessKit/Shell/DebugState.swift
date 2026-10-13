@@ -41,6 +41,12 @@ public struct DebugState: Codable, Equatable, Sendable {
     /// The editor on screen, nil when none is.
     public var editor: EditorState?
 
+    public init(busy: [String] = [], router: RouterState, editor: EditorState? = nil) {
+        self.busy = busy
+        self.router = router
+        self.editor = editor
+    }
+
     public struct RouterState: Codable, Equatable, Sendable {
         public var selectedTab: String
         /// The selected tab's stack, one `DebugState.describe(_:)` string per screen.

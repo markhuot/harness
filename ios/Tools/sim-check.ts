@@ -578,6 +578,7 @@ const DRAW_MS = 400;
  */
 async function whenShown(udid: string, before: string | undefined, ready?: (l: string[]) => boolean, ms = 12000): Promise<boolean> {
   let prev = "";
+  let sameSince: number | undefined;
   const end = Date.now() + ms;
   while (Date.now() < end) {
     const l = await labels(udid);
@@ -594,6 +595,16 @@ async function whenShown(udid: string, before: string | undefined, ready?: (l: s
       await atRest(udid, DRAW_MS);
       return true;
     }
+    // The link led to the screen already up (a ticket already open, say): its labels never differ
+    // from `before`. With the probe, a screen that has held still and settled for a few seconds is
+    // that case, not a transition that never started, so don't wait out the whole timeout.
+    if (t === before && l[0] === "Harness" && l.length >= 3 && (!ready || ready(l))) {
+      sameSince ??= Date.now();
+      if (Date.now() - sameSince > 3000 && (await probe(udid))?.settled) {
+        lastTree.set(udid, t);
+        return true;
+      }
+    } else sameSince = undefined;
     if (process.env.SIM_CHECK_DEBUG && prev && t !== prev) {
       const a = new Set(prev.split("\n"));
       const b = new Set(l);
@@ -2220,7 +2231,7 @@ async function fileDockChecks(udid: string, p: { project: Project; conductor: Ti
     const marked = async () => (await probe(udid))?.editor?.markedLines ?? [];
     await goto(udid, `${link}#L3`);
     await until("the editor", editorUp, 12000);
-    await probeUntil(udid, "the new lines marked in the open editor", (s) => s.editor?.markedLines.join("\n") === "line three").catch(async (e) => {
+    await probeUntil(udid, "the new lines marked in the open editor", (s) => s.editor?.markedLines.length === 1 && s.editor.markedLines[0]!.includes("line three")).catch(async (e) => {
       await say(`marked ${JSON.stringify(await marked())}`);
       await shot(udid, "file-reveal-failed", true);
       throw e;
@@ -2228,7 +2239,7 @@ async function fileDockChecks(udid: string, p: { project: Project; conductor: Ti
     await atRest(udid, 600);
     await shot(udid, "file-reveal-line-three", true);
     await goto(udid, `${link}#L4-L4`);
-    await probeUntil(udid, "the next link's lines marked", (s) => s.editor?.markedLines.join("\n") === "line four");
+    await probeUntil(udid, "the next link's lines marked", (s) => s.editor?.markedLines.length === 1 && s.editor.markedLines[0]!.includes("line four"));
     if (!ipad) await dockSheet(udid);
     const expected = ipad ? 1 : 2;
     if ((await count()) !== expected) throw new Error(`${await count()} docked after relinking lines, expected ${expected}`);

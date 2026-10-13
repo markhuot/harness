@@ -19,6 +19,10 @@ final class DebugProbe {
     private var loop: Task<Void, Never>?
     private let url = FileManager.default.temporaryDirectory.appendingPathComponent(DebugState.fileName)
 
+    /// When each running animation was first seen, so a perpetual one can be told from a transition.
+    private var ambient: [String: TimeInterval] = [:]
+    private static let ambientAfter: TimeInterval = 2
+
     private struct WeakHost { weak var host: EditorWebHost? }
 
     /// Starts writing for the main window's router (a ticket window's router is ignored).
@@ -44,13 +48,22 @@ final class DebugProbe {
     /// view being dragged or coasting ("scrolling"). A spinner or a pulse that repeats forever is
     /// part of a screen at rest, so it doesn't count. This is what lets sim-check wait for a sheet
     /// to slide in or a fling to stop instead of sleeping.
-    private static func motion() -> [String] {
+    private func motion() -> [String] {
+        let now = ProcessInfo.processInfo.systemUptime
+        var seen: [String: TimeInterval] = [:]
         var animating: [String] = []
         var scrolling = false
         func walk(_ layer: CALayer) {
             for key in layer.animationKeys() ?? [] {
-                guard let a = layer.animation(forKey: key), a.repeatCount < 1000, animating.count < 4 else { continue }
-                animating.append("animating:\(type(of: layer)):\(key)")
+                guard let a = layer.animation(forKey: key), animating.count < 4,
+                      a.repeatCount < 1000, a.repeatDuration < 1000,
+                      // The system activity indicator's spinner, which runs for as long as it is shown.
+                      !(layer is CAReplicatorLayer) else { continue }
+                // One that has run for seconds is ambient (the glass lenses' shimmer), not a transition.
+                let id = "\(ObjectIdentifier(layer).hashValue):\(key)"
+                let since = ambient[id] ?? now
+                seen[id] = since
+                if now - since < Self.ambientAfter { animating.append("animating:\(type(of: layer)):\(key)") }
             }
             for sub in layer.sublayers ?? [] { walk(sub) }
         }
@@ -64,6 +77,7 @@ final class DebugProbe {
                 walk(window)
             }
         }
+        ambient = seen
         return animating + (scrolling ? ["scrolling"] : [])
     }
 
@@ -73,7 +87,7 @@ final class DebugProbe {
         let onScreen = hosts.compactMap(\.host).filter { $0.webView.window != nil }
         var state = DebugState(router: DebugState.router(router))
         if onScreen.contains(where: { !$0.ready }) { state.busy.append("editor") }
-        state.busy += Self.motion()
+        state.busy += motion()
         for host in onScreen where host.ready {
             if let editor = await host.probe() { state.editor = editor; break }
         }
