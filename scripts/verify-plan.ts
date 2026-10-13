@@ -121,7 +121,10 @@ export const RULES: Rule[] = [
     layers: (f) => [bunIn("app"), typecheck, appBuild, appCheck(f.replace(/^app\/scripts\/|\.ts$/g, ""))],
   },
   { name: "app build and packaging scripts", match: /^app\/(scripts|package\.json|vite|tsconfig)/, layers: () => [bunIn("app"), typecheck] },
-  { name: "HarnessKit (Swift package)", match: /^ios\/HarnessKit\//, layers: () => [swiftTest] },
+  { name: "HarnessKit tests", match: /^ios\/HarnessKit\/Tests\//, layers: () => [swiftTest] },
+  // HarnessKit is linked into the app, so a source change can break the app build the snapshot layer makes.
+  { name: "HarnessKit (linked into the app)", match: /^ios\/HarnessKit\/(?!Tests\/)/, layers: () => [swiftTest, snapshots] },
+  { name: "ios build tooling (a real build)", match: /^ios\/Tools\/(build|build-cache|snapshots)\.ts$/, layers: () => [bunIn("ios"), typecheck, snapshots] },
   { name: "sim-check", match: /^ios\/Tools\/sim-check\.ts$/, layers: () => [bunIn("ios"), typecheck, walkThrough] },
   { name: "ios tooling", match: /^ios\/Tools\//, layers: () => [bunIn("ios"), typecheck] },
   { name: "snapshot tests and references", match: /^ios\/HarnessSnapshotTests\//, layers: () => [snapshots] },

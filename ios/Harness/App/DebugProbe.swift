@@ -1,4 +1,4 @@
-#if DEBUG || SIM_CHECK
+#if SIM_CHECK
 import Foundation
 import HarnessKit
 import UIKit
@@ -7,7 +7,7 @@ import UIKit
 /// about every 50 ms, for ios/Tools/sim-check.ts to read (`simctl get_app_container … data`). A file
 /// rather than a URL route and a daemon post: it needs no round trip to land (a read is a file
 /// read), nothing from the daemon, and it works before the app is paired. Compiled only into a
-/// DEBUG or SIM_CHECK build (build.ts's simulator build sets SIM_CHECK), so a release build has
+/// SIM_CHECK build (build.ts's simulator build sets it; a Debug device build does not), so a device or release build has
 /// none of it. The shape and the settle rule are in HarnessKit's DebugState.swift.
 @MainActor
 final class DebugProbe {

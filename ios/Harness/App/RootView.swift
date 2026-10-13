@@ -34,7 +34,7 @@ struct RootView: View {
             })
             .onAppear {
                 WindowDirectory.shared.mainActive(router, scene: scene)
-                #if DEBUG || SIM_CHECK
+                #if SIM_CHECK
                 DebugProbe.shared.attach(router)
                 #endif
             }
