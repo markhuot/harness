@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { HarnessClient, parsePairUrl, type ListenSetting } from "@harness/shared";
 import { createHarness, type Harness } from "../app";
 import { DummyDriver } from "../drivers/dummy";
+import { testIf } from "@harness/shared/testing/skip";
 import { stubBrowser, tempHome } from "../testing/fakes";
 import {
   NetworkManager,
@@ -267,7 +268,7 @@ async function boot(opts: Partial<Parameters<typeof createHarness>[0]> = {}) {
 const reach = (url: string, init?: RequestInit) => fetch(url, { ...init, signal: AbortSignal.timeout(1500) }).then((r) => r.status, () => "down" as const);
 
 describe("listen setting over real sockets", () => {
-  test.skipIf(!LAN)("PATCH listen rebinds live; remote requests need the token; MCP is loopback-only; switching back closes the address", async () => {
+  testIf(LAN, "no non-loopback IPv4 address (LAN): remote listen rebinding skipped")("PATCH listen rebinds live; remote requests need the token; MCP is loopback-only; switching back closes the address", async () => {
     const { h, client } = await boot({ networkDrainMs: 400 });
     const remote = `http://${LAN}:${h.port}`;
     expect(await reach(`${remote}/health`)).toBe("down");
@@ -309,7 +310,7 @@ describe("listen setting over real sockets", () => {
     expect(h.url).toBe(`http://127.0.0.1:${h.port}`);
   });
 
-  test.skipIf(!LAN)("boot with Tailscale down falls back to loopback and retries into the configured mode", async () => {
+  testIf(LAN, "no non-loopback IPv4 address (LAN): Tailscale-down fallback skipped")("boot with Tailscale down falls back to loopback and retries into the configured mode", async () => {
     let up = true;
     // Stand the LAN address in for the Tailscale one so a real listener comes up.
     const tailscale = async () => (up ? { ip: LAN!, dnsName: "box.tail.ts.net" } : null);

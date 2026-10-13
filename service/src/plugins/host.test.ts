@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { HarnessClient, type PluginInfo, type PluginTab } from "@harness/shared";
 import { createHarness, type Harness } from "../app";
 import { DummyDriver } from "../drivers/dummy";
+import { testIf } from "@harness/shared/testing/skip";
 import { stubBrowser, tempHome } from "../testing/fakes";
 import { safeJoin } from "../safe-path";
 import { execFile, parseManifest } from "./host";
@@ -254,7 +255,7 @@ describe("plugin host over HTTP", () => {
   // A phone reaches the service over the LAN or Tailscale, never loopback. Bun streams a file
   // body there without its status line or headers, so this only fails off loopback.
   const lanIp = Object.values(networkInterfaces()).flat().find((a) => a && a.family === "IPv4" && !a.internal)?.address;
-  test.skipIf(!lanIp)("static UI: a well-formed HTTP response on a non-loopback address", async () => {
+  testIf(lanIp, "no non-loopback IPv4 address (LAN): plugin static UI over a LAN address skipped")("static UI: a well-formed HTTP response on a non-loopback address", async () => {
     const { h } = await boot(
       (builtin) => writePlugin(builtin, "viewer", { id: "viewer", ui: "dist", tabs: [{ id: "main", title: "Main" }] }, { "dist/index.html": "<!doctype html><p>hi</p>" }),
       { hostname: lanIp },

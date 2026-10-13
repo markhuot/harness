@@ -1,3 +1,4 @@
+import { testIf } from "@harness/shared/testing/skip";
 import { describe, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
@@ -184,7 +185,7 @@ describe("entitlementsFor", () => {
   });
 });
 
-test.skipIf(!existsSync(profilePath()))("the installed profile passes for the app's entitlements and the default identity", () => {
+testIf(existsSync(profilePath()), "no installed provisioning profile: profile/entitlements test skipped")("the installed profile passes for the app's entitlements and the default identity", () => {
   const ent = readPlist(join(import.meta.dir, "..", "resources", "entitlements.mac.plist"));
   const ok = checkProfile(decodeProfile(profilePath()), { appIdentifier: APP_ID, certificateSha1: DEFAULT_IDENTITY, entitlements: ent, path: profilePath() });
   expect(ok.apsEnvironment).toBe("production");

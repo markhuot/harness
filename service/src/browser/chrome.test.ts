@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
+import { describeIf } from "@harness/shared/testing/skip";
 import {
   ChromeProcess,
   chromeStartTimes,
@@ -86,12 +87,27 @@ describe("sweepCodeSignClones", () => {
 });
 
 const chromePath = findChrome();
-const realChrome = chromePath && codeSignCloneRoot() ? describe : describe.skip;
+const realChrome = describeIf(chromePath && codeSignCloneRoot(), "Chrome or its code_sign_clone directory not found (macOS only): real-Chrome clone test skipped");
+
+/**
+ * Launch Chrome until its clone is attributed. Attribution is best-effort by design: it needs
+ * exactly one new clone, so a Chrome launching in another test process at the same moment leaves
+ * it unclaimed. Under the parallel runner that happens, so retry rather than assume it.
+ */
+async function launchAttributed(prefix: string): Promise<ChromeProcess> {
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const chrome = await ChromeProcess.launch({ chromePath: chromePath!, profileDir: tempDir(prefix) });
+    if (chrome.cloneDir) return chrome;
+    await chrome.close();
+    await Bun.sleep(200 + Math.random() * 600);
+  }
+  throw new Error("Chrome's code-sign clone was never attributed in 8 launches");
+}
 
 realChrome("code-sign clones with real Chrome", () => {
   test("a sweep removes a killed Chrome's unclaimed clone and keeps a running Chrome's", async () => {
-    const a = await ChromeProcess.launch({ chromePath: chromePath!, profileDir: tempDir("chrome-a-") });
-    const b = await ChromeProcess.launch({ chromePath: chromePath!, profileDir: tempDir("chrome-b-") });
+    const a = await launchAttributed("chrome-a-");
+    const b = await launchAttributed("chrome-b-");
     const bClone = b.cloneDir;
     try {
       expect(a.cloneDir).toBeDefined();
@@ -117,5 +133,5 @@ realChrome("code-sign clones with real Chrome", () => {
     }
     // Chrome removes its own clone after a clean exit.
     expect(existsSync(bClone!)).toBe(false);
-  }, 60_000);
+  }, 120_000);
 });

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { describeIf } from "@harness/shared/testing/skip";
 import { tempDir } from "@harness/shared/testing";
 import { ensureSpawnHelperExecutable } from "./pty";
 import { loginShell, parseEnsureOptions, resolveCwd, Scrollback, shellEnv, TerminalError, TerminalManager, type Pty, type SpawnOptions } from "./terminals";
@@ -346,7 +347,7 @@ const electronBin = (() => {
   }
 })();
 
-describe.skipIf(!electronBin)("real pty (Electron's Node)", () => {
+describeIf(electronBin, "Electron is not installed: real pty tests skipped")("real pty (Electron's Node)", () => {
   const dir = tempDir("harness-pty-test-");
 
   test("spawns a login shell, echoes input, replays scrollback and reports the exit code", async () => {
