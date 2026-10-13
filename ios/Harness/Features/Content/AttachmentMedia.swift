@@ -24,6 +24,11 @@ final class AttachmentMedia {
         cache.object(forKey: key(url, poster) as NSString)
     }
 
+    /// Puts a decoded image in the cache, so a view renders it without a request (the snapshot tests).
+    func seed(_ image: UIImage, url: String, poster: Bool = false) {
+        cache.setObject(image, forKey: key(url, poster) as NSString)
+    }
+
     /// The full image at `url` (decoded off the main thread).
     func image(_ url: String) async throws -> UIImage {
         try await load(url, poster: false) {

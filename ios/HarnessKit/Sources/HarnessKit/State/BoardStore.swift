@@ -82,6 +82,8 @@ public final class BoardStore {
     /// The plan-usage gauges' last report (GET /usage, then each usage.updated); nil until one arrives.
     /// Held here, not in the reducer: the TS reducer has no usage state to stay in parity with.
     public private(set) var usage: PlanUsageReport?
+    /// Replace the usage report, as a `usage.updated` event does (and the snapshot tests, whose stub client reports none).
+    public func setUsage(_ report: PlanUsageReport?) { usage = report }
     /// The release mismatch the person closed: hidden until the service or the app changes.
     public private(set) var dismissedMismatch: ReleaseMismatch?
 

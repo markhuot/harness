@@ -14,6 +14,8 @@ struct SnapshotWorld {
     let app: AppModel
     let store: BoardStore
     let actions = Actions()
+    /// What the store's client answers: nothing unless a test serves a path (`serve`).
+    let transport: FixtureTransport
 
     static let project = Project(
         id: "p-harness", key: "HAR", name: "Harness", path: "/Users/dev/harness", nextSeq: 12, useWorktrees: true,
@@ -94,7 +96,10 @@ struct SnapshotWorld {
     ]
 
     init() async {
-        let client = StubClient()
+        // A real client over a transport that answers from fixtures, so `store.api` is set and the
+        // screens that fetch through it (usage, attachments, transcripts) get their data.
+        let transport = FixtureTransport()
+        let client = HarnessClient(baseUrl: "http://127.0.0.1:1", token: "snapshot", transport: transport)
         let store = BoardStore(client: client, baseUrl: "http://127.0.0.1:1", makeSocket: { StubSocket() })
         let app = AppModel(storage: MemoryStorage(), probe: { _ in .ok(version: "") }, makeStore: { _, _ in store })
         app.load()
@@ -107,6 +112,32 @@ struct SnapshotWorld {
         if let last = Self.specRevisions.last { store.dispatch(.specRevision(ticketId: "t-7", revision: SpecRevision(last, body: Self.spec))) }
         self.app = app
         self.store = store
+        self.transport = transport
+    }
+
+    /// Answers `GET path` (the query is ignored) with `{ "data": value }`.
+    func serve<T: Encodable>(_ path: String, _ value: T) {
+        transport.serve(path, value)
+    }
+
+    /// Adds tickets (with their sessions) to the board's fixture, and their transcripts and spec
+    /// revisions where given. Dispatches the whole snapshot again, so call it before the test's own dispatches.
+    func add(_ extra: [Ticket]) {
+        let sessions = Self.sessions() + extra.map {
+            Session(id: $0.sessionId, key: $0.key, kind: .ticket, ticketId: $0.id, driver: $0.driver, cwd: Self.project.path,
+                    busy: $0.busy, createdAt: $0.createdAt, updatedAt: $0.updatedAt)
+        }
+        store.dispatch(.snapshot(BoardSnapshot(projects: [Self.project], tickets: Self.tickets + extra, sessions: sessions)))
+        store.dispatch(.connected(true))
+        store.dispatch(.activity(sessionId: "s-7", activity: Self.activity))
+        store.dispatch(.specRevisions(ticketId: "t-7", revisions: Self.specRevisions))
+    }
+
+    /// Shows `spec` as the ticket's current revision, the way the Spec tab reads it.
+    func setSpec(_ ticket: Ticket, _ spec: String) {
+        let info = SpecRevisionInfo(rev: 1, author: .agent, note: "Plan drafted", approvedBaseline: true, createdAt: Self.ago(minutes: 300))
+        store.dispatch(.specRevisions(ticketId: ticket.id, revisions: [info]))
+        store.dispatch(.specRevision(ticketId: ticket.id, revision: SpecRevision(info, body: spec)))
     }
 
     /// The environment every screen gets in the app (HarnessApp, SceneChrome), with a fixed clock.
@@ -121,19 +152,24 @@ struct SnapshotWorld {
     }
 }
 
-/// A client that answers nothing: the store is fed directly, so a request that goes out simply fails.
-private struct StubClient: BoardClient {
-    func ticketPage(status: TicketStatus, projectId: String?, group: String?, q: String?, limit: Int?, cursor: String?) async throws -> TicketPage { throw URLError(.cannotConnectToHost) }
-    func searchTickets(q: String, projectId: String?, group: String?, limit: Int?, cursor: String?) async throws -> TicketPage { throw URLError(.cannotConnectToHost) }
-    func getTicket(_ key: String) async throws -> TicketDetail { throw URLError(.cannotConnectToHost) }
-    func health() async throws -> Health { throw URLError(.cannotConnectToHost) }
-    func listProjects() async throws -> [Project] { throw URLError(.cannotConnectToHost) }
-    func listTickets(projectId: String?, status: [TicketStatus]) async throws -> [Ticket] { throw URLError(.cannotConnectToHost) }
-    func listSessions(kind: SessionKind?) async throws -> [Session] { throw URLError(.cannotConnectToHost) }
-    func listWatchers() async throws -> [Watcher] { throw URLError(.cannotConnectToHost) }
-    func getSettings() async throws -> PublicSettings { throw URLError(.cannotConnectToHost) }
-    func listDrivers() async throws -> [DriverInfo] { throw URLError(.cannotConnectToHost) }
-    func listActivity(_ key: String) async throws -> [ActivityEntry] { throw URLError(.cannotConnectToHost) }
+/// A transport that answers the paths a test serves and fails every other request the way an
+/// unreachable service does, so the store is fed by dispatch and a stray request just fails.
+private struct Envelope<D: Encodable>: Encodable { let data: D }
+
+final class FixtureTransport: HTTPTransport, @unchecked Sendable {
+    private let lock = NSLock()
+    private var routes: [String: Data] = [:]
+
+    func serve<T: Encodable>(_ path: String, _ value: T) {
+        let body = try! JSONEncoder().encode(Envelope(data: value))
+        lock.withLock { routes[path] = body }
+    }
+
+    func send(_ request: HTTPRequest) async throws -> HTTPResponse {
+        let path = request.url.path
+        guard request.method == "GET", let body = lock.withLock({ routes[path] }) else { throw URLError(.cannotConnectToHost) }
+        return HTTPResponse(status: 200, body: body)
+    }
 }
 
 /// A socket that never connects and never speaks.

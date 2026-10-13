@@ -12,6 +12,7 @@ struct PlanUsageSection: View {
     @AppStorage("planUsageMode") private var modeStorage = PlanUsageMode.usedSoFar.rawValue
     @State private var showingInfo = false
     @Environment(\.palette) private var c
+    @Environment(\.snapshotNow) private var fixedNow
 
     private var filter: PlanUsageFilter { PlanUsageFilter(storage: filterStorage) }
     private var mode: PlanUsageMode { PlanUsageMode(rawValue: modeStorage) ?? .usedSoFar }
@@ -20,7 +21,7 @@ struct PlanUsageSection: View {
         if let report, !report.drivers.isEmpty {
             // Re-render each minute so projected bars and reset times move between polls.
             TimelineView(.everyMinute) { context in
-                let now = context.date.timeIntervalSince1970 * 1000
+                let now = fixedNow ?? context.date.timeIntervalSince1970 * 1000
                 let rows = PlanUsage.rows(report, filter: filter, mode: mode, now: now)
                 VStack(alignment: .leading, spacing: 8) {
                     header(report)

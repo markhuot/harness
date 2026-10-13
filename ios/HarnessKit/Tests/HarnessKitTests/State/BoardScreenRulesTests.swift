@@ -101,6 +101,13 @@ struct BoardScreenRulesTests {
         #expect(BoardScreenRules.cardMenu(Self.t("a", .planning), parent: nil).first == .ticket(.start(approvePlan: false)))
     }
 
+    @Test func aPlanningCardOffersStartWorkAndNoReviewActions() {
+        let menu = BoardScreenRules.cardMenu(Self.t("a", .planning), parent: nil)
+        let titles = menu.compactMap { if case let .ticket(a) = $0 { a.title } else { nil } }
+        #expect(titles.first == "Start work")
+        #expect(!titles.contains { $0.hasPrefix("Approve") || $0 == "Request changes" })
+    }
+
     @Test func menuTitleNamesTheCardAndCutsAt90() {
         #expect(BoardScreenRules.menuTitle(Self.t("1", .review)) == "K-1 · Title")
         // A draft says so instead of its title, however long that is.

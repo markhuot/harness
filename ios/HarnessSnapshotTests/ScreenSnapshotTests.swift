@@ -8,7 +8,7 @@ import XCTest
 /// daemon or the keyboard stay in sim-check.
 @MainActor
 final class ScreenSnapshotTests: XCTestCase {
-    private var world: SnapshotWorld!
+    var world: SnapshotWorld!
 
     override func setUp() async throws {
         continueAfterFailure = true
@@ -31,7 +31,7 @@ final class ScreenSnapshotTests: XCTestCase {
     }
 
     /// Renders `content` in both appearances and checks each against its reference.
-    private func snapshot<V: View>(_ name: String, router makeRouter: () -> Router = { Router() }, file: StaticString = #filePath, line: UInt = #line, @ViewBuilder _ content: () -> V) async throws {
+    func snapshot<V: View>(_ name: String, router makeRouter: () -> Router = { Router() }, file: StaticString = #filePath, line: UInt = #line, @ViewBuilder _ content: () -> V) async throws {
         let view = content()
         for appearance in SnapshotRenderer.Appearance.allCases {
             let scheme: ColorScheme = appearance == .dark ? .dark : .light
