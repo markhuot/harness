@@ -4301,7 +4301,12 @@ function interactionChains(s: Seeded): Chain[] {
           if (!l.some((x) => x === want || x.startsWith(`${want} `))) throw new Error(`the review card's menu has no ${want}; on screen: ${l.slice(0, 30).join(" | ")}`);
         }
         // Request changes needs notes: it opens the same sheet the ticket screen's button does.
-        await tapWhere(udid, "Request changes");
+        // A tap right after the menu's lift can be swallowed (it happens while a compacting run is still busy): tap again if the menu is still up.
+        for (let attempt = 1; ; attempt++) {
+          await tapWhere(udid, "Request changes");
+          const up = await until("the notes sheet", async () => (await labels(udid)).includes("What should the agent change?"), attempt < 3 ? 3000 : 6000).then(() => true, () => false);
+          if (up || attempt >= 3) break;
+        }
         await until("the notes sheet", async () => (await labels(udid)).includes("What should the agent change?"), 6000).catch(async (e) => {
           await shot(udid, "board-card-request-changes-failed");
           throw new Error(`${(e as Error).message}; on screen: ${(await labels(udid)).slice(0, 30).join(" | ")}`);
