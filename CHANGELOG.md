@@ -29,6 +29,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
+- A file that mixes line endings (say CRLF and LF) now reads as saved after you save it, on Mac, iPhone and iPad, and again when you undo back to what was on disk. Before, it stayed marked unsaved, so leaving it kept saving or asking.
+- On iPhone and iPad, edits a card couldn't save when you left can no longer come back later over newer text: nothing is kept while the file is open again, and any successful save clears them. Choosing Discard changes also ignores keyboard commits that land as the dialog opens, so they aren't saved. A link to an open file's other lines now scrolls it there even when the card was parked, still loading, or its editor restarted.
 - On iPhone and iPad, a file card that closes while its save fails (a write error with Save on blur on, a card swiped away or closed with ✕) no longer loses your edits: the card comes back with them and "Save failed" showing, and Save tries again. A save that already failed makes closing ask, like Save on blur off does, and the iPad panel's ✕ saves first and stays open if the save fails.
 - On iPhone and iPad, a link to other lines of a file that's already docked (`harness://file/…#L40-L50`) now scrolls its open editor to those lines and marks them, keeping any edits, instead of only bringing the card forward.
 - For people working on Harness: sim-check's Save on blur check now holds the switch down briefly, since the switch ignores the instant tap it sent before and the check could never pass, and `--sheets` covers re-linking lines of a docked file and a failed save as a card closes.

@@ -51,13 +51,23 @@ public final class FileEditorModel {
         revision += 1
     }
 
+    /// The user chose "Discard changes": leaving drops the edits, and the editor's late events (an IME or
+    /// autocorrect commit as the dialog takes focus) neither count as new typing nor trigger a save.
+    public private(set) var discarded = false
+
+    public func discard() { discarded = true }
+
     public func edited(contents: String, dirty: Bool) {
+        guard !discarded else { return }
         latest = contents
         revision += 1
         self.dirty = dirty
     }
 
-    public func dirtyChanged(_ dirty: Bool) { self.dirty = dirty }
+    public func dirtyChanged(_ dirty: Bool) {
+        guard !discarded else { return }
+        self.dirty = dirty
+    }
 
     /// Writes `contents` (default: the newest the editor reported). Returns what was written when it
     /// succeeded, for the editor's `markSaved`; nil when it failed (`saveError` says why) or there

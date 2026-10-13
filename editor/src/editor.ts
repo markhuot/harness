@@ -181,7 +181,9 @@ export function createEditor(parent: HTMLElement, options: EditorOptions): Edito
   // A file keeps its line breaks: the document is split and joined on them, so saving writes what was read.
   let eol = detectEol(options.contents);
   const eolCompartment = new Compartment();
-  let saved: Text = EditorState.create({ doc: options.saved ?? options.contents }).doc;
+  // Split on the document's own line break (not on every kind), or a mixed file never compares equal.
+  const toText = (contents: string): Text => Text.of(eol ? contents.split(eol) : [contents]);
+  let saved: Text = toText(options.saved ?? options.contents);
   let dirty = options.saved !== undefined && options.saved !== options.contents;
   /** True while setContents replaces the document, so a reload isn't reported as an edit. */
   let quiet = false;
@@ -294,7 +296,7 @@ export function createEditor(parent: HTMLElement, options: EditorOptions): Edito
     },
     isDirty: () => dirty,
     markSaved(contents) {
-      saved = contents === undefined ? view.state.doc : EditorState.create({ doc: contents }).doc;
+      saved = contents === undefined ? view.state.doc : toText(contents);
       syncDirty(view);
     },
     focus: () => view.focus(),

@@ -148,16 +148,16 @@ private struct FileViewerContent: View {
             guard session == nil else { return }
             guard let client = store.client as? FileViewerClient else { return }
             let s = FileEditorSession(
-                client: client, root: root, path: path, range: range, theme: FileEditorTheme(c.theme.pluginInfo),
+                client: client, root: root, path: path, range: reveal?.range ?? revealedRange ?? range, theme: FileEditorTheme(c.theme.pluginInfo),
                 background: UIColor(c.bg), saveOnBlur: { [store] in SettingsRules.saveOnBlur(store.state.settings?.saveOnBlur) })
-            s.onLeaveFailed = { [router, cardID] in
+            s.onLeaveFailed = { [router, cardID, weak s] in
                 // The card is gone and its save failed: it comes back holding the edits (a pushed file
                 // is still under its sheet; the edits wait for the file to open).
                 guard let cardID, !router.dockedSheets.contains(where: { $0.id == cardID }) else { return }
                 router.push(.file(FileRouteParams(
                     path: path, ticket: { if case let .ticket(k) = root { k } else { nil } }(),
                     project: { if case let .project(id) = root { id } else { nil } }(),
-                    start: range.map { String($0.lowerBound) }, end: range.map { String($0.upperBound) })))
+                    start: (s?.range ?? range).map { String($0.lowerBound) }, end: (s?.range ?? range).map { String($0.upperBound) })))
             }
             session = s
             await s.start()
@@ -182,8 +182,9 @@ private struct FileViewerContent: View {
                 session?.didBackground()
             }
         }
-        .onChange(of: reveal) { _, next in
-            // The card is already open: scroll it to the new lines (a link to this file again).
+        .onChange(of: reveal, initial: true) { _, next in
+            // A link to this file again: scroll the card to the new lines. A card that mounts with one
+            // already set (or whose editor isn't ready) opens on them: the session remembers the range.
             guard let lines = next?.range else { return }
             revealedRange = lines
             tab = .file

@@ -165,6 +165,22 @@ describe("dirty", () => {
     expect(h.isDirty()).toBe(false);
   });
 
+  test("a mixed file reads clean after a save and after undoing back to it", () => {
+    const original = "a\r\nb\nc\r\n";
+    const h = make({ contents: original });
+    insert(h, "x");
+    expect(h.isDirty()).toBe(true);
+    h.markSaved(h.getContents());
+    expect(h.isDirty()).toBe(false);
+    undo(h.view);
+    expect(h.isDirty()).toBe(true);
+    h.markSaved(original);
+    expect(h.isDirty()).toBe(false);
+    insert(h, "y");
+    undo(h.view);
+    expect(h.isDirty()).toBe(false);
+  });
+
   test("a reload that changes the line breaks takes them", () => {
     const h = make({ contents: "a\r\nb\r\n" });
     h.setContents("a\nb\nc\n");

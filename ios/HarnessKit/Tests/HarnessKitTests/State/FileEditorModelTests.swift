@@ -89,6 +89,43 @@ import Testing
         #expect(client.writes.withLock { $0 } == ["ticket T-1 src/a.ts two"])
     }
 
+    @Test func aFailedLeaveSaveIsNotKeptWhileTheFileIsOnScreen() {
+        let edits = UnsavedEdits()
+        let root = FileRoot.ticket(key: "T-1")
+        // The reopened screen is live: the leaving screen's late failure mustn't leave an entry behind.
+        edits.attach(root, path: "a")
+        #expect(!edits.keep(root, path: "a", contents: "old", saved: "one", error: "Disk full"))
+        #expect(!edits.has(root, path: "a"))
+        edits.detach(root, path: "a")
+        #expect(edits.keep(root, path: "a", contents: "old", saved: "one", error: "Disk full"))
+        // Two screens (a pushed file over a card): kept only once both are gone.
+        edits.attach(root, path: "a")
+        edits.attach(root, path: "a")
+        edits.detach(root, path: "a")
+        #expect(!edits.keep(root, path: "a", contents: "x", saved: nil, error: nil))
+        #expect(edits.has(root, path: "a"))
+    }
+
+    @Test func aLaterSuccessfulSaveDropsKeptEdits() {
+        let edits = UnsavedEdits()
+        let root = FileRoot.project(id: "P")
+        edits.keep(root, path: "a", contents: "old", saved: "one", error: nil)
+        edits.drop(root, path: "b")
+        #expect(edits.has(root, path: "a"))
+        edits.drop(root, path: "a")
+        #expect(edits.take(root, path: "a") == nil)
+    }
+
+    @Test func discardedEditsIgnoreLateEditorEvents() {
+        let m = model(WriteClient())
+        m.edited(contents: "two", dirty: true)
+        m.discard()
+        // An autocorrect commit as the dialog takes focus.
+        m.edited(contents: "two!", dirty: true)
+        m.dirtyChanged(false)
+        #expect(m.discarded && m.latest == "two" && m.dirty)
+    }
+
     @Test func typingDuringASaveLeavesTheEditorDirty() async {
         let client = WriteClient()
         let gate = Deferred<Void>()

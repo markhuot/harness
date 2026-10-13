@@ -14,6 +14,8 @@ public final class UnsavedEdits {
     public static let shared = UnsavedEdits()
 
     private var entries: [String: Entry] = [:]
+    /// Screens showing each file right now.
+    private var live: [String: Int] = [:]
 
     public init() {}
 
@@ -24,9 +26,28 @@ public final class UnsavedEdits {
         }
     }
 
-    public func keep(_ root: FileRoot, path: String, contents: String, saved: String?, error: String?) {
-        entries[key(root, path)] = Entry(contents: contents, saved: saved, error: error)
+    /// A screen of the file is on screen (opened, or came back). While one is, the edits a leaving screen
+    /// couldn't save aren't kept: the live screen already holds its own, and a stale entry would bring old
+    /// text back on a later open.
+    public func attach(_ root: FileRoot, path: String) { live[key(root, path), default: 0] += 1 }
+
+    public func detach(_ root: FileRoot, path: String) {
+        let k = key(root, path)
+        let n = (live[k] ?? 0) - 1
+        live[k] = n > 0 ? n : nil
     }
+
+    /// Holds the edits for the file's next screen. False (nothing kept) when a screen of the file is live.
+    @discardableResult
+    public func keep(_ root: FileRoot, path: String, contents: String, saved: String?, error: String?) -> Bool {
+        let k = key(root, path)
+        guard live[k] == nil else { return false }
+        entries[k] = Entry(contents: contents, saved: saved, error: error)
+        return true
+    }
+
+    /// The file was written: whatever was kept for it is older than what's on disk now.
+    public func drop(_ root: FileRoot, path: String) { entries.removeValue(forKey: key(root, path)) }
 
     /// The kept edits for the file, handed over once.
     public func take(_ root: FileRoot, path: String) -> Entry? {
