@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { dirname, join } from "node:path";
-import { rmSync } from "node:fs";
+import { existsSync, mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { fakeTicket } from "../tools/fakes";
 import { confineOutputPath, readTaskOutput } from "../task-output";
 import { outputTitle, type Project, type RunKind } from "@harness/shared";
 import { triagePrompt as buildTriagePrompt } from "../orchestrator/prompts";
@@ -276,6 +277,62 @@ describe("dummy driver", () => {
     const { events } = await collect(driver, req);
     expect(texts(events).length).toBe(1);
     expect(ops.calls).toEqual([{ method: "postNote", args: ["Completed."] }]);
+  });
+
+  describe("complete with a worktree", () => {
+    const sh = (cwd: string, ...args: string[]) => {
+      const p = Bun.spawnSync(["git", "-c", "user.name=T", "-c", "user.email=t@example.com", "-c", "commit.gpgsign=false", ...args], { cwd });
+      if (p.exitCode !== 0) throw new Error(`git ${args.join(" ")}: ${p.stderr.toString()}`);
+      return p.stdout.toString().trim();
+    };
+    // A main repo on `main` plus a ticket worktree on `harness/t-1` with one commit of its own.
+    function setup() {
+      const root = realpathSync(tempDir("dummy-complete-"));
+      const repo = join(root, "repo");
+      const workdir = join(root, "wt");
+      mkdirSync(repo);
+      sh(repo, "init", "-b", "main");
+      writeFileSync(join(repo, "a.txt"), "a");
+      sh(repo, "add", "."), sh(repo, "commit", "-m", "base");
+      sh(repo, "worktree", "add", "-b", "harness/t-1", workdir);
+      writeFileSync(join(workdir, "feature.txt"), "feature");
+      sh(workdir, "add", "."), sh(workdir, "commit", "-m", "feature");
+      return { repo, workdir };
+    }
+    const complete = async (repo: string, workdir: string, action: "merge" | "cleanup" | "pr" | "custom") => {
+      const { req } = makeReq("complete", "Finalize", {
+        ctx: { cwd: workdir, ticket: fakeTicket({ workdir, branch: "harness/t-1", completionAction: action, pullRequestUrl: "https://github.com/x/y/pull/1" }) },
+      });
+      const { error } = await collect(driver, req);
+      expect(error).toBeNull();
+      return { branches: sh(repo, "branch", "--format=%(refname:short)").split("\n"), worktreeExists: existsSync(workdir) };
+    };
+
+    test("merge lands the branch on main, then removes the worktree and branch", async () => {
+      const { repo, workdir } = setup();
+      const out = await complete(repo, workdir, "merge");
+      expect(out.worktreeExists).toBe(false);
+      expect(out.branches).toEqual(["main"]);
+      expect(existsSync(join(repo, "feature.txt"))).toBe(true);
+    });
+
+    test("cleanup removes the worktree and branch without merging", async () => {
+      const { repo, workdir } = setup();
+      const out = await complete(repo, workdir, "cleanup");
+      expect(out.worktreeExists).toBe(false);
+      expect(out.branches).toEqual(["main"]);
+      expect(existsSync(join(repo, "feature.txt"))).toBe(false);
+    });
+
+    for (const action of ["pr", "custom"] as const) {
+      test(`${action} leaves the worktree and branch alone`, async () => {
+        const { repo, workdir } = setup();
+        const out = await complete(repo, workdir, action);
+        expect(out.worktreeExists).toBe(true);
+        expect(out.branches.sort()).toEqual(["harness/t-1", "main"]);
+        expect(existsSync(join(repo, "feature.txt"))).toBe(false);
+      });
+    }
   });
 
   test("conductor first run without bullets: two children, second depends on first", async () => {
