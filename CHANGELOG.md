@@ -19,6 +19,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
+- For people working on Harness: `sim-check` no longer waits out its 12 s "no settled screen" timeout when a link leads to the screen that is already up; with the debug probe it sees the app has settled and goes on, which took about 35 s off `--only=sheet-checks`.
 - For people working on Harness: the real-Chrome browser tests are split into smaller files (`manager*.test.ts`, `wait-run`, `wait-timeout` and `browser-run`, with shared fixtures in `test-support.ts` and `wait-support.ts`), so the parallel runner spreads them across workers, each file with its own Chrome and profile. The slowest single file drops from about 50 s to about 20 s when the machine is idle, and the Chrome shutdown hooks wait up to 30 s so a busy machine no longer fails them.
 - For people working on Harness: `bun run typecheck` runs its seven `tsc` projects at once (`scripts/typecheck.ts`), about half the wall time. It still exits 1 when any project fails and prints that project's errors under its name.
 - For people working on Harness: `bun run test` ends with a "Skipped:" line that counts the tests skipped and says why (no Chrome, no LAN address, no Electron, the opt-in Chrome Web Store test, and so on). Tests declare the reason through `describeIf`/`testIf` in `@harness/shared/testing/skip`, and a skip with no declared reason is reported as such.
