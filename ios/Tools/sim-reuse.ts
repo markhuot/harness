@@ -155,7 +155,12 @@ function hashTree(dir: string): string {
     for (const name of readdirSync(join(dir, rel)).sort()) {
       const p = join(rel, name);
       const full = join(dir, p);
-      const st = statSync(full);
+      let st;
+      try {
+        st = statSync(full);
+      } catch {
+        continue; // a dangling symlink or a file that vanished mid-walk: this note is advisory
+      }
       if (st.isDirectory()) walk(p);
       else {
         h.update(`${p}\0${st.size}\0`);
@@ -200,13 +205,28 @@ export async function listKept(tmp: string, homePrefix: string, alive: (s: Reuse
  */
 export function staleAppNote(appDir: string, sources: readonly string[]): string | null {
   if (!existsSync(appDir)) return null;
-  const built = statSync(appDir).mtimeMs;
+  let built: number;
+  try {
+    built = statSync(appDir).mtimeMs;
+  } catch {
+    return null;
+  }
   let newest: { file: string; mtime: number } | null = null;
   const walk = (dir: string) => {
-    if (!existsSync(dir)) return;
-    for (const name of readdirSync(dir)) {
+    let names: string[];
+    try {
+      names = readdirSync(dir);
+    } catch {
+      return;
+    }
+    for (const name of names) {
       const full = join(dir, name);
-      const st = statSync(full);
+      let st;
+      try {
+        st = statSync(full);
+      } catch {
+        continue; // a dangling symlink or a file that vanished mid-walk: this note is advisory
+      }
       if (st.isDirectory()) walk(full);
       else if (name.endsWith(".swift") && st.mtimeMs > built && (!newest || st.mtimeMs > newest.mtime)) newest = { file: full, mtime: st.mtimeMs };
     }

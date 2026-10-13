@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { claimKept, staleAppNote, chooseKept, hashApp, hashService, listKept, planApp, deviceAppUrl, planDeviceInstall, readReuseState, REUSE_VERSION, writeReuseState, type Kept, type ReuseState } from "./sim-reuse";
@@ -175,6 +175,9 @@ test("staleAppNote names a Swift file newer than the built app, and stays quiet 
     writeFileSync(join(src, "New.swift"), "x");
     at(join(src, "New.swift"), 3000);
     expect(staleAppNote(app, [join(t, "src"), join(t, "missing")])).toMatch(/New\.swift.*--rebuild/);
+    // A dangling symlink among the sources must not fail the run over an advisory note.
+    symlinkSync(join(t, "nowhere"), join(src, "Dangling.swift"));
+    expect(staleAppNote(app, [join(t, "src")])).toMatch(/New\.swift/);
     // No built app (or an unreadable source dir): not this check's business.
     expect(staleAppNote(join(t, "none.app"), [join(t, "src")])).toBeNull();
   } finally {
