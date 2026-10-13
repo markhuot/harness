@@ -110,7 +110,8 @@
 //      declares it (`needs` in check()), and those earlier checks run first as setup, so a selected
 //      check never runs against state nobody built. A pattern that matches nothing fails, listing the
 //      nearest check names. Applies to the modes and chains that run checks; screens (--screens, --shot)
-//      have no checks to pick.
+//      have no checks to pick, and the walk-through still visits its screens and shots, so --grep
+//      saves little there.
 //
 //   --reuse: attaches to what the last `--keep` run left (its daemon, seeded tickets and paired app)
 //      instead of building, installing, resetting the keychain, seeding and pairing again, so
@@ -144,7 +145,7 @@ import { findTheme } from "@harness/shared/themes";
 import { Database } from "bun:sqlite";
 import { acquire, checkDisk, ensureDevice, markKept, isSharedDevice, reap, SHARED_DEVICE, SHARED_IPAD_DEVICE, writeRunOwner } from "./sim";
 import { CheckSelector, noMatchMessage, parseGrep } from "./sim-grep";
-import { chooseKept, hashApp, listKept, MARKER_KEY, planApp, REUSE_VERSION, writeReuseState, type ReuseState, type Want } from "./sim-reuse";
+import { chooseKept, hashApp, hashService, listKept, MARKER_KEY, planApp, REUSE_VERSION, writeReuseState, type ReuseState, type Want } from "./sim-reuse";
 import { parsePrepare, plan as planRun, resolveShot, SEED_NAMES, type Entry, type Plan, type SeedName } from "./sim-select";
 
 /** ios/: screenshots go to its build/ folder. */
@@ -825,6 +826,17 @@ async function daemonAnswers(s: ReuseState, dir: string): Promise<boolean> {
   if (!existsSync(join(dir, "token"))) return false;
   return fetch(`http://127.0.0.1:${s.port}/health`, { signal: AbortSignal.timeout(2000) }).then((r) => r.ok, () => false);
 }
+/** A port from the daemon pool that nothing is listening on (kept daemons hold theirs indefinitely). */
+function freePort(): number {
+  for (let i = 0; i < 200; i++) {
+    const p = 7830 + Math.floor(Math.random() * 60);
+    try {
+      Bun.listen({ hostname: "127.0.0.1", port: p, socket: { data() {} } }).stop(true);
+      return p;
+    } catch {}
+  }
+  throw new Error("no free daemon port in 7830-7889");
+}
 /** The daemon this run's checks talk to: the kept one for --reuse when one fits, otherwise a new one. */
 async function startDaemon(want: Want) {
   if (reuse) {
@@ -849,6 +861,8 @@ async function startDaemon(want: Want) {
       base = `http://127.0.0.1:${port}`;
       daemonPid = pick.state.daemonPid;
       attached = pick.state;
+      // This run owns the home now: the original --keep process is gone, and reap --kept would take it for a dead run's.
+      writeRunOwner(home, scratch);
       claudeRecord = join(home, "fake-claude.ndjson");
       console.log(`--reuse: attached to the daemon at ${base} (pid ${daemonPid}, HARNESS_HOME=${home})`);
       return;
@@ -857,7 +871,7 @@ async function startDaemon(want: Want) {
   }
   home = mkdtempSync(join(tmpdir(), HOME_PREFIX));
   scratch = mkdtempSync(join(tmpdir(), "harness-sim-projects-"));
-  port = 7830 + Math.floor(Math.random() * 60);
+  port = freePort();
   base = `http://127.0.0.1:${port}`;
   console.log(`daemon: ${base} (HARNESS_HOME=${home})`);
   // Lets a later run's reap tell this run's dirs (and daemon) from a dead run's.
@@ -4669,7 +4683,8 @@ async function buildApp() {
 
 // ---------------------------------------------------------------- main
 let failed = false;
-let reusable: Pick<ReuseState, "modeKey" | "seeds" | "seeded" | "udids" | "appHash"> | null = null;
+const serviceHash = reuse || keep ? hashService(repoRoot) : "";
+let reusable: Pick<ReuseState, "modeKey" | "seeds" | "seeded" | "udids" | "appHash" | "installed"> | null = null;
 try {
   mkdirSync(shots, { recursive: true });
   // What the run does and which tickets it needs, decided before anything is seeded: the entries
@@ -4684,8 +4699,8 @@ try {
       : planRun(entriesFor(dry), { only, screens: flag("screens") });
   const seedNeeds = selection?.seeds ?? new Set<SeedName>();
   // Which seed a kept daemon must hold for --reuse to attach to it.
-  const modeKey = `${walkThrough ? "walk" : pagingOnly ? "paging" : stickOnly ? "stick" : keyboardOnly ? "keyboard" : mentionsOnly ? "mentions" : attachmentsOnly ? "attachments" : draftsOnly ? "drafts" : "sheets"}${ipad ? "-ipad" : ""}`;
-  await startDaemon({ modeKey, seeds: [...seedNeeds] });
+  const modeKey = `${walkThrough ? "walk" : pagingOnly ? "paging" : stickOnly ? "stick" : keyboardOnly ? "keyboard" : mentionsOnly ? "mentions" : attachmentsOnly ? "attachments" : draftsOnly ? "drafts" : memoryOnly ? "memory" : "sheets"}${ipad ? "-ipad" : ""}`;
+  await startDaemon({ modeKey, seeds: [...seedNeeds], repoRoot, serviceHash });
   await timed("daemon healthy", () => until("daemon healthy", async () => (await fetch(`${base}/health`)).ok && existsSync(join(home, "token")), 20000, 50));
   token = readFileSync(join(home, "token"), "utf8").trim();
   // The simulators boot, the app builds and the daemon seeds all at once.
@@ -4699,11 +4714,17 @@ try {
       await Promise.all(udids.map((u) => simctl("spawn", u, "defaults", "write", BUNDLE, MARKER_KEY, home)));
     });
   const installAll = (udids: string[]) => timed("install", () => Promise.all(udids.map(install)));
+  /** hashApp of the bundle installed on a simulator, or null when there is none. */
+  const bundleHash = async (u: string): Promise<string | null> => {
+    const dir = await sh(["xcrun", "simctl", "get_app_container", u, BUNDLE, "app"], { allowFail: true });
+    return dir ? hashApp(dir.trim()) : null;
+  };
   /** --reuse with the kept app: still this build, on these devices, and still paired for this daemon. */
   const reuseApp = async (udids: string[]): Promise<boolean> => {
     if (!attached) return false;
     const markers = await Promise.all(udids.map((u) => sh(["xcrun", "simctl", "spawn", u, "defaults", "read", BUNDLE, MARKER_KEY], { allowFail: true }).then((m) => m || null)));
-    const plan = planApp(attached, { udids, appHash: builtHash, home, markers });
+    const installed = await Promise.all(udids.map(bundleHash));
+    const plan = planApp(attached, { udids, appHash: builtHash, home, markers, installed });
     if (plan.install) {
       console.log(`--reuse: installing the app again (${plan.reason}); the daemon and its seeds stay`);
       return false;
@@ -4732,7 +4753,10 @@ try {
   const paired = walkThrough
     ? devices.then((udids) => ticketsUp.then(() => (appKept ? undefined : pairAll(udids))).then(() => udids))
     : devices;
-  /** The seed: a --reuse run takes what the kept run seeded (the daemon still holds the tickets), anything else makes it. */
+  /**
+   * The seed: a --reuse run takes what the kept run seeded (the daemon still holds the tickets), anything else makes it.
+   * What a seed returns is stored as JSON, so it must be plain data (no Set, Map or Date).
+   */
   const seeding = <T,>(label: string, fn: () => Promise<T>): Promise<T> => (attached ? (ticketsCreated(), Promise.resolve(attached.seeded as T)) : timed(label, fn));
   const [udids, seeded, paged, sticky, typing, mentioned, media, drafting, sheeted, usageSeed] = await Promise.all([
     paired,
@@ -4751,7 +4775,7 @@ try {
 
   if (!walkThrough && !appKept) await pairAll(udids);
   // What --reuse needs, left in the kept home when the run ends (see the finally).
-  reusable = { modeKey, seeds: [...seedNeeds], seeded: [seeded, paged, sticky, typing, mentioned, media, drafting, sheeted].find((x) => x) ?? null, udids, appHash: builtHash };
+  reusable = { modeKey, seeds: [...seedNeeds], seeded: [seeded, paged, sticky, typing, mentioned, media, drafting, sheeted].find((x) => x) ?? null, udids, appHash: builtHash, installed: keep ? ((await Promise.all(udids.map(bundleHash))) as string[]) : [] };
 
   const udid = udids[0]!;
   if (paged) await timed("mode: paging", () => pagingChecks(udid, paged));
@@ -4792,23 +4816,24 @@ try {
 } catch (e) {
   failed = true;
   console.error("sim-check failed:", (e as Error).message);
-  console.error(readFileSync(join(home, "daemon.err"), "utf8").slice(-2000));
+  // Before the daemon starts there's no home (or log) yet.
+  if (home) console.error(readFileSync(join(home, "daemon.err"), "utf8").slice(-2000));
 } finally {
-  if (keep) {
+  if (keep && home) {
     markKept(home);
     if (reusable?.seeded) {
-      writeReuseState(home, { version: REUSE_VERSION, savedAt: Date.now(), port, scratch, daemonPid, ...reusable });
+      writeReuseState(home, { version: REUSE_VERSION, savedAt: Date.now(), port, scratch, daemonPid, repoRoot, serviceHash, ...reusable });
       console.log("kept for --reuse: rerun with --reuse (and --grep=<check>) to attach to it; `bun run sim reap --kept` clears it");
     }
     console.log(`--keep: daemon still running at ${base} (pid ${daemonPid}); token in ${home}/token`);
-  } else {
+  } else if (home) {
     await timed("daemon shutdown", async () => {
       // The daemon closes its Chrome on SIGTERM, which can take a while; a Chrome killed mid-close
       // leaks its code-sign clone, and one left running outlives this run (and its deleted home).
-      daemon!.kill("SIGTERM");
-      if ((await Promise.race([daemon!.exited.then(() => true), Bun.sleep(20000).then(() => false)])) === false) {
+      daemon?.kill("SIGTERM");
+      if (daemon && (await Promise.race([daemon.exited.then(() => true), Bun.sleep(20000).then(() => false)])) === false) {
         console.log("the daemon didn't stop in 20 s; killing it and its Chrome");
-        daemon!.kill("SIGKILL");
+        daemon.kill("SIGKILL");
         Bun.spawnSync(["pkill", "-f", `user-data-dir=${join(home, "chrome-profile")}`]);
       }
     });

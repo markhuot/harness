@@ -354,4 +354,7 @@ test("planReap leaves kept homes alone, and stops their daemons and removes them
   const all = planReap({ ...input, includeKept: true });
   expect(all.kill.map((p) => p.pid)).toEqual([1]); // not the live run's daemon
   expect(all.remove).toEqual([kept.path, `${T}/harness-sim-projects-k`]);
+  // A --reuse run that attached to the kept home took over its owner file: it's live now, so reap --kept leaves it be.
+  const attached = { ...kept, owner: { pid: 3, start: "s", scratch: kept.owner.scratch }, ownerAlive: true };
+  expect(planReap({ ...input, dirs: [attached, live], includeKept: true })).toEqual({ shutdown: [], kill: [], remove: [] });
 });

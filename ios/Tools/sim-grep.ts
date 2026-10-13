@@ -79,6 +79,7 @@ export class CheckSelector<F> {
   /** A new run of checks starts (a mode's function, a chain): earlier checks aren't its prerequisites. */
   sequence(kind: "chained" | "declared" = "chained"): void {
     this.sequenceNames = [];
+    this.done.clear();
     this.chained = kind === "chained";
   }
 

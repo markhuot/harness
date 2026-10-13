@@ -2,24 +2,25 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { chooseKept, hashApp, listKept, planApp, readReuseState, REUSE_VERSION, writeReuseState, type Kept, type ReuseState } from "./sim-reuse";
+import { chooseKept, hashApp, hashService, listKept, planApp, readReuseState, REUSE_VERSION, writeReuseState, type Kept, type ReuseState } from "./sim-reuse";
 
 const state = (over: Partial<ReuseState> = {}): ReuseState => ({
-  version: REUSE_VERSION, savedAt: 1000, port: 7831, scratch: "/tmp/p", daemonPid: 42, modeKey: "sheets", seeds: [], seeded: { a: 1 }, udids: ["U1"], appHash: "h1", ...over,
+  version: REUSE_VERSION, savedAt: 1000, port: 7831, scratch: "/tmp/p", daemonPid: 42, modeKey: "sheets", seeds: [], seeded: { a: 1 }, udids: ["U1"], appHash: "h1", installed: ["i1"], repoRoot: "/repo", serviceHash: "s1", ...over,
 });
+const W = { modeKey: "sheets", seeds: [] as string[], repoRoot: "/repo", serviceHash: "s1" };
 const kept = (home: string, over: Partial<ReuseState> = {}, daemonAlive = true): Kept => ({ home, state: state(over), daemonAlive });
 
 test("chooseKept takes the newest kept state that fits", () => {
-  const { pick, notes } = chooseKept([kept("/old", { savedAt: 1 }), kept("/new", { savedAt: 9 })], { modeKey: "sheets", seeds: [] });
+  const { pick, notes } = chooseKept([kept("/old", { savedAt: 1 }), kept("/new", { savedAt: 9 })], W);
   expect(pick?.home).toBe("/new");
   expect(notes).toEqual([]);
 });
 
 test("chooseKept explains each state it passes over, and says so when there is none", () => {
-  expect(chooseKept([], { modeKey: "sheets", seeds: [] })).toEqual({ pick: null, notes: ["no kept state to reuse (run once with --keep)"] });
+  expect(chooseKept([], W)).toEqual({ pick: null, notes: ["no kept state to reuse (run once with --keep)"] });
   const { pick, notes } = chooseKept(
     [kept("/dead", { savedAt: 5 }, false), kept("/other", { savedAt: 4, modeKey: "paging" }), kept("/stale", { savedAt: 3, version: 0 })],
-    { modeKey: "sheets", seeds: [] },
+    W,
   );
   expect(pick).toBeNull();
   expect(notes).toEqual([
@@ -31,22 +32,43 @@ test("chooseKept explains each state it passes over, and says so when there is n
 
 test("a walk-through reuses a state that seeded at least what it needs, not less", () => {
   const have = { seeds: ["conductor", "approval"], modeKey: "walk" };
-  expect(chooseKept([kept("/a", have)], { modeKey: "walk", seeds: ["conductor"] }).pick).not.toBeNull();
-  const miss = chooseKept([kept("/a", have)], { modeKey: "walk", seeds: ["conductor", "noted"] });
+  expect(chooseKept([kept("/a", have)], { ...W, modeKey: "walk", seeds: ["conductor"] }).pick).not.toBeNull();
+  const miss = chooseKept([kept("/a", have)], { ...W, modeKey: "walk", seeds: ["conductor", "noted"] });
   expect(miss.pick).toBeNull();
   expect(miss.notes[0]).toContain("didn't seed noted");
 });
 
+test("chooseKept won't attach to a daemon running another checkout's or edited service code", () => {
+  const other = chooseKept([kept("/a", { repoRoot: "/other" })], W);
+  expect(other.pick).toBeNull();
+  expect(other.notes[0]).toContain("/other");
+  const edited = chooseKept([kept("/a", { serviceHash: "s0" })], W);
+  expect(edited.pick).toBeNull();
+  expect(edited.notes[0]).toContain("service/src changed");
+});
+
+test("hashService follows the service sources", () => {
+  const root = mkdtempSync(join(tmpdir(), "svc-"));
+  mkdirSync(join(root, "service/src"), { recursive: true });
+  writeFileSync(join(root, "service/src/a.ts"), "1");
+  const h = hashService(root);
+  writeFileSync(join(root, "service/src/a.ts"), "2");
+  expect(hashService(root)).not.toBe(h);
+  rmSync(root, { recursive: true, force: true });
+});
+
 test("planApp keeps the app only for the same build, the same devices and this home's marker", () => {
-  const now = { udids: ["U1"], appHash: "h1", home: "/h", markers: ["/h"] };
-  const s = { udids: ["U1"], appHash: "h1" };
+  const now = { udids: ["U1"], appHash: "h1", home: "/h", markers: ["/h"], installed: ["i1"] };
+  const s = { udids: ["U1"], appHash: "h1", installed: ["i1"] };
+  expect(planApp(s, { ...now, installed: ["i2"] })).toMatchObject({ install: true, reason: expect.stringContaining("installed bundle") });
+  expect(planApp(s, { ...now, installed: [null] })).toMatchObject({ install: true });
   expect(planApp(s, now)).toEqual({ install: false });
   expect(planApp(s, { ...now, appHash: "h2" })).toMatchObject({ install: true, reason: "the built app changed" });
   expect(planApp(s, { ...now, udids: ["U2"] })).toMatchObject({ install: true, reason: expect.stringContaining("simulators differ") });
   expect(planApp(s, { ...now, markers: [null] })).toMatchObject({ install: true, reason: expect.stringContaining("another run installed over it") });
   expect(planApp(s, { ...now, markers: ["/elsewhere"] })).toMatchObject({ install: true });
-  expect(planApp({ udids: ["U1", "U2"], appHash: "h1" }, { ...now, markers: ["/h"] })).toMatchObject({ install: true }); // one device fewer
-  expect(planApp({ udids: ["U1", "U2"], appHash: "h1" }, { ...now, udids: ["U1", "U2"], markers: ["/h", null] })).toMatchObject({ install: true });
+  expect(planApp({ udids: ["U1", "U2"], appHash: "h1", installed: ["i1", "i2"] }, { ...now, markers: ["/h"] })).toMatchObject({ install: true }); // one device fewer
+  expect(planApp({ udids: ["U1", "U2"], appHash: "h1", installed: ["i1", "i2"] }, { ...now, udids: ["U1", "U2"], markers: ["/h", null], installed: ["i1", "i2"] })).toMatchObject({ install: true });
 });
 
 const dirs: string[] = [];

@@ -84,3 +84,13 @@ test("matched counts selected checks, so a pattern that selects none can be told
   expect(run("zzz", [{ name: "a", sequence: "declared" }, { name: "b" }]).sel.matched).toBe(0);
   expect(run("zzz", [{ name: "a", sequence: "declared" }]).sel.names).toEqual(["a"]);
 });
+
+test("a new sequence runs setup again even for a check an earlier sequence ran", () => {
+  const { ran } = run("last", [
+    { name: "open", sequence: "declared" },
+    { name: "last", needs: ["open"] },
+    { name: "open", sequence: "declared" },
+    { name: "last", needs: ["open"] },
+  ]);
+  expect(ran).toEqual(["setup:open", "last", "setup:open", "last"]);
+});

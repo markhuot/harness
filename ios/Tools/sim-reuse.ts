@@ -9,7 +9,7 @@ import { join } from "node:path";
 /** Written into a kept sim-check home, next to its `keep` file. */
 export const REUSE_FILE = "reuse.json";
 /** Bump when the state's meaning changes, so an old file is stale rather than misread. */
-export const REUSE_VERSION = 1;
+export const REUSE_VERSION = 2;
 
 export interface ReuseState {
   version: number;
@@ -30,11 +30,19 @@ export interface ReuseState {
   udids: string[];
   /** hashApp of the app that was installed. */
   appHash: string;
+  /** hashApp of the bundle on each simulator right after the install, to notice a plain `simctl install` over it later. */
+  installed: string[];
+  /** The checkout whose service code the daemon runs; another worktree's run must not attach to it. */
+  repoRoot: string;
+  /** hashApp of that checkout's service/src when the daemon started; edited code means a stale daemon. */
+  serviceHash: string;
 }
 
 export interface Want {
   modeKey: string;
   seeds: readonly string[];
+  repoRoot: string;
+  serviceHash: string;
 }
 
 export interface Kept {
@@ -70,6 +78,8 @@ function misfit(k: Kept, want: Want): string | null {
   const s = k.state;
   if (s.version !== REUSE_VERSION) return `state is version ${s.version}, this sim-check reads ${REUSE_VERSION}`;
   if (!k.daemonAlive) return `its daemon (pid ${s.daemonPid}) isn't answering`;
+  if (s.repoRoot !== want.repoRoot) return `its daemon runs the service from ${s.repoRoot}, not ${want.repoRoot}`;
+  if (s.serviceHash !== want.serviceHash) return "service/src changed since its daemon started";
   if (s.modeKey !== want.modeKey) return `it was seeded for ${s.modeKey}, this run is ${want.modeKey}`;
   const have = new Set(s.seeds);
   const missing = want.seeds.filter((n) => !have.has(n));
@@ -85,16 +95,18 @@ export const MARKER_KEY = "HarnessSimCheckHome";
 /**
  * Whether the app on the simulators is still this run's: installed from the same build, on the same
  * devices, and still the one paired for this home. Another run or agent that installed over the
- * shared simulator wiped the marker (it uninstalls first), so a changed marker means the app is theirs.
+ * shared simulator wiped the marker (it uninstalls first), so a changed marker means the app is theirs;
+ * an install that keeps the data container (dev-sim, by hand) leaves the marker but changes the bundle.
  * Otherwise it's installed (and paired) again, against the same daemon.
  */
 export function planApp(
-  state: Pick<ReuseState, "udids" | "appHash">,
-  now: { udids: readonly string[]; appHash: string; home: string; markers: readonly (string | null)[] },
+  state: Pick<ReuseState, "udids" | "appHash" | "installed">,
+  now: { udids: readonly string[]; appHash: string; home: string; markers: readonly (string | null)[]; installed: readonly (string | null)[] },
 ): AppPlan {
   if (state.appHash !== now.appHash) return { install: true, reason: "the built app changed" };
   if (state.udids.length !== now.udids.length || state.udids.some((u, i) => u !== now.udids[i])) return { install: true, reason: "the simulators differ from the kept run's" };
   if (now.markers.some((m) => m !== now.home)) return { install: true, reason: "the app on the simulator isn't the one paired for this daemon (another run installed over it)" };
+  if (now.installed.some((h, i) => h !== state.installed[i])) return { install: true, reason: "the installed bundle isn't the one this run installed (installed over by dev-sim or by hand)" };
   return { install: false };
 }
 
@@ -103,6 +115,15 @@ export function planApp(
  * mtimes, since a rebuild that changes nothing rewrites every timestamp.
  */
 export function hashApp(dir: string): string {
+  return hashTree(dir);
+}
+
+/** The service code a daemon runs from: a hash of `<repo>/service/src`. */
+export function hashService(repoRoot: string): string {
+  return hashTree(join(repoRoot, "service/src"));
+}
+
+function hashTree(dir: string): string {
   const h = createHash("sha256");
   const walk = (rel: string) => {
     for (const name of readdirSync(join(dir, rel)).sort()) {
