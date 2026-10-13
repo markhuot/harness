@@ -137,8 +137,11 @@ export async function startDaemon(opts: StartDaemonOptions = {}): Promise<TestDa
   const port = opts.port ?? freePort(opts.portPool);
   const base = `http://127.0.0.1:${port}`;
   const files = (opts.logs ?? "files") === "files";
+  // A test daemon runs by itself: not under the app's launchd plist (which rewrites PATH and sends
+  // its output to a log file) and not supervised (which would let it restart through the app's).
+  const { HARNESS_LAUNCHD: _launchd, HARNESS_SUPERVISOR_PID: _supervisor, ...inherited } = process.env;
   const proc = Bun.spawn(["bun", opts.entry ?? daemonEntry], {
-    env: { ...process.env, HARNESS_HOME: home, HARNESS_PORT: String(port), HARNESS_DUMMY_DRIVER: "1", HARNESS_DUMMY_DELAY_MS: String(opts.delayMs ?? 1), ...opts.env },
+    env: { ...inherited, HARNESS_HOME: home, HARNESS_PORT: String(port), HARNESS_DUMMY_DRIVER: "1", HARNESS_DUMMY_DELAY_MS: String(opts.delayMs ?? 1), ...opts.env },
     stdout: files ? Bun.file(join(home, "daemon.out")) : "inherit",
     stderr: files ? Bun.file(join(home, "daemon.err")) : "inherit",
   });

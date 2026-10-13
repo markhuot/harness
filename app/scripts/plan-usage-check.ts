@@ -1,30 +1,16 @@
 // The sidebar's plan-usage gauges in the built app, against the seeded world (GET /usage answered by
-// a proxy, which also pushes a usage.updated): rows and their colours in both modes, the ⓘ popover, the
+// the world's proxy, which also pushes a usage.updated): rows and their colours in both modes, the ⓘ popover, the
 // filter menu, an unreadable driver, the one-line Hide state, and that filter and mode persist.
 // planUsage.test.ts covers the maths underneath.
 //
 //   bun run build && bun scripts/plan-usage-check.ts [--shots=<dir>]
 import { join } from "node:path";
-import { startDaemonProxy } from "@harness/shared/testing/proxy";
 import { bootWorld } from "./lib/world";
 import { appDir, checker, launchApp, stopped, until } from "./lib/drive";
 
 const shots = process.argv.find((a) => a.startsWith("--shots="))?.slice("--shots=".length);
-// The dummy driver reports no plan usage and the real ones read an account's login, so the app talks
-// to a proxy in front of the world's daemon that answers GET /usage from `report` and can push a
-// usage.updated: Claude's two windows (one amber) and Copilot's Premium requests (limited).
 const world = await bootWorld();
-const MIN = 60_000;
-const usageWindow = (id: string, label: string, usedPercent: number, resetsIn: number, windowSeconds: number) => ({ id, label, usedPercent, resetsAt: Date.now() + resetsIn, windowSeconds });
-let report: { drivers: unknown[] } = {
-  drivers: [
-    { driver: "claude-code", name: "Claude Code", status: "ok", error: null, fetchedAt: Date.now() - 3 * MIN, windows: [usageWindow("five_hour", "5-hour", 42, 134 * MIN, 18000), usageWindow("seven_day", "Weekly", 78, 3 * 86_400_000, 604800)] },
-    { driver: "github-copilot", name: "GitHub Copilot", status: "limited", error: null, fetchedAt: Date.now() - 3 * MIN, windows: [usageWindow("monthly", "Premium requests", 100, 9 * 3_600_000, 2_592_000)] },
-  ],
-};
-const proxy = startDaemonProxy(world.base, { intercept: (req) => (req.method === "GET" && new URL(req.url).pathname === "/usage" ? Response.json({ data: report }) : undefined) });
-const { token } = world;
-const base = proxy.base;
+const { base, token } = world;
 const counter = checker();
 const { check } = counter;
 const app = await launchApp({ baseUrl: base, token });
@@ -40,10 +26,7 @@ try {
     );
   const clickText = (sel: string, text: string) =>
     js<boolean>(`(() => { const el = [...document.querySelectorAll(${JSON.stringify(sel)})].find(e => e.textContent.includes(${JSON.stringify(text)})); el?.click(); return !!el; })()`);
-  const push = async (drivers: unknown[]) => {
-    report = { drivers };
-    proxy.push({ kind: "usage.updated", usage: report });
-  };
+  const push = async (drivers: unknown[]) => world.setUsage(drivers);
   const t = Date.now();
   const H = 3_600_000;
   const win = (id: string, label: string, usedPercent: number, resetsIn: number, windowSeconds: number) => ({ id, label, usedPercent, resetsAt: t + resetsIn, windowSeconds });
@@ -137,7 +120,6 @@ try {
   check("run", false, (e as Error).message);
 } finally {
   await app.close();
-  proxy.stop();
   await world.stop();
 }
 console.log(counter.failures ? `${counter.failures} failed` : "all plan usage checks passed");

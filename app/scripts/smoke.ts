@@ -1,47 +1,34 @@
-// End-to-end UI smoke test: boots the mock service and the built app, then drives the real
+// End-to-end UI smoke test: boots the seeded world (the real daemon with the dummy driver) and the built app, then drives the real
 // renderer over the Chrome DevTools Protocol and checks the effects on the service's state.
 //
 //   bun run build && bun scripts/smoke.ts
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { tempDir } from "@harness/shared/testing";
+import { GREETER_FILES, seedRepo, withDb } from "@harness/shared/testing/seed";
+import { bootWorld, WORLD_TAILSCALE } from "./lib/world";
 import { api as makeApi, appDir, checker, launchApp, until } from "./lib/drive";
 import { encodeQr, qrPath } from "../src/renderer/components/qr";
 
-const port = 7600 + Math.floor(Math.random() * 90);
-const token = "smoke-token";
-const base = `http://127.0.0.1:${port}`;
+const world = await bootWorld({ delayMs: 20 });
+const { token, base } = world;
 const inputs: string[] = [];
-
-const mock = Bun.spawn(["bun", join(appDir, "scripts/mock-service.ts")], {
-  env: { ...process.env, MOCK_PORT: String(port), MOCK_TOKEN: token, MOCK_QUIET: "1" },
-  stdout: "pipe",
-  stderr: "inherit",
+// The real daemon keeps no log of the browser input the app forwards; the world's proxy reports
+// every message a socket sends, and these are the browser.input ones (as JSON), bar mouse moves.
+world.onClientMessage((raw) => {
+  const m = JSON.parse(raw) as { type?: string; input?: { type: string; action?: string } };
+  if (m.type === "browser.input" && m.input && !(m.input.type === "mouse" && m.input.action === "move")) inputs.push(JSON.stringify(m.input));
 });
-void (async () => {
-  const dec = new TextDecoder();
-  const reader = mock.stdout.getReader();
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    inputs.push(...dec.decode(value).split("\n").filter((l) => l.includes("browser.input")));
-  }
-})();
 
 const api = makeApi(base, token);
 /** True once the canvas has non-transparent pixels (a frame was decoded and drawn). */
 const canvasPainted = `(() => { const c = document.querySelector(".browser-canvas"); if (!c || !c.width) return false;
   const d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data; let n = 0;
   for (let i = 3; i < d.length; i += 4 * 101) if (d[i] > 0) n++; return n > 50; })()`;
-for (let i = 0; i < 50; i++) {
-  try {
-    if ((await fetch(base + "/health")).ok) break;
-  } catch {}
-  await Bun.sleep(100);
-}
 
 const counter = checker();
 const { check, fail } = counter;
 let app: Awaited<ReturnType<typeof launchApp>> | null = null;
-let mock2: ReturnType<typeof Bun.spawn> | null = null;
 
 try {
   // Native context menus can't be clicked over CDP; this makes them pick "Project settings…".
@@ -117,16 +104,19 @@ try {
     await screenshot("/tmp/harness-242-mac-waiting.png");
 
     // Start on a planned ticket whose dependency isn't done queues it: it stays in Planning with the
-    // clock, and its Start turns into Starts automatically (NYTIMES-2 made to wait on NYTIMES-1).
-    await api("PATCH", "/tickets/NYTIMES-2", { dependsOn: ["NYTIMES-1"] });
-    await js(`location.hash = "#/board/all/ticket/NYTIMES-2"`);
-    await until("Start work on NYTIMES-2", () => js<boolean>(`[...document.querySelectorAll(".actions button")].some(b => b.textContent.trim() === "Start work")`));
+    // clock, and its Start turns into Starts automatically (a new ticket made to wait on NYTIMES-1;
+    // it's deleted after, since once its dependency is dropped the service would start it by itself).
+    const nyId = world.projects.NYTIMES.id;
+    const waiter = await api<{ key: string }>("POST", "/tickets", { projectId: nyId, spec: "Wait for the cache fix", start: false, dependsOn: ["NYTIMES-1"] });
+    await until("waiter's plan run ended", async () => !(await api<{ ticket: { busy: boolean } }>("GET", `/tickets/${waiter.key}`)).ticket.busy, 15000);
+    await js(`location.hash = "#/board/all/ticket/${waiter.key}"`);
+    await until("Start work on the waiter", () => js<boolean>(`[...document.querySelectorAll(".actions button")].some(b => b.textContent.trim() === "Start work")`));
     await js(`[...document.querySelectorAll(".actions button")].find(b => b.textContent.trim() === "Start work").click()`);
-    const queued = await until("NYTIMES-2 queued", () => js<boolean>(`!!document.querySelector("[data-testid=start-waiting]") && !!document.querySelector('.card[data-key="NYTIMES-2"] [data-testid=card-autostart]')`));
-    const after = await api<{ ticket: { status: string; autoStart: boolean } }>("GET", "/tickets/NYTIMES-2");
+    const queued = await until("waiter queued", () => js<boolean>(`!!document.querySelector("[data-testid=start-waiting]") && !!document.querySelector('.card[data-key="${waiter.key}"] [data-testid=card-autostart]')`));
+    const after = await api<{ ticket: { status: string; autoStart: boolean } }>("GET", `/tickets/${waiter.key}`);
     check("Start with an open dependency queues the ticket: Planning, a clock, Starts automatically", queued && after.ticket.status === "planning" && after.ticket.autoStart, JSON.stringify(after.ticket.status));
     await screenshot("/tmp/harness-242-mac-queued.png");
-    await api("PATCH", "/tickets/NYTIMES-2", { dependsOn: [] });
+    await api("DELETE", `/tickets/${waiter.key}`);
     await js(`location.hash = "#/board/all"`);
   }
 
@@ -340,7 +330,8 @@ try {
   check("the agent's approval then completes the ticket by itself", earlyDone);
 
   // 4b'. Cancelling the completion puts the approval back: Approve shows again and lands it.
-  const stopped = await api<{ key: string }>("POST", "/tickets", { projectId: nyProject.id, spec: "Cancel my completion" });
+  // The completion runs on the slow dummy model, so it's still going when Cancel run is clicked.
+  const stopped = await api<{ key: string }>("POST", "/tickets", { projectId: nyProject.id, spec: "Cancel my completion", phaseModels: { complete: { driver: "dummy", model: "dummy-slow" } } });
   const stoppedT = async () => (await api<{ ticket: EarlyT & { busy: boolean } }>("GET", `/tickets/${stopped.key}`)).ticket;
   await until("stopped ticket agent-approved", async () => {
     const t = await stoppedT();
@@ -373,7 +364,7 @@ try {
     const getT = async (key: string) => (await api<{ ticket: T }>("GET", `/tickets/${key}`)).ticket;
     const all = await api<{ id: string; key: string }[]>("GET", "/projects");
     const site = all.find((p) => p.key === "SITE")!;
-    const plain = await api<{ id: string; completionActions: string[] }>("POST", "/projects", { path: "/tmp/smoke-plain-git", key: "PLAIN", name: "plain-git" });
+    const plain = await api<{ id: string; completionActions: string[] }>("POST", "/projects", { path: await seedRepo(join(tempDir("harness-smoke-plain-"), "plain-git"), GREETER_FILES), key: "PLAIN", name: "plain-git" });
     check("a git project without a PR host offers merge, cleanup and custom", plain.completionActions?.join(",") === "merge,cleanup,custom", String(plain.completionActions));
     const [ghT, plainT, siteT] = await Promise.all(
       [nyProject.id, plain.id, site.id].map((projectId) => api<{ key: string }>("POST", "/tickets", { projectId, spec: "Land me" })),
@@ -385,6 +376,14 @@ try {
         const x = await getT(t.key);
         return x.status === "review" && x.agentReview === "approved" && !x.busy;
       }, 15000);
+    }
+    // The dummy agent changes nothing, and a ticket with nothing to land only offers clean up: give
+    // the two that should be able to merge a file of their own in their worktrees.
+    for (const t of [ghT!, plainT!]) {
+      const workdir = (await api<{ ticket: { workdir: string } }>("GET", `/tickets/${t.key}`)).ticket.workdir;
+      writeFileSync(join(workdir, "CHANGE.md"), `Work for ${t.key}\n`);
+      // The service re-checks with git each time the ticket is read; wait for it to see the file.
+      await until(`${t.key} has changes to land`, async () => (await api<{ ticket: { hasChanges?: boolean | null } }>("GET", `/tickets/${t.key}`)).ticket.hasChanges === true, 10000);
     }
     const menuItems = () => js<string[]>(`[...document.querySelectorAll(".land-menu-approve button")].map(b => b.textContent.trim())`);
     const openApprove = async (key: string) => {
@@ -830,7 +829,7 @@ try {
   await comboClose();
   // Between runs: a planning ticket on Dummy lists every driver, and Default moves it back to the project's.
   const idle = await api<{ key: string }>("POST", "/tickets", { projectId: nyProject.id, spec: "Pick a model between runs", start: false, driver: "dummy", model: "dummy-slow" });
-  await until("plan run finished", async () => !(await api<{ ticket: { busy: boolean } }>("GET", `/tickets/${idle.key}`)).ticket.busy, 15000);
+  await until("plan run finished", async () => !(await api<{ ticket: { busy: boolean } }>("GET", `/tickets/${idle.key}`)).ticket.busy, 90000);
   await js(`location.hash = "#/board/all/ticket/${idle.key}/details"`);
   await until("idle details", () => js<boolean>(`location.hash.includes(${JSON.stringify(idle.key)}) && !!document.querySelector(".props [data-testid=phase-model-select]")`));
   const idleRows = await comboRows(".props");
@@ -838,7 +837,7 @@ try {
   await comboPick("Defaults");
   const cleared = await until("model cleared", async () => {
     const t = (await api<{ ticket: { driver: string; model: string | null } }>("GET", `/tickets/${idle.key}`)).ticket;
-    return t.model === null && t.driver === "claude-code" && t;
+    return t.model === null && t.driver === "dummy" && t;
   });
   check("Details Defaults puts the ticket's Work phase back on the project's driver with no model", !!cleared, JSON.stringify(cleared));
   check("header badge disappears for default model", !!(await until("badge gone", async () => !(await exists(".detail-head .model-badge")))));
@@ -879,6 +878,8 @@ try {
   await comboPick("Default", "adviser", "claude-code");
   await until("adviser back on the default", async () => { const pm = (await api<{ phaseModels: Record<string, { model: string | null }> }>("GET", "/settings")).phaseModels; return pm.adviser?.model == null; });
   await comboClose();
+  // Picking Claude Code's Work model above made it the app's Work driver; the world runs on the dummy.
+  await api("PATCH", "/settings", { defaultDriver: "dummy" });
   await js(`document.querySelector('[data-driver-row="claude-code"]').click()`);
   await until("claude code settings", () => exists("[data-testid=driver-settings-claude-code]"));
   check("the Anthropic API key only shows in the Anthropic API driver", !(await exists("[data-testid=driver-settings-claude-code] [data-testid=anthropic-api-key]")));
@@ -893,6 +894,7 @@ try {
   check("Settings → Permissions saves the mode and classifier", !!savedPerm);
   await pick("#settings-permissions [data-testid=permission-mode]", "auto");
   await pick("#settings-permissions [data-testid=classifier-backend]", "claude-cli");
+  await api("PATCH", "/settings", { classifier: "off" }); // the world's classifier: no model calls for permissions
 
   // 6. Browser tab forwards input to the service.
   await js(`location.hash = "#/board/all/ticket/NYTIMES-1/browser"`);
@@ -920,7 +922,7 @@ try {
   const responsiveOn = await until("responsive on", () => js<boolean>(`!!document.querySelector("[data-testid=browser-responsive]")?.classList.contains("owned")`)).catch(() => false);
   check("a new tab follows this pane (Responsive, owned) and gets its stage size", responsiveOn && inputs.some((l) => l.includes('"type":"resize"')));
 
-  // 6a. Browser tabs: the mock opens two (Local dev server, Docs). + opens a third (current), a chip
+  // 6a. Browser tabs: NYTIMES-1 has two (Local dev server, Docs). + opens a third (current), a chip
   // switches back, × closes the others, and the lone tab left keeps its chip (so it can be torn off).
   {
     type Chip = { id: number; on: boolean; label: string };
@@ -935,7 +937,7 @@ try {
       const c = await chips();
       return c.length === 3 && c[2]!.on && c;
     }).catch(() => null);
-    check("New tab opens a third tab and switches to it", !!opened && opened[2]!.label === "New tab", JSON.stringify(opened));
+    check("New tab opens a third tab and switches to it", !!opened && opened[2]!.label === "about:blank", JSON.stringify(opened));
     check("New tab sent newTab", inputs.some((l) => l.includes('"type":"newTab"')));
     const repainted = await until("new tab frame", () => js<boolean>(canvasPainted), 8000).catch(() => false);
     check("the new tab's frames are drawn", repainted);
@@ -944,7 +946,7 @@ try {
     const back = await until("switched back", async () => {
       const c = await chips();
       const url = await js<string>(`document.querySelector(".browser-url-input").value`);
-      return c[0]?.on && url.startsWith("http://localhost:3000") && c;
+      return c[0]?.on && url.startsWith(world.devUrl) && c;
     }).catch(() => null);
     check("clicking a chip switches to its tab (and its URL)", !!back, JSON.stringify(back));
     await js(`document.querySelectorAll(".browser-tab-close")[2].click()`);
@@ -2235,21 +2237,18 @@ try {
   }
 
   // 7. Service restart: the indicator flips to reconnecting, then the app refetches everything.
-  mock.kill();
-  await mock.exited;
+  await world.stopDaemon();
   const offline = await until("reconnecting indicator", () => js<boolean>(`!!document.querySelector(".conn.off")`));
   check("connection indicator shows reconnecting", offline);
-  mock2 = Bun.spawn(["bun", join(appDir, "scripts/mock-service.ts")], {
-    env: { ...process.env, MOCK_PORT: String(port), MOCK_TOKEN: token, MOCK_QUIET: "1" },
-    stdout: "ignore",
-    stderr: "inherit",
-  });
+  // A change made while the service is down (a ticket retitled in its database): the app only sees
+  // it by refetching once it reconnects.
+  withDb(world.home, (db) => db.query("UPDATE tickets SET title = 'Retitled while the service was down' WHERE key = 'NYTIMES-2'").run());
+  await world.startDaemonAgain();
   {
-    await until("reconnected", () => js<boolean>(`!!document.querySelector(".conn.on")`), 10000);
-    // The restarted mock has fresh seed data: the ticket created in step 5 is gone after refetch.
+    await until("reconnected", () => js<boolean>(`!!document.querySelector(".conn.on")`), 20000);
     const gone = await until("refetch after reconnect", () =>
-      js<boolean>(`location.hash = "#/board/all", ![...document.querySelectorAll(".card-key")].some(e => e.textContent === ${JSON.stringify(created.key)})`),
-    );
+      js<boolean>(`location.hash = "#/board/all", [...document.querySelectorAll(".card[data-key=NYTIMES-2]")].some(e => e.textContent.includes("Retitled while the service was down"))`),
+    ).catch(() => false);
     check("reconnect refetches the board", gone);
     const donePage = await until("done paging reset", async () => {
       const n = await js<number>(`[...document.querySelectorAll(".column")].find(c => c.querySelector(".column-title")?.textContent === "Done")?.querySelectorAll(".card[data-key]").length ?? 0`);
@@ -2257,18 +2256,18 @@ try {
     }).catch(() => 0);
     check("reconnect resets Done paging to the first page", donePage === 50, String(donePage));
     // Project settings loads the project's done tickets itself: the rename preview spans them
-    // even though the board hasn't paged them in (HELLOHARNESS-1 and -2 are old done tickets).
-    const hh2 = (await api<{ id: string; key: string }[]>("GET", "/projects")).find((p) => p.key === "HELLOHARNESS")!;
+    // even though the board hasn't paged them in (HEL-1 and -2 are old done tickets, renamed in 6b).
+    const hh2 = (await api<{ id: string; key: string }[]>("GET", "/projects")).find((p) => p.key === "HEL")!;
     await js(`location.hash = "#/project/${hh2.id}/settings"`);
     await until("key input after reconnect", () => exists(".key-input"));
-    await type(".key-input", "hel");
+    await type(".key-input", "hello");
     const previewText = () => js<string>(`document.querySelector("[data-testid=key-preview]")?.textContent ?? ""`);
     const pv = await until("rename preview after reconnect", async () => {
       const t = await previewText();
-      return t.includes("HELLOHARNESS-1…3") && t;
+      return t.includes("HEL-1…3") && t;
     }, 4000).catch(previewText);
-    check("rename preview counts done tickets the board hasn't loaded", pv.includes("existing HELLOHARNESS-1…3 become HEL-1…3"), pv);
-    await type(".key-input", "HELLOHARNESS");
+    check("rename preview counts done tickets the board hasn't loaded", pv.includes("existing HEL-1…3 become HELLO-1…3"), pv);
+    await type(".key-input", "HEL");
     await js(`location.hash = "#/board/all"`);
   }
 
@@ -2307,17 +2306,17 @@ try {
     await until("network section", () => exists("[data-testid=network-section]"));
     check("Network section renders in localhost mode", (await js<string>(`document.querySelector("[data-mode=localhost]").getAttribute("aria-checked")`)) === "true");
     const bound = await until("bound urls", () => js<string>(`document.querySelector("[data-testid=network-bound]")?.textContent ?? ""`).then((t) => t.includes("127.0.0.1") && t));
-    check("shows the bound loopback URL", bound.includes(`http://127.0.0.1:${port}`), bound);
+    check("shows the bound loopback URL", bound.includes(`http://127.0.0.1:${world.port}`), bound);
     check("Localhost mode disables pairing with an explanation", (await exists("[data-testid=pair-disabled]")) && !(await exists("[data-testid=pair-qr]")));
     const ts = await js<string>(`document.querySelector("[data-testid=network-tailscale]")?.textContent ?? ""`);
-    check("shows Tailscale IP and MagicDNS name", ts.includes("100.101.102.103") && ts.includes("mock.tail.ts.net"), ts);
+    check("shows Tailscale IP and MagicDNS name", ts.includes(WORLD_TAILSCALE.ip) && ts.includes(WORLD_TAILSCALE.dnsName), ts);
 
     await js(`document.querySelector("[data-mode=tailscale]").click()`);
     await until("listen saved as tailscale", async () => (await api<S>("GET", "/settings")).listen?.mode === "tailscale");
     const d = await until("pairing QR", () => js<string>(`document.querySelector("[data-testid=pair-qr] svg path")?.getAttribute("d") ?? ""`));
     const pairing = await api<{ url: string; token: string; pairUrl: string }>("GET", "/pairing");
     check("QR encodes exactly the pairUrl", d === qrPath(encodeQr(pairing.pairUrl), 4));
-    check("pair URL is the Tailscale address", (await js<string>(`document.querySelector("[data-testid=pair-url]").textContent`)) === `http://100.101.102.103:${port}`);
+    check("pair URL is the Tailscale address", (await js<string>(`document.querySelector("[data-testid=pair-url]").textContent`)) === `http://${WORLD_TAILSCALE.ip}:${world.port}`);
     const masked = await js<string>(`document.querySelector("[data-testid=pair-token]").textContent`);
     check("token is masked", !masked.includes(token) && masked.startsWith("•") && masked.endsWith(token.slice(-4)), masked);
 
@@ -2339,8 +2338,13 @@ try {
     const rotated = await until("new token shown", () => js<string>(`document.querySelector("[data-testid=pair-token]")?.textContent ?? ""`).then((t) => t && t !== token && !t.includes("•") && t));
     const api2 = makeApi(base, rotated);
     await until("socket reconnected with the new token", () => js<boolean>(`!!document.querySelector(".conn.on")`), 10000);
-    await js(`document.querySelector("[data-mode=localhost]").click()`);
-    const back = await until("app works after rotation", async () => (await api2<S>("GET", "/settings")).listen?.mode === "localhost");
+    // Switching back rebinds the service's listeners, and one it just retired for Any stays open for
+    // a second while it drains: a click inside that window is refused (409), so click again.
+    let back = false;
+    for (let attempt = 0; attempt < 4 && !back; attempt++) {
+      await js(`document.querySelector("[data-mode=localhost]").click()`);
+      back = await until("app works after rotation", async () => (await api2<S>("GET", "/settings")).listen?.mode === "localhost", 2500).catch(() => false);
+    }
     check("after rotation the app keeps working (switching back to Localhost saved)", back);
     check("…and pairing is disabled again", await until("pair disabled", () => exists("[data-testid=pair-disabled]")));
   }
@@ -2350,8 +2354,7 @@ try {
   console.error("✗", (e as Error).message);
 } finally {
   await app?.close();
-  mock.kill();
-  mock2?.kill();
+  await world.stop();
 }
 console.log(counter.failures ? `${counter.failures} check(s) failed` : "all checks passed");
 process.exit(counter.failures ? 1 : 0);

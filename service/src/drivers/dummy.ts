@@ -496,6 +496,18 @@ export class DummyDriver implements Driver {
           const head = (await git(["rev-parse", "HEAD"], req.cwd)).stdout.trim();
           yield* call("record_pull_request", { url: t.pullRequestUrl ?? `https://github.com/example/dummy/pull/${t.key.split("-").pop()}`, head });
         }
+        // A merge or cleanup completion only finishes once the worktree and branch are gone (and, for a
+        // merge, the branch has landed): the dummy does what a real agent's git commands would.
+        if (t?.workdir && t.branch && (t.completionAction ?? "merge") !== "custom" && t.completionAction !== "pr") {
+          const common = (await git(["rev-parse", "--path-format=absolute", "--git-common-dir"], t.workdir)).stdout;
+          if (common.endsWith("/.git")) {
+            const repo = common.slice(0, -"/.git".length);
+            const identity = ["-c", "user.name=Dummy", "-c", "user.email=dummy@example.com", "-c", "commit.gpgsign=false"];
+            if ((t.completionAction ?? "merge") === "merge") await git([...identity, "merge", "--no-ff", "-m", `Merge ${t.branch}`, t.branch], repo);
+            await git(["worktree", "remove", "--force", t.workdir], repo);
+            await git(["branch", "-D", t.branch], repo);
+          }
+        }
         yield* call("post_note", { note: "Completed." });
         break;
       }

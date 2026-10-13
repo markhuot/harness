@@ -5,7 +5,6 @@
 //   bun run build && bun scripts/browser-size-check.ts [screenshotDir]
 import { mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { startDaemonProxy } from "@harness/shared/testing/proxy";
 import { bootWorld } from "./lib/world";
 import { api as makeApi, appDir, checker, launchApp, until } from "./lib/drive";
 
@@ -13,17 +12,14 @@ const shots = resolve(process.argv[2] ?? join(appDir, "out", "screenshots", "bro
 mkdirSync(shots, { recursive: true });
 const inputs: Record<string, any>[] = [];
 
-// The real daemon keeps no log of the browser input it forwards, so the app (and the second window
-// below) talk to it through a proxy that records every browser.input a socket sends, bar mouse moves.
+// The real daemon keeps no log of the browser input it forwards, so the world's proxy reports every
+// message a socket sends: this records the browser.input ones, bar mouse moves.
 const world = await bootWorld();
-const { token } = world;
-const proxy = startDaemonProxy(world.base, {
-  onClientMessage: (raw) => {
-    const m = JSON.parse(raw) as { type?: string; input?: { type: string; action?: string } };
-    if (m.type === "browser.input" && m.input && !(m.input.type === "mouse" && m.input.action === "move")) inputs.push(m.input);
-  },
+const { token, base } = world;
+world.onClientMessage((raw) => {
+  const m = JSON.parse(raw) as { type?: string; input?: { type: string; action?: string } };
+  if (m.type === "browser.input" && m.input && !(m.input.type === "mouse" && m.input.action === "move")) inputs.push(m.input);
 });
-const base = proxy.base;
 
 const c = checker();
 const { check } = c;
@@ -137,7 +133,7 @@ try {
   check("after editing the size, resizing the pane sends nothing", since(n, "resize").length === 0, JSON.stringify(since(n, "resize")));
 
   // 6. Another window switches Responsive on: this pane shows it dimmed-lit and doesn't drive it.
-  other = new WebSocket(`${proxy.base.replace("http", "ws")}/ws?token=${token}`);
+  other = new WebSocket(`${base.replace("http", "ws")}/ws?token=${token}`);
   await new Promise((r) => (other!.onopen = r));
   const tabId = await js<number>(`Number(document.querySelector(".browser-tab-select[aria-selected=true]").dataset.tabId)`);
   other.send(JSON.stringify({ type: "browser.subscribe", sessionId, tabId, viewerId: "other" }));
@@ -267,7 +263,6 @@ try {
 } finally {
   other?.close();
   await app?.close();
-  proxy.stop();
   await world.stop();
 }
 console.log(c.failures ? `\n${c.failures} check(s) failed` : "\nall browser size checks passed");

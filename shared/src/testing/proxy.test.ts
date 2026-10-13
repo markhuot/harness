@@ -10,7 +10,7 @@ function backend() {
       if (new URL(req.url).pathname === "/ws") return srv.upgrade(req) ? undefined : new Response("no", { status: 400 });
       return Response.json({ data: { from: "daemon", path: new URL(req.url).pathname, auth: req.headers.get("authorization") } });
     },
-    websocket: { message: (ws, m) => ws.send(`echo:${m}`) },
+    websocket: { message: (ws, m) => void ws.send(`echo:${m}`) },
   });
 }
 

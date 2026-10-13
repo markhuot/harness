@@ -9,11 +9,12 @@
 // not something an API call can ask for. Run state the daemon would sweep at startup (a run going)
 // goes in after it is up. `bun run --cwd app world` boots one for development.
 import { Database } from "bun:sqlite";
-import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { tempDir } from "@harness/shared/testing";
-import { repoRoot, startDaemon, type StartDaemonOptions, type TestDaemon } from "@harness/shared/testing/daemon";
+import { startDaemonProxy } from "@harness/shared/testing/proxy";
+import { apiClient, repoRoot, startDaemon, type StartDaemonOptions, type TestDaemon } from "@harness/shared/testing/daemon";
 import { GREETER_FILES, git, seedRepo, withDb } from "@harness/shared/testing/seed";
 import { png } from "./png";
 
@@ -22,7 +23,28 @@ const id = () => randomUUID();
 
 export type WorldProject = { id: string; key: string; path: string };
 
-export type World = TestDaemon & {
+export type World = Omit<TestDaemon, "base" | "api" | "stop"> & {
+  stop(opts?: { termMs?: number }): Promise<void>;
+  /**
+   * Where clients (the app, the checks) connect: a proxy in front of the daemon that answers GET /usage
+   * with a fixed report (the dummy driver has no plan usage, and Claude Code's reads the machine's own
+   * login) and reports the messages clients send. Everything else is the daemon's.
+   */
+  base: string;
+  /** The daemon itself, for a check that has to bypass the proxy. */
+  daemonBase: string;
+  /** An API client for `base`. */
+  api: TestDaemon["api"];
+  /** Stop the daemon but keep its home, for a restart test; the proxy stays up and the app sees the connection drop. */
+  stopDaemon(): Promise<void>;
+  /** Start the daemon again on the same home and port. */
+  startDaemonAgain(): Promise<void>;
+  /** The seeded database file (write to it only while the daemon is stopped). */
+  readonly home: string;
+  /** Replace the plan usage GET /usage answers with, and push it to connected clients as usage.updated. */
+  setUsage(drivers: unknown[]): void;
+  /** Call `fn` with every message a client socket sends (the browser input the app forwards). Returns a stop function. */
+  onClientMessage(fn: (message: string) => void): () => void;
   /** Seeded projects by key. */
   projects: Record<"NYTIMES" | "HARNESS" | "HELLOHARNESS" | "SITE" | "MH", WorldProject>;
   /** The page NYTIMES-1's browser tabs show (a local server standing in for a dev server). */
@@ -87,8 +109,9 @@ export const WORLD_TAILSCALE = { ip: "127.0.0.1", dnsName: "mock.tail.ts.net" };
 function fakeTools(root: string): Record<string, string> {
   const bin = join(root, "bin");
   mkdirSync(bin, { recursive: true });
-  // gh only has to exist on PATH: the service reads its hosts.yml, not its output.
-  writeFileSync(join(bin, "gh"), "#!/bin/sh\nexit 0\n");
+  // gh has to exist on PATH (the service reads its hosts.yml for the login), and answers the one
+  // question the service asks it: a pull request's title.
+  writeFileSync(join(bin, "gh"), '#!/bin/sh\nif [ "$1" = "pr" ] && [ "$2" = "view" ]; then echo "{\\"title\\":\\"Mock pull request ${3##*/}\\"}"; fi\nexit 0\n');
   writeFileSync(
     join(bin, "tailscale"),
     `#!/bin/sh\nif [ "$1" = "status" ]; then echo '{"BackendState":"Running","Self":{"TailscaleIPs":["${WORLD_TAILSCALE.ip}"],"DNSName":"${WORLD_TAILSCALE.dnsName}."}}'; else echo ${WORLD_TAILSCALE.ip}; fi\n`,
@@ -127,8 +150,20 @@ const HUE = (h: number, l: number): [number, number, number] => {
   return [f(0), f(8), f(4)];
 };
 
+/** Claude's two windows (one amber) and Copilot's Premium requests (limited), as of now. */
+export function defaultUsage(): unknown[] {
+  const t = Date.now();
+  const min = 60_000;
+  const win = (id: string, label: string, usedPercent: number, resetsIn: number, windowSeconds: number) => ({ id, label, usedPercent, resetsAt: t + resetsIn, windowSeconds });
+  return [
+    { driver: "claude-code", name: "Claude Code", status: "ok", error: null, fetchedAt: t - 3 * min, windows: [win("five_hour", "5-hour", 42, 134 * min, 18000), win("seven_day", "Weekly", 78, 3 * 86_400_000, 604800)] },
+    { driver: "github-copilot", name: "GitHub Copilot", status: "limited", error: null, fetchedAt: t - 3 * min, windows: [win("monthly", "Premium requests", 100, 9 * 3_600_000, 2_592_000)] },
+  ];
+}
+
 export async function bootWorld(opts: Pick<StartDaemonOptions, "delayMs" | "readyMs" | "logs"> & { env?: Record<string, string> } = {}): Promise<World> {
-  const root = tempDir("harness-world-");
+  // The real path: git reports checkouts by it (/private/var…), and the app compares them with the project's path.
+  const root = realpathSync(tempDir("harness-world-"));
   const home = join(root, "home");
   const sites = join(root, "Sites");
   mkdirSync(home, { recursive: true });
@@ -145,8 +180,9 @@ export async function bootWorld(opts: Pick<StartDaemonOptions, "delayMs" | "read
   const branches = ["develop", "feature/dark-mode", "release/2026-09"];
   const [nytimes, harness, hello, mh] = await Promise.all([
     repoOf("nytimes", "https://github.com/markhuot/nytimes.git", branches, [
+      // A branch checked out in another worktree (the branch picker warns about it). Not a ticket's own
+      // branch: finishing a ticket cleans its branch up, and one that's checked out elsewhere blocks it.
       { branch: "medl-1223-ai-app", path: join(root, "medl-worktrees", "medl-1223-ai-app") },
-      { branch: "harness/nytimes-4", path: join(root, "worktrees", "NYTIMES-4") },
     ]),
     repoOf("harness", null, branches),
     repoOf("hello-harness", null),
@@ -752,8 +788,9 @@ export async function bootWorld(opts: Pick<StartDaemonOptions, "delayMs" | "read
   });
   db.close();
 
-  const daemon = await startDaemon({ home, delayMs: opts.delayMs ?? 5, readyMs: opts.readyMs, logs: opts.logs, env: { ...fakeTools(root), ...opts.env } });
-  const stopDaemon = daemon.stop;
+  const daemonOptions: StartDaemonOptions = { home, delayMs: opts.delayMs ?? 5, readyMs: opts.readyMs, logs: opts.logs, env: { ...fakeTools(root), ...opts.env } };
+  const daemon = await startDaemon(daemonOptions);
+  let current = daemon;
   // Runs going: the daemon sweeps any it finds at startup, so these go in once it is up.
   withDb(home, (d) => {
     for (const r of busyRuns) {
@@ -764,14 +801,37 @@ export async function bootWorld(opts: Pick<StartDaemonOptions, "delayMs" | "read
     // HARNESS-903's compact run is the one that makes it `compacting`.
     d.query("UPDATE runs SET kind = 'compact', prompt = '/compact' WHERE session_id = $s AND status = 'running'").run({ $s: sessionIds.get("HARNESS-903")! });
   });
+  let planUsage = defaultUsage();
+  const listeners = new Set<(message: string) => void>();
+  const proxy = startDaemonProxy(daemon.base, {
+    intercept: (req) => (req.method === "GET" && new URL(req.url).pathname === "/usage" ? Response.json({ data: { drivers: planUsage } }) : undefined),
+    onClientMessage: (m) => listeners.forEach((fn) => fn(m)),
+  });
   return {
     ...daemon,
+    base: proxy.base,
+    daemonBase: daemon.base,
+    api: apiClient(proxy.base, daemon.token),
     projects,
     devUrl: dev.url,
     sessionOf: (key: string) => sessionIds.get(key) ?? "",
+    setUsage(drivers) {
+      planUsage = drivers;
+      proxy.push({ kind: "usage.updated", usage: { drivers } });
+    },
+    onClientMessage(fn) {
+      listeners.add(fn);
+      return () => listeners.delete(fn);
+    },
+    stopDaemon: () => current.stop({ termMs: 20000 }),
+    async startDaemonAgain() {
+      current = await startDaemon({ ...daemonOptions, port: daemon.port });
+    },
     stop: async (o) => {
+      proxy.stop();
       dev.stop();
-      await stopDaemon(o);
+      await current.stop({ termMs: o?.termMs });
+      rmSync(root, { recursive: true, force: true });
     },
   };
 }

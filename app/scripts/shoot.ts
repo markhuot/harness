@@ -1,4 +1,4 @@
-// Visual check: boot the mock service, launch the built app against it once per route/theme and
+// Visual check: boot the seeded world (the real daemon), launch the built app against it once per route/theme and
 // capture the window via webContents.capturePage (HARNESS_CAPTURE, see src/main/main.ts).
 //
 //   bun scripts/shoot.ts [outDir] [--only=board-light,ticket-dark] [--themes=harness-dark,catppuccin-mocha]
@@ -7,6 +7,7 @@
 // other themes are saved as <shot>-<theme id>.png.
 import { mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { bootWorld } from "./lib/world";
 import { findTheme } from "@harness/shared/themes";
 
 const appDir = resolve(import.meta.dir, "..");
@@ -18,25 +19,12 @@ if (unknown.length) throw new Error(`unknown theme ids: ${unknown.join(", ")}`);
 const themeLabel = (id: string) => (id === "harness-light" ? "light" : id === "harness-dark" ? "dark" : id);
 mkdirSync(outDir, { recursive: true });
 
-const port = 7700 + Math.floor(Math.random() * 90);
-const token = "shoot-token";
-const mock = Bun.spawn(["bun", join(appDir, "scripts/mock-service.ts")], {
-  env: { ...process.env, MOCK_PORT: String(port), MOCK_TOKEN: token },
-  stdout: "ignore",
-  stderr: "inherit",
-});
-const base = `http://127.0.0.1:${port}`;
-for (let i = 0; i < 50; i++) {
-  try {
-    if ((await fetch(base + "/health")).ok) break;
-  } catch {}
-  await Bun.sleep(100);
-}
-
-const projects = (await (await fetch(base + "/projects", { headers: { authorization: `Bearer ${token}` } })).json()).data as { id: string; key: string }[];
-const hello = projects.find((p) => p.key === "HELLOHARNESS")?.id ?? projects[0]!.id;
-const harness = projects.find((p) => p.key === "HARNESS")?.id ?? projects[0]!.id;
-const mh = projects.find((p) => p.key === "MH")?.id ?? projects[0]!.id;
+const world = await bootWorld({ delayMs: 70 });
+const { token } = world;
+const base = world.base;
+const hello = world.projects.HELLOHARNESS.id;
+const harness = world.projects.HARNESS.id;
+const mh = world.projects.MH.id;
 
 // Child tickets are hidden by default; this opens the search options and flips the switch.
 const showChildren = `document.querySelector("[data-testid=search-options]")?.click(); setTimeout(() => { document.querySelector("[data-testid=show-children]")?.click(); document.querySelector("[data-testid=search-options]")?.click(); }, 50)`;
@@ -217,7 +205,7 @@ const shots: { name: string; route: string; delay?: number; setup?: string }[] =
   { name: "settings-models-open", route: "#/settings/drivers", setup: openCombo("[data-testid=default-model]") },
   { name: "project-model-open", route: `#/project/${hello}/settings`, setup: openCombo("[data-testid=project-models]") },
   // Prompts: the list, a built-in prompt, a customized one, a draft that doesn't validate, the
-  // compare view, and a stored override that no longer validates (mock-service seeds both).
+  // compare view, and a stored override that no longer validates (the seeded world has both).
   { name: "prompts", route: "#/settings/prompts" },
   { name: "prompt-builtin", route: "#/settings/prompts", setup: openPrompt("system.work") },
   { name: "prompt-customized", route: "#/settings/prompts", setup: openPrompt("run.review") },
@@ -229,7 +217,7 @@ const shots: { name: string; route: string; delay?: number; setup?: string }[] =
   },
   { name: "prompt-broken", route: "#/settings/prompts", setup: openPrompt("system.files") },
   // Save and reset go through PATCH /settings and the reloaded catalog: Introduction turns
-  // Customized, then back to Built-in (so the mock ends as it started for the next theme's shots).
+  // Customized, then back to Built-in (so the world ends as it started for the next theme's shots).
   {
     name: "prompt-saved",
     route: "#/settings/prompts",
@@ -284,7 +272,7 @@ const shots: { name: string; route: string; delay?: number; setup?: string }[] =
     route: "#/board/all/ticket/NYTIMES-4",
     setup: `${panes([board, ticketPane("t1", "NYTIMES-4")], [0.6, 0.4], "t1")}; ${holdDrag("NYTIMES-3", "t1", 0.5, 0.85)}`,
   },
-  // Drafts last: these save drafts in the mock, which the shots above shouldn't show.
+  // Drafts last: these save drafts in the world, which the shots above shouldn't show.
   // A saved draft with Options open (Skip agent review on), and its Model combobox open.
   {
     name: "draft-options",
@@ -339,6 +327,6 @@ try {
     }
   }
 } finally {
-  mock.kill();
+  await world.stop();
 }
 console.log(`screenshots in ${outDir}`);

@@ -41,7 +41,8 @@ export function startDaemonProxy(target: string | (() => string), opts: DaemonPr
       }
       const answered = await opts.intercept?.(req);
       if (answered) return answered;
-      return fetch(upstream, { method: req.method, headers: req.headers, body: req.body, redirect: "manual" });
+      // A daemon that is down (a restart test) answers 502 rather than failing the proxy.
+      return fetch(upstream, { method: req.method, headers: req.headers, body: req.body, redirect: "manual" }).catch(() => new Response("the daemon is not answering", { status: 502 }));
     },
     websocket: {
       open(ws: Client) {

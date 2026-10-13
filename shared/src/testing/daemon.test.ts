@@ -90,3 +90,22 @@ describe("stopProcess and freePort", () => {
     }
   });
 });
+
+describe("startDaemon's environment", () => {
+  test("the app's launchd and supervisor variables don't reach the daemon, so PATH and the log stay the test's own", async () => {
+    const before = { launchd: process.env.HARNESS_LAUNCHD, supervisor: process.env.HARNESS_SUPERVISOR_PID };
+    process.env.HARNESS_LAUNCHD = "bundle";
+    process.env.HARNESS_SUPERVISOR_PID = "1";
+    const d = await startDaemon({ entry: fixture("env-daemon.ts"), env: { WORLD_MARK: "yes" } });
+    try {
+      const env = await d.api<Record<string, string | null>>("GET", "/env");
+      expect(env).toEqual({ launchd: null, supervisor: null, mark: "yes", home: d.home });
+    } finally {
+      await d.stop();
+      for (const [k, v] of [["HARNESS_LAUNCHD", before.launchd], ["HARNESS_SUPERVISOR_PID", before.supervisor]] as const) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+    }
+  });
+});
