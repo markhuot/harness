@@ -1,5 +1,25 @@
 import { describe, expect, test } from "bun:test";
-import { orderFiles, parseCounts, pool, splitArgs } from "./parallel";
+import { formatCost, heaviestLines, orderFiles, parseCounts, pool, splitArgs } from "./parallel";
+
+describe("cost lines", () => {
+  test("spawns most first, ties by name; no spawns leaves just the times", () => {
+    expect(formatCost({ ms: 12_340, cpuMs: 8_050, spawns: { bun: 2, git: 120, xcrun: 2 } })).toBe("[12.3s, cpu 8.1s; git 120, bun 2, xcrun 2]");
+    expect(formatCost({ ms: 100, cpuMs: 40, spawns: {} })).toBe("[0.1s, cpu 0.0s]");
+  });
+
+  test("heaviest files go by CPU, not wall time, and the total sums every file's spawns", () => {
+    const results = [
+      { file: "waits.test.ts", ms: 20_000, cpuMs: 1_000, spawns: {} },
+      { file: "git.test.ts", ms: 5_000, cpuMs: 9_000, spawns: { git: 300 } },
+      { file: "chrome.test.ts", ms: 10_000, cpuMs: 15_000, spawns: { git: 1, "Google Chrome": 1 } },
+    ];
+    expect(heaviestLines(results, 2)).toEqual([
+      "chrome.test.ts [10.0s, cpu 15.0s; git 1, Google Chrome 1]",
+      "git.test.ts [5.0s, cpu 9.0s; git 300]",
+      "all files: cpu 25.0s; git 301, Google Chrome 1",
+    ]);
+  });
+});
 
 describe("orderFiles", () => {
   test("unrecorded files first, then slowest first, ties by name", () => {
