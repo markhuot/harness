@@ -155,7 +155,12 @@ function hashTree(dir: string): string {
     for (const name of readdirSync(join(dir, rel)).sort()) {
       const p = join(rel, name);
       const full = join(dir, p);
-      const st = statSync(full);
+      let st;
+      try {
+        st = statSync(full);
+      } catch {
+        continue; // a dangling symlink or a file that vanished mid-walk: this note is advisory
+      }
       if (st.isDirectory()) walk(p);
       else {
         h.update(`${p}\0${st.size}\0`);
@@ -191,4 +196,49 @@ export async function listKept(tmp: string, homePrefix: string, alive: (s: Reuse
     if (state) out.push({ home, state, daemonAlive: await alive(state, home) });
   }
   return out;
+}
+
+/**
+ * The note to print when the built app is older than the Swift it was built from, or null. Compares
+ * mtimes (not hashes): the app has to be cheap to check on every --reuse. `sources` are directories
+ * (ios/Harness, ios/HarnessKit/Sources); only `.swift` files count.
+ */
+export function staleAppNote(appDir: string, sources: readonly string[]): string | null {
+  if (!existsSync(appDir)) return null;
+  let built: number;
+  try {
+    built = statSync(appDir).mtimeMs;
+  } catch {
+    return null;
+  }
+  let newest: { file: string; mtime: number } | null = null;
+  const walk = (dir: string) => {
+    let names: string[];
+    try {
+      names = readdirSync(dir);
+    } catch {
+      return;
+    }
+    for (const name of names) {
+      const full = join(dir, name);
+      let st;
+      try {
+        st = statSync(full);
+      } catch {
+        continue; // a dangling symlink or a file that vanished mid-walk: this note is advisory
+      }
+      if (st.isDirectory()) walk(full);
+      else if (name.endsWith(".swift") && st.mtimeMs > built && (!newest || st.mtimeMs > newest.mtime)) newest = { file: full, mtime: st.mtimeMs };
+    }
+  };
+  for (const d of sources) walk(d);
+  if (!newest) return null;
+  return `the built app predates ${(newest as { file: string }).file} and other Swift changes may be missing from it; add --rebuild to build the current sources`;
+}
+
+/** Takes the exclusive lock on a kept home, or says who holds it. */
+export function claimKept(name: string, lock: (name: string) => boolean, holder: (name: string) => { pid: number; command: string } | null): string | null {
+  if (lock(name)) return null;
+  const h = holder(name);
+  return `another --reuse run holds ${name}${h ? ` (pid ${h.pid}: ${h.command})` : ""}; wait for it to finish, or run without --reuse to get a daemon of your own`;
 }

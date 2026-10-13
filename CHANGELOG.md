@@ -41,6 +41,9 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 - For people working on Harness: `bun run sim snapshots` (and `bun run verify`'s snapshot layer) now takes any free simulator of the pool, or the one a parent `sim with-lock` already holds, instead of always waiting on `harness-shared` while `harness-shared-2` sits idle.
 - For people working on Harness: a simulator lock can no longer be deleted out from under the process that just took it (a race when two runs cleared the same dead holder), and a run whose new pool simulator was refused for low disk now creates it once disk frees up instead of waiting up to 30 minutes on a held one.
+- For people working on Harness: two `sim-check --reuse` runs started in the same checkout no longer attach to the same kept daemon at once; the second stops with a message naming the run that holds it. The claim re-checks the home after taking the lock, so a run that just ended can't leave the next one attached to a deleted home.
+- For people working on Harness: `sim-check` falls back to a fixed wait when an iPhone app's debug probe file is left over from an earlier launch or the app crashed, instead of failing with "timed out: the app to settle" after 10 seconds. It waits for a probe that isn't up yet, and only a probe that never answers turns the probe off for the run; a stale file costs one fixed wait.
+- For people working on Harness: `sim-check --reuse` prints a note when Swift files under `ios/Harness` or `ios/HarnessKit` are newer than the built app it is about to install, so a stale build isn't mistaken for current code. Add `--rebuild` to build the current sources.
 - For people working on Harness: the clone-sweep test in `browser/chrome.test.ts` no longer fails when other test files launch Chrome at the same moment. It relaunches until Chrome's code-sign clone is attributed to it, which is best-effort when several Chromes start together.
 
 ### Removed

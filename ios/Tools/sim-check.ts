@@ -139,15 +139,15 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { buildPairUrl, reviewPassed, type ActivityEntry, type Project, type PromptEntry, type SpecRevision, type Ticket, type TicketDetail, type TicketPage, type TranscriptEntry, type Watcher } from "@harness/shared";
 import { findTheme } from "@harness/shared/themes";
 import { freePort, startDaemon as startDaemonShared, until as untilShared, type TestDaemon } from "@harness/shared/testing/daemon";
 import { startDaemonProxy } from "@harness/shared/testing/proxy";
 import { git, readSetting, seedRepo, seedDummySettings, setSessionContext, startCompactRun as startCompactRunAt, writeSetting } from "@harness/shared/testing/seed";
-import { acquire, acquireReady, daemonAnswers, checkDisk, ensureDevice, markKept, isSharedDevice, reap, SHARED_IPAD_DEVICE, writeRunOwner } from "./sim";
+import { acquire, acquireReady, daemonAnswers, checkDisk, ensureDevice, lockHolder, markKept, isSharedDevice, reap, releaseLock, SHARED_IPAD_DEVICE, tryLock, writeRunOwner } from "./sim";
 import { CheckSelector, noMatchMessage, parseGrep } from "./sim-grep";
-import { chooseKept, hashApp, hashService, listKept, MARKER_KEY, planApp, REUSE_VERSION, writeReuseState, type ReuseState, type Want } from "./sim-reuse";
+import { chooseKept, claimKept, staleAppNote, hashApp, hashService, listKept, MARKER_KEY, planApp, readReuseState, REUSE_VERSION, writeReuseState, type ReuseState, type Want } from "./sim-reuse";
 import { PROBE_FILE, parseState, settled as probeSettled, waitFor as probeWaitFor, type DebugState } from "./probe";
 import { parsePrepare, plan as planRun, resolveShot, SEED_NAMES, type Entry, type Plan, type SeedName } from "./sim-select";
 
@@ -460,10 +460,9 @@ async function atRest(udid: string, fallbackMs: number): Promise<void> {
   if (noProbe.has(udid)) return void (await Bun.sleep(fallbackMs));
   // Quiet for no longer than the sleep it replaces (capped at 300 ms), counted from the state's last change.
   const s = await probeSettled(() => probe(udid), { quietMs: Math.min(fallbackMs, 300) });
-  if (!s) {
-    noProbe.add(udid); // not a SIM_CHECK build: don't wait for it again
-    await Bun.sleep(fallbackMs);
-  }
+  if (!s) noProbe.add(udid); // never answered: not a SIM_CHECK build, don't wait for it again
+  // A stale or frozen file only sleeps this once: the app may be writing again by the next action.
+  if (!s || s === "frozen") await Bun.sleep(fallbackMs);
 }
 
 // ---------------------------------------------------------------- simulators
@@ -862,22 +861,40 @@ let claudeRecord = "";
 const HOME_PREFIX = "harness-sim-home-";
 /** The port range kept daemons live in, so they stay findable. */
 const SIM_PORTS = { from: 7830, span: 60 };
-/** Whether the kept daemon is still the one that state names: its process is up and it answers on its port. */
+/** The lock held on the kept home this run attached to (--reuse); released when the run ends. */
+let keptLock = "";
 /** The daemon this run's checks talk to: the kept one for --reuse when one fits, otherwise a new one. */
 async function startDaemon(want: Want) {
   if (reuse) {
     const kept = await listKept(tmpdir(), HOME_PREFIX, daemonAnswers);
-    const { pick, notes } = chooseKept(kept, want);
+    const chosen = chooseKept(kept, want);
+    let pick = chosen.pick;
+    const notes = chosen.notes;
     for (const n of notes) console.log(`--reuse: ${n}`);
     // A kept home whose daemon is gone can't be reused and nothing else will clear it (reap leaves kept homes alone).
     for (const k of kept) {
-      if (k.daemonAlive) continue;
+      if (k.daemonAlive || lockHolder(basename(k.home))) continue; // a live run holds it
       try {
         process.kill(k.state.daemonPid, 0);
       } catch {
         rmSync(k.home, { recursive: true, force: true });
         rmSync(k.state.scratch, { recursive: true, force: true });
         console.log(`--reuse: removed ${k.home}, whose daemon had stopped`);
+      }
+    }
+    if (pick) {
+      // Two --reuse runs on one home would share the daemon's tickets and fight over the app and pairing.
+      const busy = claimKept(basename(pick.home), tryLock, lockHolder);
+      if (busy) throw new Error(`--reuse: ${busy}`);
+      // The run that held the home may have ended (and deleted it, or kept newer state) between listKept and the lock.
+      const fresh = existsSync(join(pick.home, "keep")) ? readReuseState(pick.home) : null;
+      if (!fresh || !(await daemonAnswers(fresh, pick.home))) {
+        releaseLock(basename(pick.home));
+        console.log(`--reuse: ${pick.home} changed while it was being claimed; starting a new daemon`);
+        pick = null;
+      } else {
+        pick = { ...pick, state: fresh };
+        keptLock = basename(pick.home);
       }
     }
     if (pick) {
@@ -4642,7 +4659,11 @@ async function walk(udids: string[], s: Seeded, selection: Plan): Promise<boolea
 // ---------------------------------------------------------------- build
 async function buildApp() {
   // --reuse takes the app already built (the point is not waiting for xcodebuild); --rebuild builds first.
-  if ((flag("no-build") || (reuse && !flag("rebuild"))) && existsSync(appPath)) return;
+  if ((flag("no-build") || (reuse && !flag("rebuild"))) && existsSync(appPath)) {
+    const note = reuse && !flag("rebuild") ? staleAppNote(appPath, [join(here, "Harness"), join(here, "HarnessKit", "Sources")]) : null;
+    if (note) console.log(`--reuse: ${note}`);
+    return;
+  }
   // XcodeGen, then the Release simulator build into ios/build/dd (its log in ios/build/sim.log).
   console.log("building the app, Release (simulator)…");
   await sh(["bun", join(here, "Tools", "build.ts"), "sim"], { cwd: repoRoot });
@@ -4803,6 +4824,7 @@ try {
     removeTemp();
     await timed("simulator shutdown", shutDownDevices);
   }
+  if (keptLock) releaseLock(keptLock);
   reportTimings();
   console.log(failed ? "sim-check finished with failures" : "sim-check done");
 }
