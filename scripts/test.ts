@@ -3,9 +3,11 @@
 //
 //   bun scripts/test.ts [args for each package's test script]
 
+import { useRealGit } from "../shared/src/testing/git-path";
 import { formatSkips, summarizeSkips } from "../shared/src/testing/skip";
 
 async function main(args: string[]): Promise<number> {
+  useRealGit();
   const proc = Bun.spawn([process.execPath, "run", "--filter", "*", "test", ...args], { stdout: "pipe", stderr: "pipe", stdin: "inherit" });
   let output = "";
   const pump = async (stream: ReadableStream<Uint8Array>, sink: NodeJS.WriteStream) => {

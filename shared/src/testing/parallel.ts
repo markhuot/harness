@@ -13,11 +13,13 @@
 // processes it started, by program (spawn-count.ts), and the run ends with the heaviest files by
 // CPU. Wall time swings with whatever else the machine is doing; CPU and spawn counts don't, so they
 // are what to compare when making a file faster. The full profile goes to
-// node_modules/.cache/harness-test-profile.json.
+// node_modules/.cache/harness-test-profile.json. Every file runs with the real git on PATH, not
+// macOS's xcrun shim (git-path.ts).
 
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { availableParallelism, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { useRealGit } from "./git-path";
 import { SKIP_MARKER, skipReasons } from "./skip";
 import { tallySpawns } from "./spawn-count";
 
@@ -135,6 +137,7 @@ async function runFile(file: string, flags: string[], children: Set<Bun.Subproce
 
 async function main(args: string[]): Promise<number> {
   const { flags, filters } = splitArgs(args);
+  useRealGit();
   if (filters.length > 0) {
     return Bun.spawn([process.execPath, "test", ...args], { stdio: ["inherit", "inherit", "inherit"] }).exited;
   }
@@ -145,7 +148,9 @@ async function main(args: string[]): Promise<number> {
   try {
     times = JSON.parse(readFileSync(timesPath, "utf8"));
   } catch {}
-  const jobs = Number(process.env.HARNESS_TEST_JOBS) || Math.max(2, Math.min(8, Math.floor(availableParallelism() / 2)));
+  // The files mostly wait (on Chrome, git, timers): at half the cores the suite used about 4 of 10,
+  // and its wall time was the sum of the files' times over the job count.
+  const jobs = Number(process.env.HARNESS_TEST_JOBS) || Math.max(2, Math.min(8, availableParallelism() - 2));
 
   const children = new Set<Bun.Subprocess>();
   for (const sig of ["SIGINT", "SIGTERM"] as const) {
