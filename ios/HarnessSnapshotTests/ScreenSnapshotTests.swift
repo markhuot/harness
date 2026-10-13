@@ -31,11 +31,15 @@ final class ScreenSnapshotTests: XCTestCase {
     }
 
     /// Renders `content` in both appearances and checks each against its reference.
-    private func snapshot<V: View>(_ name: String, router: Router = Router(), file: StaticString = #filePath, line: UInt = #line, @ViewBuilder _ content: () -> V) async throws {
+    private func snapshot<V: View>(_ name: String, router makeRouter: () -> Router = { Router() }, file: StaticString = #filePath, line: UInt = #line, @ViewBuilder _ content: () -> V) async throws {
         let view = content()
         for appearance in SnapshotRenderer.Appearance.allCases {
             let scheme: ColorScheme = appearance == .dark ? .dark : .light
             let image: UIImage
+            // A fresh router and clean defaults per render: tearing down the light render's window
+            // closes the tickets on the shared router, so the dark one would show the board.
+            Self.resetPersistedState()
+            let router = makeRouter()
             do {
                 image = try await SnapshotRenderer.render(
                     world.environment(view, router: router, scheme: scheme).preferredColorScheme(scheme), appearance: appearance)
@@ -52,15 +56,19 @@ final class ScreenSnapshotTests: XCTestCase {
     }
 
     func testTicketSpec() async throws {
-        let router = Router()
-        router.openTicket(key: "HAR-7", tab: .spec)
-        try await snapshot("ticket-spec", router: router) { RootView() }
+        try await snapshot("ticket-spec", router: {
+            let router = Router()
+            router.openTicket(key: "HAR-7", tab: .spec)
+            return router
+        }) { RootView() }
     }
 
     func testTicketActivity() async throws {
-        let router = Router()
-        router.openTicket(key: "HAR-7", tab: .activity)
-        try await snapshot("ticket-activity", router: router) { RootView() }
+        try await snapshot("ticket-activity", router: {
+            let router = Router()
+            router.openTicket(key: "HAR-7", tab: .activity)
+            return router
+        }) { RootView() }
     }
 
     func testSheetFrame() async throws {
@@ -75,11 +83,13 @@ final class ScreenSnapshotTests: XCTestCase {
     }
 
     func testDock() async throws {
-        let router = Router()
-        router.openTicket(key: "HAR-7", tab: .spec)
-        router.openTicket(key: "HAR-3", tab: .activity)
-        router.openTicket(key: "HAR-5", tab: nil)
-        router.dockSheet()
-        try await snapshot("dock", router: router) { RootView() }
+        try await snapshot("dock", router: {
+            let router = Router()
+            router.openTicket(key: "HAR-7", tab: .spec)
+            router.openTicket(key: "HAR-3", tab: .activity)
+            router.openTicket(key: "HAR-5", tab: nil)
+            router.dockSheet()
+            return router
+        }) { RootView() }
     }
 }

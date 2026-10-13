@@ -35,3 +35,17 @@ test("failureLines keeps the assertion messages and drops the noise", () => {
   ].join("\n");
   expect(failureLines(output)).toEqual(output.split("\n").slice(1, 3));
 });
+
+test("no two reference images in a device folder are identical (a screen that rendered the wrong thing)", async () => {
+  const { readdirSync, readFileSync } = await import("node:fs");
+  const { createHash } = await import("node:crypto");
+  const root = new URL("../HarnessSnapshotTests/References/", import.meta.url).pathname;
+  for (const device of readdirSync(root)) {
+    const seen = new Map<string, string>();
+    for (const file of readdirSync(`${root}${device}`).filter((f) => f.endsWith(".png"))) {
+      const hash = createHash("md5").update(readFileSync(`${root}${device}/${file}`)).digest("hex");
+      expect(seen.get(hash) ? `${device}/${file} duplicates ${device}/${seen.get(hash)}` : "").toBe("");
+      seen.set(hash, file);
+    }
+  }
+});
