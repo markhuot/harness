@@ -35,6 +35,7 @@ export const FROZEN = [
   "browserInput",
   "fileViewer",
   "heroCollapse",
+  "launchBodies",
   "mentionCaret",
   "mobileBoardColumns",
   "mobileConnection",

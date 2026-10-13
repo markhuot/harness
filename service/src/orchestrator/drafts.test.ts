@@ -3,7 +3,7 @@
 // POST /tickets/:key/submit launches it the way createTicket would have.
 
 import { describe, expect, test } from "bun:test";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { HarnessEvent, RunKind, Ticket } from "@harness/shared";
 import { executeTool } from "../drivers/types";
@@ -96,6 +96,29 @@ describe("submitting a draft", () => {
     expect(h.runKinds(t)[0]).toBe("work");
     expect(h.driver.calls.find((c) => c.kind === "work")?.prompt).toBe("Fix the footer");
     expect(h.statusLines(t).slice(0, 2)).toEqual(["Draft saved", "Ticket created"]);
+  });
+
+  // sim-check's New session mention and slash checks used to prove these through the sheet: the draft the
+  // app saves is submitted with {"start":true|false}, and the run gets the spec as typed plus its mentions.
+  test("a draft's @-mentioned file reaches the run and is announced; the spec stays as typed", async () => {
+    const h = setup();
+    writeFileSync(join(h.web.path, "README.md"), "# Hello\n");
+    const d = await h.draft("Summarize @README.md");
+    const t = await h.orch.submitTicket(d.key, { start: true });
+    await h.orch.idle();
+    const prompt = h.driver.calls.find((c) => c.kind === "work")!.prompt;
+    expect(prompt).toStartWith("Summarize @README.md\n\n<mentioned-files>");
+    expect(prompt).toContain('<file path="README.md">\n# Hello\n</file>');
+    expect(h.statusLines(t)).toContain("Attached @README.md");
+    expect(h.get(t).spec).toBe("Summarize @README.md");
+  });
+
+  test("a draft that starts with a slash command reaches the agent with the command first, as typed", async () => {
+    const h = setup();
+    const d = await h.draft("/code-walk this branch");
+    await h.orch.submitTicket(d.key, { start: true });
+    await h.orch.idle();
+    expect(h.driver.calls.find((c) => c.kind === "work")!.prompt).toBe("/code-walk this branch");
   });
 
   test("start false: stays in planning with a plan run", async () => {

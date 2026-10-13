@@ -87,6 +87,37 @@ describe("http api", () => {
     expect((await client.updateSettings({ saveOnBlur: false })).saveOnBlur).toBe(false);
   });
 
+  // The contract seam with the iPhone app: HarnessClientTests encodes these same bodies from the app's types.
+  // sim-check used to prove the service took them by tapping Plan first, the Save on blur switch and Send.
+  test("every launch, Save on blur and message body HarnessKit builds is accepted and does what it says", async () => {
+    const fixtures = JSON.parse(readFileSync(join(import.meta.dir, "../../../ios/HarnessKit/Tests/HarnessKitTests/Fixtures/launchBodies.json"), "utf8")) as Record<
+      string,
+      { name: string; output: Record<string, unknown> }[]
+    >;
+    const { client, dir, h } = await boot();
+    const p = await client.createProject({ path: dir });
+    for (const c of fixtures.saveOnBlurPatchCases!) {
+      expect((await client.request<{ saveOnBlur: boolean }>("PATCH", "/settings", c.output)).saveOnBlur, c.name).toBe(c.output.saveOnBlur as boolean);
+      expect((await client.getSettings()).saveOnBlur, c.name).toBe(c.output.saveOnBlur as boolean);
+    }
+    for (const c of fixtures.submitBodyCases!) {
+      const d = await client.createTicket({ projectId: p.id, spec: "Plan the readme", draft: true });
+      const t = await client.request<{ draft: boolean; status: string }>("POST", `/tickets/${d.key}/submit`, c.output);
+      await h.orchestrator.idle();
+      const kinds = (await client.getTicket(d.key)).runs.map((r) => r.kind);
+      expect([t.draft, kinds[0]], c.name).toEqual([false, c.output.start ? "work" : "plan"]);
+      // Plan first stays in planning; Start session has moved on to its work.
+      if (!c.output.start) expect(t.status, c.name).toBe("planning");
+    }
+    for (const c of fixtures.messageBodyCases!) {
+      const t = await client.createTicket({ projectId: p.id, spec: "hello", start: false });
+      await h.orchestrator.idle();
+      await client.request("POST", `/tickets/${t.key}/messages`, c.output);
+      await h.orchestrator.idle();
+      expect((await client.getTicket(t.key)).ticket.status, c.name).toBe("planning"); // a message never moves the ticket
+    }
+  });
+
   test("PUT /file writes the file the viewer shows, for projects and tickets", async () => {
     const { client, dir } = await boot();
     writeFileSync(join(dir, "a.txt"), "\uFEFFone\r\ntwo\r\n");

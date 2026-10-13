@@ -99,6 +99,25 @@ struct PromptsTests {
         #expect(Prompts.promptDraftError(c.input.entry, draft: c.input.draft) == c.output)
     }
 
+    /// Save is on only for a changed, valid draft that isn't mid-save: the Save button and the keyboard's submit share it.
+    @Test func canSaveNeedsAChangedValidIdleDraft() throws {
+        let entry = try JSONDecoder().decode(
+            PromptEntry.self,
+            from: Data(#"{"id":"system.work","group":"system","label":"Work","description":"","variables":[{"name":"branch","description":""}],"builtin":"Work on {{branch}}.","override":null,"overrideError":null}"#.utf8)
+        )
+        #expect(Prompts.canSave(entry, draft: "Work on {{branch}}. Mind it.", saving: false))
+        #expect(!Prompts.canSave(entry, draft: "Work on {{brnch}}. Mind it.", saving: false), "an unknown variable can't save")
+        #expect(!Prompts.canSave(entry, draft: entry.builtin, saving: false), "unchanged from the built-in")
+        #expect(!Prompts.canSave(entry, draft: "Work on {{branch}}. Mind it.", saving: true), "already saving")
+    }
+
+    @Test func aTappedVariableIsInsertedWrappedInBraces() throws {
+        #expect(Prompts.variableToken("key") == "{{key}}")
+        let got = Prompts.insertText("then the diff.", start: 14, end: 14, insert: Prompts.variableToken("key"))
+        #expect(got.text == "then the diff.{{key}}")
+        #expect(got.caret == 21)
+    }
+
     @Test(arguments: Fixture.cases("prompts", "promptStartTextCases", input: PromptEntry.self, output: String.self))
     func promptStartText(_ c: Fixture.Case<PromptEntry, String>) {
         #expect(Prompts.promptStartText(c.input) == c.output)

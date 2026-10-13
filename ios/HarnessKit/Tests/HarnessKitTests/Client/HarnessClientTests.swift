@@ -167,6 +167,36 @@ struct HarnessClientRequestTests {
         #expect(try bodyJSON(r) == json(#"{"projectId":"prj_1","spec":"Do it","start":false}"#))
     }
 
+    // The bodies the app sends for launching a draft, flipping Save on blur and sending a message. The
+    // service's http.test.ts posts the same Fixtures/launchBodies.json, so the two can't drift.
+    struct LaunchStart: Decodable, Sendable { let start: Bool }
+    struct LaunchBlur: Decodable, Sendable { let saveOnBlur: Bool }
+    struct LaunchText: Decodable, Sendable { let text: String }
+
+    @Test(arguments: Fixture.cases("launchBodies", "submitBodyCases", input: LaunchStart.self, output: JSONValue.self))
+    func submitDraftBody(_ c: Fixture.Case<LaunchStart, JSONValue>) async throws {
+        let t = FakeTransport(status: 200, body: try envelope(protocolSample("Ticket")))
+        _ = try await client(t).submitTicket("NY-1", SubmitTicketBody(start: c.input.start))
+        #expect(path(t) == "/tickets/NY-1/submit")
+        #expect(try bodyJSON(t.last) == c.output)
+    }
+
+    @Test(arguments: Fixture.cases("launchBodies", "saveOnBlurPatchCases", input: LaunchBlur.self, output: JSONValue.self))
+    func saveOnBlurPatchBody(_ c: Fixture.Case<LaunchBlur, JSONValue>) async throws {
+        let t = FakeTransport(status: 200, body: try envelope(protocolSample("PublicSettings")))
+        _ = try await client(t).updateSettings(SettingsPatch(saveOnBlur: c.input.saveOnBlur))
+        #expect(t.last?.method == "PATCH")
+        #expect(path(t) == "/settings")
+        #expect(try bodyJSON(t.last) == c.output)
+    }
+
+    @Test(arguments: Fixture.cases("launchBodies", "messageBodyCases", input: LaunchText.self, output: JSONValue.self))
+    func messageBody(_ c: Fixture.Case<LaunchText, JSONValue>) async throws {
+        let t = FakeTransport(status: 200, body: try envelope(protocolSample("Ticket")))
+        _ = try await client(t).sendMessage("NY-1", text: c.input.text)
+        #expect(try bodyJSON(t.last) == c.output)
+    }
+
     /// Only the text: no `log` (messages don't go into Activity) and no `move` (a message never moves the ticket).
     @Test func sendMessageSendsOnlyTheText() async throws {
         let t = FakeTransport(status: 200, body: try envelope(protocolSample("Ticket")))
