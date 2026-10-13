@@ -103,6 +103,29 @@
 //   --usage: the sidebar's plan-usage gauges, against a proxy that fakes GET /usage (and pushes usage.updated)
 //      in front of the daemon. Add --shots to keep its screenshots; --ipad for the split view's sidebar.
 //
+//   --grep=<pattern>: runs only the checks whose names match, in whichever sequence you chose
+//      (e.g. `--sheets --grep="dirty file"`, or `--only=sheet-checks --grep=dock`). A pattern is a
+//      case-insensitive substring, or a regular expression written /like this/flags. The rest are
+//      skipped, not run and not reported. A check that leans on what an earlier one left on screen
+//      declares it (`needs` in check()), and those earlier checks run first as setup, so a selected
+//      check never runs against state nobody built. A pattern that matches nothing fails, listing the
+//      nearest check names. Applies to the modes and chains that run checks; screens (--screens, --shot)
+//      have no checks to pick.
+//
+//   --reuse: attaches to what the last `--keep` run left (its daemon, seeded tickets and paired app)
+//      instead of building, installing, resetting the keychain, seeding and pairing again, so
+//      editing one check and rerunning it with --grep takes seconds, not minutes. It uses the app
+//      already built (no build; add --rebuild to build first). If the built app differs from the one
+//      installed (a hash of its files, kept with the state) or the simulators differ, it installs and
+//      pairs again but still uses the daemon and seeds. With no kept state, or state for another
+//      mode or seed, a dead daemon or an old format, it says why and does a full run instead. It
+//      keeps its state when it ends, as --keep does, so the next --reuse finds it. Checks change
+//      tickets, so a reused run starts from what the last one left: `bun run sim reap --kept` stops
+//      kept daemons and removes their dirs when you want a clean start. Not available with --usage.
+//
+//      bun run sim-check --sheets --keep                    # the first run: full, and left running
+//      bun run sim-check --sheets --reuse --grep="dirty file"   # then edit and rerun in seconds
+//
 //   It runs on the shared harness-shared simulator under its lock, e.g. `--only=connect`; --udid
 //      still names a specific existing device.
 //
@@ -111,7 +134,7 @@
 //
 //   Every run prints its slowest steps and writes them all to timings.json in its screens folder.
 //
-//   DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer bun ios/Tools/sim-check.ts [--no-build] [--app=path] [--shards=N] [--udid=…,…] [--keep] [--screens | --only=name,name | --shot=link [--prepare=…]] [--themes=id,id] [--paging] [--stick] [--keyboard] [--mentions] [--drafts] [--attachments] [--sheets] [--memory] [--usage] [--ipad]
+//   DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer bun ios/Tools/sim-check.ts [--no-build] [--app=path] [--shards=N] [--udid=…,…] [--keep | --reuse [--rebuild]] [--grep=pattern] [--help] [--screens | --only=name,name | --shot=link [--prepare=…]] [--themes=id,id] [--paging] [--stick] [--keyboard] [--mentions] [--drafts] [--attachments] [--sheets] [--memory] [--usage] [--ipad]
 import { AsyncLocalStorage } from "node:async_hooks";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
@@ -120,6 +143,8 @@ import { buildPairUrl, reviewPassed, type ActivityEntry, type Project, type Prom
 import { findTheme } from "@harness/shared/themes";
 import { Database } from "bun:sqlite";
 import { acquire, checkDisk, ensureDevice, markKept, isSharedDevice, reap, SHARED_DEVICE, SHARED_IPAD_DEVICE, writeRunOwner } from "./sim";
+import { CheckSelector, noMatchMessage, parseGrep } from "./sim-grep";
+import { chooseKept, hashApp, listKept, MARKER_KEY, planApp, REUSE_VERSION, writeReuseState, type ReuseState, type Want } from "./sim-reuse";
 import { parsePrepare, plan as planRun, resolveShot, SEED_NAMES, type Entry, type Plan, type SeedName } from "./sim-select";
 
 /** ios/: screenshots go to its build/ folder. */
@@ -128,6 +153,13 @@ const repoRoot = resolve(here, "..");
 const args = process.argv.slice(2);
 const flag = (name: string) => args.includes(`--${name}`);
 const opt = (name: string) => args.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3);
+if (flag("help") || args.includes("-h")) {
+  // The header comment above is the help: its lines up to the usage one.
+  const src = readFileSync(import.meta.path, "utf8").split("\n");
+  const end = src.findIndex((l) => l.startsWith("import "));
+  console.log(src.slice(0, end).map((l) => l.replace(/^\/\/ ?/, "")).join("\n"));
+  process.exit(0);
+}
 const DEVELOPER_DIR = process.env.DEVELOPER_DIR ?? "/Applications/Xcode-27.0.0.app/Contents/Developer";
 const env = { ...process.env, DEVELOPER_DIR };
 const ipad = args.includes("--ipad");
@@ -147,9 +179,15 @@ const attachmentsOnly = flag("attachments");
 const draftsOnly = flag("drafts");
 const sheetsOnly = flag("sheets");
 const usageOnly = flag("usage");
+/** --reuse attaches to the last --keep run's daemon, seeds and app, and keeps them in turn. */
+const reuse = flag("reuse");
+const keep = flag("keep") || reuse;
 const walkThrough = !(pagingOnly || stickOnly || keyboardOnly || mentionsOnly || attachmentsOnly || draftsOnly || sheetsOnly || memoryOnly || usageOnly);
 if (ipad && !walkThrough && !sheetsOnly && !usageOnly) throw new Error("--ipad takes the walk-through's screens, --sheets or --usage, not --paging, --stick, --keyboard, --mentions, --drafts or --attachments");
+if (reuse && usageOnly) throw new Error("--reuse doesn't apply to --usage: its proxy and pair link are new every run");
+if (opt("grep") !== undefined) parseGrep(opt("grep")!); // a bad pattern fails before anything starts
 const shardCount = walkThrough ? Math.max(1, Number(opt("shards") ?? 1) || 1) : 1;
+if (opt("grep") !== undefined && shardCount > 1) throw new Error("--grep runs checks in order on one simulator; drop --shards");
 for (const id of themeShots) if (!findTheme(id)) throw new Error(`--themes: unknown theme ${id}`);
 checkDisk();
 
@@ -188,18 +226,40 @@ const results: Result[] = [];
 /** The running check's hard time cap: every `until` inside it gives up once the cap passes. */
 const capOf = new AsyncLocalStorage<{ deadline: number; name: string }>();
 const CHECK_CAP_MS = 90_000;
+type CheckBody = { fn: () => Promise<string | boolean>; capMs: number };
+/** --grep: which checks run. Every check is announced to it, in source order, so setup can be found. */
+const selector = new CheckSelector<CheckBody>(opt("grep") === undefined ? null : parseGrep(opt("grep")!));
+async function runCheck(name: string, { fn, capMs }: CheckBody): Promise<Result> {
+  try {
+    const v = await timed(`check: ${name}`, () => capOf.run({ deadline: Date.now() + capMs, name }, fn));
+    return [name, v !== false, typeof v === "string" ? v : ""];
+  } catch (e) {
+    return [name, false, (e as Error).message.split("\n")[0]!];
+  }
+}
 /**
  * Runs one named check; a thrown error or `false` fails it. The result prints right away. A check
  * that outlives `capMs` fails at its next wait instead of stalling every step after it.
+ *
+ * `needs` names (exactly) the earlier checks that leave the screen as this one starts from. Under
+ * --grep they run first as setup when this one is selected; without it every check runs in order
+ * and `needs` changes nothing. A check that skips setup because it starts with its own `goto` needs
+ * nothing.
  */
-async function check(name: string, fn: () => Promise<string | boolean>, capMs = CHECK_CAP_MS) {
-  let r: Result;
-  try {
-    const v = await timed(`check: ${name}`, () => capOf.run({ deadline: Date.now() + capMs, name }, fn));
-    r = [name, v !== false, typeof v === "string" ? v : ""];
-  } catch (e) {
-    r = [name, false, (e as Error).message.split("\n")[0]!];
+async function check(name: string, fn: () => Promise<string | boolean>, capMs = CHECK_CAP_MS, needs?: readonly string[]) {
+  const { run, setup } = selector.visit(name, needs, { fn, capMs });
+  if (!run) return;
+  for (const s of setup) {
+    const r = await runCheck(s.name, s.body);
+    console.log(`  ${r[1] ? "·" : "✗"} setup for "${name}": ${r[0]}${r[2] ? ` — ${r[2]}` : ""}`);
+    if (!r[1]) {
+      const failed: Result = [name, false, `its setup "${s.name}" failed: ${r[2]}`];
+      results.push(failed);
+      console.log(`✗ ${failed[0]} — ${failed[2]}`);
+      return;
+    }
   }
+  const r = await runCheck(name, { fn, capMs });
   results.push(r);
   console.log(`${r[1] ? "✓" : "✗"} ${r[0]}${r[2] ? ` — ${r[2]}` : ""}`);
 }
@@ -445,7 +505,7 @@ const toShutDown = new Set<string>();
  */
 const toDelete = new Set<string>();
 async function shutDownDevices() {
-  if (flag("keep") || !toShutDown.size) return;
+  if (keep || !toShutDown.size) return;
   const udids = [...toShutDown];
   toShutDown.clear();
   await Promise.all(udids.map((u) => sh(["xcrun", "simctl", "shutdown", u], { allowFail: true })));
@@ -735,13 +795,17 @@ async function pair(udid: string, pairUrl: string) {
 }
 
 // ---------------------------------------------------------------- daemon
-const home = mkdtempSync(join(tmpdir(), "harness-sim-home-"));
-const scratch = mkdtempSync(join(tmpdir(), "harness-sim-projects-"));
-const port = 7830 + Math.floor(Math.random() * 60);
-const base = `http://127.0.0.1:${port}`;
-console.log(`daemon: ${base} (HARNESS_HOME=${home})`);
-// Lets a later run's reap tell this run's dirs (and daemon) from a dead run's.
-writeRunOwner(home, scratch);
+// Set by startDaemon, the first thing the run does: a fresh daemon in new temp dirs, or (--reuse) the
+// kept one in its own.
+let home = "";
+let scratch = "";
+let port = 0;
+let base = "";
+/** The daemon's process, when this run started it; a reused daemon belongs to the run that kept it. */
+let daemon: ReturnType<typeof Bun.spawn> | null = null;
+let daemonPid = 0;
+/** The kept state a --reuse run attached to. */
+let attached: ReuseState | null = null;
 // --mentions' /command check runs a project on the claude-code driver, pointed at the fake CLI:
 // it answers `initialize` with SLASH_COMMANDS and records each agent run's prompt.
 const SLASH_COMMANDS = [
@@ -749,19 +813,70 @@ const SLASH_COMMANDS = [
   { name: "commit-and-pr", description: "Commit and PR (user)", argumentHint: "" },
   { name: "vercel:deploy", description: "(vercel) Deploy the current project to Vercel.", argumentHint: "[prod]" },
 ];
-const claudeRecord = join(home, "fake-claude.ndjson");
-const fakeClaude = mentionsOnly
-  ? {
-      HARNESS_CLAUDE_BIN: join(repoRoot, "service/src/drivers/__fixtures__/fake-claude.ts"),
-      FAKE_CLAUDE_COMMANDS: JSON.stringify(SLASH_COMMANDS),
-      FAKE_CLAUDE_RECORD: claudeRecord,
+let claudeRecord = "";
+const HOME_PREFIX = "harness-sim-home-";
+/** Whether the kept daemon is still the one that state names: its process is up and it answers on its port. */
+async function daemonAnswers(s: ReuseState, dir: string): Promise<boolean> {
+  try {
+    process.kill(s.daemonPid, 0);
+  } catch {
+    return false;
+  }
+  if (!existsSync(join(dir, "token"))) return false;
+  return fetch(`http://127.0.0.1:${s.port}/health`, { signal: AbortSignal.timeout(2000) }).then((r) => r.ok, () => false);
+}
+/** The daemon this run's checks talk to: the kept one for --reuse when one fits, otherwise a new one. */
+async function startDaemon(want: Want) {
+  if (reuse) {
+    const kept = await listKept(tmpdir(), HOME_PREFIX, daemonAnswers);
+    const { pick, notes } = chooseKept(kept, want);
+    for (const n of notes) console.log(`--reuse: ${n}`);
+    // A kept home whose daemon is gone can't be reused and nothing else will clear it (reap leaves kept homes alone).
+    for (const k of kept) {
+      if (k.daemonAlive) continue;
+      try {
+        process.kill(k.state.daemonPid, 0);
+      } catch {
+        rmSync(k.home, { recursive: true, force: true });
+        rmSync(k.state.scratch, { recursive: true, force: true });
+        console.log(`--reuse: removed ${k.home}, whose daemon had stopped`);
+      }
     }
-  : {};
-const daemon = Bun.spawn(["bun", join(repoRoot, "service/src/daemon.ts")], {
-  env: { ...process.env, HARNESS_HOME: home, HARNESS_PORT: String(port), HARNESS_DUMMY_DRIVER: "1", HARNESS_DUMMY_DELAY_MS: "1", ...fakeClaude },
-  stdout: Bun.file(join(home, "daemon.out")),
-  stderr: Bun.file(join(home, "daemon.err")),
-});
+    if (pick) {
+      home = pick.home;
+      scratch = pick.state.scratch;
+      port = pick.state.port;
+      base = `http://127.0.0.1:${port}`;
+      daemonPid = pick.state.daemonPid;
+      attached = pick.state;
+      claudeRecord = join(home, "fake-claude.ndjson");
+      console.log(`--reuse: attached to the daemon at ${base} (pid ${daemonPid}, HARNESS_HOME=${home})`);
+      return;
+    }
+    console.log("--reuse: nothing to reuse; this run does everything and keeps its state for the next one");
+  }
+  home = mkdtempSync(join(tmpdir(), HOME_PREFIX));
+  scratch = mkdtempSync(join(tmpdir(), "harness-sim-projects-"));
+  port = 7830 + Math.floor(Math.random() * 60);
+  base = `http://127.0.0.1:${port}`;
+  console.log(`daemon: ${base} (HARNESS_HOME=${home})`);
+  // Lets a later run's reap tell this run's dirs (and daemon) from a dead run's.
+  writeRunOwner(home, scratch);
+  claudeRecord = join(home, "fake-claude.ndjson");
+  const fakeClaude = mentionsOnly
+    ? {
+        HARNESS_CLAUDE_BIN: join(repoRoot, "service/src/drivers/__fixtures__/fake-claude.ts"),
+        FAKE_CLAUDE_COMMANDS: JSON.stringify(SLASH_COMMANDS),
+        FAKE_CLAUDE_RECORD: claudeRecord,
+      }
+    : {};
+  daemon = Bun.spawn(["bun", join(repoRoot, "service/src/daemon.ts")], {
+    env: { ...process.env, HARNESS_HOME: home, HARNESS_PORT: String(port), HARNESS_DUMMY_DRIVER: "1", HARNESS_DUMMY_DELAY_MS: "1", ...fakeClaude },
+    stdout: Bun.file(join(home, "daemon.out")),
+    stderr: Bun.file(join(home, "daemon.err")),
+  });
+  daemonPid = daemon.pid;
+}
 // --usage: the dummy driver reports no plan usage, and the real ones read the account's login, so
 // the app talks to this proxy instead: it forwards everything to the daemon (HTTP and the event
 // socket) except GET /usage, which it answers from `usageReport`, and it can push usage.updated.
@@ -830,12 +945,12 @@ const usageProxy = usageOnly
       } as never,
     })
   : null;
-const usageBase = usageProxy ? `http://127.0.0.1:${usageProxy.port}` : base;
+const usageBaseOf = () => (usageProxy ? `http://127.0.0.1:${usageProxy.port}` : base);
 // The temp dirs go however the run ends (the finally at the bottom, process.exit, an uncaught
 // error, Ctrl-C), except with --keep, which leaves the daemon running in them. A run killed
 // outright (SIGKILL) can't clean up; the next run's reap (Tools/sim.ts) does it instead.
 const removeTemp = () => {
-  if (flag("keep")) return;
+  if (keep || !home) return;
   rmSync(home, { recursive: true, force: true });
   rmSync(scratch, { recursive: true, force: true });
 };
@@ -846,8 +961,8 @@ process.on("exit", removeTemp);
 for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
   process.on(sig, async () => {
     console.error(`sim-check: ${sig}, stopping the daemon, shutting down its simulators and removing ${home}`);
-    if (!flag("keep")) {
-      daemon.kill("SIGKILL");
+    if (!keep) {
+      daemon?.kill("SIGKILL");
       Bun.spawnSync(["pkill", "-f", `user-data-dir=${join(home, "chrome-profile")}`]);
       await Promise.race([shutDownDevices(), Bun.sleep(15000)]);
     }
@@ -1224,6 +1339,7 @@ async function seedPaging() {
 
 /** --paging: real taps against the seeded Done history. */
 async function pagingChecks(udid: string, p: Awaited<ReturnType<typeof seedPaging>>) {
+  selector.sequence();
   const has = async (prefix: string) => (await labels(udid)).some((l) => l.startsWith(prefix));
   // A quick flick, so the list carries on with momentum.
   const swipeUp = () => axe("swipe", "--start-x", "200", "--start-y", "720", "--end-x", "200", "--end-y", "220", "--duration", "0.1", "--udid", udid);
@@ -1364,6 +1480,7 @@ async function undock(udid: string) {
  * sends it away, and New session docks as "New session".
  */
 async function sheetChecks(udid: string, p: { project: Project; conductor: Ticket }, column?: string) {
+  selector.sequence("declared");
   const key = p.conductor.key;
   const [kid, sibling] = (await api<TicketDetail>("GET", `/tickets/${key}`)).children;
   if (!kid || !sibling) throw new Error(`${key} has no children`);
@@ -1377,7 +1494,11 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
   const dock = () => dockSheet(udid);
   const say = async (what: string) => console.log(`    ${what}: ${(await labels(udid)).slice(0, 40).join(" | ")}`);
 
-  await check(`${column ? "a board card" : "a ticket link"} opens its ticket in a sheet over the board`, async () => {
+  // The checks below that start from the previous one's screen name it in `needs` (see check()).
+  const OPEN = `${column ? "a board card" : "a ticket link"} opens its ticket in a sheet over the board`;
+  const DOCKED = "dragging the sheet to the bottom docks it under the board, titled by the ticket on top";
+  const RESTORED = "the dock survives a tab change, and a tap restores the sheet where it was";
+  await check(OPEN, async () => {
     await goto(udid, BOARD);
     await undock(udid);
     if (column) {
@@ -1438,11 +1559,11 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
       throw e;
     });
     return `${kid.key} → back to ${key}`;
-  });
+  }, CHECK_CAP_MS, [OPEN]);
   // Where the child's composer sat before docking: restored, it sits there again, not lifted by
   // the inset the system gave the docked sheet.
   let composerBefore: AXNode["frame"] | null = null;
-  await check("dragging the sheet to the bottom docks it under the board, titled by the ticket on top", async () => {
+  await check(DOCKED, async () => {
     // Pushed again, so restoring has a path to bring back.
     await tapWhere(udid, (l) => l.includes(kid.key));
     await until("the child", async () => onChild(await labels(udid)), 8000);
@@ -1478,8 +1599,8 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
     }
     await shootBoth(udid, "sheet-docked");
     return label;
-  });
-  await check("the dock survives a tab change, and a tap restores the sheet where it was", async () => {
+  }, CHECK_CAP_MS, [OPEN]);
+  await check(RESTORED, async () => {
     await goto(udid, "harness://settings");
     if (!(await labels(udid)).some(isDock)) throw new Error("no dock on Settings");
     await goto(udid, BOARD);
@@ -1500,7 +1621,7 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
       });
     }
     return `${kid.key} restored`;
-  });
+  }, CHECK_CAP_MS, [DOCKED]);
   await check("the dock's close button sends it away without opening it", async () => {
     await dock();
     // Recorded, since a sheet that grows to full size on its way out is gone before the
@@ -1522,7 +1643,7 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
     await goto(udid, `harness://ticket/${encodeURIComponent(kid.key)}`);
     await until("the child", async () => onChild(await labels(udid)), 8000);
     return `closed, the board held still (${frames.length} frames, top half changed by at most ${moved.toFixed(1)})`;
-  });
+  }, CHECK_CAP_MS, [RESTORED]);
   // The ticket sheet is one rigid piece while a finger drags it: the system shrinks the sheet from
   // the top, and the ticket inside must only slide with it, never lay out again (a header that
   // resizes, a transcript that snaps back to its bottom). Each frame of a slow drag, held down
@@ -1704,6 +1825,7 @@ async function seedDockable(projectId: string, n: number): Promise<Ticket[]> {
  * and a swipe down close only the top; the dock comes back after a relaunch; Projects closes them all.
  */
 async function dockStackChecks(udid: string, p: { project: Project; conductor: Ticket }) {
+  selector.sequence("declared");
   const key = p.conductor.key;
   const kid = (await api<TicketDetail>("GET", `/tickets/${key}`)).children[0];
   if (!kid) throw new Error(`${key} has no children`);
@@ -1720,8 +1842,17 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
   const row = (k: string) => (l: string) => l.startsWith(`${k} · `);
   const keyOf = (label: string) => label.split(",")[0]!;
   let composerBefore: AXNode["frame"] | null = null;
+  // Each check but the first picks up the dock the one before left, so it needs that one (see check()).
+  const JOINS = "a second ticket joins the dock as a second card, the newest at the bottom with its ref and title";
+  const MENU = "a long press on the ticket's title lists the other docked tickets and switches";
+  const SWIPE = "a swipe along the dock moves to the next ticket and back";
+  const MORE = "with 3 docked, two cards and \"1 more…\" expand into the list, whose oldest opens at its saved path";
+  const CLOSE = "a card's ✕ closes only that ticket";
+  const AWAY = "a swipe away from the presented sheet closes it and leaves the next as the docked card, no sheet";
+  const DOWN = "a swipe down on the dock closes one and leaves the rest docked";
+  const RELAUNCH = "the dock comes back after the app is quit and relaunched";
 
-  await check("a second ticket joins the dock as a second card, the newest at the bottom with its ref and title", async () => {
+  await check(JOINS, async () => {
     await goto(udid, BOARD);
     await undock(udid);
     await goto(udid, `harness://ticket/${encodeURIComponent(key)}?tab=children`, (l) => l.some((x) => x.includes(kid.key)));
@@ -1753,7 +1884,7 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
     await appearance(udid, "light");
     return `${keyOf(cards[0]!.AXLabel!)} over ${keyOf(label)}`;
   });
-  await check("a long press on the ticket's title lists the other docked tickets and switches", async () => {
+  await check(MENU, async () => {
     // Tapping the first card opens its ticket (the sheet check covers keeping its path and composer).
     await tapWhere(udid, card(kid.key));
     moved(udid);
@@ -1778,8 +1909,8 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
       throw e;
     });
     return `${kid.key} → ${b.key}, still presented`;
-  });
-  await check("a swipe along the dock moves to the next ticket and back", async () => {
+  }, CHECK_CAP_MS, [JOINS]);
+  await check(SWIPE, async () => {
     const first = await dockSheet(udid);
     const bar = (await findElement(udid, (l) => l === first))!;
     const y = String(Math.round(bar.frame.y + bar.frame.height / 2));
@@ -1797,8 +1928,8 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
     await swipe(W * 0.15, W * 0.65);
     await until("the first back on top", async () => (await top()) === first, 5000);
     return `${keyOf(first)} → ${keyOf(second)} → back`;
-  });
-  await check("with 3 docked, two cards and \"1 more…\" expand into the list, whose oldest opens at its saved path", async () => {
+  }, CHECK_CAP_MS, [MENU]);
+  await check(MORE, async () => {
     // b on top, so the conductor's sheet (with the child pushed) is the oldest.
     if (!(await top())?.startsWith(`${b.key}, `)) {
       await tapWhere(udid, card(b.key));
@@ -1844,8 +1975,8 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
       throw e;
     });
     return `2 cards and 1 more; the list of 3; ${kid.key} came back on its pushed screen`;
-  });
-  await check("a card's ✕ closes only that ticket", async () => {
+  }, CHECK_CAP_MS, [SWIPE]);
+  await check(CLOSE, async () => {
     const before = await dockSheet(udid);
     const n = await count();
     await tapWhere(udid, `Close ${keyOf(before)}`);
@@ -1855,8 +1986,8 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
     }, 6000);
     if ((await count()) !== n - 1) throw new Error(`${await count()} docked after ✕, not ${n - 1}`);
     return `${n} → ${n - 1}`;
-  });
-  await check("a swipe away from the presented sheet closes it and leaves the next as the docked card, no sheet", async () => {
+  }, CHECK_CAP_MS, [MORE]);
+  await check(AWAY, async () => {
     // Open the top card's ticket, then swipe it away fast: the system dismissal closes it.
     const before = (await top())!;
     const n = await count();
@@ -1880,8 +2011,8 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
     await dockSheet(udid);
     if ((await count()) !== n) throw new Error(`${await count()} docked after docking ${closed} again, not ${n}`);
     return `${keyOf(before)} closed, ${keyOf(after)} docked`;
-  });
-  await check("a swipe down on the dock closes one and leaves the rest docked", async () => {
+  }, CHECK_CAP_MS, [CLOSE]);
+  await check(DOWN, async () => {
     const before = (await top())!;
     const n = await count();
     await swipeDockDown(udid, (await findElement(udid, (l) => l === before))!);
@@ -1896,8 +2027,8 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
     if (!onBoard(await labels(udid))) throw new Error("the board isn't showing over the dock");
     await shot(udid, "dock-after-swipe-light");
     return `${keyOf(before)} closed, ${keyOf(after)} on top, ${n - 1} left`;
-  });
-  await check("the dock comes back after the app is quit and relaunched", async () => {
+  }, CHECK_CAP_MS, [AWAY]);
+  await check(RELAUNCH, async () => {
     const before = (await top())!;
     const n = await count();
     await simctl("terminate", udid, BUNDLE);
@@ -1915,14 +2046,14 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
     lastUrl.set(udid, BOARD);
     await shot(udid, "dock-relaunched-light");
     return `${keyOf(after)} on top of ${n}`;
-  });
+  }, CHECK_CAP_MS, [DOWN]);
   await check("Projects closes every docked ticket", async () => {
     await tapWhere(udid, "Projects");
     await until("the Projects sheet", async () => (await labels(udid)).includes("Inbox"), 5000);
     await goto(udid, BOARD);
     if ((await labels(udid)).some(isDock)) throw new Error("a dock is still there after Projects");
     return "all closed";
-  });
+  }, CHECK_CAP_MS, [RELAUNCH]);
 }
 
 /**
@@ -1931,6 +2062,7 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
  * switches between them, opening it again focuses the card it has, and its ✕ closes only it.
  */
 async function fileDockChecks(udid: string, p: { project: Project; conductor: Ticket }, ipad: boolean) {
+  selector.sequence("declared");
   const key = p.conductor.key;
   const link = `harness://file/${DOCK_FILE}?project=${encodeURIComponent(p.project.id)}`;
   const { width: W } = (await tree(udid)).reduce((a, b) => (b.frame.height > a.frame.height ? b : a)).frame;
@@ -1957,7 +2089,11 @@ async function fileDockChecks(udid: string, p: { project: Project; conductor: Ti
       return dot();
     }, 20000, 1000);
   };
-  await check("a file opened from a link is its own card next to the ticket's", async () => {
+  // Checks that pick up the cards the first ones left name them in `needs` (see check()); the rest start with their own goto.
+  const OPENED = "a file opened from a link is its own card next to the ticket's";
+  const SWITCH = ipad ? "tapping the ticket's card and the file's card switches between them" : "a swipe along the dock walks from the file to the ticket and back";
+  const RELINK = "linking other lines of the docked file scrolls its editor there";
+  await check(OPENED, async () => {
     await goto(udid, BOARD);
     if (ipad) {
       // The corner cards and the panel each have a ✕: close them until none is left.
@@ -1989,7 +2125,7 @@ async function fileDockChecks(udid: string, p: { project: Project; conductor: Ti
     }
     return `${DOCK_FILE} and ${key} docked`;
   });
-  await check(ipad ? "tapping the ticket's card and the file's card switches between them" : "a swipe along the dock walks from the file to the ticket and back", async () => {
+  await check(SWITCH, async () => {
     if (ipad) {
       await tapWhere(udid, ticketCard);
       await until("the ticket in the panel", async () => (await labels(udid)).includes(`Close ${key}`), 8000);
@@ -2010,7 +2146,7 @@ async function fileDockChecks(udid: string, p: { project: Project; conductor: Ti
     await swipe(W * 0.15, W * 0.65);
     await until("the file back on top", async () => ((await labels(udid)).filter(isDock).at(-1) ?? "").startsWith(`${DOCK_FILE}, `), 5000);
     return "file → ticket → file";
-  });
+  }, CHECK_CAP_MS, [OPENED]);
   await check("opening the docked file again focuses it instead of adding a card", async () => {
     await goto(udid, link);
     await until("the editor", editorUp, 12000);
@@ -2019,8 +2155,8 @@ async function fileDockChecks(udid: string, p: { project: Project; conductor: Ti
     const expected = ipad ? 1 : 2;
     if ((await count()) !== expected) throw new Error(`${await count()} docked after a second open, expected ${expected}`);
     return "no second card";
-  });
-  await check("linking other lines of the docked file scrolls its editor there", async () => {
+  }, CHECK_CAP_MS, [OPENED]);
+  await check(RELINK, async () => {
     const marked = () => nodes(udid).then((n) => n.find((x) => x.AXUniqueId === "file-editor")?.AXValue ?? "");
     await goto(udid, `${link}#L3`);
     await until("the editor", editorUp, 12000);
@@ -2037,7 +2173,7 @@ async function fileDockChecks(udid: string, p: { project: Project; conductor: Ti
     const expected = ipad ? 1 : 2;
     if ((await count()) !== expected) throw new Error(`${await count()} docked after relinking lines, expected ${expected}`);
     return "line three, then line four, same card";
-  });
+  }, CHECK_CAP_MS, [OPENED]);
   await check("a dirty file card's Close asks, and Discard closes the card", async () => {
     const dot = async () => (await labels(udid)).includes("Unsaved changes");
     // The iPhone left the file docked at the bottom card: bring it up.
@@ -2069,7 +2205,7 @@ async function fileDockChecks(udid: string, p: { project: Project; conductor: Ti
     await Bun.sleep(1500);
     if (readFileSync(join(scratch, "sheets", DOCK_FILE), "utf8").includes("DISCARD_ME")) throw new Error("Discard saved the edit to the file");
     return "Close → Discard closed the card, and the file is as it was";
-  });
+  }, CHECK_CAP_MS, [RELINK]);
   await check("a failed save as a file card closes keeps the edits: the card comes back with them and Save retries", async () => {
     const dir = join(scratch, "sheets");
     const onDisk = () => readFileSync(join(dir, DOCK_FILE), "utf8");
@@ -2130,6 +2266,7 @@ async function fileDockChecks(udid: string, p: { project: Project; conductor: Ti
  * footprint three times), so only `--memory` runs it.
  */
 async function memoryChecks(udid: string, p: { project: Project }) {
+  selector.sequence();
   const count = async () => dockCount(await labels(udid));
   await check("past the five live ones, more docked tickets cost about nothing", async () => {
     // A parked ticket is the Router's root and path plus the board's card: 15 more of them must not
@@ -2197,6 +2334,7 @@ async function cardInCorner(udid: string, k: string, edge: number, H: number, le
  * closes just it. How many cards fit and when they collapse are DockMetricsTests'.
  */
 async function cardStackChecks(udid: string, s: { project: Project; conductor: Ticket }) {
+  selector.sequence();
   const ts = await seedDockable(s.project.id, 3);
   const panelOn = (l: string[], k: string) => l.includes(RESIZE) && l.includes(`Close ${k}`);
   const cards = async () => (await nodes(udid)).filter((n) => n.AXLabel && isDock(n.AXLabel));
@@ -2325,6 +2463,7 @@ async function dragPanelEdge(udid: string, toX: number): Promise<number> {
  * button moves its ticket into a window of its own.
  */
 async function panelChecks(udid: string, s: { project: Project; conductor: Ticket }) {
+  selector.sequence();
   const key = s.conductor.key;
   const kid = (await api<TicketDetail>("GET", `/tickets/${key}`)).children[0];
   if (!kid) throw new Error(`${key} has no children`);
@@ -2826,6 +2965,7 @@ async function seedStick() {
 
 /** --stick: real swipes on the Transcript and Activity tabs. */
 async function stickChecks(udid: string, p: Awaited<ReturnType<typeof seedStick>>) {
+  selector.sequence();
   const key = p.ticket.key;
   const H = (await tree(udid))[0]!.frame.height;
   // The list's viewport: below the tab strip, above the composer.
@@ -3049,6 +3189,7 @@ async function keyboardChecks(udid: string, p: Awaited<ReturnType<typeof seedTic
 }
 
 async function keyboardChecksWithSoftwareKeyboard(udid: string, p: Awaited<ReturnType<typeof seedTicket>>) {
+  selector.sequence();
   // Types by tapping the on-screen keys (letters, space, return). AXe's `type` and `key` send
   // hardware key events, which put iOS in hardware-keyboard mode for the rest of the run.
   const typeOnKeys = async (text: string) => {
@@ -3222,6 +3363,7 @@ async function seedMentions() {
 
 /** --mentions: real typing and taps in New session and the composer. */
 async function mentionChecks(udid: string, p: Awaited<ReturnType<typeof seedMentions>>) {
+  selector.sequence();
   const has = async (label: string) => (await labels(udid)).includes(label);
   const texts = async (key: string) => {
     const d = await api<TicketDetail>("GET", `/tickets/${key}`);
@@ -3332,6 +3474,7 @@ async function mentionChecks(udid: string, p: Awaited<ReturnType<typeof seedMent
 
 /** --drafts: real typing in the composer against message drafts saved and changed on the service. */
 async function draftChecks(udid: string, p: Awaited<ReturnType<typeof seedTicket>>) {
+  selector.sequence();
   const key = p.ticket.key;
   const saved = async () => (await api<TicketDetail>("GET", `/tickets/${encodeURIComponent(key)}`)).ticket.messageDraft ?? null;
   /** The composer's text, as VoiceOver reads its value. */
@@ -3374,6 +3517,7 @@ async function draftChecks(udid: string, p: Awaited<ReturnType<typeof seedTicket
  * usage.updated. Screenshots go with --shots.
  */
 async function usageChecks(udid: string) {
+  selector.sequence();
   const showSidebar = async () => {
     if (ipad) await toggleSidebar(udid, true);
     else await goto(udid, "harness://projects", (l) => l.includes("Inbox"));
@@ -3533,6 +3677,7 @@ async function seedAttachments() {
 
 /** --attachments: inline images in the Spec tab, then the viewer (open, page, close, swipe down), in one visit. */
 async function attachmentChecks(udid: string, p: Awaited<ReturnType<typeof seedAttachments>>) {
+  selector.sequence();
   const has = async (pred: (l: string) => boolean) => (await labels(udid)).some(pred);
   const counter = (n: number) => (l: string) => l.startsWith(`${n} of 5`);
   const viewerOpen = () => has((l) => / of 5/.test(l));
@@ -3941,6 +4086,7 @@ const IPAD_ROUTES = new Set(["board-no-sidebar", "ticket-spec", "ticket-tear-off
  * No shot and no theme flip, and no taps unless the screen is `interactive`. One result for all.
  */
 async function visitScreens(udid: string, list: Screen[]) {
+  selector.sequence();
   const crashed: string[] = [];
   await check(`${list.length} routes open without crashing the app`, async () => {
     for (const sc of list) {
@@ -3989,7 +4135,7 @@ async function oneShot(udid: string, url: string) {
 type Chain = Entry & { kind: "chain"; seconds: number; run: (udid: string) => Promise<void> };
 function interactionChains(s: Seeded): Chain[] {
   const k = (t: Ticket) => encodeURIComponent(t.key);
-  const chain = (name: string, needs: SeedName[], seconds: number, run: (udid: string) => Promise<void>, optIn = false): Chain => ({ name, kind: "chain", needs, seconds, run, optIn });
+  const chain = (name: string, needs: SeedName[], seconds: number, run: (udid: string) => Promise<void>, optIn = false): Chain => ({ name, kind: "chain", needs, seconds, run: (udid) => (selector.sequence(), run(udid)), optIn });
   return [
     // --sheets owns these (the iPhone's ticket sheet and the dock), and they run here only when named.
     chain("sheet-checks", ["conductor"], 40, (udid) => sheetChecks(udid, s), true),
@@ -4449,6 +4595,7 @@ function interactionChains(s: Seeded): Chain[] {
  * and the filter survives opening a row and coming back (Subagents.filter has the rules).
  */
 async function agentsFilterChecks(udid: string, s: Seeded) {
+  selector.sequence();
   const url = `harness://ticket/${encodeURIComponent(s.tasks.key)}?tab=agents`;
   const isTaskRow = (l: string) => l.startsWith("Count to 30");
   const isAgentRow = (l: string) => /^Sub-task \d+, /.test(l);
@@ -4507,7 +4654,8 @@ async function walk(udids: string[], s: Seeded, selection: Plan): Promise<boolea
 
 // ---------------------------------------------------------------- build
 async function buildApp() {
-  if (flag("no-build") && existsSync(appPath)) return;
+  // --reuse takes the app already built (the point is not waiting for xcodebuild); --rebuild builds first.
+  if ((flag("no-build") || (reuse && !flag("rebuild"))) && existsSync(appPath)) return;
   // XcodeGen, then the Release simulator build into ios/build/dd (its log in ios/build/sim.log).
   console.log("building the app, Release (simulator)…");
   await sh(["bun", join(here, "Tools", "build.ts"), "sim"], { cwd: repoRoot });
@@ -4515,13 +4663,9 @@ async function buildApp() {
 
 // ---------------------------------------------------------------- main
 let failed = false;
+let reusable: Pick<ReuseState, "modeKey" | "seeds" | "seeded" | "udids" | "appHash"> | null = null;
 try {
   mkdirSync(shots, { recursive: true });
-  await timed("daemon healthy", () => until("daemon healthy", async () => (await fetch(`${base}/health`)).ok && existsSync(join(home, "token")), 20000, 50));
-  token = readFileSync(join(home, "token"), "utf8").trim();
-  // The simulators boot, the app builds and the daemon seeds all at once.
-  // The app installs as soon as it's built and its simulator is up.
-  const pairUrl = buildPairUrl(usageBase, token);
   // What the run does and which tickets it needs, decided before anything is seeded: the entries
   // are built against stand-ins, since their links name keys that don't exist yet.
   const stub = { key: "X", id: "X", name: "X" };
@@ -4533,28 +4677,75 @@ try {
       ? { steps: [], seeds: new Set(resolveShot(shotLink, () => "X").needs) }
       : planRun(entriesFor(dry), { only, screens: flag("screens") });
   const seedNeeds = selection?.seeds ?? new Set<SeedName>();
-  const pairAll = (udids: string[]) => timed("pair", () => Promise.all(udids.map((u) => pair(u, pairUrl))));
-  const devices = Promise.all([timed("simulators", () => pickDevices(shardCount)), timed("build", buildApp)]).then(([udids]) =>
-    timed("install", () => Promise.all(udids.map(install))).then(() => udids),
-  );
+  // Which seed a kept daemon must hold for --reuse to attach to it.
+  const modeKey = `${walkThrough ? "walk" : pagingOnly ? "paging" : stickOnly ? "stick" : keyboardOnly ? "keyboard" : mentionsOnly ? "mentions" : attachmentsOnly ? "attachments" : draftsOnly ? "drafts" : "sheets"}${ipad ? "-ipad" : ""}`;
+  await startDaemon({ modeKey, seeds: [...seedNeeds] });
+  await timed("daemon healthy", () => until("daemon healthy", async () => (await fetch(`${base}/health`)).ok && existsSync(join(home, "token")), 20000, 50));
+  token = readFileSync(join(home, "token"), "utf8").trim();
+  // The simulators boot, the app builds and the daemon seeds all at once.
+  // The app installs as soon as it's built and its simulator is up.
+  const pairUrl = buildPairUrl(usageBaseOf(), token);
+  /** Whether the app is paired from before (--reuse found it as the kept run left it); false: install and pair as a new run does. */
+  let appKept = false;
+  const pairAll = (udids: string[]) =>
+    timed("pair", async () => {
+      await Promise.all(udids.map((u) => pair(u, pairUrl)));
+      await Promise.all(udids.map((u) => simctl("spawn", u, "defaults", "write", BUNDLE, MARKER_KEY, home)));
+    });
+  const installAll = (udids: string[]) => timed("install", () => Promise.all(udids.map(install)));
+  /** --reuse with the kept app: still this build, on these devices, and still paired for this daemon. */
+  const reuseApp = async (udids: string[]): Promise<boolean> => {
+    if (!attached) return false;
+    const markers = await Promise.all(udids.map((u) => sh(["xcrun", "simctl", "spawn", u, "defaults", "read", BUNDLE, MARKER_KEY], { allowFail: true }).then((m) => m || null)));
+    const plan = planApp(attached, { udids, appHash: builtHash, home, markers });
+    if (plan.install) {
+      console.log(`--reuse: installing the app again (${plan.reason}); the daemon and its seeds stay`);
+      return false;
+    }
+    // Brought up on the board it was left on; one that doesn't show a board with tickets isn't paired.
+    await Promise.all(udids.map((u) => simctl("launch", u, BUNDLE)));
+    if (hasAxe) {
+      await Promise.all(udids.map((u) => (lastUrl.delete(u), simctl("openurl", u, BOARD))));
+      const shown = await Promise.all(udids.map((u) => whenShown(u, undefined, (l) => onBoard(l) && l.some((x) => /^[A-Z]+-\d+ /.test(x)), 30000)));
+      if (shown.some((x) => !x)) {
+        console.log("--reuse: the kept app doesn't show its board; installing and pairing again");
+        return false;
+      }
+    }
+    for (const u of udids) lastUrl.set(u, BOARD);
+    return true;
+  };
+  let builtHash = "";
+  const built = timed("build", buildApp).then(() => (builtHash = hashApp(appPath)));
+  const devices = Promise.all([timed("simulators", () => pickDevices(shardCount)), built]).then(async ([udids]) => {
+    if (await reuseApp(udids)) appKept = true;
+    else await installAll(udids);
+    return udids;
+  });
   // The walk-through pairs as soon as its tickets exist, while their runs settle; the modes once seeded.
-  const paired = walkThrough ? devices.then((udids) => ticketsUp.then(() => pairAll(udids)).then(() => udids)) : devices;
+  const paired = walkThrough
+    ? devices.then((udids) => ticketsUp.then(() => (appKept ? undefined : pairAll(udids))).then(() => udids))
+    : devices;
+  /** The seed: a --reuse run takes what the kept run seeded (the daemon still holds the tickets), anything else makes it. */
+  const seeding = <T,>(label: string, fn: () => Promise<T>): Promise<T> => (attached ? (ticketsCreated(), Promise.resolve(attached.seeded as T)) : timed(label, fn));
   const [udids, seeded, paged, sticky, typing, mentioned, media, drafting, sheeted, usageSeed] = await Promise.all([
     paired,
-    selection ? timed("seed", () => seed(seedNeeds)) : null,
-    pagingOnly ? timed("seed paging", seedPaging) : null,
-    stickOnly ? timed("seed stick", seedStick) : null,
-    keyboardOnly ? timed("seed keyboard", () => seedTicket("KEYS", "Warm up").then(async (s) => (await seedPrompts(), s))) : null,
-    mentionsOnly ? timed("seed mentions", seedMentions) : null,
-    attachmentsOnly ? timed("seed attachments", seedAttachments) : null,
-    draftsOnly ? timed("seed drafts", () => seedTicket("DRFT", "Warm up")) : null,
-    sheetsOnly || memoryOnly ? timed("seed sheets", seedSheets) : null,
+    selection ? seeding("seed", () => seed(seedNeeds)) : null,
+    pagingOnly ? seeding("seed paging", seedPaging) : null,
+    stickOnly ? seeding("seed stick", seedStick) : null,
+    keyboardOnly ? seeding("seed keyboard", () => seedTicket("KEYS", "Warm up").then(async (s) => (await seedPrompts(), s))) : null,
+    mentionsOnly ? seeding("seed mentions", seedMentions) : null,
+    attachmentsOnly ? seeding("seed attachments", seedAttachments) : null,
+    draftsOnly ? seeding("seed drafts", () => seedTicket("DRFT", "Warm up")) : null,
+    sheetsOnly || memoryOnly ? seeding("seed sheets", seedSheets) : null,
     usageOnly ? timed("seed usage", () => seedTicket("USE", "Warm up")) : null,
   ]);
   if (seeded) console.log(`simulators ${udids.join(", ")}; seeded ${[...seedNeeds].join(", ") || "no tickets"}`);
   if (paged) console.log(`simulator ${udids[0]}; seeded ${paged.history.length + 4} done tickets in ${paged.project.key}, needle ${paged.needle.key}, conductor ${paged.conductor.key}`);
 
-  if (!walkThrough) await pairAll(udids);
+  if (!walkThrough && !appKept) await pairAll(udids);
+  // What --reuse needs, left in the kept home when the run ends (see the finally).
+  reusable = { modeKey, seeds: [...seedNeeds], seeded: [seeded, paged, sticky, typing, mentioned, media, drafting, sheeted].find((x) => x) ?? null, udids, appHash: builtHash };
 
   const udid = udids[0]!;
   if (paged) await timed("mode: paging", () => pagingChecks(udid, paged));
@@ -4585,25 +4776,33 @@ try {
     const real: Plan = { seeds: selection.seeds, steps: selection.steps.map((st) => ({ action: st.action, entry: byName.get(st.entry.name)! })) };
     if (!(await walk(udids, seeded, real))) failed = true;
   }
+  if (selector.hasMatcher && selector.matched === 0) {
+    console.error(noMatchMessage(opt("grep")!, selector.names));
+    failed = true;
+  }
   if (results.some((r) => !r[1])) failed = true;
   // Back to light, and quit the app: once the daemon is gone it would spin reconnecting.
-  await Promise.all(udids.map((u) => Promise.all([appearance(u, "light"), flag("keep") ? null : simctl("terminate", u, BUNDLE).catch(() => {})])));
+  await Promise.all(udids.map((u) => Promise.all([appearance(u, "light"), keep ? null : simctl("terminate", u, BUNDLE).catch(() => {})])));
 } catch (e) {
   failed = true;
   console.error("sim-check failed:", (e as Error).message);
   console.error(readFileSync(join(home, "daemon.err"), "utf8").slice(-2000));
 } finally {
-  if (flag("keep")) {
+  if (keep) {
     markKept(home);
-    console.log(`--keep: daemon still running at ${base} (pid ${daemon.pid}); token in ${home}/token`);
+    if (reusable?.seeded) {
+      writeReuseState(home, { version: REUSE_VERSION, savedAt: Date.now(), port, scratch, daemonPid, ...reusable });
+      console.log("kept for --reuse: rerun with --reuse (and --grep=<check>) to attach to it; `bun run sim reap --kept` clears it");
+    }
+    console.log(`--keep: daemon still running at ${base} (pid ${daemonPid}); token in ${home}/token`);
   } else {
     await timed("daemon shutdown", async () => {
       // The daemon closes its Chrome on SIGTERM, which can take a while; a Chrome killed mid-close
       // leaks its code-sign clone, and one left running outlives this run (and its deleted home).
-      daemon.kill("SIGTERM");
-      if ((await Promise.race([daemon.exited.then(() => true), Bun.sleep(20000).then(() => false)])) === false) {
+      daemon!.kill("SIGTERM");
+      if ((await Promise.race([daemon!.exited.then(() => true), Bun.sleep(20000).then(() => false)])) === false) {
         console.log("the daemon didn't stop in 20 s; killing it and its Chrome");
-        daemon.kill("SIGKILL");
+        daemon!.kill("SIGKILL");
         Bun.spawnSync(["pkill", "-f", `user-data-dir=${join(home, "chrome-profile")}`]);
       }
     });

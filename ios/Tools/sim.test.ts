@@ -344,3 +344,14 @@ test("reap shuts down unheld devices under their lock, stops an orphaned daemon 
   expect(readdirSync(tmp).sort()).toEqual(["harness-sim-home-kept", "harness-sim-home-live", "harness-sim-projects-live"]);
   releaseLock("sim-check 3", locks);
 });
+
+test("planReap leaves kept homes alone, and stops their daemons and removes them with includeKept (reap --kept)", () => {
+  const T = "/tmp/x";
+  const kept = { path: `${T}/harness-sim-home-k`, kind: "home" as const, ageSec: 10, owner: { pid: 1, start: "s", scratch: `${T}/harness-sim-projects-k` }, ownerAlive: false, keep: true };
+  const live = { ...kept, path: `${T}/harness-sim-home-l`, owner: { pid: 2, start: "s", scratch: `${T}/harness-sim-projects-l` }, ownerAlive: true, keep: false };
+  const input = { devices: [], held: () => false, dirs: [kept, live], daemons: [{ pid: 1, ppid: 1, ageSec: 99, home: kept.path }, { pid: 2, ppid: 1, ageSec: 99, home: live.path }] };
+  expect(planReap(input)).toEqual({ shutdown: [], kill: [], remove: [] });
+  const all = planReap({ ...input, includeKept: true });
+  expect(all.kill.map((p) => p.pid)).toEqual([1]); // not the live run's daemon
+  expect(all.remove).toEqual([kept.path, `${T}/harness-sim-projects-k`]);
+});

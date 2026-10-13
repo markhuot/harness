@@ -305,7 +305,7 @@ export interface RunOwner { pid: number; start: string; scratch: string }
 /** A harness daemon a sim-check run started (its HARNESS_HOME is a sim-check home). */
 export interface SimDaemon { pid: number; ppid: number; ageSec: number; home: string }
 export interface SimTempDir { path: string; kind: "home" | "projects"; ageSec: number; owner: RunOwner | null; ownerAlive: boolean; keep: boolean }
-export interface ReapInput { devices: Device[]; held: (name: string) => boolean; daemons: SimDaemon[]; dirs: SimTempDir[]; except?: string[] }
+export interface ReapInput { devices: Device[]; held: (name: string) => boolean; daemons: SimDaemon[]; dirs: SimTempDir[]; except?: string[]; includeKept?: boolean }
 export interface ReapPlan { shutdown: Device[]; kill: SimDaemon[]; remove: string[] }
 
 /** Records the run that owns `home`, so a reaper can tell a live run's dirs from a dead one's. */
@@ -324,7 +324,8 @@ const base = (p: string) => p.replace(/\/+$/, "").split("/").pop() ?? p;
  * What runs that died left behind. A device is shut down when it's a booted sim-check device that
  * nobody holds and this caller doesn't want. A daemon is stopped when its parent is gone (it was
  * reparented to launchd) and its home isn't kept; a legacy home (no owner.json) also has to be an
- * hour old, since a --keep from before the keep file looks the same. A home goes when its run is
+ * hour old, since a --keep from before the keep file looks the same. `includeKept` (`reap --kept`) stops
+ * kept daemons too, and removes their homes: a `--keep`'d run for `sim-check --reuse` is otherwise left alone for good. A home goes when its run is
  * dead and no daemon that stays still runs in it; its projects dir goes with it. A projects dir no
  * home claims goes once it's six hours old.
  */
@@ -335,7 +336,7 @@ export function planReap(input: ReapInput): ReapPlan {
   const kill = input.daemons.filter((p) => {
     if (p.ppid !== 1) return false;
     const h = homes.get(base(p.home));
-    if (h?.keep) return false;
+    if (h?.keep && !input.includeKept) return false;
     return h?.owner ? !h.ownerAlive : p.ageSec > LEGACY_HOME_AGE_SEC;
   });
   const killed = new Set(kill.map((p) => p.pid));
@@ -343,7 +344,7 @@ export function planReap(input: ReapInput): ReapPlan {
   const remove: string[] = [];
   const claimed = new Set<string>();
   for (const h of homes.values()) {
-    const live = h.keep || inUse.has(base(h.path)) || (h.owner ? h.ownerAlive : h.ageSec <= LEGACY_HOME_AGE_SEC);
+    const live = (h.keep && !input.includeKept) || inUse.has(base(h.path)) || (h.owner ? h.ownerAlive : h.ageSec <= LEGACY_HOME_AGE_SEC);
     if (h.owner) claimed.add(base(h.owner.scratch));
     if (live) continue;
     remove.push(h.path);
@@ -404,7 +405,7 @@ function listSimTempDirs(tmp: string): SimTempDir[] {
   return dirs;
 }
 
-export interface ReapOptions { except?: string[]; tmp?: string; lockDir?: string; log?: (line: string) => void; simctl?: Simctl; ps?: () => string }
+export interface ReapOptions { except?: string[]; includeKept?: boolean; tmp?: string; lockDir?: string; log?: (line: string) => void; simctl?: Simctl; ps?: () => string }
 
 const psDaemons = () => Bun.spawnSync(["ps", "-Eww", "-x", "-o", "pid=,ppid=,etime=,command="], { stdout: "pipe", stderr: "ignore" }).stdout.toString();
 
@@ -421,6 +422,7 @@ export async function reap(opts: ReapOptions = {}): Promise<ReapPlan> {
     daemons: parseSimDaemons(ps),
     dirs: listSimTempDirs(opts.tmp ?? tmpdir()),
     except: opts.except,
+    includeKept: opts.includeKept,
   });
   const shutdown: Device[] = [];
   await Promise.all(
@@ -494,7 +496,7 @@ if (import.meta.main) {
         console.log(d ? `${name} (${d.udid}) is shut down` : `no simulator named ${name}`);
       }, { onWait: waiting });
     } else if (cmd === "reap") {
-      const done = await reap({ log: console.log });
+      const done = await reap({ log: console.log, includeKept: opts.includes("--kept") });
       if (!done.shutdown.length && !done.kill.length && !done.remove.length) console.log("nothing left behind");
     } else if (cmd === "status") {
       const d = await findDevice(name);
