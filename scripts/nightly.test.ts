@@ -104,3 +104,16 @@ describe("parseArgs and the CLI", () => {
     expect(err).toContain("all green");
   });
 });
+
+describe("the example watcher", () => {
+  test("runs the nightly script daily from a checkout that has it, and tells triage to decline green runs", async () => {
+    const w = await Bun.file(join(import.meta.dir, "..", "service", "examples", "watchers", "nightly.json")).json();
+    const pkg = await Bun.file(join(import.meta.dir, "..", "package.json")).json();
+    expect(w.command).toBe("bun run nightly");
+    expect(pkg.scripts.nightly).toBe("bun scripts/nightly.ts");
+    expect(w.mode).toBe("interval");
+    expect(w.intervalSec).toBe(86400);
+    expect(w.prompt).toContain("HARNESS");
+    expect(w.prompt).toContain("Decline");
+  });
+});

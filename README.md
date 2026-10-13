@@ -262,7 +262,8 @@ exits non-zero if any fail. `--dry-run` prints the plan and why, `--all` runs ev
 by hand:
 
 `bun run nightly` runs everything `verify --all` covers, with the full sim-check walk-through on two
-shards (`--shards=2`). A Harness watcher named `nightly` runs it from the main checkout once a day. All
+shards (`--shards=2`). The watcher in `service/examples/watchers/nightly.json` runs it from the main
+checkout once a day (add it in Settings → Watchers; adjust `cwd` to your checkout). All
 green prints nothing (exit 4, "nothing to report"). A failure prints the failing layer, the failing
 check names and the tail of its log to the Inbox, where triage dispatches it to a ticket in the HARNESS
 project. The simulator layer is skipped, and reported, when `bun run sim disk` finds under 5 GiB free.
