@@ -1,8 +1,8 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { chooseKept, hashApp, hashService, listKept, planApp, deviceAppUrl, planDeviceInstall, readReuseState, REUSE_VERSION, writeReuseState, type Kept, type ReuseState } from "./sim-reuse";
+import { claimKept, staleAppNote, chooseKept, hashApp, hashService, listKept, planApp, deviceAppUrl, planDeviceInstall, readReuseState, REUSE_VERSION, writeReuseState, type Kept, type ReuseState } from "./sim-reuse";
 
 const state = (over: Partial<ReuseState> = {}): ReuseState => ({
   version: REUSE_VERSION, savedAt: 1000, port: 7831, scratch: "/tmp/p", daemonPid: 42, modeKey: "sheets", seeds: [], seeded: { a: 1 }, udids: ["U1"], appHash: "h1", installed: ["i1"], repoRoot: "/repo", serviceHash: "s1", ...over,
@@ -145,4 +145,39 @@ test("deviceAppUrl matches the bundle id exactly and tolerates bad output", () =
   expect(deviceAppUrl(json, "com.markhuot")).toBeNull();
   expect(deviceAppUrl("not json", "com.markhuot.harness")).toBeNull();
   expect(deviceAppUrl("{}", "com.markhuot.harness")).toBeNull();
+});
+
+test("claimKept lets the first run take the home and tells the second who has it", () => {
+  const taken = new Set<string>();
+  const lock = (n: string) => (taken.has(n) ? false : (taken.add(n), true));
+  const holder = () => ({ pid: 77, command: "sim-check.ts --reuse" });
+  expect(claimKept("harness-sim-home-a", lock, holder)).toBeNull();
+  expect(claimKept("harness-sim-home-a", lock, holder)).toMatch(/another --reuse run holds harness-sim-home-a \(pid 77: sim-check.ts --reuse\)/);
+  // A different home is free.
+  expect(claimKept("harness-sim-home-b", lock, holder)).toBeNull();
+});
+
+test("staleAppNote names a Swift file newer than the built app, and stays quiet otherwise", () => {
+  const t = mkdtempSync(join(tmpdir(), "stale-app-"));
+  try {
+    const app = join(t, "Harness.app");
+    const src = join(t, "src", "Views");
+    mkdirSync(app);
+    mkdirSync(src, { recursive: true });
+    const at = (p: string, secs: number) => utimesSync(p, secs, secs);
+    writeFileSync(join(src, "Old.swift"), "x");
+    writeFileSync(join(src, "notes.md"), "x");
+    at(app, 2000);
+    at(join(src, "Old.swift"), 1000);
+    at(join(src, "notes.md"), 3000);
+    // Only older Swift, plus a newer non-Swift file: nothing to say.
+    expect(staleAppNote(app, [join(t, "src")])).toBeNull();
+    writeFileSync(join(src, "New.swift"), "x");
+    at(join(src, "New.swift"), 3000);
+    expect(staleAppNote(app, [join(t, "src"), join(t, "missing")])).toMatch(/New\.swift.*--rebuild/);
+    // No built app (or an unreadable source dir): not this check's business.
+    expect(staleAppNote(join(t, "none.app"), [join(t, "src")])).toBeNull();
+  } finally {
+    rmSync(t, { recursive: true, force: true });
+  }
 });

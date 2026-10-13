@@ -39,7 +39,7 @@ describe("settled", () => {
     const clock = fake();
     const s = await settled(script([state({ seq: 900 }), state({ seq: 1 }), state({ seq: 2 }), state({ seq: 3 })]), { clock });
     expect(s?.seq).toBe(3);
-    expect(clock.t).toBe(100);
+    expect(clock.t).toBe(50);
   });
 
   test("honours a longer quiet window than the app's", async () => {
@@ -59,6 +59,14 @@ describe("settled", () => {
   test("returns null when nothing answers, for the caller to sleep instead", async () => {
     const clock = fake();
     expect(await settled(script([null]), { clock })).toBeNull();
+  });
+
+  test("returns null for a stale probe file that answers but never changes, instead of timing out", async () => {
+    const clock = fake();
+    // Settled and quiet, but left from an earlier launch: the same seq on every read.
+    expect(await settled(script([state({ seq: 40 })]), { clock })).toBeNull();
+    // It gave up after probeMs, not the full 10 s settle timeout.
+    expect(clock.t).toBeLessThanOrEqual(650);
   });
 });
 

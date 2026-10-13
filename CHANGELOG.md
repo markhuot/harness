@@ -39,6 +39,9 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
+- For people working on Harness: two `sim-check --reuse` runs started in the same checkout no longer attach to the same kept daemon at once; the second stops with a message naming the run that holds it.
+- For people working on Harness: `sim-check` falls back to a fixed wait when an iPhone app's debug probe file is left over from an earlier launch or the app crashed, instead of failing with "timed out: the app to settle" after 10 seconds.
+- For people working on Harness: `sim-check --reuse` prints a note when Swift files under `ios/Harness` or `ios/HarnessKit` are newer than the built app it is about to install, so a stale build isn't mistaken for current code. Add `--rebuild` to build the current sources.
 - For people working on Harness: the clone-sweep test in `browser/chrome.test.ts` no longer fails when other test files launch Chrome at the same moment. It relaunches until Chrome's code-sign clone is attributed to it, which is best-effort when several Chromes start together.
 
 ### Removed

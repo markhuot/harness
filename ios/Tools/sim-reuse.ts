@@ -192,3 +192,33 @@ export async function listKept(tmp: string, homePrefix: string, alive: (s: Reuse
   }
   return out;
 }
+
+/**
+ * The note to print when the built app is older than the Swift it was built from, or null. Compares
+ * mtimes (not hashes): the app has to be cheap to check on every --reuse. `sources` are directories
+ * (ios/Harness, ios/HarnessKit/Sources); only `.swift` files count.
+ */
+export function staleAppNote(appDir: string, sources: readonly string[]): string | null {
+  if (!existsSync(appDir)) return null;
+  const built = statSync(appDir).mtimeMs;
+  let newest: { file: string; mtime: number } | null = null;
+  const walk = (dir: string) => {
+    if (!existsSync(dir)) return;
+    for (const name of readdirSync(dir)) {
+      const full = join(dir, name);
+      const st = statSync(full);
+      if (st.isDirectory()) walk(full);
+      else if (name.endsWith(".swift") && st.mtimeMs > built && (!newest || st.mtimeMs > newest.mtime)) newest = { file: full, mtime: st.mtimeMs };
+    }
+  };
+  for (const d of sources) walk(d);
+  if (!newest) return null;
+  return `the built app predates ${(newest as { file: string }).file} and other Swift changes may be missing from it; add --rebuild to build the current sources`;
+}
+
+/** Takes the exclusive lock on a kept home, or says who holds it. */
+export function claimKept(name: string, lock: (name: string) => boolean, holder: (name: string) => { pid: number; command: string } | null): string | null {
+  if (lock(name)) return null;
+  const h = holder(name);
+  return `another --reuse run holds ${name}${h ? ` (pid ${h.pid}: ${h.command})` : ""}; wait for it to finish, or run without --reuse to get a daemon of your own`;
+}

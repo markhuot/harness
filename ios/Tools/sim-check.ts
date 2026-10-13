@@ -139,15 +139,15 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { buildPairUrl, reviewPassed, type ActivityEntry, type Project, type PromptEntry, type SpecRevision, type Ticket, type TicketDetail, type TicketPage, type TranscriptEntry, type Watcher } from "@harness/shared";
 import { findTheme } from "@harness/shared/themes";
 import { freePort, startDaemon as startDaemonShared, until as untilShared, type TestDaemon } from "@harness/shared/testing/daemon";
 import { startDaemonProxy } from "@harness/shared/testing/proxy";
 import { git, readSetting, seedRepo, seedDummySettings, setSessionContext, startCompactRun as startCompactRunAt, writeSetting } from "@harness/shared/testing/seed";
-import { acquire, acquireReady, daemonAnswers, checkDisk, ensureDevice, markKept, isSharedDevice, reap, SHARED_IPAD_DEVICE, writeRunOwner } from "./sim";
+import { acquire, acquireReady, daemonAnswers, checkDisk, ensureDevice, lockHolder, markKept, isSharedDevice, reap, releaseLock, SHARED_IPAD_DEVICE, tryLock, writeRunOwner } from "./sim";
 import { CheckSelector, noMatchMessage, parseGrep } from "./sim-grep";
-import { chooseKept, hashApp, hashService, listKept, MARKER_KEY, planApp, REUSE_VERSION, writeReuseState, type ReuseState, type Want } from "./sim-reuse";
+import { chooseKept, claimKept, staleAppNote, hashApp, hashService, listKept, MARKER_KEY, planApp, REUSE_VERSION, writeReuseState, type ReuseState, type Want } from "./sim-reuse";
 import { PROBE_FILE, parseState, settled as probeSettled, waitFor as probeWaitFor, type DebugState } from "./probe";
 import { parsePrepare, plan as planRun, resolveShot, SEED_NAMES, type Entry, type Plan, type SeedName } from "./sim-select";
 
@@ -863,6 +863,8 @@ const HOME_PREFIX = "harness-sim-home-";
 /** The port range kept daemons live in, so they stay findable. */
 const SIM_PORTS = { from: 7830, span: 60 };
 /** Whether the kept daemon is still the one that state names: its process is up and it answers on its port. */
+/** The lock held on the kept home this run attached to (--reuse); released when the run ends. */
+let keptLock = "";
 /** The daemon this run's checks talk to: the kept one for --reuse when one fits, otherwise a new one. */
 async function startDaemon(want: Want) {
   if (reuse) {
@@ -881,6 +883,10 @@ async function startDaemon(want: Want) {
       }
     }
     if (pick) {
+      // Two --reuse runs on one home would share the daemon's tickets and fight over the app and pairing.
+      const busy = claimKept(basename(pick.home), tryLock, lockHolder);
+      if (busy) throw new Error(`--reuse: ${busy}`);
+      keptLock = basename(pick.home);
       home = pick.home;
       scratch = pick.state.scratch;
       port = pick.state.port;
@@ -4642,7 +4648,11 @@ async function walk(udids: string[], s: Seeded, selection: Plan): Promise<boolea
 // ---------------------------------------------------------------- build
 async function buildApp() {
   // --reuse takes the app already built (the point is not waiting for xcodebuild); --rebuild builds first.
-  if ((flag("no-build") || (reuse && !flag("rebuild"))) && existsSync(appPath)) return;
+  if ((flag("no-build") || (reuse && !flag("rebuild"))) && existsSync(appPath)) {
+    const note = reuse && !flag("rebuild") ? staleAppNote(appPath, [join(here, "Harness"), join(here, "HarnessKit", "Sources")]) : null;
+    if (note) console.log(`--reuse: ${note}`);
+    return;
+  }
   // XcodeGen, then the Release simulator build into ios/build/dd (its log in ios/build/sim.log).
   console.log("building the app, Release (simulator)…");
   await sh(["bun", join(here, "Tools", "build.ts"), "sim"], { cwd: repoRoot });
@@ -4803,6 +4813,7 @@ try {
     removeTemp();
     await timed("simulator shutdown", shutDownDevices);
   }
+  if (keptLock) releaseLock(keptLock);
   reportTimings();
   console.log(failed ? "sim-check finished with failures" : "sim-check done");
 }

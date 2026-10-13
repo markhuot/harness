@@ -70,16 +70,21 @@ export async function waitFor(
  * Waits for the app to be at rest: settled, quiet for `quietMs`, and `fresh` writes seen after the
  * call began, so a state that predates the action that came just before can't pass (the count is of
  * seq changes, not its value: a relaunched app starts over from 1). Null when the probe doesn't
- * answer within `probeMs` (an app without it, or not up yet): the caller falls back to a fixed wait.
+ * answer, or answers but doesn't change, within `probeMs` (an app without it, not up yet, a stale file
+ * from an earlier launch, or a crashed app): the caller falls back to a fixed wait.
  */
 export async function settled(
   read: () => Promise<DebugState | null>,
   { quietMs = 0, fresh = 3, ms = 10000, probeMs = 600, every = 50, clock = realClock }: { quietMs?: number; fresh?: number; ms?: number; probeMs?: number; every?: number; clock?: Clock } = {},
 ): Promise<DebugState | null> {
-  const first = await waitFor("the probe", read, () => true, { ms: probeMs, every, clock }).catch(() => null);
+  // A probe file left from an earlier launch (or an app that crashed) answers too, but it never
+  // changes: only a seq change within probeMs shows the app is writing it now.
+  const first = await read();
   if (!first) return null;
-  let prev = first.seq;
-  let writes = 0;
+  const live = await waitFor("the probe to change", read, (s) => s.seq !== first.seq, { ms: probeMs, every, clock }).catch(() => null);
+  if (!live) return null;
+  let prev = live.seq;
+  let writes = 1;
   return waitFor(
     "the app to settle",
     read,
