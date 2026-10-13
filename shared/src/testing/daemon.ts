@@ -73,7 +73,7 @@ export async function daemonAnswers(s: { daemonPid: number; port: number }, dir:
   const base = `http://127.0.0.1:${s.port}`;
   const healthy = await fetch(`${base}/health`, { signal: AbortSignal.timeout(2000) }).then((r) => r.ok, () => false);
   if (!healthy) return false;
-  return fetch(`${base}/drivers`, { headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(2000) }).then((r) => r.ok, () => false);
+  return fetch(`${base}/settings`, { headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(2000) }).then((r) => r.ok, () => false);
 }
 
 type Killable = { exited: Promise<number>; kill(signal?: number | NodeJS.Signals): void };
@@ -118,9 +118,9 @@ export type StartDaemonOptions = {
   /** How long to wait for /health and the token file. Default 20 s. */
   readyMs?: number;
   /**
-   * Stop the daemon (and sweep its Chrome) when this process exits or gets SIGINT/SIGTERM, so a
-   * killed check leaves no orphan. Default: only when the home is a temp dir this call made; a
-   * home the caller gave may be meant to outlive the run (sim-check --keep).
+   * Stop the daemon (and sweep its Chrome) when this process exits or gets SIGINT/SIGTERM/SIGHUP,
+   * so a killed check leaves no orphan. Default true; pass false for a daemon meant to outlive
+   * the run (sim-check --keep).
    */
   stopOnExit?: boolean;
   /** The script to run instead of the service's daemon (for tests of this module). */
@@ -176,6 +176,29 @@ function stopProcessSync(pid: number, ms = 5000) {
   }
 }
 
+/** The daemons whose owner process must not leave without stopping them; one handler set serves them all. */
+const hooked = new Set<() => void>();
+let hooksInstalled = false;
+
+function stopHooked() {
+  for (const cleanup of [...hooked]) cleanup();
+}
+
+function installHooks() {
+  if (hooksInstalled) return;
+  hooksInstalled = true;
+  // Registered ahead of tmp.ts's own exit hook, so the daemon is gone before its home is removed.
+  process.prependListener("exit", stopHooked);
+  for (const [sig, code] of [["SIGINT", 130], ["SIGTERM", 143], ["SIGHUP", 129]] as const) {
+    const onSignal = () => {
+      stopHooked();
+      // A script with its own handler for this signal finishes its shutdown; otherwise leave now.
+      if (process.listenerCount(sig) <= 1) process.exit(code);
+    };
+    process.on(sig, onSignal);
+  }
+}
+
 /**
  * Starts the real daemon with the dummy driver and resolves once it answers /health and has
  * written its token. A daemon that doesn't get there (exits, or the readiness timeout passes) is
@@ -197,37 +220,28 @@ export async function startDaemon(opts: StartDaemonOptions = {}): Promise<TestDa
     stderr: files ? Bun.file(join(home, "daemon.err")) : "inherit",
   });
   const chromeProfile = join(home, "chrome-profile");
-  let stopped = false;
-  // Registered ahead of tmp.ts's own exit hook, so the daemon is gone before its home is removed.
-  const onExit = () => {
-    if (stopped) return;
-    stopped = true;
+  let stopping = false;
+  let done = false;
+  // Blocking cleanup for an exit hook. Also covers a stop() still waiting out its grace period.
+  const cleanup = () => {
+    if (done) return;
+    done = true;
+    hooked.delete(cleanup);
     stopProcessSync(proc.pid);
     sweepChrome(chromeProfile);
     if (ownsHome) rmSync(home, { recursive: true, force: true });
   };
-  const onSignal = (sig: NodeJS.Signals) => {
-    onExit();
-    // A script with its own handler for this signal finishes its shutdown; otherwise leave now.
-    if (process.listenerCount(sig) <= 1) process.exit(sig === "SIGINT" ? 130 : 143);
-  };
-  const onInt = () => onSignal("SIGINT");
-  const onTerm = () => onSignal("SIGTERM");
-  const unhook = () => {
-    process.off("exit", onExit);
-    process.off("SIGINT", onInt);
-    process.off("SIGTERM", onTerm);
-  };
-  if (opts.stopOnExit ?? ownsHome) {
-    process.prependListener("exit", onExit);
-    process.on("SIGINT", onInt);
-    process.on("SIGTERM", onTerm);
+  if (opts.stopOnExit ?? true) {
+    hooked.add(cleanup);
+    installHooks();
   }
   const stop: TestDaemon["stop"] = async ({ termMs = 20000, keepHome = false } = {}) => {
-    if (stopped) return;
-    stopped = true;
-    unhook();
+    if (stopping || done) return;
+    stopping = true;
     if (!(await stopProcess(proc, termMs))) sweepChrome(chromeProfile);
+    if (done) return; // an exit hook took over while we waited
+    done = true;
+    hooked.delete(cleanup);
     if (ownsHome && !keepHome) rmSync(home, { recursive: true, force: true });
   };
   try {

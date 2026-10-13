@@ -68,3 +68,13 @@ await runCommand(${JSON.stringify(fakeLayer(dir))}, { cwd: ${JSON.stringify(dir)
   expect(await proc.exited).toBe(143);
   await waitFor(() => !alive(grandchild));
 });
+
+test("a grandchild holding the output pipes doesn't keep a finished layer waiting for the time limit", async () => {
+  const dir = tempDir();
+  const started = Date.now();
+  // The layer exits at once, leaving a child that inherited stdout/stderr and sleeps on.
+  const r = await runCommand(["bun", "-e", 'Bun.spawn(["sleep", "60"], { stdout: "inherit", stderr: "inherit" }).unref(); console.log("done")'], { cwd: dir, timeoutMs: 30000 });
+  expect(r).toMatchObject({ code: 0, timedOut: false });
+  expect(r.output).toContain("done");
+  expect(Date.now() - started).toBeLessThan(10000);
+});

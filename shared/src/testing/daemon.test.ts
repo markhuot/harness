@@ -113,10 +113,10 @@ describe("startDaemon's environment", () => {
 describe("a check that dies leaves no daemon behind", () => {
   async function runOrphanCheck(env: Record<string, string>, end: (proc: ReturnType<typeof Bun.spawn>) => void) {
     const proc = Bun.spawn(["bun", fixture("orphan-check.ts")], { stdout: "pipe", stderr: "inherit", env: { ...process.env, ...env } });
-    const [pid, home] = (await proc.stdout.getReader().read().then((r) => new TextDecoder().decode(r.value))).trim().split(" ");
+    const [pid, home, pid2] = (await proc.stdout.getReader().read().then((r) => new TextDecoder().decode(r.value))).trim().split(" ");
     end(proc);
-    await proc.exited;
-    return { daemonPid: Number(pid), home: home! };
+    const code = await proc.exited;
+    return { daemonPid: Number(pid), home: home!, secondPid: pid2 ? Number(pid2) : undefined, code };
   }
   const gone = (pid: number) => {
     try {
@@ -131,6 +131,23 @@ describe("a check that dies leaves no daemon behind", () => {
     const { daemonPid, home } = await runOrphanCheck({}, (p) => p.kill("SIGTERM"));
     await until("daemon gone", async () => gone(daemonPid), 5000);
     expect(existsSync(home)).toBe(false);
+  });
+
+  test("a home the caller supplied is covered too: the daemon stops when the check is killed", async () => {
+    const { daemonPid } = await runOrphanCheck({ GIVEN_HOME: "1" }, (p) => p.kill("SIGTERM"));
+    await until("daemon gone", async () => gone(daemonPid), 5000);
+  });
+
+  test("SIGHUP (a closed terminal) stops the daemon", async () => {
+    const { daemonPid, code } = await runOrphanCheck({}, (p) => p.kill("SIGHUP"));
+    await until("daemon gone", async () => gone(daemonPid), 5000);
+    expect(code).toBe(129);
+  });
+
+  test("two daemons in one process both stop, and the signal still ends the process", async () => {
+    const { daemonPid, secondPid, code } = await runOrphanCheck({ TWO: "1" }, (p) => p.kill("SIGTERM"));
+    await until("both gone", async () => gone(daemonPid) && gone(secondPid!), 5000);
+    expect(code).toBe(143);
   });
 
   test("a check that just exits stops its daemon before the home goes", async () => {

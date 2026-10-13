@@ -470,6 +470,9 @@ export const RUN_OWNER_FILE = "owner.json";
 export const KEEP_FILE = "keep";
 /** Homes from before owner.json (and their daemons) count as left behind only once this old. */
 export const LEGACY_HOME_AGE_SEC = 60 * 60;
+/** A startDaemon home has no owner file; its daemon reparented to launchd means its check is gone, so a few minutes of slack is plenty. */
+export const TEST_DAEMON_AGE_SEC = 5 * 60;
+const ownerlessAgeSec = (path: string) => (base(path).startsWith(TEST_DAEMON_HOME_PREFIX) ? TEST_DAEMON_AGE_SEC : LEGACY_HOME_AGE_SEC);
 /** Projects dirs no home claims count as left behind once this old (a sim-check run takes minutes). */
 export const STRAY_PROJECTS_AGE_SEC = 6 * 60 * 60;
 
@@ -509,14 +512,14 @@ export function planReap(input: ReapInput): ReapPlan {
     if (p.ppid !== 1) return false;
     const h = homes.get(base(p.home));
     if (h?.keep && !input.includeKept) return false;
-    return h?.owner ? !h.ownerAlive : p.ageSec > LEGACY_HOME_AGE_SEC;
+    return h?.owner ? !h.ownerAlive : p.ageSec > ownerlessAgeSec(p.home);
   });
   const killed = new Set(kill.map((p) => p.pid));
   const inUse = new Set(input.daemons.filter((p) => !killed.has(p.pid)).map((p) => base(p.home)));
   const remove: string[] = [];
   const claimed = new Set<string>();
   for (const h of homes.values()) {
-    const live = (h.keep && !input.includeKept) || inUse.has(base(h.path)) || (h.owner ? h.ownerAlive : h.ageSec <= LEGACY_HOME_AGE_SEC);
+    const live = (h.keep && !input.includeKept) || inUse.has(base(h.path)) || (h.owner ? h.ownerAlive : h.ageSec <= ownerlessAgeSec(h.path));
     if (h.owner) claimed.add(base(h.owner.scratch));
     if (live) continue;
     remove.push(h.path);
@@ -562,7 +565,7 @@ function listSimTempDirs(tmp: string): SimTempDir[] {
   const now = Date.now();
   const dirs: SimTempDir[] = [];
   for (const name of readdirSync(tmp)) {
-    const kind = name.startsWith(HOME_PREFIX) ? "home" : name.startsWith(PROJECTS_PREFIX) ? "projects" : null;
+    const kind = name.startsWith(HOME_PREFIX) || name.startsWith(TEST_DAEMON_HOME_PREFIX) ? "home" : name.startsWith(PROJECTS_PREFIX) ? "projects" : null;
     if (!kind) continue;
     const path = join(tmp, name);
     let ageSec: number;
