@@ -41,7 +41,6 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 - For people working on Harness: `bun run sim snapshots` (and `bun run verify`'s snapshot layer) now takes any free simulator of the pool, or the one a parent `sim with-lock` already holds, instead of always waiting on `harness-shared` while `harness-shared-2` sits idle.
 - For people working on Harness: a simulator lock can no longer be deleted out from under the process that just took it (a race when two runs cleared the same dead holder), and a run whose new pool simulator was refused for low disk now creates it once disk frees up instead of waiting up to 30 minutes on a held one.
-
 - For people working on Harness: the clone-sweep test in `browser/chrome.test.ts` no longer fails when other test files launch Chrome at the same moment. It relaunches until Chrome's code-sign clone is attributed to it, which is best-effort when several Chromes start together.
 
 ### Removed
