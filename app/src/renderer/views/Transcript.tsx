@@ -1,7 +1,7 @@
 import { memo, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Attachment, Subagent, ToolResultContent, TranscriptEntry } from "@harness/shared";
 import { useStore } from "../state/store";
-import { formatMaybeJson, groupTranscript, isTask, itemRun, liveDelta, runHeader, splitRunSections, shortToolName, SUBAGENT_STATUS_LABEL, subagentById, subagentOpenLabel, subagentsOf, subagentTitle, toolIcon, toolPreview, transcriptKey } from "@harness/shared/state";
+import { formatMaybeJson, groupTranscript, isTask, itemRun, liveDelta, runHeader, splitRunSections, shortToolName, SUBAGENT_STATUS_LABEL, subagentById, subagentOpenLabel, subagentsOf, subagentTitle, toolElapsed, toolIcon, toolPreview, transcriptKey } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import { Markdown } from "../components/Markdown";
 import { PermissionStatusRow } from "../components/PermissionLog";
@@ -236,6 +236,18 @@ function Thinking({ text }: { text: string }) {
   );
 }
 
+/** Re-render every second while active, so a running tool's elapsed time ticks. */
+function useNow(active: boolean): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!active) return;
+    setNow(Date.now());
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [active]);
+  return now;
+}
+
 const ToolRow = memo(function ToolRow({
   call,
   result,
@@ -252,13 +264,16 @@ const ToolRow = memo(function ToolRow({
   const name = shortToolName(call?.content.name ?? result?.content.name ?? "tool");
   const preview = call ? toolPreview(name, call.content.input) : "";
   const isError = result?.content.isError;
+  const now = useNow(!result && !!call);
+  const elapsed = toolElapsed(call, result, now);
   return (
-    <div className={`t-tool ${open ? "open" : ""} ${isError ? "error" : ""}`}>
+    <div className={`t-tool${open ? "open" : ""} ${isError ? "error" : ""}`}>
       <button className="t-tool-head" onClick={() => setOpen(!open)}>
         <Icon name={open ? "chevronDown" : "chevronRight"} size={12} />
         <Icon name={toolIcon(name)} size={12} />
         <span className="t-tool-name">{name}</span>
         <span className="t-tool-preview truncate">{preview}</span>
+        {elapsed && <span className="t-tool-elapsed">{elapsed}</span>}
         {!result ? <span className="spinner" /> : isError ? <Icon name="x" size={12} className="t-bad" /> : <Icon name="check" size={12} className="t-ok" />}
       </button>
       {agent && onOpenAgent && (

@@ -31,6 +31,7 @@ struct TranscriptToolRow: View {
                     Text(name).font(.mono(13, weight: .semibold)).foregroundStyle(c.text)
                     Text(preview).font(.mono(12.5)).foregroundStyle(c.text3).lineLimit(1)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                    ToolElapsed(call: call, result: result)
                     switch state {
                     case .running: Spinner().controlSize(.small)
                     case .failed: Icon("x", size: 13, weight: .bold).foregroundStyle(c.red)
@@ -200,6 +201,27 @@ struct TranscriptOutputImage: View {
         .task(id: base64) {
             let data = base64
             image = await Task.detached { Data(base64Encoded: data, options: .ignoreUnknownCharacters).flatMap(UIImage.init(data:)) }.value
+        }
+    }
+}
+
+/// A tool call's elapsed time, right-aligned before the spinner or ✓/✗. It counts up every second
+/// while the call runs, in its own `TimelineView` so the row's equality check and the list around
+/// it don't re-render, and stops at the result's time once it lands.
+private struct ToolElapsed: View {
+    let call: TranscriptEntry?
+    let result: TranscriptEntry?
+
+    @Environment(\.palette) private var c
+
+    var body: some View {
+        if call != nil {
+            TimelineView(.periodic(from: .now, by: result == nil ? 1 : 3600)) { ctx in
+                if let text = Format.toolElapsed(call: call, result: result, now: ctx.date.timeIntervalSince1970 * 1000) {
+                    Text(text).font(.mono(11)).monospacedDigit().foregroundStyle(c.text3).lineLimit(1)
+                        .accessibilityIdentifier("tool-elapsed")
+                }
+            }
         }
     }
 }

@@ -9,6 +9,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- On the Mac, iPhone and iPad, every tool call in the transcript shows its elapsed time (42s, 3m 5s) just left of the spinner or ✓/✗. It counts up each second while the tool runs and freezes at its final time when it finishes.
+
 ### Fixed
 
 - On iPad, the ticket panel's content ignores the horizontal safe area, so dragging the panel toward the trailing edge can't squeeze it into the visible sliver. The iPad sim-check now drags the panel partly off the window and fails if its title reflows.
