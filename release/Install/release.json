@@ -1,19 +1,19 @@
 {
   "site": "https://harness-install.vercel.app",
-  "tag": "app-20261012.0049",
-  "releaseUrl": "https://github.com/markhuot/harness/releases/tag/app-20261012.0049",
-  "date": "2026-10-12",
+  "tag": "app-20261013.0325",
+  "releaseUrl": "https://github.com/markhuot/harness/releases/tag/app-20261013.0325",
+  "date": "2026-10-13",
   "ios": {
     "url": "https://github.com/markhuot/harness/releases/latest/download/Harness.ipa",
     "version": "2.0.0",
-    "build": "202610120049",
-    "bytes": 8061881,
+    "build": "202610130325",
+    "bytes": 8495572,
     "testflightUrl": "https://testflight.apple.com/join/M8kvbuv1"
   },
   "mac": {
     "url": "https://github.com/markhuot/harness/releases/latest/download/Harness-mac.zip",
     "version": "0.1.0",
-    "bytes": 162698906,
+    "bytes": 163834777,
     "notarized": true
   }
 }
