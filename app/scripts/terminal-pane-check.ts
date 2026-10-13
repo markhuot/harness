@@ -1,5 +1,5 @@
-// Terminal panes end to end in the built app, over the DevTools Protocol, against the mock
-// service: open terminals from the sidebar's New ▾ menu and a project's context menu, type into
+// Terminal panes end to end in the built app, over the DevTools Protocol, against the seeded
+// world: open terminals from the sidebar's New ▾ menu and a project's context menu, type into
 // them with real key events, and check the shell's folder, re-attaching after a board switch
 // (history kept, nothing printed twice, the PTY resized to the remounted pane), exit + Restart,
 // closing (the shell dies), and the startup reconcile after a reload. scripts/terminal-check.ts
@@ -11,23 +11,12 @@ import { realpathSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { tempDir } from "@harness/shared/testing";
-import { api as makeApi, appDir, checker, launchApp, stopped, until } from "./lib/drive";
+import { bootWorld } from "./lib/world";
+import { api as makeApi, appDir, checker, launchApp, until } from "./lib/drive";
 
 const shots = process.argv.find((a) => a.startsWith("--shots="))?.slice("--shots=".length);
-const port = 7700 + Math.floor(Math.random() * 90);
-const token = "term-token";
-const base = `http://127.0.0.1:${port}`;
-const mock = Bun.spawn(["bun", join(appDir, "scripts/mock-service.ts")], {
-  env: { ...process.env, MOCK_PORT: String(port), MOCK_TOKEN: token, MOCK_QUIET: "1" },
-  stdout: "ignore",
-  stderr: "inherit",
-});
-for (let i = 0; i < 50; i++) {
-  try {
-    if ((await fetch(base + "/health")).ok) break;
-  } catch {}
-  await Bun.sleep(100);
-}
+const world = await bootWorld();
+const { base, token } = world;
 const api = makeApi(base, token);
 const counter = checker();
 const { check } = counter;
@@ -268,8 +257,7 @@ try {
   check("run", false, (e as Error).message);
 } finally {
   await app.close();
-  mock.kill();
-  await stopped(mock);
+  await world.stop();
   rmSync(projectDir, { recursive: true, force: true });
 }
 console.log(counter.failures ? `${counter.failures} failed` : "all terminal pane checks passed");

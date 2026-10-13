@@ -3,31 +3,25 @@
 // ticket's background Bash task and its output view, in light and dark.
 //
 //   bun run build && bun scripts/agents.ts [screenshotDir]
-import { mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { Project } from "@harness/shared";
 import { cleanupTempDirs, tempDir } from "@harness/shared/testing";
-import { api as makeApi, appDir, checker, launchApp, until, waitHealthy } from "./lib/drive";
+import { startDaemon } from "@harness/shared/testing/daemon";
+import { api as makeApi, appDir, checker, launchApp, until } from "./lib/drive";
 import { checkAgentsTab } from "./lib/agents-check";
 
 const shots = resolve(process.argv[2] ?? join(appDir, "out", "screenshots", "agents"));
 mkdirSync(shots, { recursive: true });
 const home = tempDir("harness-agents-home-");
 const projectDir = tempDir("harness-agents-project-");
-const port = 7800 + Math.floor(Math.random() * 90);
-const base = `http://127.0.0.1:${port}`;
-const daemon = Bun.spawn(["bun", join(appDir, "..", "service/src/daemon.ts")], {
-  // Slow enough to see sub-agents running.
-  env: { ...process.env, HARNESS_HOME: home, HARNESS_PORT: String(port), HARNESS_DUMMY_DRIVER: "1", HARNESS_DUMMY_DELAY_MS: "60" },
-  stdout: "inherit",
-  stderr: "inherit",
-});
+const daemon = await startDaemon({ home, delayMs: 60, logs: "inherit" });
+const { port, base } = daemon;
 
 const c = checker();
 let app: Awaited<ReturnType<typeof launchApp>> | null = null;
 try {
-  await waitHealthy(base, 15000);
-  const token = readFileSync(join(home, "token"), "utf8").trim();
+  const { token } = daemon;
   const api = makeApi(base, token);
   const project = await api<Project>("POST", "/projects", { path: projectDir, name: "agents", key: "AGT" });
   for (const theme of ["light", "dark"] as const) {
@@ -44,8 +38,7 @@ try {
   if (app) await app.screenshot(join(shots, "failure.png")).catch(() => {});
 } finally {
   await app?.close();
-  daemon.kill();
-  await daemon.exited;
+  await daemon.stop();
   // Only now that nothing writes into them (and tempDir's exit listener covers a crash).
   await cleanupTempDirs();
 }

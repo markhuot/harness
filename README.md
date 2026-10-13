@@ -91,13 +91,16 @@ desktop agree on keys, reducers, themes and markdown. See [ios/README.md](ios/RE
   (iOS 27.0) and holds its lock for the run, so other agents wait their turn. `--shards=N` splits
   the screens across extra "sim-check 2" … "sim-check N" simulators. `--sheets`, `--ipad`,
   `--ipad --sheets`, `--memory` and the other modes in the header of `ios/Tools/sim-check.ts` each
-  validate one area. `ios/build/screens/timings.json` shows where the time went.
+  validate one area. `--grep=<pattern>` runs only the checks whose names match, and `--keep` then
+  `--reuse` reattaches to the kept daemon, seeds and app so one check reruns in seconds
+  (`sim-check --help` lists every flag; `bun run sim reap --kept` clears kept runs).
+  `ios/build/screens/timings.json` shows where the time went.
   `bun ios/Tools/dev-sim.ts` is the dev loop: it seeds a daemon, installs a fresh build and pairs it.
-- **Simulator:** `bun run sim` (`ios/Tools/sim.ts`) manages the one simulator everyone shares.
-  `ensure` creates `harness-shared` (iPhone 18 Pro, pinned to the iOS 27.0 runtime; it never falls
+- **Simulator:** `bun run sim` (`ios/Tools/sim.ts`) manages the small pool of simulators everyone shares
+  (`harness-shared`, `harness-shared-2`; `HARNESS_SIM_POOL_SIZE` sets how many). `ensure` creates `harness-shared` (iPhone 18 Pro, pinned to the iOS 27.0 runtime; it never falls
   back to another runtime or downloads one), boots it and prints its UDID.
-  `with-lock -- <command>` waits for exclusive use, then runs the command with `SIM_UDID` set.
-  `status` shows who holds it, `shutdown` stops it once it's free, and `disk` fails below 5 GiB
+  `with-lock -- <command>` waits for a free simulator (the second is only created while there is disk for it), then runs the command with `SIM_UDID` set.
+  `status` shows who holds each, `shutdown` stops the free ones, and `disk` fails below 5 GiB
   free. Locks live in `~/.harness/tmp/sim-locks`; a lock whose process died is taken over. See
   CLAUDE.md → Simulators for the rules agents follow.
 
@@ -252,16 +255,33 @@ built-in plugin UIs, and the service also builds them on start when they're miss
 
 ## Tests
 
+`bun run verify` (repo root) runs the layers your diff needs: it maps the changed files to bun tests,
+typecheck, `swift test`, the matching Mac app check and the iPhone snapshot and sim-check runs, and
+exits non-zero if any fail. `--dry-run` prints the plan and why, `--all` runs everything, and
+`--base=<ref>` diffs against another branch. The mapping is `scripts/verify-plan.ts`. The layers
+by hand:
+
+`bun run nightly` runs everything `verify --all` covers, with the full sim-check walk-through on two
+shards (`--shards=2`). The watcher in `service/examples/watchers/nightly.json` runs it from the main
+checkout once a day (add it in Settings → Watchers; adjust `cwd` to your checkout). All
+green prints nothing (exit 4, "nothing to report"). A failure prints the failing layer, the failing
+check names and the tail of its log to the Inbox, where triage dispatches it to a ticket in the HARNESS
+project. The simulator layer is skipped, and reported, when `bun run sim disk` finds under 5 GiB free.
+`--list` prints the layers and `--only=<layer id>,…` runs some of them.
+
 ```sh
 cd shared && bun test     # key helpers, client state (reducer, conductor, models, bridge, markdown), themes (registry, WCAG contrast)
 cd service && bun run test # store, orchestrator, drivers, tools, MCP, browser (real Chrome), HTTP/WS e2e, CLI; files in parallel
 cd app && bun test        # routes, theme resolution, CSS var coverage, keyboard registry, board and pane navigation, palette ranking
 cd ios/HarnessKit && swift test   # the iPhone app's protocol, client, logic and state, against the JSON fixtures
 cd ios && bun run test    # iOS build, simulator and highlighter tooling
+bun run sim snapshots     # the iPhone/iPad screens rendered from fixture models vs. reference PNGs (--record updates them, --out=<dir> writes the renders)
 cd release && bun run test # release prepare, publish checks, TestFlight, install page
 cd plugins/sdk && bun test   # plugin iframe bridge (connect)
 cd plugins/git && bun test   # git plugin routes against real temp repos
-cd app && bun run smoke   # drives the Electron UI against a mock service
+cd app && bun run smoke   # drives the Electron UI against a seeded world: the real daemon with the dummy driver (app/scripts/lib/world.ts)
+cd app && bun run shoot   # screenshots of every screen and state, against the same seeded world
+cd app && bun run world   # boots that world and leaves it running, for `HARNESS_URL=… HARNESS_TOKEN=… bun run dev`
 cd app && bun run build && bun scripts/approve-plan.ts   # Approve plan against a real daemon, with screenshots
 cd app && bun run real    # drives the Electron UI against a real daemon in a temp home
 cd app && bun run changes # the Changes tab against a real daemon, light + dark screenshots

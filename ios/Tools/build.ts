@@ -1,9 +1,13 @@
-// Builds the native iPhone/iPad app (ios/). Every build regenerates Harness.xcodeproj with
-// XcodeGen first, builds into ios/build/dd (ARCHITECTURE.md § Disk budget) and logs xcodebuild's
-// output to ios/build/<command>.log, printing only its tail when it fails. Progress goes to stderr,
-// and the path of what was built is the one line on stdout.
+// Builds the native iPhone/iPad app (ios/). Each build regenerates Harness.xcodeproj with XcodeGen
+// when project.yml or the source file list changed, builds into ios/build/dd (ARCHITECTURE.md
+// § Disk budget) and logs xcodebuild's output to ios/build/<command>.log, printing only its tail
+// when it fails.
+// Progress goes to stderr, and the path of what was built is the one line on stdout.
 //
 //   bun ios/Tools/build.ts sim                         Release, iphonesimulator, ad-hoc signed, arm64
+//   bun ios/Tools/build.ts snapshots                   Debug build-for-testing of the snapshot tests (HarnessSnapshotTests),
+//                                                      into ios/build/dd-snapshots; prints the .xctestrun path
+//                                                      (Tools/snapshots.ts, `bun run sim snapshots`, runs it)
 //   bun ios/Tools/build.ts archive --build-number N    Release archive for devices (CFBundleVersion N),
 //                                                      signed automatically with team 47P4ZSALX4
 //   bun ios/Tools/build.ts export --method dev|testflight
@@ -19,17 +23,22 @@
 // archive and export take --archive-path; export takes --export-path. release/publish-install.sh
 // runs archive, export and verify.
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { bundleInputs, planXcodegen, xcfilelist, xcodegenHash } from "./build-cache";
+import { deviceAppUrl, hashApp, planDeviceInstall } from "./sim-reuse";
 
 export const IOS = resolve(import.meta.dir, "..");
 export const BUILD = join(IOS, "build");
 export const DERIVED_DATA = join(BUILD, "dd");
+/** Its own derived data: the snapshot tests build Debug, the app builds Release. */
+export const SNAPSHOT_DERIVED_DATA = join(BUILD, "dd-snapshots");
 export const TEAM_ID = "47P4ZSALX4";
 export const BUNDLE_ID = "com.markhuot.harness";
 
 export type Method = "dev" | "testflight";
 export type Options =
   | { command: "sim" }
+  | { command: "snapshots" }
   | { command: "archive"; buildNumber: string; archivePath: string }
   | { command: "export"; method: Method; archivePath: string; exportPath: string }
   | { command: "device"; device: string; launch: boolean }
@@ -61,6 +70,7 @@ export function parseArgs(argv: string[]): Options {
   }
   const allowed: Record<string, string[]> = {
     sim: [],
+    snapshots: [],
     archive: ["build-number", "archive-path"],
     export: ["method", "archive-path", "export-path"],
     device: ["device", "launch"],
@@ -82,6 +92,7 @@ export function parseArgs(argv: string[]): Options {
   };
   switch (command) {
     case "sim":
+    case "snapshots":
       return { command };
     case "archive":
       return { command, buildNumber: buildNumber(), archivePath: resolve(str("archive-path") ?? DEFAULT_ARCHIVE) };
@@ -176,28 +187,84 @@ function run(name: string, cmd: string[], cwd = IOS): void {
   }
 }
 
+/** Writes a file only when its text changed, so an unchanged list keeps its mtime (Xcode compares it with the phase's output). */
+function writeIfChanged(path: string, text: string): void {
+  if (existsSync(path) && readFileSync(path, "utf8") === text) return;
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, text);
+}
+
+/** The files the two bundle build phases read, for Xcode's skip check (project.yml, "Bundle highlighter"). */
+function writeBundleLists(): void {
+  const inputs = bundleInputs(IOS);
+  writeIfChanged(join(BUILD, "bundle-highlighter.xcfilelist"), xcfilelist(inputs.highlighter));
+  writeIfChanged(join(BUILD, "bundle-editor.xcfilelist"), xcfilelist(inputs.editor));
+}
+
+const XCODEGEN_HASH = join(BUILD, "xcodegen.hash");
+
+/** Runs XcodeGen only when project.yml or the globbed source file list changed since it last ran. */
 function xcodegen(): void {
-  log("==> Generating Harness.xcodeproj (xcodegen)");
+  const hash = xcodegenHash(IOS);
+  const plan = planXcodegen({
+    projectExists: existsSync(join(IOS, "Harness.xcodeproj/project.pbxproj")),
+    lastHash: existsSync(XCODEGEN_HASH) ? readFileSync(XCODEGEN_HASH, "utf8").trim() : null,
+    hash,
+  });
+  if (!plan.run) return log("==> Harness.xcodeproj is current (skipping xcodegen)");
+  log(`==> Generating Harness.xcodeproj (xcodegen: ${plan.reason})`);
   run("xcodegen", ["xcodegen", "--spec", join(IOS, "project.yml"), "--project", IOS, "--quiet"]);
+  // Hashed again, not `hash`: XcodeGen writes Info.plist and entitlements files into the globbed folders.
+  writeIfChanged(XCODEGEN_HASH, xcodegenHash(IOS) + "\n");
+}
+
+/** Everything before xcodebuild that a build reuses from earlier ones. */
+function prepare(): void {
+  writeBundleLists();
+  xcodegen();
 }
 
 const project = () => ["-project", join(IOS, "Harness.xcodeproj"), "-scheme", "Harness", "-derivedDataPath", DERIVED_DATA];
 
-function sim(): string {
-  xcodegen();
-  log("==> Building for the simulator (Release, arm64, ad-hoc signed)");
-  run("sim", [
+/** The xcodebuild arguments of the simulator build. */
+export function simArgs(): string[] {
+  return [
     "xcodebuild", ...project(), "-configuration", "Release", "-sdk", "iphonesimulator",
     "-destination", "generic/platform=iOS Simulator", "ARCHS=arm64", "ONLY_ACTIVE_ARCH=YES",
     // Ad-hoc signed, not unsigned: the simulator only grants the Keychain to a signed app (its
     // simulated entitlements), and pairing stores the token there.
-    "CODE_SIGN_IDENTITY=-", "CODE_SIGNING_REQUIRED=NO", "build",
-  ]);
+    "CODE_SIGN_IDENTITY=-", "CODE_SIGNING_REQUIRED=NO",
+    // The debug state probe (Harness/App/DebugProbe.swift) is compiled in for this simulator build
+    // only; the device and archive builds never get it.
+    "SWIFT_ACTIVE_COMPILATION_CONDITIONS=$(inherited) SIM_CHECK", "build",
+  ];
+}
+
+function sim(): string {
+  prepare();
+  log("==> Building for the simulator (Release, arm64, ad-hoc signed)");
+  run("sim", simArgs());
   return join(DERIVED_DATA, "Build/Products/Release-iphonesimulator/Harness.app");
 }
 
+/** Builds the snapshot tests and the app that hosts them; returns the .xctestrun file xcodebuild test-without-building takes. */
+function snapshots(): string {
+  prepare();
+  log("==> Building the snapshot tests (Debug, arm64, ad-hoc signed)");
+  run("snapshots", [
+    "xcodebuild", "-project", join(IOS, "Harness.xcodeproj"), "-scheme", "HarnessSnapshots", "-derivedDataPath", SNAPSHOT_DERIVED_DATA,
+    "-configuration", "Debug", "-sdk", "iphonesimulator", "-destination", "generic/platform=iOS Simulator",
+    "ARCHS=arm64", "ONLY_ACTIVE_ARCH=YES", "CODE_SIGN_IDENTITY=-", "CODE_SIGNING_REQUIRED=NO", "build-for-testing",
+  ]);
+  const products = join(SNAPSHOT_DERIVED_DATA, "Build/Products");
+  const found = new Bun.Glob("*.xctestrun").scanSync({ cwd: products });
+  const file = [...found][0];
+  if (!file) fail(`no .xctestrun in ${products}`);
+  return join(products, file);
+}
+
 function archive(o: Extract<Options, { command: "archive" }>): string {
-  xcodegen();
+  prepare();
   log(`==> Archiving (Release, build ${o.buildNumber})`);
   rmSync(o.archivePath, { recursive: true, force: true });
   run("archive", [
@@ -230,17 +297,42 @@ function exportArchive(o: Extract<Options, { command: "export" }>): string {
   return ipa;
 }
 
-function device(o: Extract<Options, { command: "device" }>): string {
-  xcodegen();
-  log(`==> Building Harness (Debug) for ${o.device}`);
-  run("device", [
+/** The xcodebuild arguments of the device build: Debug, but without SIM_CHECK, so no debug probe. */
+export function deviceArgs(): string[] {
+  return [
     "xcodebuild", ...project(), "-configuration", "Debug", "-destination", "generic/platform=iOS",
     "-allowProvisioningUpdates", `DEVELOPMENT_TEAM=${TEAM_ID}`, "CODE_SIGN_STYLE=Automatic", "build",
-  ]);
+  ];
+}
+
+function device(o: Extract<Options, { command: "device" }>): string {
+  prepare();
+  log(`==> Building Harness (Debug) for ${o.device}`);
+  run("device", deviceArgs());
   const app = join(DERIVED_DATA, "Build/Products/Debug-iphoneos/Harness.app");
-  log(`==> Installing on ${o.device}`);
-  run("device-install", ["xcrun", "devicectl", "device", "install", "app", "--device", o.device, app]);
-  if (o.launch) run("device-launch", ["xcrun", "devicectl", "device", "process", "launch", "--device", o.device, BUNDLE_ID]);
+  const records = join(BUILD, "device-installs.json");
+  let recorded: Record<string, { hash: string; url: string }> = {};
+  try {
+    if (existsSync(records)) recorded = JSON.parse(readFileSync(records, "utf8")) ?? {};
+  } catch {} // a damaged record is no record: install again
+  const listing = join(BUILD, "device-apps.json");
+  rmSync(listing, { force: true });
+  const listed = Bun.spawnSync(["xcrun", "devicectl", "device", "info", "apps", "--device", o.device, "--bundle-id", BUNDLE_ID, "--json-output", listing], { stdout: "pipe", stderr: "pipe", timeout: 60_000 });
+  const deviceUrl = listed.exitCode === 0 && existsSync(listing) ? deviceAppUrl(readFileSync(listing, "utf8"), BUNDLE_ID) : null;
+  const builtHash = hashApp(app);
+  const plan = planDeviceInstall({ installed: recorded[o.device] ?? null, builtHash, deviceUrl });
+  if (plan.install) {
+    log(`==> Installing on ${o.device} (${plan.reason})`);
+    run("device-install", ["xcrun", "devicectl", "device", "install", "app", "--device", o.device, app]);
+    rmSync(listing, { force: true });
+    Bun.spawnSync(["xcrun", "devicectl", "device", "info", "apps", "--device", o.device, "--bundle-id", BUNDLE_ID, "--json-output", listing], { stdout: "pipe", stderr: "pipe", timeout: 60_000 });
+    const url = existsSync(listing) ? deviceAppUrl(readFileSync(listing, "utf8"), BUNDLE_ID) : null;
+    // Without the device's location there's nothing to compare next time, so leave no record.
+    const { [o.device]: _old, ...rest } = recorded;
+    writeIfChanged(records, JSON.stringify(url ? { ...rest, [o.device]: { hash: builtHash, url } } : rest));
+  } else log(`==> ${o.device} already has this build; skipping the install`);
+  // --terminate-existing: an unchanged build wasn't reinstalled, which used to restart the app.
+  if (o.launch) run("device-launch", ["xcrun", "devicectl", "device", "process", "launch", "--device", o.device, "--terminate-existing", BUNDLE_ID]);
   return app;
 }
 
@@ -258,6 +350,7 @@ if (import.meta.main) {
     } else {
       const out =
         o.command === "sim" ? sim()
+        : o.command === "snapshots" ? snapshots()
         : o.command === "archive" ? archive(o)
         : o.command === "export" ? exportArchive(o)
         : device(o);

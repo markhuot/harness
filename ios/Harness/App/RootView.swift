@@ -32,7 +32,12 @@ struct RootView: View {
                 scene = s
                 WindowDirectory.shared.mainActive(router, scene: s)
             })
-            .onAppear { WindowDirectory.shared.mainActive(router, scene: scene) }
+            .onAppear {
+                WindowDirectory.shared.mainActive(router, scene: scene)
+                #if SIM_CHECK
+                DebugProbe.shared.attach(router)
+                #endif
+            }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active { WindowDirectory.shared.mainActive(router, scene: scene) }
             }

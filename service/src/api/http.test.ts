@@ -10,6 +10,7 @@ import { DummyDriver } from "../drivers/dummy";
 import { FakeDriver, stubBrowser, tempHome } from "../testing/fakes";
 import { mp4, png } from "../testing/media";
 import { fakeContext, fakeSession } from "../tools/fakes";
+import { testIf } from "@harness/shared/testing/skip";
 import { git as runGit } from "../orchestrator/worktree";
 import { parseRange, serveFile } from "./http";
 import { subscriberIdOf, viewerIdOf } from "./ws";
@@ -1244,7 +1245,7 @@ function rawGet(host: string, port: number, path: string, headers = ""): Promise
 }
 
 describe("serveFile over a non-loopback socket", () => {
-  test.skipIf(!lanAddress)("the status line and headers come before the file", async () => {
+  testIf(lanAddress, "no non-loopback IPv4 address (LAN): serveFile over a LAN socket skipped")("the status line and headers come before the file", async () => {
     const dir = tempHome("harness-servefile-");
     const body = Buffer.from(Array.from({ length: 64 * 1024 }, (_, i) => (i * 7) % 256));
     const path = join(dir, "shot.png");

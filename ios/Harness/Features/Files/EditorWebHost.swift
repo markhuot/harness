@@ -19,10 +19,6 @@ final class EditorWebHost: NSObject {
     /// carries everything the page needs.
     private(set) var ready = false
 
-    /// The text of the first marked (linked) line once the page has scrolled to it. sim-check reads it
-    /// through the editor's accessibility value, since a web view's page isn't in the AX tree.
-    private(set) var revealedLine: String?
-
     @ObservationIgnored let webView: EditorWebView
     /// The page is (re)ready: send `open` or `diff` now.
     @ObservationIgnored var onReady: () -> Void = {}
@@ -44,6 +40,9 @@ final class EditorWebHost: NSObject {
         webView.isInspectable = true
         #endif
         super.init()
+        #if SIM_CHECK
+        DebugProbe.shared.register(self)
+        #endif
         // The content controller retains its handlers; the proxy keeps that from retaining us.
         content.add(WeakEditorHandler(self), name: Self.handlerName)
         webView.navigationDelegate = self
@@ -78,14 +77,15 @@ final class EditorWebHost: NSObject {
         webView.evaluateJavaScript(command.script, completionHandler: nil)
     }
 
-    /// Reads which line the page marked for a linked range, after it has had time to scroll there.
-    func readRevealedLine() async {
-        try? await Task.sleep(for: .milliseconds(500))
-        revealedLine = await evaluate("(document.querySelector('.cm-revealed-line') || {}).textContent || ''")
-    }
-
     /// Takes the keyboard down, which makes the page lose focus and say `blur`.
     func resignFocus() { webView.endEditing(true) }
+
+    /// The editor's state as the page reports it (the debug state probe); nil while none is open.
+    func probe() async -> DebugState.EditorState? {
+        guard ready, let json = await evaluate("JSON.stringify(window.harnessEditor ? window.harnessEditor.probe() : null)"),
+              let data = json.data(using: .utf8) else { return nil }
+        return try? JSONDecoder().decode(DebugState.EditorState.self, from: data)
+    }
 
     /// Run a script in the page and return its result as a string (DEBUG probes).
     func evaluate(_ script: String) async -> String? {

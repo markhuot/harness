@@ -29,7 +29,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Attachment, Project, Ticket, TicketDetail, TranscriptEntry } from "@harness/shared";
 import { tempDir } from "@harness/shared/testing";
-import { api as makeApi, appDir, checker, launchApp, stopped, until, waitHealthy } from "./lib/drive";
+import { startDaemon } from "@harness/shared/testing/daemon";
+import { api as makeApi, appDir, checker, launchApp, until } from "./lib/drive";
 import { png } from "./lib/png";
 
 const shots = process.argv.find((a) => a.startsWith("--shots="))?.slice("--shots=".length);
@@ -58,13 +59,8 @@ const site = Bun.serve({
 });
 const pageUrl = `http://127.0.0.1:${site.port}/settings`;
 
-const port = 7800 + Math.floor(Math.random() * 90);
-const base = `http://127.0.0.1:${port}`;
-const daemon = Bun.spawn(["bun", join(appDir, "..", "service/src/daemon.ts")], {
-  env: { ...process.env, HARNESS_HOME: home, HARNESS_PORT: String(port), HARNESS_DUMMY_DRIVER: "1" },
-  stdout: "ignore",
-  stderr: "inherit",
-});
+const daemon = await startDaemon({ home, delayMs: 15, logs: "inherit" });
+const { port, base } = daemon;
 
 const counter = checker();
 const { check } = counter;
@@ -84,8 +80,7 @@ type Rect = { left: number; top: number; right: number; bottom: number; width: n
 type TextContent = { text: string; attachments?: Attachment[] };
 
 try {
-  await waitHealthy(base, 15000);
-  const token = readFileSync(join(home, "token"), "utf8").trim();
+  const { token } = daemon;
   const api = makeApi(base, token);
   const fetchBytes = async (path: string) => new Uint8Array(await (await fetch(`${base}${path}`, { headers: { authorization: `Bearer ${token}` } })).arrayBuffer());
   const project = await api<Project>("POST", "/projects", { path: projectDir, name: "annotate", key: "ANN" });
@@ -455,8 +450,7 @@ try {
   counter.fail();
 } finally {
   await app?.close();
-  daemon.kill();
-  await stopped(daemon);
+  await daemon.stop();
   site.stop(true);
 }
 console.log(counter.failures ? `\n${counter.failures} check(s) failed` : "\nall checks passed");

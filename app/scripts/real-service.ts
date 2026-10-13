@@ -4,11 +4,12 @@
 // worktree ticket for the git plugin's Changes tab and a /agents ticket for the Agents tab.
 //
 //   bun run build && bun scripts/real-service.ts [screenshotDir] [--theme=dark]
-import { mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { Project, Ticket, TicketDetail, TranscriptEntry } from "@harness/shared";
 import { cleanupTempDirs, tempDir } from "@harness/shared/testing";
-import { api as makeApi, appDir, checker, launchApp, until, waitHealthy } from "./lib/drive";
+import { startDaemon } from "@harness/shared/testing/daemon";
+import { appDir, checker, launchApp, until } from "./lib/drive";
 import { checkChangesTab } from "./lib/changes-check";
 import { checkAgentsTab } from "./lib/agents-check";
 import { checkBrowserTabs } from "./lib/browser-tabs-check";
@@ -17,15 +18,8 @@ const shots = resolve(process.argv.find((a, i) => i > 1 && !a.startsWith("--")) 
 const theme = (process.argv.find((a) => a.startsWith("--theme="))?.slice(8) ?? "light") as "light" | "dark";
 mkdirSync(shots, { recursive: true });
 
-const home = tempDir("harness-real-home-");
 const projectDir = tempDir("harness-real-project-");
-const port = 7800 + Math.floor(Math.random() * 90);
-const base = `http://127.0.0.1:${port}`;
-const daemon = Bun.spawn(["bun", join(appDir, "..", "service/src/daemon.ts")], {
-  env: { ...process.env, HARNESS_HOME: home, HARNESS_PORT: String(port), HARNESS_DUMMY_DRIVER: "1", HARNESS_DUMMY_DELAY_MS: process.env.HARNESS_DUMMY_DELAY_MS ?? "70" },
-  stdout: "inherit",
-  stderr: "inherit",
-});
+const daemon = await startDaemon({ delayMs: Number(process.env.HARNESS_DUMMY_DELAY_MS ?? "70"), logs: "inherit", readyMs: 15000 });
 
 const c = checker();
 const { check } = c;
@@ -36,9 +30,7 @@ const shot = async (name: string) => {
 };
 
 try {
-  await waitHealthy(base, 15000);
-  const token = readFileSync(join(home, "token"), "utf8").trim();
-  const api = makeApi(base, token);
+  const { base, token, api } = daemon;
   const project = await api<Project>("POST", "/projects", { path: projectDir, name: "hello", key: "HELLO" });
 
   app = await launchApp({ baseUrl: base, token, theme });
@@ -165,9 +157,8 @@ try {
   if (app) await shot("failure").catch(() => {});
 } finally {
   await app?.close();
-  daemon.kill();
-  await daemon.exited;
-  // HARNESS_HOME, the project and the seeded repo, now that nothing writes into them (and
+  await daemon.stop();
+  // The project and the seeded repo, now that nothing writes into them (and
   // tempDir's exit listener covers a crash).
   await cleanupTempDirs();
 }

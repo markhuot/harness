@@ -7,11 +7,12 @@
 // (GET /attachments/:id), a deleted one as missing.
 //
 //   bun run build && bun scripts/composer-attachments-check.ts [--shots=<dir>] [--theme=dark]
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Project, Ticket, TranscriptEntry } from "@harness/shared";
 import { tempDir } from "@harness/shared/testing";
-import { api as makeApi, appDir, checker, launchApp, stopped, until, waitHealthy } from "./lib/drive";
+import { startDaemon } from "@harness/shared/testing/daemon";
+import { api as makeApi, appDir, checker, launchApp, until } from "./lib/drive";
 import { png } from "./lib/png";
 
 const shots = process.argv.find((a) => a.startsWith("--shots="))?.slice("--shots=".length);
@@ -31,13 +32,8 @@ writeFileSync(dropped, png(64, 64, [234, 88, 12], [250, 204, 21]));
 writeFileSync(unwanted, "# Not this one\n");
 const pasted = png(80, 80, [168, 85, 247], [236, 72, 153]);
 
-const port = 7800 + Math.floor(Math.random() * 90);
-const base = `http://127.0.0.1:${port}`;
-const daemon = Bun.spawn(["bun", join(appDir, "..", "service/src/daemon.ts")], {
-  env: { ...process.env, HARNESS_HOME: home, HARNESS_PORT: String(port), HARNESS_DUMMY_DRIVER: "1" },
-  stdout: "ignore",
-  stderr: "inherit",
-});
+const daemon = await startDaemon({ home, delayMs: 15, logs: "inherit" });
+const { port, base } = daemon;
 
 const counter = checker();
 const { check } = counter;
@@ -49,8 +45,7 @@ const shot = async (name: string) => {
 };
 
 try {
-  await waitHealthy(base, 15000);
-  const token = readFileSync(join(home, "token"), "utf8").trim();
+  const { token } = daemon;
   const api = makeApi(base, token);
   const project = await api<Project>("POST", "/projects", { path: projectDir, name: "composer", key: "CMP" });
   const ticket = await api<Ticket>("POST", "/tickets", { projectId: project.id, spec: "Fix the settings page crash", driver: "dummy", start: false });
@@ -199,8 +194,7 @@ try {
   counter.fail();
 } finally {
   await app?.close();
-  daemon.kill();
-  await stopped(daemon);
+  await daemon.stop();
 }
 
 console.log(counter.failures ? `\n${counter.failures} check(s) failed` : "\nall checks passed");

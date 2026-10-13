@@ -7,11 +7,13 @@
 //   bun ios/Tools/dev-sim.ts --seed-only [--keep]
 //
 // Run with --help for what each flag does.
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { startDaemon as startDaemonShared, until, type TestDaemon } from "@harness/shared/testing/daemon";
+import { GREETER_FILES, seedDummySettings, seedRepo } from "@harness/shared/testing/seed";
 import { buildPairUrl, type Project, type Ticket, type TicketDetail } from "@harness/shared";
-import { acquire, checkDisk, ensureDevice, freeGiB, SHARED_DEVICE, type Device } from "./sim";
+import { acquire, acquireReady, checkDisk, ensureDevice, freeGiB, isSharedDevice, SHARED_DEVICE, type Device } from "./sim";
 import { axeFor, hasAxe, screenKey, screenState } from "./axe";
 
 const IOS = resolve(import.meta.dir, "..");
@@ -142,34 +144,6 @@ async function sh(cmd: string[], opts: { cwd?: string; allowFail?: boolean } = {
 }
 const simctl = (...a: string[]) => sh(["xcrun", "simctl", ...a]);
 
-async function until<T>(label: string, fn: () => Promise<T | null | undefined | false>, ms = 20000, every = 100): Promise<T> {
-  const end = Date.now() + ms;
-  let last: unknown;
-  while (Date.now() < end) {
-    try {
-      const v = await fn();
-      if (v) return v;
-    } catch (e) {
-      last = e;
-    }
-    await Bun.sleep(every);
-  }
-  throw new Error(`timed out: ${label}${last ? ` (${(last as Error).message})` : ""}`);
-}
-
-async function git(cwd: string, ...a: string[]) {
-  await sh(["git", "-c", "user.name=Harness Dev", "-c", "user.email=dev@example.com", "-c", "commit.gpgsign=false", ...a], { cwd });
-}
-
-/** A port nothing is listening on, so parallel runs never collide. */
-function freePort(): number {
-  const s = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: () => new Response() });
-  const port = s.port;
-  s.stop(true);
-  if (!port) throw new Error("couldn't find a free port");
-  return port;
-}
-
 // ------------------------------------------------------------------ simulator
 
 /**
@@ -177,7 +151,7 @@ function freePort(): number {
  * any other name has to exist already.
  */
 async function simulatorFor(name: string): Promise<string> {
-  if (name === SHARED_DEVICE) return ensureDevice(name, { log });
+  if (isSharedDevice(name)) return ensureDevice(name, { log });
   const list = JSON.parse(await simctl("list", "devices", "--json")) as { devices: Record<string, Device[]> };
   const d = Object.values(list.devices).flat().find((x) => x.isAvailable && (x.name === name || x.udid === name));
   if (!d) throw new Error(`no simulator named ${name}; dev-sim only ever creates ${SHARED_DEVICE} (drop --sim to use it)`);
@@ -274,53 +248,29 @@ async function shoot(udid: string, name: string) {
 
 // ------------------------------------------------------------------ daemon
 
-type Daemon = { base: string; token: string; home: string; scratch: string; proc: ReturnType<typeof Bun.spawn> };
+type Daemon = TestDaemon & { scratch: string };
 
 async function startDaemon(): Promise<Daemon> {
-  const home = mkdtempSync(join(tmpdir(), "harness-dev-home-"));
   const scratch = mkdtempSync(join(tmpdir(), "harness-dev-projects-"));
-  const port = freePort();
-  const base = `http://127.0.0.1:${port}`;
-  const proc = Bun.spawn(["bun", join(REPO, "service", "src", "daemon.ts")], {
-    env: { ...process.env, HARNESS_HOME: home, HARNESS_PORT: String(port), HARNESS_DUMMY_DRIVER: "1", HARNESS_DUMMY_DELAY_MS: "1" },
-    stdout: Bun.file(join(home, "daemon.out")),
-    stderr: Bun.file(join(home, "daemon.err")),
-  });
-  const d: Daemon = { base, token: "", home, scratch, proc };
   try {
-    await until("daemon /health", async () => (await fetch(`${base}/health`)).ok, 20000, 50);
-    d.token = readFileSync(join(home, "token"), "utf8").trim();
+    return { ...(await startDaemonShared({ delayMs: 1 })), scratch };
   } catch (e) {
-    await stopDaemon(d, true);
+    rmSync(scratch, { recursive: true, force: true });
     throw e;
   }
-  return d;
 }
 
-/** SIGTERM, then SIGKILL after 20 s; deletes its home and scratch unless told to keep them. */
+/** SIGTERM, then SIGKILL after 20 s; deletes its home and scratch. */
 async function stopDaemon(d: Daemon, printErrors = false) {
   if (printErrors) {
     const err = join(d.home, "daemon.err");
     if (existsSync(err)) console.error(readFileSync(err, "utf8").slice(-2000));
   }
-  d.proc.kill("SIGTERM");
-  if (!(await Promise.race([d.proc.exited.then(() => true), Bun.sleep(20000).then(() => false)]))) d.proc.kill("SIGKILL");
-  rmSync(d.home, { recursive: true, force: true });
+  await d.stop();
   rmSync(d.scratch, { recursive: true, force: true });
 }
 
-function client(d: Daemon) {
-  return async function api<T>(method: string, path: string, body?: unknown): Promise<T> {
-    const res = await fetch(d.base + path, {
-      method,
-      headers: { authorization: `Bearer ${d.token}`, ...(body ? { "content-type": "application/json" } : {}) },
-      body: body ? JSON.stringify(body) : undefined,
-    });
-    const json = (await res.json().catch(() => ({}))) as { data?: T; error?: string };
-    if (!res.ok) throw new Error(`${method} ${path} → ${res.status} ${json.error ?? ""}`);
-    return json.data as T;
-  };
-}
+const client = (d: Daemon) => d.api;
 
 export type Seeded = { project: Project; review: Ticket; planning: Ticket; blocked: Ticket; done: Ticket; waiting: Ticket; notes: Ticket };
 
@@ -332,14 +282,8 @@ export type Seeded = { project: Project; review: Ticket; planning: Ticket; block
  */
 async function seed(d: Daemon): Promise<Seeded> {
   const api = client(d);
-  await api("PATCH", "/settings", { defaultDriver: "dummy", classifier: "off" });
-  const repo = join(d.scratch, "greeter");
-  mkdirSync(join(repo, "src"), { recursive: true });
-  writeFileSync(join(repo, "README.md"), "# Greeter\n\nSays hello.\n");
-  writeFileSync(join(repo, "src", "app.ts"), 'export function main(name = "world") {\n  console.log("Hello, " + name);\n}\n');
-  await git(repo, "init", "-q", "-b", "main");
-  await git(repo, "add", "-A");
-  await git(repo, "commit", "-qm", "Initial commit");
+  await seedDummySettings(api);
+  const repo = await seedRepo(join(d.scratch, "greeter"), GREETER_FILES);
   const project = await api<Project>("POST", "/projects", { path: repo, name: "greeter", key: "GREET", useWorktrees: true, defaultDriver: "dummy" });
   const create = (prompt: string, extra: Record<string, unknown> = {}) => api<Ticket>("POST", "/tickets", { projectId: project.id, spec: prompt, driver: "dummy", start: true, ...extra });
   const ticket = async (key: string) => (await api<TicketDetail>("GET", `/tickets/${key}`)).ticket;
@@ -407,8 +351,8 @@ async function main(o: Options): Promise<void> {
     if (!existsSync(app)) throw new UsageError(`${app} doesn't exist; drop --no-build to build it`);
   }
 
-  // The simulator boots and the app builds while the daemon starts and seeds.
-  const device = o.seedOnly ? null : Promise.all([simulatorFor(o.sim), o.build ? buildApp() : Promise.resolve(o.app ?? DEFAULT_APP)]);
+  // The app builds while the daemon starts and seeds; the simulator is taken once it has.
+  const device = o.seedOnly ? null : o.build ? buildApp() : Promise.resolve(o.app ?? DEFAULT_APP);
   device?.catch(() => {}); // awaited below; don't let an early failure go unhandled meanwhile
   const d = await startDaemon();
   let stopped = false;
@@ -433,8 +377,19 @@ async function main(o: Options): Promise<void> {
     const seeded = await seed(d);
     printSeeded(d, seeded);
     if (device) {
-      const [udid, app] = await device;
-      release = await acquire(o.sim, { onWait: (h) => log(`waiting for the ${o.sim} simulator${h ? ` (held by pid ${h.pid}: ${h.command})` : ""}…`) });
+      const app = await device;
+      // The default is any free slot of the shared pool; --sim names one other simulator.
+      let slot = o.sim;
+      let udid: string;
+      if (o.sim === SHARED_DEVICE) {
+        const got = await acquireReady({ onWait: (h) => log(`waiting for a shared simulator${h ? ` (held by pid ${h.pid}: ${h.command})` : ""}…`) }, { log });
+        slot = got.name;
+        release = got.release;
+        udid = got.udid;
+      } else {
+        release = await acquire(o.sim, { onWait: (h) => log(`waiting for the ${o.sim} simulator${h ? ` (held by pid ${h.pid}: ${h.command})` : ""}…`) });
+        udid = await simulatorFor(slot);
+      }
       try {
         const axe = axeFor(udid, process.env.DEVELOPER_DIR!);
         await installAndPair(udid, axe, app, buildPairUrl(d.base, d.token));
@@ -449,7 +404,7 @@ async function main(o: Options): Promise<void> {
       } finally {
         letGo();
       }
-      log(`simulator: ${o.sim} (${udid}); leave it alone, and delete ios/build and ios/HarnessKit/.build when done`);
+      log(`simulator: ${slot} (${udid}); leave it alone, and delete ios/build and ios/HarnessKit/.build when done`);
     }
   } catch (e) {
     await stopDaemon(d, true);

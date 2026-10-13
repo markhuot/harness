@@ -1,4 +1,4 @@
-// Pop-out windows end to end in the built app, over the DevTools Protocol, against the mock
+// Pop-out windows end to end in the built app, over the DevTools Protocol, against the seeded world
 // service: pop a ticket pane out with its header button (the pane leaves the board, a new window
 // shows just it), work in it, put it back on the board; pop a terminal out and check its shell and
 // scrollback came along, then close the window (the shell dies with it); ⇧⌘O pops the focused pane
@@ -6,23 +6,12 @@
 //
 //   bun run build && bun scripts/popout-check.ts [--shots=<dir>]
 import { join } from "node:path";
-import { api as makeApi, appDir, checker, launchApp, stopped, until } from "./lib/drive";
+import { bootWorld } from "./lib/world";
+import { api as makeApi, appDir, checker, launchApp, until } from "./lib/drive";
 
 const shots = process.argv.find((a) => a.startsWith("--shots="))?.slice("--shots=".length);
-const port = 7700 + Math.floor(Math.random() * 90);
-const token = "popout-token";
-const base = `http://127.0.0.1:${port}`;
-const mock = Bun.spawn(["bun", join(appDir, "scripts/mock-service.ts")], {
-  env: { ...process.env, MOCK_PORT: String(port), MOCK_TOKEN: token, MOCK_QUIET: "1" },
-  stdout: "ignore",
-  stderr: "inherit",
-});
-for (let i = 0; i < 50; i++) {
-  try {
-    if ((await fetch(base + "/health")).ok) break;
-  } catch {}
-  await Bun.sleep(100);
-}
+const world = await bootWorld();
+const { base, token } = world;
 const api = makeApi(base, token);
 const { check, ...counter } = checker();
 const alive = (pid: number) => {
@@ -143,8 +132,7 @@ try {
   check("run", false, (e as Error).message);
 } finally {
   await app.close();
-  mock.kill();
-  await stopped(mock);
+  await world.stop();
 }
 console.log(counter.failures ? `${counter.failures} failed` : "all pop-out checks passed");
 process.exit(counter.failures ? 1 : 0);

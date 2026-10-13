@@ -4,15 +4,28 @@ import { join } from "node:path";
 import { tempDir } from "@harness/shared/testing";
 import {
   acquire,
+  acquirePool,
   checkDisk,
   deviceTypeFor,
+  acquireReady,
+  DiskLowError,
+  NEW_SIM_GIB,
+  MIN_FREE_GIB,
+  poolNames,
   ensureDevice,
   etimeSeconds,
   extraRuntimes,
+  isSharedDevice,
+  keptSlots,
+  poolSize,
+  poolSlots,
+  slotCandidates,
+  type SlotView,
   lockHolder,
   markKept,
   parseSimDaemons,
   pinnedRuntime,
+  reapIfStale,
   planReap,
   processStart,
   reap,
@@ -295,17 +308,44 @@ test("planReap removes a stray projects dir only when no home claims it and it's
   expect(plan.remove).toEqual([`${T}/harness-sim-projects-stray`]);
 });
 
+test("planReap reaps an orphaned startDaemon home (harness-daemon-*) after a few minutes, and removes its dir", () => {
+  const T = "/tmp/x";
+  const home = (id: string, ageSec: number) => ({ path: `${T}/harness-daemon-${id}`, kind: "home" as const, ageSec, owner: null, ownerAlive: false, keep: false });
+  const d = (pid: number, id: string, ageSec: number, ppid = 1) => ({ pid, ppid, ageSec, home: `${T}/harness-daemon-${id}` });
+  const plan = planReap({
+    devices: [],
+    held: () => false,
+    dirs: [home("orphan", 600), home("young", 60), home("parented", 900)],
+    daemons: [d(1, "orphan", 600), d(2, "young", 60), d(3, "parented", 900, 999)],
+  });
+  expect(plan.kill.map((p) => p.pid)).toEqual([1]);
+  expect(plan.remove).toEqual([`${T}/harness-daemon-orphan`]);
+});
+
+test("reap lists harness-daemon-* dirs in the temp dir", async () => {
+  const tmp = tempDir("harness-reap-tmp-");
+  mkdirSync(join(tmp, "harness-daemon-stale"));
+  utimesSync(join(tmp, "harness-daemon-stale"), new Date(Date.now() - 3600_000), new Date(Date.now() - 3600_000));
+  mkdirSync(join(tmp, "harness-daemon-fresh"));
+  const done = await reap({ tmp, lockDir: tempDir("harness-locks-"), simctl: async () => JSON.stringify({ devices: {} }), ps: () => "", log: () => {} });
+  expect(done.remove).toEqual([join(tmp, "harness-daemon-stale")]);
+  expect(existsSync(join(tmp, "harness-daemon-stale"))).toBe(false);
+  expect(existsSync(join(tmp, "harness-daemon-fresh"))).toBe(true);
+});
+
 test("parseSimDaemons finds sim-check daemons by their HARNESS_HOME and reads their age", () => {
   const ps = [
     "  9519     1 03:17:29 bun /w/HARNESS-172/service/src/daemon.ts PATH=/bin HARNESS_HOME=/var/T/harness-sim-home-tf4UXu HARNESS_PORT=7848",
     "  3374  3325 1-02:03:04 bun /w/HARNESS-174/service/src/daemon.ts HARNESS_HOME=/var/T/harness-sim-home-fiOcad",
     "   700     1 10:00 bun /Applications/Harness.app/service/src/daemon.ts HARNESS_HOME=/Users/me/.harness",
     "   701     1 10:00 bun test HARNESS_HOME=/var/T/harness-sim-home-zzz",
+    "  4400     1 20:00 bun /w/x/service/src/daemon.ts HARNESS_HOME=/var/T/harness-daemon-Ab12Cd HARNESS_PORT=1",
     "garbage",
   ].join("\n");
   expect(parseSimDaemons(ps)).toEqual([
     { pid: 9519, ppid: 1, ageSec: 3 * 3600 + 17 * 60 + 29, home: "/var/T/harness-sim-home-tf4UXu" },
     { pid: 3374, ppid: 3325, ageSec: 86400 + 2 * 3600 + 3 * 60 + 4, home: "/var/T/harness-sim-home-fiOcad" },
+    { pid: 4400, ppid: 1, ageSec: 1200, home: "/var/T/harness-daemon-Ab12Cd" },
   ]);
   expect(etimeSeconds("05")).toBe(5);
   expect(etimeSeconds("01:05")).toBe(65);
@@ -343,4 +383,247 @@ test("reap shuts down unheld devices under their lock, stops an orphaned daemon 
   expect(await orphan.exited).not.toBe(0);
   expect(readdirSync(tmp).sort()).toEqual(["harness-sim-home-kept", "harness-sim-home-live", "harness-sim-projects-live"]);
   releaseLock("sim-check 3", locks);
+});
+
+test("planReap leaves kept homes alone, and stops their daemons and removes them with includeKept (reap --kept)", () => {
+  const T = "/tmp/x";
+  const kept = { path: `${T}/harness-sim-home-k`, kind: "home" as const, ageSec: 10, owner: { pid: 1, start: "s", scratch: `${T}/harness-sim-projects-k` }, ownerAlive: false, keep: true };
+  const live = { ...kept, path: `${T}/harness-sim-home-l`, owner: { pid: 2, start: "s", scratch: `${T}/harness-sim-projects-l` }, ownerAlive: true, keep: false };
+  const input = { devices: [], held: () => false, dirs: [kept, live], daemons: [{ pid: 1, ppid: 1, ageSec: 99, home: kept.path }, { pid: 2, ppid: 1, ageSec: 99, home: live.path }] };
+  expect(planReap(input)).toEqual({ shutdown: [], kill: [], remove: [] });
+  const all = planReap({ ...input, includeKept: true });
+  expect(all.kill.map((p) => p.pid)).toEqual([1]); // not the live run's daemon
+  expect(all.remove).toEqual([kept.path, `${T}/harness-sim-projects-k`]);
+  // A --reuse run that attached to the kept home took over its owner file: it's live now, so reap --kept leaves it be.
+  const attached = { ...kept, owner: { pid: 3, start: "s", scratch: kept.owner.scratch }, ownerAlive: true };
+  expect(planReap({ ...input, dirs: [attached, live], includeKept: true })).toEqual({ shutdown: [], kill: [], remove: [] });
+});
+
+// ---------------------------------------------------------------- the pool
+
+const view = (name: string, o: Partial<SlotView> = {}): SlotView => ({ name, exists: true, booted: true, held: false, ...o });
+const A = "harness-shared";
+const B = "harness-shared-2";
+
+test("poolSlots keeps the existing harness-shared as slot 1; poolSize reads HARNESS_SIM_POOL_SIZE and ignores junk", () => {
+  expect(poolSlots(3)).toEqual([A, B, "harness-shared-3"]);
+  expect(poolSize({})).toBe(2);
+  expect(poolSize({ HARNESS_SIM_POOL_SIZE: "3" })).toBe(3);
+  for (const bad of ["0", "-1", "x", "1.5", ""]) expect(poolSize({ HARNESS_SIM_POOL_SIZE: bad })).toBe(2);
+  expect(isSharedDevice(B) && isSharedDevice(A) && isSharedDevice("harness-shared-ipad")).toBe(true);
+  expect(isSharedDevice("harness-shared-x") || isSharedDevice("sim-check 2")).toBe(false);
+});
+
+test("slotCandidates: the first free existing slot wins, held ones are skipped, preferred ones go first", () => {
+  expect(slotCandidates([view(A), view(B)], { diskOk: true })).toEqual([A, B]);
+  expect(slotCandidates([view(A, { held: true }), view(B)], { diskOk: true })).toEqual([B]);
+  expect(slotCandidates([view(A), view(B)], { diskOk: true, prefer: [B] })).toEqual([B, A]);
+  expect(slotCandidates([view(A, { held: true }), view(B, { held: true })], { diskOk: true, prefer: [B] })).toEqual([]);
+});
+
+test("slotCandidates: the pool grows lazily, and only with disk to spare", () => {
+  const grow = [view(A, { held: true }), view(B, { exists: false, booted: false })];
+  expect(slotCandidates(grow, { diskOk: true })).toEqual([B]);
+  expect(slotCandidates(grow, { diskOk: false })).toEqual([]); // wait on the first slot instead
+  // an existing slot is taken before a missing one is created
+  expect(slotCandidates([view(A, { exists: false, booted: false }), view(B)], { diskOk: false })).toEqual([B]);
+  expect(slotCandidates([view(A, { exists: false, booted: false }), view(B)], { diskOk: true })).toEqual([B, A]);
+});
+
+test("slotCandidates: creating needs the growth margin (roomForNew), not just MIN_FREE_GIB; existing slots only need MIN_FREE_GIB", () => {
+  const grow = [view(A, { held: true }), view(B, { exists: false, booted: false })];
+  expect(slotCandidates(grow, { diskOk: true, roomForNew: false })).toEqual([]);
+  expect(slotCandidates(grow, { diskOk: true, roomForNew: true })).toEqual([B]);
+  expect(slotCandidates([view(A, { held: true }), view(B, { booted: false })], { diskOk: true, roomForNew: false })).toEqual([B]);
+});
+
+test("slotCandidates: under low disk a shut-down slot beyond the first isn't booted, a booted one still is, the first always is", () => {
+  expect(slotCandidates([view(A, { held: true }), view(B, { booted: false })], { diskOk: false })).toEqual([]);
+  expect(slotCandidates([view(A, { held: true }), view(B)], { diskOk: false })).toEqual([B]);
+  expect(slotCandidates([view(A, { booted: false }), view(B)], { diskOk: false })).toEqual([A, B]);
+});
+
+const slotDev = (name: string, state = "Booted", udid = `U-${name}`) => ({ udid, name, state, isAvailable: true });
+
+test("acquirePool: two callers get different slots, a third waits for one to be released", async () => {
+  const dir = tempDir();
+  const opts = { dir, pollMs: 10, devices: async () => [slotDev(A), slotDev(B)], freeGiB: () => 100 };
+  const first = await acquirePool(opts);
+  const second = await acquirePool(opts);
+  expect([first.name, second.name].sort()).toEqual([A, B]);
+  let got: string | null = null;
+  const third = acquirePool(opts).then((r) => ((got = r.name), r));
+  await Bun.sleep(60);
+  expect(got).toBeNull();
+  second.release();
+  expect((await third).name).toBe(second.name);
+  first.release();
+  (await third).release();
+});
+
+test("acquirePool: a slot whose holder died is taken over, and under low disk it waits instead of creating slot 2", async () => {
+  const dir = tempDir();
+  const child = await holdInChild(dir, A, 60_000);
+  const low = { dir, pollMs: 10, devices: async () => [slotDev(A)], freeGiB: () => 1 };
+  await expect(acquirePool({ ...low, timeoutMs: 100 })).rejects.toThrow(/timed out waiting for a shared simulator.*pid \d+.*disk is low/);
+  expect(existsSync(join(dir, `${B}.lock`))).toBe(false);
+  child.kill("SIGKILL");
+  await child.exited;
+  const got = await acquirePool(low);
+  expect(got.name).toBe(A); // the dead holder's lock was reaped, per slot
+  got.release();
+  // with room, the same situation (slot 1 held) creates slot 2
+  const again = await holdInChild(dir, A, 60_000);
+  const roomy = await acquirePool({ ...low, freeGiB: () => 50 });
+  expect(roomy.name).toBe(B);
+  roomy.release();
+  again.kill();
+});
+
+test("acquirePool inside with-lock returns the slot the parent holds, even when it's slot 2", async () => {
+  const dir = tempDir();
+  const parent = await holdInChild(dir, B, 5000);
+  process.env.HARNESS_SIM_LOCKED = B;
+  try {
+    const got = await acquirePool({ dir, timeoutMs: 100, devices: async () => [slotDev(A), slotDev(B)] });
+    expect(got.name).toBe(B);
+    got.release();
+    expect(lockHolder(B, dir)?.pid).toBe(parent.pid);
+  } finally {
+    delete process.env.HARNESS_SIM_LOCKED;
+    parent.kill();
+  }
+});
+
+test("keptSlots maps the kept --reuse states' simulators to pool slots, newest first, ignoring other devices", async () => {
+  const { writeReuseState } = await import("./sim-reuse");
+  const tmp = tempDir();
+  const keep = (name: string, savedAt: number, udids: string[]) => {
+    const home = join(tmp, `harness-sim-home-${name}`);
+    mkdirSync(home);
+    writeFileSync(join(home, "keep"), "");
+    writeReuseState(home, { version: 2, savedAt, port: 1, scratch: "", daemonPid: 1, modeKey: "walk", seeds: [], seeded: {}, udids, appHash: "", installed: [], repoRoot: "", serviceHash: "" });
+  };
+  keep("old", 1, ["U-" + A]);
+  keep("new", 2, ["U-" + B, "U-sim-check 2", "gone"]);
+  expect(await keptSlots(tmp, async () => [slotDev(A), slotDev(B), slotDev("sim-check 2")], async () => true)).toEqual([B, A]);
+});
+
+test("acquirePool creates a new slot only at NEW_SIM_GIB free, not at MIN_FREE_GIB", async () => {
+  expect(NEW_SIM_GIB).toBeGreaterThan(MIN_FREE_GIB);
+  const dir = tempDir();
+  const holder = await holdInChild(dir, A, 60_000);
+  const base = { dir, pollMs: 10, devices: async () => [slotDev(A)] };
+  await expect(acquirePool({ ...base, freeGiB: () => NEW_SIM_GIB - 0.5, timeoutMs: 80 })).rejects.toThrow(/disk is low/);
+  const got = await acquirePool({ ...base, freeGiB: () => NEW_SIM_GIB });
+  expect(got.name).toBe(B);
+  got.release();
+  holder.kill();
+});
+
+test("acquirePool with no simulator at all and too little disk fails at once instead of waiting", async () => {
+  await expect(acquirePool({ dir: tempDir(), devices: async () => [], freeGiB: () => 6, timeoutMs: 60_000 })).rejects.toBeInstanceOf(DiskLowError);
+});
+
+test("acquirePool polls simctl only while a slot is unheld", async () => {
+  const dir = tempDir();
+  const a = await holdInChild(dir, A, 60_000);
+  const b = await holdInChild(dir, B, 60_000);
+  let listed = 0;
+  const devices = async () => (listed++, [slotDev(A), slotDev(B)]);
+  await expect(acquirePool({ dir, devices, pollMs: 10, timeoutMs: 120, freeGiB: () => 100 })).rejects.toThrow(/timed out/);
+  expect(listed).toBe(0);
+  a.kill();
+  b.kill();
+});
+
+test("acquireReady: when creating the slot is refused for disk after it was locked, it lets go and takes an existing slot instead", async () => {
+  const dir = tempDir();
+  const holder = await holdInChild(dir, A, 60_000);
+  const sim = fakeSimctl([runtime("27.0")], { "com.apple.CoreSimulator.SimRuntime.iOS-27-0": [{ udid: "UA", name: A, state: "Booted", isAvailable: true }] });
+  // The pool check saw room for slot 2 (50 GiB); by the time ensureDevice looks, another run used it (1 GiB).
+  const pool = { dir, pollMs: 10, devices: async () => [slotDev(A)], freeGiB: () => 50 };
+  const pending = acquireReady(pool, { simctl: sim.run, lockDir: dir, freeGiB: () => 1, log: () => {} });
+  await Bun.sleep(100);
+  expect(lockHolder(B, dir)).toBeNull(); // slot 2 was let go, not kept
+  expect(sim.calls.some((c) => c[0] === "create")).toBe(false);
+  holder.kill("SIGKILL");
+  const got = await pending;
+  expect([got.name, got.udid]).toEqual([A, "UA"]);
+  got.release();
+});
+
+test("acquireReady: a slot refused for disk is tried again once the disk has room, rather than waiting on a held slot", async () => {
+  const dir = tempDir();
+  const holder = await holdInChild(dir, A, 60_000);
+  const sim = fakeSimctl([runtime("27.0")], { "com.apple.CoreSimulator.SimRuntime.iOS-27-0": [{ udid: "UA", name: A, state: "Booted", isAvailable: true }] });
+  let free = 1;
+  const pool = { dir, pollMs: 10, timeoutMs: 5000, devices: async () => (await sim.run("list", "devices", "--json").then((o) => Object.values((JSON.parse(o) as { devices: Record<string, { udid: string; name: string; state: string; isAvailable: boolean }[]> }).devices).flat())), freeGiB: () => 50 };
+  const pending = acquireReady(pool, { simctl: sim.run, lockDir: dir, freeGiB: () => free, log: () => {} });
+  await Bun.sleep(150);
+  expect(sim.calls.some((c) => c[0] === "create")).toBe(false); // refused, and A is held
+  free = 50;
+  const got = await pending;
+  expect(got.name).toBe(B); // created, not waited out
+  expect(sim.calls.some((c) => c[0] === "create")).toBe(true);
+  got.release();
+  holder.kill("SIGKILL");
+});
+
+test("reapIfStale leaves a lock another process created after the stale one was already gone", () => {
+  const dir = tempDir();
+  const path = join(dir, "x.lock");
+  const live = JSON.stringify({ pid: process.pid, start: processStart(process.pid), command: "other", at: new Date().toISOString() });
+  // No lock file at the re-read; a live holder appears right after it. Removing "the stale lock" now would delete theirs.
+  reapIfStale(path, () => writeFileSync(path, live));
+  expect(existsSync(path)).toBe(true);
+});
+
+test("reapIfStale still removes a lock whose holder is dead", () => {
+  const dir = tempDir();
+  const path = join(dir, "y.lock");
+  writeFileSync(path, JSON.stringify({ pid: 2 ** 22 + 12345, start: "never", command: "gone", at: "" }));
+  reapIfStale(path);
+  expect(existsSync(path)).toBe(false);
+});
+
+test("ensureDevice creates a simulator only at NEW_SIM_GIB free, and one at a time across names", async () => {
+  const dir = tempDir();
+  const low = fakeSimctl([runtime("27.0")]);
+  await expect(ensureDevice(B, { simctl: low.run, lockDir: dir, freeGiB: () => NEW_SIM_GIB - 1, log: () => {} })).rejects.toBeInstanceOf(DiskLowError);
+  expect(low.calls.some((c) => c[0] === "create")).toBe(false);
+  const sim = fakeSimctl([runtime("27.0")]);
+  let active = 0;
+  let most = 0;
+  const run: Simctl = async (...args) => {
+    if (args[0] === "create") {
+      most = Math.max(most, ++active);
+      await Bun.sleep(40);
+      active--;
+    }
+    return sim.run(...args);
+  };
+  const opts = { simctl: run, lockDir: dir, freeGiB: () => 100, log: () => {} };
+  await Promise.all([ensureDevice(A, opts), ensureDevice(B, opts)]);
+  expect(most).toBe(1);
+});
+
+test("poolNames lists configured slots plus any existing harness-shared-N, in slot order, never the iPad", () => {
+  const dev = (name: string) => slotDev(name);
+  expect(poolNames([dev(A)], 2)).toEqual([A, B]);
+  expect(poolNames([dev("harness-shared-3"), dev(A), dev("harness-shared-ipad"), dev("sim-check 2"), dev("harness-shared-10")], 2)).toEqual([A, B, "harness-shared-3", "harness-shared-10"]);
+});
+
+test("keptSlots ignores kept states whose daemon is dead", async () => {
+  const { writeReuseState } = await import("./sim-reuse");
+  const tmp = tempDir();
+  const keep = (name: string, savedAt: number, udid: string) => {
+    const home = join(tmp, `harness-sim-home-${name}`);
+    mkdirSync(home);
+    writeFileSync(join(home, "keep"), "");
+    writeReuseState(home, { version: 2, savedAt, port: 1, scratch: "", daemonPid: savedAt, modeKey: "walk", seeds: [], seeded: {}, udids: [udid], appHash: "", installed: [], repoRoot: "", serviceHash: "" });
+  };
+  keep("dead-newer", 2, "U-" + B);
+  keep("live-older", 1, "U-" + A);
+  expect(await keptSlots(tmp, async () => [slotDev(A), slotDev(B)], async (s) => s.daemonPid === 1)).toEqual([A]);
 });

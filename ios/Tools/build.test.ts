@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { checkApp, machOCpuTypes, parseArgs, UsageError } from "./build";
+import { checkApp, deviceArgs, simArgs, machOCpuTypes, parseArgs, UsageError } from "./build";
 
 const ARM64 = 0x0100000c;
 const X86_64 = 0x01000007;
@@ -121,4 +121,21 @@ test("parseArgs: device needs --device; verify needs a bundle id and one app", (
   expect(() => parseArgs([...verify, "a.app", "b.app"])).toThrow("exactly one");
   expect(() => parseArgs(["verify", "--build-number", "1", "a.app"])).toThrow("--bundle-id");
   expect(() => parseArgs([...verify, "--kind", "native", "a.app"])).toThrow("verify doesn't take --kind");
+});
+
+test("snapshots takes no flags", () => {
+  expect(parseArgs(["snapshots"])).toEqual({ command: "snapshots" });
+  expect(() => parseArgs(["snapshots", "--record"])).toThrow(UsageError);
+});
+
+const compilationConditions = (args: string[]) => args.filter((a) => a.startsWith("SWIFT_ACTIVE_COMPILATION_CONDITIONS=")).join(" ");
+
+test("the simulator build compiles in the debug probe (SIM_CHECK)", () => {
+  expect(compilationConditions(simArgs())).toMatch(/\bSIM_CHECK\b/);
+});
+
+test("the device build, though Debug, never gets SIM_CHECK, so a phone runs no probe", () => {
+  const args = deviceArgs();
+  expect(args).toContain("Debug");
+  expect(args.join(" ")).not.toContain("SIM_CHECK");
 });

@@ -43,12 +43,15 @@ targets:
         com.apple.security.application-groups: [group.com.markhuot.harness]
         aps-environment: development
     # The syntax highlighter's JavaScriptCore bundle (Shiki, from Tools/highlighter/highlight.ts) is
-    # generated, not committed: bun bundles it into the app on every build (ARCHITECTURE.md
-    # § Syntax highlighting). It runs every time because its inputs are the whole Shiki dependency
-    # tree; build-highlighter.ts leaves the file alone when nothing changed.
+    # generated, not committed: bun bundles it into the app (ARCHITECTURE.md § Syntax highlighting).
+    # Xcode skips each bundle phase while its inputs (the files in build/bundle-*.xcfilelist) are
+    # unchanged and its output exists. Tools/build.ts writes those lists before every build
+    # (build-cache.ts bundleInputs: the bundle's sources, shared/src and bun.lock, which pins Shiki
+    # and esbuild). A plain xcodegen or Xcode build needs them, so run build.ts once first.
     preBuildScripts:
       - name: Bundle highlighter
-        basedOnDependencyAnalysis: false
+        inputFileLists: [build/bundle-highlighter.xcfilelist]
+        outputFiles: ["$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/highlighter.js"]
         showEnvVars: false
         script: |
           BUN="$(command -v bun || true)"
@@ -63,7 +66,8 @@ targets:
       # The file editor's CodeMirror bundle (editor/, built by editor/scripts/build.ts) goes in the
       # same way, beside Resources/editor.html, which loads it (ARCHITECTURE.md § File viewer).
       - name: Bundle editor
-        basedOnDependencyAnalysis: false
+        inputFileLists: [build/bundle-editor.xcfilelist]
+        outputFiles: ["$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/editor.js"]
         showEnvVars: false
         script: |
           BUN="$(command -v bun || true)"
@@ -126,6 +130,25 @@ targets:
         # phase may only do for declared inputs.
         ENABLE_USER_SCRIPT_SANDBOXING: NO
         PRODUCT_BUNDLE_IDENTIFIER: com.markhuot.harness
+  # The snapshot tests (ARCHITECTURE.md § Snapshot tests): the app's screens rendered in-process from
+  # fixture models. Hosted by the app (`@testable import Harness`) and run in Debug through
+  # `bun run sim snapshots`, never in a release build. The reference PNGs sit beside the sources
+  # and are not part of the bundle.
+  HarnessSnapshotTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: HarnessSnapshotTests
+        excludes: ["References/**"]
+    dependencies:
+      - target: Harness
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.markhuot.harness.snapshottests
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/Harness.app/Harness
+        BUNDLE_LOADER: $(TEST_HOST)
+        ENABLE_TESTABILITY: YES
   # The widgets (ARCHITECTURE.md § Widgets). One set of sources builds both extensions: this one
   # for iPhone and iPad, embedded in the app, and HarnessMacWidgets for the Electron Mac app.
   HarnessWidgets:
@@ -207,3 +230,12 @@ schemes:
     build:
       targets:
         HarnessMacWidgets: all
+  HarnessSnapshots:
+    build:
+      targets:
+        Harness: all
+        HarnessSnapshotTests: [test]
+    test:
+      config: Debug
+      targets:
+        - HarnessSnapshotTests

@@ -1,27 +1,16 @@
-// The sidebar's plan-usage gauges in the built app, against the mock service (GET /usage, and PUT
-// /mock/usage to push a usage.updated): rows and their colours in both modes, the ⓘ popover, the
+// The sidebar's plan-usage gauges in the built app, against the seeded world (GET /usage answered by
+// the world's proxy, which also pushes a usage.updated): rows and their colours in both modes, the ⓘ popover, the
 // filter menu, an unreadable driver, the one-line Hide state, and that filter and mode persist.
 // planUsage.test.ts covers the maths underneath.
 //
 //   bun run build && bun scripts/plan-usage-check.ts [--shots=<dir>]
 import { join } from "node:path";
-import { appDir, checker, launchApp, stopped, until } from "./lib/drive";
+import { bootWorld } from "./lib/world";
+import { appDir, checker, launchApp, until } from "./lib/drive";
 
 const shots = process.argv.find((a) => a.startsWith("--shots="))?.slice("--shots=".length);
-const port = 7900 + Math.floor(Math.random() * 90);
-const token = "usage-token";
-const base = `http://127.0.0.1:${port}`;
-const mock = Bun.spawn(["bun", join(appDir, "scripts/mock-service.ts")], {
-  env: { ...process.env, MOCK_PORT: String(port), MOCK_TOKEN: token, MOCK_QUIET: "1" },
-  stdout: "ignore",
-  stderr: "inherit",
-});
-for (let i = 0; i < 50; i++) {
-  try {
-    if ((await fetch(base + "/health")).ok) break;
-  } catch {}
-  await Bun.sleep(100);
-}
+const world = await bootWorld();
+const { base, token } = world;
 const counter = checker();
 const { check } = counter;
 const app = await launchApp({ baseUrl: base, token });
@@ -37,7 +26,7 @@ try {
     );
   const clickText = (sel: string, text: string) =>
     js<boolean>(`(() => { const el = [...document.querySelectorAll(${JSON.stringify(sel)})].find(e => e.textContent.includes(${JSON.stringify(text)})); el?.click(); return !!el; })()`);
-  const push = (drivers: unknown) => fetch(`${base}/mock/usage`, { method: "PUT", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify({ drivers }) });
+  const push = async (drivers: unknown[]) => world.setUsage(drivers);
   const t = Date.now();
   const H = 3_600_000;
   const win = (id: string, label: string, usedPercent: number, resetsIn: number, windowSeconds: number) => ({ id, label, usedPercent, resetsAt: t + resetsIn, windowSeconds });
@@ -131,8 +120,7 @@ try {
   check("run", false, (e as Error).message);
 } finally {
   await app.close();
-  mock.kill();
-  await stopped(mock);
+  await world.stop();
 }
 console.log(counter.failures ? `${counter.failures} failed` : "all plan usage checks passed");
 process.exit(counter.failures ? 1 : 0);

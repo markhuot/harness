@@ -3,23 +3,11 @@
 import { rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { tempDir } from "@harness/shared/testing";
+import { apiClient, until } from "@harness/shared/testing/daemon";
 
 export const appDir = resolve(import.meta.dir, "..", "..");
 
-export async function until<T>(what: string, fn: () => Promise<T | undefined | false | null>, ms = 8000): Promise<T> {
-  const end = Date.now() + ms;
-  let last: unknown;
-  while (Date.now() < end) {
-    try {
-      const v = await fn();
-      if (v) return v;
-    } catch (e) {
-      last = e;
-    }
-    await Bun.sleep(100);
-  }
-  throw new Error(`timed out waiting for: ${what}${last ? ` (${(last as Error).message})` : ""}`);
-}
+export { until };
 
 export function checker() {
   let failures = 0;
@@ -30,18 +18,7 @@ export function checker() {
   return { check, fail: () => failures++, get failures() { return failures; } };
 }
 
-export function api(base: string, token: string) {
-  return async <T>(method: string, path: string, body?: unknown): Promise<T> => {
-    const res = await fetch(base + path, {
-      method,
-      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-      body: body ? JSON.stringify(body) : undefined,
-    });
-    const json = (await res.json()) as { data?: T; error?: string };
-    if (!res.ok) throw new Error(`${method} ${path}: ${json.error ?? res.status}`);
-    return json.data as T;
-  };
-}
+export const api = apiClient;
 
 export async function waitHealthy(base: string, ms = 10000) {
   await until(`${base}/health`, async () => (await fetch(base + "/health")).ok, ms);

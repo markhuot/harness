@@ -27,8 +27,19 @@ export type BridgeEvent =
   | { type: "error"; message: string }
   | { type: "contents"; id?: string; contents: string };
 
+/** What the debug state probe reads from the page (ios/HarnessKit DebugState.EditorState). */
+export interface BridgeProbe {
+  markedLines: string[];
+  selection: { anchor: number; head: number };
+  dirty: boolean;
+  scrollY: number;
+  lineCount: number;
+}
+
 export interface Mounted {
   receive(command: BridgeCommand): void;
+  /** The editor's state for the debug probe; null while no editor (or only a diff) is open. */
+  probe(): BridgeProbe | null;
   destroy(): void;
 }
 
@@ -56,6 +67,17 @@ export function mount(win: Window, post: (event: BridgeEvent) => void, parent?: 
       } catch (error) {
         post({ type: "error", message: error instanceof Error ? error.message : String(error) });
       }
+    },
+    probe() {
+      if (!editor) return null;
+      const { selection, doc } = editor.view.state;
+      return {
+        markedLines: Array.from(root.querySelectorAll(".cm-revealed-line"), (el) => el.textContent ?? ""),
+        selection: { anchor: selection.main.anchor, head: selection.main.head },
+        dirty: editor.isDirty(),
+        scrollY: Math.round(win.scrollY || 0),
+        lineCount: doc.lines,
+      };
     },
     destroy: clear,
   };

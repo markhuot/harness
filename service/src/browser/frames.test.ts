@@ -26,13 +26,14 @@ import {
 } from "../tools";
 import { fakeContext, fakeOps, fakeSession } from "../tools/fakes";
 import type { ToolContext, ToolResult } from "../tools/types";
+import { describeIf } from "@harness/shared/testing/skip";
 import { findChrome } from "./chrome.ts";
 import { frameChain } from "./frames.ts";
 import { BrowserManager } from "./manager.ts";
 import { checkCondition, describeCondition } from "./wait.ts";
 
 const chromePath = findChrome();
-const withChrome = chromePath ? describe : describe.skip;
+const withChrome = describeIf(chromePath, "Chrome not found (set HARNESS_CHROME_PATH): frames tests skipped");
 const profileDir = chromePath ? tempDir("harness-frames-test-") : "";
 const work = tempDir("harness-frames-work-");
 const scratch = tempDir("harness-frames-scratch-");
@@ -389,6 +390,11 @@ return [await content("#status"), await evaluate(() => document.getElementById("
       expect(await run(browserEval, { expression: "document.title", frame: '["#card-frame","#tds"]' }, ctx)).toBe('"Challenge"');
     }, 30_000);
   });
+  // Closes Chrome here, as the file's last test, because a hook gets only 5 s and a busy machine can
+  // take longer; the afterAll above then finds nothing left to close.
+  test("closes Chrome", async () => {
+    await browser.shutdown();
+  }, 30_000);
 });
 
 describe("resolveUploadPaths", () => {

@@ -1,7 +1,8 @@
 # Harness
 
-README.md covers setup and use, and DESIGN.md covers the architecture. `bun run test` and
-`bun run typecheck` run from the repo root.
+README.md covers setup and use, and DESIGN.md covers the architecture. `bun run verify` runs the
+test layers your change needs (below); `bun run test` and `bun run typecheck` still run
+everything from the repo root.
 
 ## Changelog
 
@@ -14,57 +15,64 @@ say in a plain sentence what it changes for the people working on Harness.
 
 ## Verifying changes
 
-A change isn't done until it has a test, `bun run test` and `bun run typecheck` pass, and a visible
-change has screenshots in the spec's Status.
+A change isn't done until it has a test, `bun run verify` passes, and a visible change has
+screenshots in the spec's Status. A ticket worktree starts without `node_modules`: clone the main
+checkout's with `cp -Rc /Users/markhuot/Sites/harness/node_modules .` (copy-on-write) or run
+`bun install`. That failure is yours to fix, not a reason to submit unverified.
 
-- **Dependencies.** A ticket worktree starts without `node_modules`, so typecheck and tests fail
-  until you add them. Clone the main checkout's with `cp -Rc /Users/markhuot/Sites/harness/node_modules .`
-  (copy-on-write, no extra disk) or run `bun install`. That failure is yours to fix, not a reason to
-  submit unverified.
-- **Mac app.** `bun run --cwd app spec-activity`, `shoot`, `smoke` and `changes` drive the built
-  renderer and write screenshots (`spec-activity` to `app/out/screenshots/`). Put new UI behaviour
-  under an assertion in the closest `app/scripts/*-check.ts` script, as the margin check in
-  `spec-activity.ts` does.
-- **iPhone and iPad.** Use sim-check under `bun run sim with-lock`, as the Simulators section below
-  describes. Run the mode for the area you touched (`--only=<check>`, `--sheets`, `--ipad --sheets`,
-  `--stick`…), not the whole suite: validation takes no screenshots. Spec screenshots come from
-  `--only=<screen>` or `--shot=<link>` (e.g. `--shot='harness://ticket/{headings}?tab=spec'`), never
-  a full `--screens` run.
+**`bun run verify`** maps your diff against `main` (`--base=<ref>` for a stacked ticket) to layers
+and runs them: bun tests and `bun run typecheck`, `swift test` for `ios/HarnessKit`, the closest
+`app/scripts/*-check.ts` for `app/src/renderer`, and the snapshot tests and sim-check chain for the
+iPhone screens you touched. Files no rule knows run bun tests + typecheck. `--dry-run` prints the plan
+and why; `--all` runs everything. The mapping is `scripts/verify-plan.ts`. Run it once when you're
+done, not after every edit.
+
+While you work, use the lowest layer that can see the bug, and write the logic first:
+
+1. **Logic** (routing, counting, layout math, request bodies, state rules): a HarnessKit test
+   (`cd ios/HarnessKit && swift test`) or the service's `bun test`. Seconds.
+2. **A screen's look** in the iPhone app: `bun run sim snapshots --only=ScreenSnapshotTests/<test>`
+   (`--out=<dir>` writes the renders for a spec's screenshots). No daemon, about a second a screen.
+   `--record` updates the references after an intended change. The state probe and event waits cover
+   what a snapshot can't see without a full run.
+3. **Real taps, scrolling, keyboard, relaunch**: sim-check, as narrowly as you can. Run
+   `bun ios/Tools/sim-check.ts --only=<chain> --grep=<check> --keep`, then
+   `--only=<chain> --grep=<check> --reuse --no-build` as often as you like (seconds); `--sheets`,
+   `--ipad --sheets`, `--stick` and the other modes work the same way. `bun run sim reap --kept` clears
+   what `--keep` left. Validation takes no screenshots; for the spec use `--only=<screen>` or
+   `--shot='harness://ticket/{headings}?tab=spec'`, never `--screens`. Run a sim-check in the
+   foreground and read its output; don't poll a background one.
+4. **The Mac app**: put new UI behaviour under an assertion in the closest `app/scripts/*-check.ts`
+   (as the margin check in `spec-activity.ts` does) and run it with `bun run --cwd app build` first.
+   `spec-activity`, `shoot`, `smoke` and `changes` write screenshots (`spec-activity` to
+   `app/out/screenshots/`).
 
 ## Simulators
 
 Several agents build and test the iPhone app at once on a Mac with little free disk, so they share
-one simulator and one runtime.
+one runtime and a small pool of simulators.
 
 - Test only on the iOS 27.0 runtime, with
   `DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer`. Never download or install
   another runtime (`xcodebuild -downloadPlatform`, `xcrun simctl runtime add`, Xcode's Components
   settings, and so on). Each one takes about 8 GB. If 27.0 is missing, block and ask.
-- Never create a simulator of your own. Use the shared ones, `harness-shared` (an iPhone 18 Pro on
-  iOS 27.0) and, for `sim-check --ipad`, `harness-shared-ipad` (an iPad Pro 11-inch, kept booted
-  between runs so each iPad run skips creating and installing on a fresh one), through `bun run sim` (`ios/Tools/sim.ts`). `bun run sim ensure` creates it the
-  first time, boots it and prints its UDID. Don't use, shut down, or delete simulators that
-  someone else owns (`harness-HARNESS-*`, `sim-check *`).
-- Run everything that touches the simulator (install, launch, screenshots, AXe taps, sim-check,
-  dev-sim) under its lock, so two agents never install different builds over each other:
-  `bun run sim with-lock -- <command>`. It waits for the lock (30 minutes, `--timeout=minutes`),
-  boots the device, runs the command with `SIM_UDID` set, and lets go when the command ends or
-  dies. Hold it for one install-to-screenshot pass, not for a whole ticket. sim-check takes the
-  lock itself.
+- Never create a simulator of your own. Use the shared pool through `bun run sim`
+  (`ios/Tools/sim.ts`): `harness-shared` and `harness-shared-2` (iPhones; the lock takes whichever is
+  free) and `harness-shared-ipad` for `--ipad`. Don't use, shut down, or delete simulators someone
+  else owns (`harness-HARNESS-*`, `sim-check *`).
+- Run everything that touches a simulator (install, launch, screenshots, AXe taps, dev-sim) under its
+  lock, so two agents never install different builds over each other:
+  `bun run sim with-lock -- <command>`. Hold it for one install-to-screenshot pass, not for a whole
+  ticket. `sim-check`, `sim snapshots` and `verify` take the lock themselves.
 - Before a heavy build (xcodebuild, sim-check, `release:publish`), run `bun run sim disk`. It exits
-  1 when less than 5 GiB is free. Then block and ask rather than build. It also names any iOS
-  runtime other than 27.0 that's installed. Pass those on to the human; don't delete them yourself.
-- sim-check shuts down and deletes the `sim-check *` simulators it drove when it ends (normally, by
-  error, or on Ctrl-C/SIGTERM), unless `--keep`. Each one grows to 3–8 GB, and the next run that
-  needs one creates it again. A run killed outright (SIGKILL, a tool timeout) can't, and
-  leaves booted simulators and an orphaned daemon behind. The next sim-check or `with-lock` cleans
-  those up first. If the Mac is slow or a run was killed, run `bun run sim reap` yourself. It only
-  touches what no live run owns: `sim-check *` simulators nobody holds the lock on, daemons whose
-  sim-check is gone, and their temp dirs. Never kill sim-check daemons or shut down `sim-check *`
-  simulators by hand.
-- When you're done, delete your build output (`ios/build`, `ios/HarnessKit/.build`)
-  and leave the shared simulator alone. `bun run sim shutdown` shuts it down once nobody holds the
-  lock, if it needs to stop.
+  1 when less than 5 GiB is free: then block and ask rather than build. It also names any iOS runtime
+  other than 27.0; pass that on to the human, don't delete it. `verify` runs it before its simulator
+  layers.
+- sim-check removes the `sim-check *` simulators it drove when it ends, unless `--keep`. If a run was
+  killed outright or the Mac is slow, run `bun run sim reap`; it only touches what no live run owns.
+  Never kill sim-check daemons or shut down `sim-check *` simulators by hand.
+- When you're done, delete your build output (`ios/build`, `ios/HarnessKit/.build`) and leave the
+  shared simulators alone. `bun run sim shutdown` stops the pool simulators nobody holds.
 
 ## Releases
 

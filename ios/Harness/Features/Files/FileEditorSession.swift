@@ -99,7 +99,6 @@ final class FileEditorSession {
         fileHost.send(.open(
             contents: model.latest ?? contents, language: language, theme: theme, range: range,
             readOnly: !editable, saved: model.saved))
-        if range != nil { Task { await fileHost.readRevealedLine() } }
     }
 
     /// A link to this open file marked other lines: the editor scrolls to and marks them.
@@ -107,7 +106,6 @@ final class FileEditorSession {
     func reveal(_ lines: ClosedRange<Int>) {
         range = lines
         fileHost.send(.reveal(lines))
-        Task { await fileHost.readRevealedLine() }
     }
 
     private func openDiff() {

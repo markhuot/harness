@@ -1,44 +1,32 @@
-// Browser size controls and pinch-zoom end-to-end against the mock service: Desktop | Mobile,
+// Browser size controls and pinch-zoom end-to-end against the seeded world (the real daemon, behind a proxy that records the browser input the app sends): Desktop | Mobile,
 // width × height, the Responsive switch (and who owns it), and a trackpad pinch that zooms the frame
 // without reaching the page, with clicks still landing on the right page pixel while zoomed.
 //
 //   bun run build && bun scripts/browser-size-check.ts [screenshotDir]
 import { mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { api as makeApi, appDir, checker, launchApp, until, waitHealthy } from "./lib/drive";
+import { bootWorld } from "./lib/world";
+import { api as makeApi, appDir, checker, launchApp, until } from "./lib/drive";
 
 const shots = resolve(process.argv[2] ?? join(appDir, "out", "screenshots", "browser-size"));
 mkdirSync(shots, { recursive: true });
-const port = 7700 + Math.floor(Math.random() * 90);
-const token = "size-token";
-const base = `http://127.0.0.1:${port}`;
 const inputs: Record<string, any>[] = [];
 
-const mock = Bun.spawn(["bun", join(appDir, "scripts/mock-service.ts")], {
-  env: { ...process.env, MOCK_PORT: String(port), MOCK_TOKEN: token, MOCK_QUIET: "1" },
-  stdout: "pipe",
-  stderr: "inherit",
+// The real daemon keeps no log of the browser input it forwards, so the world's proxy reports every
+// message a socket sends: this records the browser.input ones, bar mouse moves.
+const world = await bootWorld();
+const { token, base } = world;
+world.onClientMessage((raw) => {
+  const m = JSON.parse(raw) as { type?: string; input?: { type: string; action?: string } };
+  if (m.type === "browser.input" && m.input && !(m.input.type === "mouse" && m.input.action === "move")) inputs.push(m.input);
 });
-void (async () => {
-  const dec = new TextDecoder();
-  const reader = mock.stdout.getReader();
-  let rest = "";
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    const lines = (rest + dec.decode(value)).split("\n");
-    rest = lines.pop() ?? "";
-    for (const l of lines) if (l.includes("[browser.input")) inputs.push(JSON.parse(l.slice(l.indexOf("{"))));
-  }
-})();
 
 const c = checker();
 const { check } = c;
 let app: Awaited<ReturnType<typeof launchApp>> | null = null;
 let other: WebSocket | null = null;
 try {
-  await waitHealthy(base, 15000);
-  const api = makeApi(base, token);
+  const api = world.api;
   const sessionId = (await api<{ session: { id: string } }>("GET", "/tickets/NYTIMES-1")).session.id;
   app = await launchApp({ baseUrl: base, token });
   const a = app;
@@ -145,7 +133,7 @@ try {
   check("after editing the size, resizing the pane sends nothing", since(n, "resize").length === 0, JSON.stringify(since(n, "resize")));
 
   // 6. Another window switches Responsive on: this pane shows it dimmed-lit and doesn't drive it.
-  other = new WebSocket(`ws://127.0.0.1:${port}/ws?token=${token}`);
+  other = new WebSocket(`${base.replace("http", "ws")}/ws?token=${token}`);
   await new Promise((r) => (other!.onopen = r));
   const tabId = await js<number>(`Number(document.querySelector(".browser-tab-select[aria-selected=true]").dataset.tabId)`);
   other.send(JSON.stringify({ type: "browser.subscribe", sessionId, tabId, viewerId: "other" }));
@@ -275,7 +263,7 @@ try {
 } finally {
   other?.close();
   await app?.close();
-  mock.kill();
+  await world.stop();
 }
 console.log(c.failures ? `\n${c.failures} check(s) failed` : "\nall browser size checks passed");
 process.exit(c.failures ? 1 : 0);

@@ -12,6 +12,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { availableParallelism } from "node:os";
 import { dirname, join } from "node:path";
+import { SKIP_MARKER, skipReasons } from "./skip";
 
 export interface FileResult {
   file: string;
@@ -20,6 +21,8 @@ export interface FileResult {
   pass: number;
   fail: number;
   skip: number;
+  /** Why the file's tests skipped, as the tests declared it (see skip.ts). */
+  reasons: string[];
   output: string;
 }
 
@@ -33,6 +36,16 @@ export function orderFiles(files: string[], times: Record<string, number>): stri
 export function parseCounts(output: string): { pass: number; fail: number; skip: number } {
   const count = (word: string) => Number(output.match(new RegExp(`^\\s*(\\d+) ${word}$`, "m"))?.[1] ?? 0);
   return { pass: count("pass"), fail: count("fail"), skip: count("skip") };
+}
+
+/**
+ * One `HARNESS-SKIP:` line per skipping file, so a skip is never silent. A file whose tests skip
+ * without declaring why is listed too, as undeclared.
+ */
+export function skipLines(results: Pick<FileResult, "file" | "skip" | "reasons">[]): string[] {
+  return results
+    .filter((r) => r.skip > 0)
+    .map((r) => `${SKIP_MARKER} ${r.reasons.length ? r.reasons.join("; ") : "no reason declared"} [${r.skip} skipped in ${r.file}]`);
 }
 
 /** Options are the arguments that start with "-" and the values that follow value-taking ones. */
@@ -72,7 +85,7 @@ async function runFile(file: string, flags: string[], children: Set<Bun.Subproce
   const [stdout, stderr, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);
   children.delete(proc);
   const output = stdout + stderr;
-  return { file, ok: code === 0, ms: performance.now() - started, ...parseCounts(output), output };
+  return { file, ok: code === 0, ms: performance.now() - started, ...parseCounts(output), reasons: skipReasons(output), output };
 }
 
 async function main(args: string[]): Promise<number> {
@@ -116,6 +129,8 @@ async function main(args: string[]): Promise<number> {
     `\n ${sum("pass")} pass\n ${sum("fail")} fail${sum("skip") ? `\n ${sum("skip")} skip` : ""}\n` +
       `Ran ${files.length} files, ${jobs} at a time. [${((performance.now() - started) / 1000).toFixed(2)}s]`,
   );
+  const skips = skipLines(results);
+  if (skips.length) console.log(`\nSkipped:\n${skips.map((l) => `  ${l}`).join("\n")}`);
   if (failed.length) console.log(`\nFailed:\n${failed.map((r) => `  ${r.file}`).join("\n")}`);
   return failed.length ? 1 : 0;
 }

@@ -70,6 +70,10 @@ The path of what it built is the only line on stdout.
 - **Service integration** starts a real daemon on a temp `HARNESS_HOME` and drives it with
   `HarnessClient`: `HARNESS_INTEGRATION=1 swift test --filter Integration` (from `ios/HarnessKit`;
   needs `bun` on `PATH`).
+- **Snapshot tests** render the main screens in-process from fixture models and compare them with
+  reference PNGs, on the shared iPhone and iPad simulators: `bun run sim snapshots` (`--record` to
+  update the references, `--out=<dir>` to write the renders, e.g. for a spec's screenshots, with no
+  daemon). ARCHITECTURE.md § Snapshot tests has what is covered and how a diff is reported.
 - **Config and fixtures** (bun): `bun run test` from the repo root covers `ios/Tools/config.test.ts`
   (Info.plist keys in `project.yml`) and `shared/src/fixtures.test.ts` (fixture freshness).
 
@@ -163,7 +167,22 @@ simulator, build or app.
 bun ios/Tools/sim-check.ts --no-build --only=approve-and     # one check (or: bun run --cwd ios sim-check …)
 bun ios/Tools/sim-check.ts --no-build --only=connect          # one catalog screen, shot light and dark
 bun ios/Tools/sim-check.ts --no-build --shot='harness://ticket/{headings}?tab=spec'
+bun ios/Tools/sim-check.ts --sheets --keep                    # leave the daemon, seeds and paired app running
+bun ios/Tools/sim-check.ts --sheets --reuse --grep="dirty file"   # then one check, in seconds
 ```
+
+`--grep=<pattern>` (a case-insensitive substring, or `/regex/flags`) runs only the checks whose names
+match. A check that depends on what an earlier one left on screen declares it with `needs` in
+`check()`, and the earlier checks run first as setup. `--reuse` attaches to the last `--keep` run's
+daemon, seeded tickets and paired app instead of building, installing, seeding and pairing (it uses
+the app already built; `--rebuild` builds first). A changed app is reinstalled and paired again
+against the same daemon; with nothing that fits it says why and does a full run. It keeps its state
+too. `bun run sim reap --kept` stops kept daemons and removes their folders.
+
+The simulator build is compiled with `SIM_CHECK`, which adds a debug state probe: the app writes its
+router, dock, editor and "settled" state as JSON into its container (ARCHITECTURE.md § Debug state
+probe). sim-check asserts on it (`probe`, `probeUntil`) and waits on it (`atRest`) instead of sleeping.
+A release build has none of it.
 
 It builds with `build.ts sim` (skip with `--no-build`), installs
 `ios/build/dd/Build/Products/Release-iphonesimulator/Harness.app` and, for a shot run, saves screenshots to

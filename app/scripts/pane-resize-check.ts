@@ -1,27 +1,16 @@
-// Pane sizing end to end in the built app, over the DevTools Protocol, against the mock service:
+// Pane sizing end to end in the built app, over the DevTools Protocol, against the seeded world (the real daemon):
 // a real divider drag scales every pane on each side of it, an ⌥-drag moves only the two touching
 // it, ⌘= equalizes every pane but the board, and a pane dragged between two of its neighbours
 // keeps every pane's size. panes.test.ts covers the math underneath.
 //
 //   bun run build && bun scripts/pane-resize-check.ts [--shots=<dir>]
 import { join } from "node:path";
-import { appDir, checker, launchApp, stopped, until } from "./lib/drive";
+import { bootWorld } from "./lib/world";
+import { appDir, checker, launchApp, until } from "./lib/drive";
 
 const shots = process.argv.find((a) => a.startsWith("--shots="))?.slice("--shots=".length);
-const port = 7800 + Math.floor(Math.random() * 90);
-const token = "resize-token";
-const base = `http://127.0.0.1:${port}`;
-const mock = Bun.spawn(["bun", join(appDir, "scripts/mock-service.ts")], {
-  env: { ...process.env, MOCK_PORT: String(port), MOCK_TOKEN: token, MOCK_QUIET: "1" },
-  stdout: "ignore",
-  stderr: "inherit",
-});
-for (let i = 0; i < 50; i++) {
-  try {
-    if ((await fetch(base + "/health")).ok) break;
-  } catch {}
-  await Bun.sleep(100);
-}
+const world = await bootWorld();
+const { base, token } = world;
 const counter = checker();
 const { check } = counter;
 const app = await launchApp({ baseUrl: base, token });
@@ -217,8 +206,7 @@ try {
   check("run", false, (e as Error).message);
 } finally {
   await app.close();
-  mock.kill();
-  await stopped(mock);
+  await world.stop();
 }
 console.log(counter.failures ? `${counter.failures} failed` : "all pane resize checks passed");
 process.exit(counter.failures ? 1 : 0);

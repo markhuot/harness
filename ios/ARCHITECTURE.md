@@ -1052,11 +1052,59 @@ What Settings, Project settings, the watcher form and Prompts share (HARNESS-144
   swipe-down are disabled; a pop that gets past it saves anyway, since edits are never dropped
   silently. A clean editor silently reloads when the app comes back to the foreground (`setContents`,
   no undo history); a dirty one keeps its edits.
-- **sim-check:** a web view's page isn't in the accessibility tree, so the editor exposes a
-  `file-editor` element whose value is the text of the first linked line the page marked (the
-  `file-link` chain checks it). The `file-edit` chain types, checks the unsaved dot and Save.
+- **sim-check:** a web view's page isn't in the accessibility tree, so the debug state probe
+  (§ Debug state probe) reads the editor's marked lines, selection and dirty flag from the page. The
+  `file-link` chain asserts the marked lines through it; the `file-edit` chain types, checks the
+  unsaved dot and Save.
 - File/Diff is two labeled buttons, not a segmented Picker, because sim-check taps the label that
   starts with "Diff". The counts use `Text(verbatim:)`, so 25000 doesn't render as "25,000".
+
+## Snapshot tests (HarnessSnapshotTests)
+
+`ios/HarnessSnapshotTests` renders the app's main screens in-process from fixture models and compares
+the pixels with reference PNGs: no daemon, install, pairing or accessibility polling. A run is one
+Debug build, then about a second per screen. sim-check stays for flows that need real taps, a
+daemon or the keyboard.
+
+```sh
+bun run sim snapshots                 # check, iPhone then iPad (harness-shared, harness-shared-ipad)
+bun run sim snapshots --iphone --only=ScreenSnapshotTests/testBoard
+bun run sim snapshots --record        # write/update the references after an intended change
+bun run sim snapshots --out=/tmp/shots   # also write every render as <device>/<name>-{light,dark}.png
+```
+
+- **Screens:** the board (phone pager, iPad columns and sidebar), a ticket's Spec tab and Activity
+  tab (the tab strip, hero, history bar and composer come with them), a ticket sheet's frame (the
+  Request changes sheet) and the docked ticket cards. Each renders in light and dark, on the iPhone
+  and the iPad. These cover the layout, theming and size-class code every other screen shares; a new
+  screen is one `func test…` in `ScreenSnapshotTests.swift` using the same `SnapshotWorld`.
+- **Approach:** an in-house renderer, not swift-snapshot-testing. The repo has no third-party Swift
+  dependency (the only package is local, and the JS side is bundled by bun); swift-snapshot-testing
+  would be the first, plus the swift-syntax it pulls in, for what is a UIHostingController, a PNG
+  and a pixel compare. `SnapshotRenderer` puts the view in a real window in the host app's scene
+  (real size classes, safe areas and traits), `SnapshotAssert` compares.
+- **Hosted:** the test bundle runs inside the app (`@testable import Harness`) under
+  the `HarnessSnapshots` scheme, built `Debug` into `ios/build/dd-snapshots`. Under XCTest
+  `HarnessApp` stays an empty window: `MemoryStorage`, no widgets, no push registration.
+- **Fixtures:** `SnapshotWorld` builds a store from fixed models (`Ticket`, `Project`, `ActivityEntry`,
+  spec revisions) with a stub client and socket, and a real `AppModel` over `MemoryStorage`. Every date
+  derives from `SnapshotWorld.now`, which the screens read as the clock (`\.snapshotNow` in
+  `RelativeTimeText` and `NowReader`). Persisted UI state in `UserDefaults` (the docked tickets) is
+  cleared before and after each test.
+- **Deterministic:** scale 2, animations off, fixed clock and fixtures, light/dark by window style.
+  The renderer captures until three identical frames in a row (after a minimum), so a sheet or
+  push that lands late is waited for, and a screen that never settles (a spinner, a pulsing busy
+  dot, a timer) fails as "kept changing" instead of recording a half-drawn frame: fixtures leave
+  `busy` off for that reason.
+- **References:** `HarnessSnapshotTests/References/<iphone|ipad>/<name>-{light,dark}.png`, committed.
+  They depend on the simulator's iOS runtime (27.0, the only one we use) and the device size.
+- **A diff:** the test fails with the count and share of differing pixels and three paths: the
+  reference, `<name>.actual.png` and `<name>.diff.png` (red where pixels differ over a faded
+  reference), written to `ios/build/snapshots/failures/<device>/`. A pixel differs when a channel
+  is more than 2 off; up to 0.02% of pixels may. A missing reference fails and says how to record it.
+- **Screenshots for a spec:** `bun run sim snapshots --out=<dir> [--only=…]` writes the renders
+  without a daemon, in about the time of the build plus a few seconds, and they are what the
+  references are made of, so they match what the checks guard.
 
 ## Disk budget (parallel agents)
 
@@ -1069,6 +1117,49 @@ for this app they come down to:
 - Build with `-derivedDataPath ios/build/dd` inside your own worktree and nowhere else.
 - Run `bun run sim disk` before any `xcodebuild`, and block and ask when it exits 1.
 - When you finish, delete `ios/build` and `ios/HarnessKit/.build`. Leave the simulator alone.
+
+## Debug state probe
+
+A SIM_CHECK build (build.ts's simulator build sets `SIM_CHECK`; the device and archive builds
+never do, so a release has none of it) writes the app's state as JSON to
+`<app container>/tmp/harness-debug-state.json` about every 50 ms (`Harness/App/DebugProbe.swift`,
+written atomically). `ios/Tools/sim-check.ts` finds the container with `simctl get_app_container … data`
+and reads the file (`Tools/probe.ts`). **Why a file:** a URL route plus a daemon post needs a round trip
+before a read lands, a daemon route to carry it, and a paired app; the file is a read, always current and
+there before pairing. The accessibility tree stays for taps and for what a person reads on screen.
+
+The shape is HarnessKit's `DebugState` (`Shell/DebugState.swift`, pinned by `DebugStateTests`):
+
+```json
+{
+  "version": 1, "seq": 42, "settled": true, "quietMs": 812, "busy": [],
+  "router": {
+    "selectedTab": "board", "path": ["ticket:HARNESS-1:spec"], "sheet": null, "cover": null,
+    "ticketSheet": "presented",
+    "dock": [{"id": 0, "kind": "ticket", "title": "HARNESS-1", "path": ["ticket:HARNESS-2"]}]
+  },
+  "editor": {
+    "markedLines": ["let x = 1"], "selection": {"anchor": 0, "head": 0}, "dirty": false,
+    "scrollY": 0, "lineCount": 12
+  }
+}
+```
+
+- `router` is the main window's `Router`: the selected tab's stack (one `kind:detail` string per screen),
+  `sheet`/`cover`, the ticket sheet's state (`presented`, `docked`, `gone`) and every ticket sheet,
+  most recently used first. `editor` is the file editor on screen (absent with none): the text of each
+  line the page marked (`.cm-revealed-line`), the selection, the dirty flag, the page's scroll offset and
+  the line count, read from the page through `window.harnessEditor.probe()` (editor/src/bridge.ts).
+- `settled` is the app's idea of "at rest": `busy` is empty and nothing in the state has changed for 250 ms
+  (`quietMs`, from `DebugSettle`). `busy` holds `editor` (a page that hasn't said ready), `animating:<layer>:<key>`
+  (a Core Animation animation in flight in any window, the keyboard's and a sheet's included; one that
+  repeats forever, like a spinner, doesn't count) and `scrolling` (a scroll view dragged or coasting).
+  `seq` counts writes, so a reader waits for it to move to know a state postdates its last action.
+- sim-check waits with `atRest(udid, fallbackMs)` where it used to sleep (fresh writes, settled, quiet for
+  the old sleep's length up to 300 ms), and with `probeUntil` for a state to reach. What no probe state
+  covers (an image or a video drawing, a list loading from the daemon, a gesture's own timing) still sleeps.
+  An app built without the probe (`--app=` of a release build) falls back to those sleeps.
+- Adding to the shape means changing `DebugState`, its test, `Tools/probe.ts` and this section together.
 
 ## Accessibility labels and sim-check (read this before porting a screen)
 

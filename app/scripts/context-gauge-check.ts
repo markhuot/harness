@@ -1,24 +1,19 @@
-// The ticket header's context gauge against the mock service: the dial, its label and miss badge,
+// The ticket header's context gauge against the seeded world (the real daemon): the dial, its label and miss badge,
 // the menu (Compact / New session / Limit…, the miss row, the ⓘ texts), the busy and compacting
 // states, the estimated gauge, and the limit saved to Settings. A screenshot of each state.
 //
 //   bun run build && bun scripts/context-gauge-check.ts [screenshotDir] [--theme=dark]
 import { mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { bootWorld } from "./lib/world";
 import { api as makeApi, appDir, checker, launchApp, until, waitHealthy } from "./lib/drive";
 
 const shots = resolve(process.argv.find((a, i) => i > 1 && !a.startsWith("--")) ?? join(appDir, "out", "screenshots", "context-gauge"));
 const theme = (process.argv.find((a) => a.startsWith("--theme="))?.slice(8) ?? "light") as "light" | "dark";
 mkdirSync(shots, { recursive: true });
 
-const port = 7700 + Math.floor(Math.random() * 90);
-const token = "gauge-token";
-const base = `http://127.0.0.1:${port}`;
-const mock = Bun.spawn(["bun", join(appDir, "scripts/mock-service.ts")], {
-  env: { ...process.env, MOCK_PORT: String(port), MOCK_TOKEN: token, MOCK_QUIET: "1" },
-  stdout: "ignore",
-  stderr: "inherit",
-});
+const world = await bootWorld();
+const { base, token } = world;
 
 const c = checker();
 const { check } = c;
@@ -33,6 +28,8 @@ try {
   const api = makeApi(base, token);
   app = await launchApp({ baseUrl: base, token, theme });
   const { js, exists, go, type } = app;
+  // The app is connected and has loaded the board (and the driver list) before the first route is set.
+  await until("board", () => exists(".card"), 15000);
   const open = async (key: string) => {
     await go(`#/board/all/ticket/${key}`);
     await until(`${key} header`, () => js<boolean>(`document.querySelector("[data-testid=detail-key]")?.textContent.includes(${JSON.stringify(key)}) && !!document.querySelector("[data-testid=context-gauge]")`), 10000);
@@ -135,7 +132,7 @@ try {
   check("…with a spinner and Send off", (await exists("[data-testid=composer-compacting]")) && (await disabled("composer-send")));
   await shot("compacting");
 
-  // New session confirms first, then clears the context (mock route).
+  // New session confirms first, then clears the context (the service's session route).
   await open("HARNESS-901");
   await openMenu();
   await js(`document.querySelector("[data-testid=gauge-new]").click()`);
@@ -152,7 +149,7 @@ try {
   } catch (e) {
     refused = String(e);
   }
-  check("the service refuses a session action while busy (409)", refused.includes("run is going"), refused);
+  check("the service refuses a session action while busy (409)", refused.includes("has a run going"), refused);
 
   // Settings carries the same limit.
   await go("#/settings/general");
@@ -163,8 +160,7 @@ try {
   c.fail();
 } finally {
   await app?.close();
-  mock.kill();
-  await mock.exited;
+  await world.stop();
 }
 console.log(c.failures ? `\n${c.failures} check(s) failed` : "\nall checks passed");
 process.exit(c.failures ? 1 : 0);
