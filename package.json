@@ -9,6 +9,7 @@
     "app": "bun run --cwd app dev",
     "typecheck": "bun scripts/typecheck.ts",
     "verify": "bun scripts/verify.ts",
+    "nightly": "bun scripts/nightly.ts",
     "plugins:build": "bun run --filter '@harness/plugin-*' build",
     "sim": "bun ios/Tools/sim.ts",
     "release:prepare": "bun release/release.ts prepare",

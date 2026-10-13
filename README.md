@@ -261,6 +261,13 @@ exits non-zero if any fail. `--dry-run` prints the plan and why, `--all` runs ev
 `--base=<ref>` diffs against another branch. The mapping is `scripts/verify-plan.ts`. The layers
 by hand:
 
+`bun run nightly` runs everything `verify --all` covers, with the full sim-check walk-through on two
+shards (`--shards=2`). A Harness watcher named `nightly` runs it from the main checkout once a day. All
+green prints nothing (exit 4, "nothing to report"). A failure prints the failing layer, the failing
+check names and the tail of its log to the Inbox, where triage dispatches it to a ticket in the HARNESS
+project. The simulator layer is skipped, and reported, when `bun run sim disk` finds under 5 GiB free.
+`--list` prints the layers and `--only=<layer id>,…` runs some of them.
+
 ```sh
 cd shared && bun test     # key helpers, client state (reducer, conductor, models, bridge, markdown), themes (registry, WCAG contrast)
 cd service && bun run test # store, orchestrator, drivers, tools, MCP, browser (real Chrome), HTTP/WS e2e, CLI; files in parallel
