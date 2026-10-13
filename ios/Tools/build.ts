@@ -25,6 +25,7 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { bundleInputs, planXcodegen, xcfilelist, xcodegenHash } from "./build-cache";
+import { exportDeveloperDir } from "./sim";
 import { deviceAppUrl, hashApp, planDeviceInstall } from "./sim-reuse";
 
 export const IOS = resolve(import.meta.dir, "..");
@@ -317,7 +318,7 @@ function device(o: Extract<Options, { command: "device" }>): string {
   } catch {} // a damaged record is no record: install again
   const listing = join(BUILD, "device-apps.json");
   rmSync(listing, { force: true });
-  const listed = Bun.spawnSync(["xcrun", "devicectl", "device", "info", "apps", "--device", o.device, "--bundle-id", BUNDLE_ID, "--json-output", listing], { stdout: "pipe", stderr: "pipe", timeout: 60_000 });
+  const listed = Bun.spawnSync(["xcrun", "devicectl", "device", "info", "apps", "--device", o.device, "--bundle-id", BUNDLE_ID, "--json-output", listing], { env: process.env, stdout: "pipe", stderr: "pipe", timeout: 60_000 });
   const deviceUrl = listed.exitCode === 0 && existsSync(listing) ? deviceAppUrl(readFileSync(listing, "utf8"), BUNDLE_ID) : null;
   const builtHash = hashApp(app);
   const plan = planDeviceInstall({ installed: recorded[o.device] ?? null, builtHash, deviceUrl });
@@ -325,7 +326,7 @@ function device(o: Extract<Options, { command: "device" }>): string {
     log(`==> Installing on ${o.device} (${plan.reason})`);
     run("device-install", ["xcrun", "devicectl", "device", "install", "app", "--device", o.device, app]);
     rmSync(listing, { force: true });
-    Bun.spawnSync(["xcrun", "devicectl", "device", "info", "apps", "--device", o.device, "--bundle-id", BUNDLE_ID, "--json-output", listing], { stdout: "pipe", stderr: "pipe", timeout: 60_000 });
+    Bun.spawnSync(["xcrun", "devicectl", "device", "info", "apps", "--device", o.device, "--bundle-id", BUNDLE_ID, "--json-output", listing], { env: process.env, stdout: "pipe", stderr: "pipe", timeout: 60_000 });
     const url = existsSync(listing) ? deviceAppUrl(readFileSync(listing, "utf8"), BUNDLE_ID) : null;
     // Without the device's location there's nothing to compare next time, so leave no record.
     const { [o.device]: _old, ...rest } = recorded;
@@ -338,8 +339,7 @@ function device(o: Extract<Options, { command: "device" }>): string {
 
 if (import.meta.main) {
   // xcode-select points at the Command Line Tools on this Mac; use the full Xcode for this process only.
-  const xcode = "/Applications/Xcode-27.0.0.app/Contents/Developer";
-  if (!process.env.DEVELOPER_DIR && existsSync(xcode)) process.env.DEVELOPER_DIR = xcode;
+  exportDeveloperDir();
   try {
     const o = parseArgs(process.argv.slice(2));
     if (o.command === "verify") {

@@ -13,7 +13,7 @@ import { join, resolve } from "node:path";
 import { startDaemon as startDaemonShared, until, type TestDaemon } from "@harness/shared/testing/daemon";
 import { GREETER_FILES, seedDummySettings, seedRepo } from "@harness/shared/testing/seed";
 import { buildPairUrl, type Project, type Ticket, type TicketDetail } from "@harness/shared";
-import { acquire, acquireReady, checkDisk, ensureDevice, freeGiB, isSharedDevice, SHARED_DEVICE, type Device } from "./sim";
+import { acquire, acquireReady, checkDisk, ensureDevice, freeGiB, isSharedDevice, SHARED_DEVICE, exportDeveloperDir, type Device } from "./sim";
 import { axeFor, hasAxe, screenKey, screenState } from "./axe";
 
 const IOS = resolve(import.meta.dir, "..");
@@ -340,8 +340,7 @@ function printSeeded(d: Daemon, s: Seeded) {
 
 async function main(o: Options): Promise<void> {
   // xcode-select points at the Command Line Tools on this Mac; use the full Xcode for this process only.
-  const xcode = "/Applications/Xcode-27.0.0.app/Contents/Developer";
-  if (!process.env.DEVELOPER_DIR && existsSync(xcode)) process.env.DEVELOPER_DIR = xcode;
+  exportDeveloperDir();
 
   // Pairing and links are confirmed on screen, which needs AXe.
   if (!o.seedOnly && !hasAxe()) throw new UsageError("dev-sim reads the screen with AXe: brew install cameroncooke/axe/axe");

@@ -145,7 +145,7 @@ import { findTheme } from "@harness/shared/themes";
 import { freePort, startDaemon as startDaemonShared, until as untilShared, type TestDaemon } from "@harness/shared/testing/daemon";
 import { startDaemonProxy } from "@harness/shared/testing/proxy";
 import { git, readSetting, seedRepo, seedDummySettings, setSessionContext, startCompactRun as startCompactRunAt, writeSetting } from "@harness/shared/testing/seed";
-import { acquire, acquireReady, daemonAnswers, checkDisk, ensureDevice, lockHolder, markKept, isSharedDevice, reap, releaseLock, SHARED_IPAD_DEVICE, tryLock, writeRunOwner } from "./sim";
+import { acquire, acquireReady, daemonAnswers, checkDisk, ensureDevice, lockHolder, markKept, isSharedDevice, reap, releaseLock, SHARED_IPAD_DEVICE, tryLock, writeRunOwner, exportDeveloperDir } from "./sim";
 import { CheckSelector, noMatchMessage, parseGrep } from "./sim-grep";
 import { chooseKept, claimKept, staleAppNote, hashApp, hashService, listKept, MARKER_KEY, planApp, readReuseState, REUSE_VERSION, writeReuseState, type ReuseState, type Want } from "./sim-reuse";
 import { PROBE_FILE, parseState, settled as probeSettled, waitFor as probeWaitFor, type DebugState } from "./probe";
@@ -164,7 +164,8 @@ if (flag("help") || args.includes("-h")) {
   console.log(src.slice(0, end).map((l) => l.replace(/^\/\/ ?/, "")).join("\n"));
   process.exit(0);
 }
-const DEVELOPER_DIR = process.env.DEVELOPER_DIR ?? "/Applications/Xcode-27.0.0.app/Contents/Developer";
+// Also on process.env, for code that spawns with env: process.env (Bun.spawn without an env option uses the startup environment, not later writes), so spawns here pass `env` explicitly.
+const DEVELOPER_DIR = exportDeveloperDir();
 const env = { ...process.env, DEVELOPER_DIR };
 const ipad = args.includes("--ipad");
 const shots = join(here, "build", `screens${ipad ? "-ipad" : ""}`);
@@ -690,7 +691,7 @@ async function recordFrames(
   { vf = "crop=iw:ih/2:0:0,scale=16:8,format=gray", bytes = 128 } = {},
 ): Promise<Uint8Array[]> {
   const video = join(shots, `${name}.mp4`);
-  const rec = Bun.spawn(["xcrun", "simctl", "io", udid, "recordVideo", "--force", video], { stdout: "ignore", stderr: "pipe" });
+  const rec = Bun.spawn(["xcrun", "simctl", "io", udid, "recordVideo", "--force", video], { env, stdout: "ignore", stderr: "pipe" });
   const reader = rec.stderr.getReader();
   let said = "";
   while (!said.includes("Recording started")) {

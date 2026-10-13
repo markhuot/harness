@@ -53,7 +53,16 @@ export function poolSlots(size = poolSize()): string[] {
 }
 /** The only iOS runtime simulators run on. */
 export const IOS_RUNTIME = "27.0";
-export const DEVELOPER_DIR = process.env.DEVELOPER_DIR ?? "/Applications/Xcode-27.0.0.app/Contents/Developer";
+export const XCODE_27_DEVELOPER_DIR = "/Applications/Xcode-27.0.0.app/Contents/Developer";
+/** The Xcode every tool runs against: the caller's DEVELOPER_DIR, else Xcode 27.0 (xcode-select points at the Command Line Tools here). */
+export function xcodeDeveloperDir(env: Record<string, string | undefined> = process.env): string {
+  return env.DEVELOPER_DIR || XCODE_27_DEVELOPER_DIR;
+}
+/** Resolve it and write it into `env`, so every child process spawned without its own env inherits Xcode 27.0. */
+export function exportDeveloperDir(env: Record<string, string | undefined> = process.env): string {
+  return (env.DEVELOPER_DIR = xcodeDeveloperDir(env));
+}
+export const DEVELOPER_DIR = xcodeDeveloperDir();
 /** Below this much free disk space, builds and new devices stop rather than fill the disk. */
 export const MIN_FREE_GIB = 5;
 /** Creating a new simulator needs this much free: a fresh one grows 3–8 GB as it's used, so it must not start at the edge of MIN_FREE_GIB. */
