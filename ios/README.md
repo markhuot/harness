@@ -175,6 +175,11 @@ the app already built; `--rebuild` builds first). A changed app is reinstalled a
 against the same daemon; with nothing that fits it says why and does a full run. It keeps its state
 too. `bun run sim reap --kept` stops kept daemons and removes their folders.
 
+The simulator build is compiled with `SIM_CHECK`, which adds a debug state probe: the app writes its
+router, dock, editor and "settled" state as JSON into its container (ARCHITECTURE.md § Debug state
+probe). sim-check asserts on it (`probe`, `probeUntil`) and waits on it (`atRest`) instead of sleeping.
+A release build has none of it.
+
 It builds with `build.ts sim` (skip with `--no-build`), installs
 `ios/build/dd/Build/Products/Release-iphonesimulator/Harness.app` and, for a shot run, saves screenshots to
 `ios/build/screens/` (`--ipad`: `ios/build/screens-ipad/`). `--udid` still names a specific

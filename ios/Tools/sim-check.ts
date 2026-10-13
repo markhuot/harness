@@ -146,6 +146,7 @@ import { Database } from "bun:sqlite";
 import { acquire, checkDisk, ensureDevice, markKept, isSharedDevice, reap, SHARED_DEVICE, SHARED_IPAD_DEVICE, writeRunOwner } from "./sim";
 import { CheckSelector, noMatchMessage, parseGrep } from "./sim-grep";
 import { chooseKept, hashApp, hashService, listKept, MARKER_KEY, planApp, REUSE_VERSION, writeReuseState, type ReuseState, type Want } from "./sim-reuse";
+import { PROBE_FILE, parseState, settled as probeSettled, waitFor as probeWaitFor, type DebugState } from "./probe";
 import { parsePrepare, plan as planRun, resolveShot, SEED_NAMES, type Entry, type Plan, type SeedName } from "./sim-select";
 
 /** ios/: screenshots go to its build/ folder. */
@@ -412,12 +413,12 @@ async function scrollTo(udid: string, match: (label: string) => boolean, tries =
     if (el && el.frame.y < 140) {
       const by = Math.min(420, Math.round(220 - el.frame.y));
       await axe("swipe", "--start-x", "200", "--start-y", "300", "--end-x", "200", "--end-y", String(300 + by), "--duration", "0.8", "--udid", udid);
-      await Bun.sleep(400);
+      await atRest(udid, 400);
       continue;
     }
     const by = el && el.frame.y > 520 ? Math.min(420, Math.round(el.frame.y - 420)) : 380;
     await axe("swipe", "--start-x", "200", "--start-y", "740", "--end-x", "200", "--end-y", String(740 - by), "--duration", "0.8", "--udid", udid);
-    await Bun.sleep(400);
+    await atRest(udid, 400);
   }
   throw new Error("scrollTo: element never came into view");
 }
@@ -436,6 +437,42 @@ async function until<T>(label: string, fn: () => Promise<T | null | undefined | 
     await Bun.sleep(every);
   }
   throw new Error(`timed out: ${label}${last ? ` (${(last as Error).message})` : ""}`);
+}
+// ---------------------------------------------------------------- debug state probe
+// The app (a SIM_CHECK build, which build.ts's simulator build is) writes its router, dock and
+// editor state, and whether it is settled, to a JSON file in its container: see Tools/probe.ts.
+// A file read beats the accessibility tree (no describe-ui round trip, and a web view's page isn't
+// in the tree at all), and beats a URL route plus a daemon post (nothing to wait for, and it works
+// before pairing). The tree stays for taps and for what the user reads on screen.
+const containers = new Map<string, string>();
+async function probe(udid: string): Promise<DebugState | null> {
+  try {
+    let dir = containers.get(udid);
+    if (!dir) containers.set(udid, (dir = await simctl("get_app_container", udid, BUNDLE, "data")));
+    return parseState(await Bun.file(join(dir, "tmp", PROBE_FILE)).text());
+  } catch {
+    containers.delete(udid); // the app was reinstalled, or isn't up
+    return null;
+  }
+}
+/** Waits until `pred` holds for the app's probe state. The state is rechecked every 50 ms: a file read. */
+const probeUntil = (udid: string, label: string, pred: (s: DebugState) => boolean, ms = 10000) => probeWaitFor(label, () => probe(udid), pred, { ms });
+/**
+ * Replaces a fixed sleep after an action: waits for the app to say it is at rest (settled, with
+ * an unchanged state for as long as the sleep was, at most 300 ms, and a few fresh writes since the call). `fallbackMs` is what an
+ * app without the probe (--app= of a release build) sleeps instead. Only state the probe holds
+ * (router, dock, the editor) can settle this way: an animation that changes none of it (a spring
+ * back, a list drawing, an image loading) still needs its sleep, or an assertion on what it shows.
+ */
+const noProbe = new Set<string>();
+async function atRest(udid: string, fallbackMs: number): Promise<void> {
+  if (noProbe.has(udid)) return void (await Bun.sleep(fallbackMs));
+  // Quiet for no longer than the sleep it replaces (capped at 300 ms), counted from the state's last change.
+  const s = await probeSettled(() => probe(udid), { quietMs: Math.min(fallbackMs, 300) });
+  if (!s) {
+    noProbe.add(udid); // not a SIM_CHECK build: don't wait for it again
+    await Bun.sleep(fallbackMs);
+  }
 }
 async function git(cwd: string, ...a: string[]) {
   await sh(["git", "-c", "user.name=Harness Test", "-c", "user.email=test@example.com", "-c", "commit.gpgsign=false", ...a], { cwd });
@@ -554,7 +591,7 @@ async function whenShown(udid: string, before: string | undefined, ready?: (l: s
     const up = l[0] === "Harness" && l.length >= 3 && t !== before;
     if (up && (!ready || ready(l))) {
       lastTree.set(udid, t);
-      await Bun.sleep(DRAW_MS);
+      await atRest(udid, DRAW_MS);
       return true;
     }
     if (process.env.SIM_CHECK_DEBUG && prev && t !== prev) {
@@ -596,7 +633,7 @@ async function resetBoard(udid: string) {
     if (!el) break;
     const y = el.AXLabel === "Dismiss context menu" ? el.frame.y + el.frame.height - 60 : el.frame.y + el.frame.height / 2;
     await axe("tap", "-x", String(Math.round(el.frame.x + el.frame.width / 2)), "-y", String(Math.round(y)), "--udid", udid).catch(() => {});
-    await Bun.sleep(500);
+    await atRest(udid, 500);
   }
   lastUrl.set(udid, BOARD);
   await simctl("openurl", udid, BOARD);
@@ -1006,7 +1043,7 @@ const APPROVE_MERGE = "Approve and merge";
 /** The "Approve and…" sheet's field (its label runs on into the placeholder). */
 const instructionsField = (l: string) => l.startsWith("Completion instructions");
 /** The Approve action sheet has finished sliding up: a tap before that is lost. */
-const approveMenuUp = (udid: string) => until("approve menu", async () => (await labels(udid)).includes("Approve and take no action"), 5000).then(() => Bun.sleep(400));
+const approveMenuUp = (udid: string) => until("approve menu", async () => (await labels(udid)).includes("Approve and take no action"), 5000).then(() => atRest(udid, 400));
 
 /**
  * A spec like HARNESS-66's: two wide tables whose cells run to a few hundred characters, and a
@@ -1382,7 +1419,7 @@ async function pagingChecks(udid: string, p: Awaited<ReturnType<typeof seedPagin
       const seen = (await labels(udid)).find((l) => older.some((k) => l.startsWith(k)));
       if (seen) return `${seen.split(" ")[0]} (≥ 60th newest) after ${i} swipes`;
       for (let j = 0; j < 3; j++) await swipeUp();
-      await Bun.sleep(300);
+      await atRest(udid, 300);
     }
     throw new Error(`${deep.key} never appeared`);
   });
@@ -1391,15 +1428,15 @@ async function pagingChecks(udid: string, p: Awaited<ReturnType<typeof seedPagin
     // The search field is always in the board's bottom bar, between Projects and New session;
     // its placeholder is the board's scope ("All projects" here).
     await goto(udid, BOARD);
-    await Bun.sleep(500);
+    await atRest(udid, 500);
     await tapHeader(udid, "All projects", { x: 192, y: 811 });
-    await Bun.sleep(500);
+    await atRest(udid, 500);
     await axe("type", "haystack", "--udid", udid);
     await until(`${p.needle.key} in the results`, () => has(`${p.needle.key} `), 10000);
     return p.needle.key;
   });
   moved(udid);
-  await Bun.sleep(400); // the result list's cards finish drawing
+  await atRest(udid, 400); // the result list's cards finish drawing
   await shootBoth(udid, "paging-search");
 }
 
@@ -1571,7 +1608,7 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
     await axe("tap", "-x", String(Math.round(W * 0.5)), "-y", String(Math.round(H * 0.9)), "--udid", udid); // dismiss the menu
     await until("the menu gone", async () => !(await labels(udid)).includes("Delete ticket"), 5000);
     // The first page's rightward swipe goes to the back swipe (PagerYieldsToBackSwipe).
-    await Bun.sleep(800); // back only goes once the pager rests on the first page
+    await atRest(udid, 800); // back only goes once the pager rests on the first page
     const y = String(Math.round(H * 0.7));
     await axe("swipe", "--start-x", String(Math.round(W * 0.1)), "--start-y", y, "--end-x", String(Math.round(W * 0.9)), "--end-y", y, "--duration", "0.3", "--udid", udid);
     await until("back on the conductor", async () => onConductor(await labels(udid)), 8000).catch(async (e) => {
@@ -1672,7 +1709,7 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
   const rigid = async (name: string, link: string, ready: () => Promise<unknown>) => {
     await goto(udid, link);
     await ready();
-    await Bun.sleep(600);
+    await atRest(udid, 600);
     const w = 196;
     const h = Math.round((w * H) / W);
     const frames = await recordFrames(
@@ -1681,7 +1718,7 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
       async () => {
         const x = String(Math.round(W / 2));
         await axe("swipe", "--start-x", x, "--start-y", "90", "--end-x", x, "--end-y", String(Math.round(90 + 0.35 * (H - 70))), "--duration", "2", "--udid", udid);
-        await Bun.sleep(1200); // the spring back
+        await atRest(udid, 1200); // the spring back
       },
       { vf: `scale=${w}:${h},format=gray`, bytes: w * h },
     );
@@ -1712,8 +1749,9 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
     // own rule springs it back, and the finger never reached the dock zone, so nothing docks.
     const x = String(Math.round(W / 2));
     await axe("swipe", "--start-x", x, "--start-y", "90", "--end-x", x, "--end-y", String(Math.round(90 + 0.25 * (H - 70))), "--duration", "0.8", "--udid", udid);
-    await Bun.sleep(1200); // the spring back, and a dock if it wrongly came
+    await atRest(udid, 1200); // the spring back, and a dock if it wrongly came
     const l = await labels(udid);
+    if ((await probe(udid))?.router.ticketSheet === "docked") throw new Error("a short drag docked the sheet (the probe says docked)");
     if (l.some(isDock)) {
       await say("after the short drag");
       throw new Error("a short drag docked the sheet");
@@ -1731,8 +1769,9 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
     for (let i = 0; i < 2; i++)
       await axe("swipe", "--start-x", x, "--start-y", String(Math.round(H * 0.7)), "--end-x", x, "--end-y", String(Math.round(H * 0.35)), "--duration", "0.6", "--udid", udid);
     await axe("swipe", "--start-x", x, "--start-y", String(Math.round(H * 0.3)), "--end-x", x, "--end-y", String(Math.round(H * 0.8)), "--duration", "0.1", "--delta", "100", "--udid", udid);
-    await Bun.sleep(1200);
+    await atRest(udid, 1200); // a fling that docked or closed the sheet moves the router
     const l = await labels(udid);
+    if ((await probe(udid))?.router.ticketSheet !== "presented") throw new Error(`a fast scroll of the ticket's content left the sheet ${(await probe(udid))?.router.ticketSheet}`);
     // The "Part of" link has scrolled away: the grabber and the ticket's own tabs say it's open.
     if (l.some(isDock) || !has(l, "Sheet Grabber") || !has(l, "Spec")) {
       await say("after the content fling");
@@ -1765,7 +1804,7 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
       await say("after the stalled flick");
       throw e;
     });
-    await Bun.sleep(300);
+    await atRest(udid, 300);
     if ((await labels(udid)).some(isDock)) throw new Error("the stalled flick docked the sheet");
     lastUrl.set(udid, BOARD);
     return "gone, no dock";
@@ -1785,7 +1824,7 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
       await say("after the flick");
       throw e;
     });
-    await Bun.sleep(300); // a dock would be animating in right after the sheet goes
+    await atRest(udid, 300); // a dock would be animating in right after the sheet goes
     if ((await labels(udid)).some(isDock)) throw new Error("the flick docked the sheet");
     lastUrl.set(udid, BOARD);
     return "gone, no dock";
@@ -1799,12 +1838,12 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
     const specTop = async () => (await nodes(udid)).find((n) => n.AXLabel?.startsWith("Paragraph 1:"))?.frame.y;
     await goto(udid, link);
     await until("the long spec", async () => (await specTop()) !== undefined, 8000);
-    await Bun.sleep(600);
+    await atRest(udid, 600);
     const start = (await specTop())!;
     const x = String(Math.round(W / 2));
     for (let i = 0; i < 3; i++)
       await axe("swipe", "--start-x", x, "--start-y", String(Math.round(H * 0.7)), "--end-x", x, "--end-y", String(Math.round(H * 0.3)), "--duration", "0.6", "--udid", udid);
-    await Bun.sleep(600);
+    await atRest(udid, 600);
     const before = (await specTop())!;
     if (!(start - before > 100)) throw new Error(`the spec didn't scroll: its top went from ${start} to ${before}`);
     await tapWhere(udid, (l) => l.startsWith("Message the agent"));
@@ -2086,7 +2125,7 @@ async function fileDockChecks(udid: string, p: { project: Project; conductor: Ti
   const key = p.conductor.key;
   const link = `harness://file/${DOCK_FILE}?project=${encodeURIComponent(p.project.id)}`;
   const { width: W } = (await tree(udid)).reduce((a, b) => (b.frame.height > a.frame.height ? b : a)).frame;
-  const editorUp = async () => (await nodes(udid)).some((n) => n.AXUniqueId === "file-editor");
+  const editorUp = async () => !!(await probe(udid))?.editor;
   const fileCard = (l: string) => l.startsWith(`${DOCK_FILE}, `) && isDock(l);
   const ticketCard = (l: string) => l.startsWith(`${key}, `) && isDock(l);
   const count = async () => dockCount(await labels(udid));
@@ -2105,9 +2144,10 @@ async function fileDockChecks(udid: string, p: { project: Project; conductor: Ti
       const y = (save ? Math.round(save.frame.y + save.frame.height) : 160) + 30 + 30 * (attempt++ % 5);
       await axe("tap", "-x", String(x), "-y", String(y), "--udid", udid);
       await axe("type", text, "--udid", udid);
-      await Bun.sleep(600);
-      return dot();
-    }, 20000, 1000);
+      // The editor's own dirty flag flips first, then the app's unsaved dot follows.
+      await probeUntil(udid, "the editor dirty", (x) => x.editor?.dirty === true, 1500).catch(() => {});
+      return until("the unsaved dot", dot, 1500, 100).catch(() => false);
+    }, 20000, 250);
   };
   // Checks that pick up the cards the first ones left name them in `needs` (see check()); the rest start with their own goto.
   const OPENED = "a file opened from a link is its own card next to the ticket's";
@@ -2120,7 +2160,7 @@ async function fileDockChecks(udid: string, p: { project: Project; conductor: Ti
       for (let i = 0; i < 20 && (await labels(udid)).some((l) => l.startsWith("Close ") && l !== "Close"); i++) {
         await tapWhere(udid, (l) => l.startsWith("Close ") && l !== "Close");
         moved(udid);
-        await Bun.sleep(400);
+        await atRest(udid, 400);
       }
     } else {
       await undock(udid);
@@ -2177,18 +2217,18 @@ async function fileDockChecks(udid: string, p: { project: Project; conductor: Ti
     return "no second card";
   }, CHECK_CAP_MS, [OPENED]);
   await check(RELINK, async () => {
-    const marked = () => nodes(udid).then((n) => n.find((x) => x.AXUniqueId === "file-editor")?.AXValue ?? "");
+    const marked = async () => (await probe(udid))?.editor?.markedLines ?? [];
     await goto(udid, `${link}#L3`);
     await until("the editor", editorUp, 12000);
-    await until("the new lines marked in the open editor", async () => ((await marked()).includes("line three") ? true : null), 10000).catch(async (e) => {
-      await say(`marked "${await marked()}"`);
+    await probeUntil(udid, "the new lines marked in the open editor", (s) => s.editor?.markedLines.join("\n") === "line three").catch(async (e) => {
+      await say(`marked ${JSON.stringify(await marked())}`);
       await shot(udid, "file-reveal-failed", true);
       throw e;
     });
-    await Bun.sleep(600);
+    await atRest(udid, 600);
     await shot(udid, "file-reveal-line-three", true);
     await goto(udid, `${link}#L4-L4`);
-    await until("the next link's lines marked", async () => ((await marked()).includes("line four") ? true : null), 10000);
+    await probeUntil(udid, "the next link's lines marked", (s) => s.editor?.markedLines.join("\n") === "line four");
     if (!ipad) await dockSheet(udid);
     const expected = ipad ? 1 : 2;
     if ((await count()) !== expected) throw new Error(`${await count()} docked after relinking lines, expected ${expected}`);
@@ -2200,10 +2240,10 @@ async function fileDockChecks(udid: string, p: { project: Project; conductor: Ti
     if (!ipad) {
       await tapWhere(udid, fileCard);
       await until("the editor", editorUp, 8000);
-      await Bun.sleep(1500);
+      await atRest(udid, 1500);
     }
     await typeUnsaved("DISCARD_ME");
-    await Bun.sleep(1500);
+    await atRest(udid, 1500);
     await shot(udid, "file-card-dirty-close", true);
     if (ipad) {
       // The panel's ✕ asks through the same dialog the card's Close does.
@@ -2234,7 +2274,7 @@ async function fileDockChecks(udid: string, p: { project: Project; conductor: Ti
     await goto(udid, BOARD);
     await goto(udid, link);
     await until("the editor", editorUp, 12000);
-    await Bun.sleep(1500);
+    await atRest(udid, 1500);
     // A folder the service can't create the temporary file in: every write fails.
     chmodSync(dir, 0o555);
     try {
@@ -2520,7 +2560,7 @@ async function panelChecks(udid: string, s: { project: Project; conductor: Ticke
         await axe("tap", "-x", String(Math.round(back.frame.x + back.frame.width / 2)), "-y", String(Math.round(back.frame.y + back.frame.height / 2)), "--udid", udid);
         moved(udid);
       } else await tapBack();
-      await Bun.sleep(800);
+      await atRest(udid, 800);
       return false;
     }, 12000, 0).catch(async (e) => {
       await say("after a tap on Back");
@@ -2559,7 +2599,7 @@ async function panelChecks(udid: string, s: { project: Project; conductor: Ticke
       const n = await findElement(udid, card(k));
       if (n && n.frame.x >= 0 && n.frame.x + 20 < edge) return true;
       await tapWhere(udid, (l) => l.startsWith(`${column},`)).catch(() => {});
-      await Bun.sleep(600);
+      await atRest(udid, 600);
       return false;
     }, 12000, 0);
   };
@@ -2621,7 +2661,7 @@ async function panelChecks(udid: string, s: { project: Project; conductor: Ticke
     // Toggle by tapping the title until the hero is collapsed (it starts collapsed or expanded by the ticket's state).
     const start = (await strip())?.frame.y ?? 0;
     await axe("tap", "-x", String(Math.round(t.frame.x + 20)), "-y", String(Math.round(t.frame.y + t.frame.height / 2)), "--udid", udid);
-    await Bun.sleep(900);
+    await atRest(udid, 900);
     const other = (await strip())?.frame.y ?? 0;
     const collapsedAt = Math.min(start, other);
     if (other === start) throw new Error(`tapping the title (${t.AXLabel}) didn't move the tab strip (y=${start})`);
@@ -2629,7 +2669,7 @@ async function panelChecks(udid: string, s: { project: Project; conductor: Ticke
       // It had been collapsed; it's expanded now. Tap back.
       t = (await titleOf())!;
       await axe("tap", "-x", String(Math.round(t.frame.x + 20)), "-y", String(Math.round(t.frame.y + t.frame.height / 2)), "--udid", udid);
-      await Bun.sleep(900);
+      await atRest(udid, 900);
     }
     t = (await titleOf())!;
     const tabs = (await strip())!;
@@ -2699,7 +2739,7 @@ async function panelChecks(udid: string, s: { project: Project; conductor: Ticke
     moved(udid);
     // Discard leaves nothing behind: no docked "New session", no draft card. (The ticket whose
     // panel New session pushed aside stays docked, as it should.)
-    await Bun.sleep(800);
+    await atRest(udid, 800);
     const after = await labels(udid);
     const left = after.filter((x) => ours(x) || (isDock(x) && x.startsWith("New session")));
     if (left.length) {
@@ -2726,7 +2766,7 @@ async function panelChecks(udid: string, s: { project: Project; conductor: Ticke
     await until("the conductor's children", async () => {
       if ((await labels(udid)).some((l) => l.includes(kid.key))) return true;
       await tapWhere(udid, (l) => l.startsWith("Tickets")).catch(() => {});
-      await Bun.sleep(1200);
+      await atRest(udid, 1200);
       return false;
     }, 15000, 0);
     await tapWhere(udid, (l) => l.includes(kid.key));
@@ -2765,7 +2805,7 @@ async function panelChecks(udid: string, s: { project: Project; conductor: Ticke
     const from = Math.round(leading + panelW * 0.3);
     // Slow (AXe's touch points are, whatever --duration says), 30% of the panel's width along.
     await axe("swipe", "--start-x", String(from), "--start-y", y, "--end-x", String(Math.round(from + panelW * 0.3)), "--end-y", y, "--duration", "0.8", "--udid", udid);
-    await Bun.sleep(1000);
+    await atRest(udid, 1000);
     const l = await labels(udid);
     if (l.some(isDock) || !panelOn(l, key)) {
       await say("after the short drag");
@@ -2774,7 +2814,7 @@ async function panelChecks(udid: string, s: { project: Project; conductor: Ticke
     if (shotsWanted) await shot(udid, "panel-spring-back");
     // A tiny fast flick: under the 40pt minimum, so it springs back whatever its speed.
     await axe("swipe", "--start-x", String(leading + 30), "--start-y", y, "--end-x", String(leading + 40), "--end-y", y, "--duration", "0.05", "--udid", udid);
-    await Bun.sleep(1000);
+    await atRest(udid, 1000);
     const t = await labels(udid);
     if (t.some(isDock) || !panelOn(t, key)) {
       await say("after the 10pt flick");
@@ -2787,7 +2827,7 @@ async function panelChecks(udid: string, s: { project: Project; conductor: Ticke
       await say("after the fast fling");
       throw e;
     });
-    await Bun.sleep(500);
+    await atRest(udid, 500);
     if ((await labels(udid)).some(isDock)) throw new Error("the fast fling docked the panel");
     // Back up for the next check.
     await goto(udid, `harness://ticket/${encodeURIComponent(key)}`);
@@ -2828,7 +2868,7 @@ async function panelChecks(udid: string, s: { project: Project; conductor: Ticke
       }
     }
     await drag;
-    await Bun.sleep(1000);
+    await atRest(udid, 1000);
     if (!seen.length) throw new Error(`the panel's title wasn't readable while it was dragged clear of rest (x ${rest.x})`);
     const bad = seen.find((r) => Math.abs(r.w - rest.w) > 2 || Math.abs(r.h - rest.h) > 4);
     if (bad) throw new Error(`the panel's content reflowed mid-drag: title ${rest.w}×${rest.h} at rest, ${bad.w}×${bad.h} with the panel at x ${bad.x} (rest ${rest.x}), ${seen.length} readings`);
@@ -2860,7 +2900,7 @@ async function panelChecks(udid: string, s: { project: Project; conductor: Ticke
       await say("after the hold");
       throw e;
     });
-    await Bun.sleep(700);
+    await atRest(udid, 700);
     const p = (await findElement(udid, isDock)) ?? pill;
     await axe("tap", "-x", String(Math.round(p.frame.x + p.frame.width / 2)), "-y", String(Math.round(p.frame.y + p.frame.height / 2)), "--udid", udid);
     moved(udid);
@@ -3026,9 +3066,9 @@ async function stickChecks(udid: string, p: Awaited<ReturnType<typeof seedStick>
     const [from, to] = dir === "down" ? [H * 0.45, H * 0.8] : [H * 0.8, H * 0.45];
     for (let i = 0; i < times; i++) {
       await axe("swipe", "--start-x", "200", "--start-y", String(Math.round(from)), "--end-x", "200", "--end-y", String(Math.round(to)), "--duration", flick ? "0.08" : "0.25", "--udid", udid);
-      await Bun.sleep(500);
+      await atRest(udid, 500);
     }
-    await Bun.sleep(flick ? 900 : 600); // a fling's momentum runs on after the finger lifts
+    await atRest(udid, flick ? 900 : 600); // a fling's momentum runs on after the finger lifts
   };
   /**
    * New content lands (another message and its runs) and the list has laid it out. With
@@ -3042,7 +3082,7 @@ async function stickChecks(udid: string, p: Awaited<ReturnType<typeof seedStick>
       ? async () => (await labels(udid)).filter(last).length > before
       : async () => (await labels(udid)).some((l) => l.includes(`Stick ${n}:`)) && (await labels(udid)).some(last);
     await until(`message ${n}'s content on screen`, async () => (await landed()) || null, 8000).catch(() => {});
-    await Bun.sleep(500);
+    await atRest(udid, 500);
   };
 
   let n = 3;
@@ -3238,7 +3278,7 @@ async function keyboardChecksWithSoftwareKeyboard(udid: string, p: Awaited<Retur
     await goto(udid, `harness://ticket/${encodeURIComponent(p.ticket.key)}?tab=transcript`, (l) => l.some((x) => x.startsWith("Message the agent")));
     await tapWhere(udid, (l) => l.startsWith("Message the agent"));
     const top = await until("keyboard up", keyboardTop, 8000);
-    await Bun.sleep(600);
+    await atRest(udid, 600);
     const field = (await nodes(udid)).find((n) => n.AXLabel?.startsWith("Message the agent"));
     await shot(udid, "keyboard-composer");
     if (!field) throw new Error("the composer is gone from the screen (behind the keyboard)");
@@ -3258,7 +3298,7 @@ async function keyboardChecksWithSoftwareKeyboard(udid: string, p: Awaited<Retur
     await axe("tap", "-x", String(Math.round(start.frame.x + start.frame.width - 30)), "-y", String(Math.round(bottomOf(start) - 20)), "--udid", udid);
     const top = await until("keyboard up", keyboardTop, 8000);
     await typeOnKeys("\n".repeat(16) + "end of the prompt");
-    await Bun.sleep(900);
+    await atRest(udid, 900);
     await shot(udid, "keyboard-prompt");
     const field = await findElement(udid, isField);
     if (!field) throw new Error("the editor field is gone from the screen");
@@ -3281,7 +3321,7 @@ async function keyboardChecksWithSoftwareKeyboard(udid: string, p: Awaited<Retur
     await axe("tap", "-x", String(Math.round(start.frame.x + 40)), "-y", String(Math.round(start.frame.y + 20)), "--udid", udid);
     const top = await until("keyboard up", keyboardTop, 8000);
     await typeOnKeys(Array.from({ length: lines }, () => "a").join("\n"));
-    await Bun.sleep(900);
+    await atRest(udid, 900);
     await shot(udid, "keyboard-new-session");
     const field = await findElement(udid, isField);
     if (!field) throw new Error("the prompt field is gone from the screen");
@@ -3310,7 +3350,7 @@ async function keyboardChecksWithSoftwareKeyboard(udid: string, p: Awaited<Retur
     const draft = await api<Ticket>("POST", "/tickets", { projectId: p.project.id, spec: "One line", draft: true, skipAgentReview: true });
     await goto(udid, `harness://new?key=${encodeURIComponent(draft.key)}`, (l) => l.includes("Spec"));
     const start = await until("prompt field", () => findElement(udid, isField), 5000);
-    await Bun.sleep(600);
+    await atRest(udid, 600);
     if (await keyboardTop()) throw new Error("the keyboard came up before the tap");
     // AXe reports the text view's own frame: one line of text in it, so a short frame means the
     // height is a frame or padding around the text view, which a tap or drag doesn't reach.
@@ -3335,7 +3375,7 @@ async function keyboardChecksWithSoftwareKeyboard(udid: string, p: Awaited<Retur
     const field = await until("prompt field", () => findElement(udid, (l) => l === "Spec"), 5000);
     await axe("tap", "-x", String(Math.round(field.frame.x + 40)), "-y", String(Math.round(field.frame.y + 20)), "--udid", udid);
     await until("keyboard up", keyboardTop, 8000);
-    await Bun.sleep(600);
+    await atRest(udid, 600);
     const top = (await keyboardTop())!;
     await shot(udid, "keyboard-new-session-corner", true); // the check reads its pixels
     const file = join(shots, "keyboard-new-session-corner.png");
@@ -3404,7 +3444,7 @@ async function mentionChecks(udid: string, p: Awaited<ReturnType<typeof seedMent
     await tapWhere(udid, (l) => l.startsWith("Spec"));
     await axe("type", "Summarize @READ", "--udid", udid);
     await until("README.md suggested", () => has("README.md"), 8000);
-    await Bun.sleep(300);
+    await atRest(udid, 300);
     await shootBoth(udid, "mentions-new-session");
     await tapWhere(udid, "README.md");
     await until("list closed", async () => !(await has("README.md")), 4000);
@@ -3424,7 +3464,7 @@ async function mentionChecks(udid: string, p: Awaited<ReturnType<typeof seedMent
     await shootBoth(udid, "new-session-toolbar-empty");
     await tapWhere(udid, (l) => l.startsWith("Spec"));
     await axe("type", "Plan the readme", "--udid", udid);
-    await Bun.sleep(300);
+    await atRest(udid, 300);
     await shootBoth(udid, "new-session-toolbar");
     await tapToolbar(1);
     moved(udid);
@@ -3443,12 +3483,12 @@ async function mentionChecks(udid: string, p: Awaited<ReturnType<typeof seedMent
     // iOS may capitalize the first word, so the message is compared without case.
     await axe("type", "see @src/a", "--udid", udid);
     await until("src/app.ts suggested", () => has("src/app.ts"), 8000);
-    await Bun.sleep(300); // let the list settle before aiming at a row
+    await atRest(udid, 300); // let the list settle before aiming at a row
     await shootBoth(udid, "mentions-composer");
     await tapWhere(udid, "src/app.ts");
     // Picking closes the list and the composer shrinks, which moves Send.
     await until("list closed", async () => !(await has("src/app.ts")), 4000);
-    await Bun.sleep(300);
+    await atRest(udid, 300);
     await tapWhere(udid, "Send");
     await until("message with the mention", async () => (await texts(p.ticket.key)).some((t) => t.toLowerCase() === "see @src/app.ts"), 10000).catch(async (e) => {
       throw new Error(`${(e as Error).message}; transcript ends ${JSON.stringify((await texts(p.ticket.key)).slice(-4))}`);
@@ -3464,12 +3504,12 @@ async function mentionChecks(udid: string, p: Awaited<ReturnType<typeof seedMent
     // The first lookup starts the (fake) CLI.
     await until("/code-walk suggested", () => has("/code-walk"), 15000);
     if (!(await has("/commit-and-pr")) || (await has("/vercel:deploy"))) throw new Error(`the list isn't /co's: ${JSON.stringify((await labels(udid)).filter((l) => l.startsWith("/")))}`);
-    await Bun.sleep(300);
+    await atRest(udid, 300);
     await shootBoth(udid, "mentions-commands");
     await tapWhere(udid, "/code-walk");
     await until("list closed", async () => !(await has("/code-walk")), 4000);
     await axe("type", "this branch", "--udid", udid);
-    await Bun.sleep(300);
+    await atRest(udid, 300);
     await tapToolbar(0);
     moved(udid);
     const t = await until("ticket launched", async () => (await api<Ticket[]>("GET", `/tickets?projectId=${p.slash.id}`)).find((x) => !x.draft), 10000);
@@ -3519,11 +3559,11 @@ async function draftChecks(udid: string, p: Awaited<ReturnType<typeof seedTicket
     // Near the start of the text, then back near its end: each tap only moves the caret.
     for (const x of [el.frame.x + 22, el.frame.x + el.frame.width / 2]) {
       await axe("tap", "-x", String(Math.round(x)), "-y", y, "--udid", udid);
-      await Bun.sleep(700);
+      await atRest(udid, 700);
       const shown = await field();
       if (shown.toLowerCase() !== "started on the phone") throw new Error(`after moving the caret the field shows ${JSON.stringify(shown)}`);
     }
-    await Bun.sleep(1200);
+    await atRest(udid, 1200);
     const d = await saved();
     if (d?.text.toLowerCase() !== "started on the phone") throw new Error(`the draft is ${JSON.stringify(d)}`);
     return "kept";
@@ -3552,7 +3592,7 @@ async function usageChecks(udid: string) {
   const choose = async (item: string) => {
     await tapWhere(udid, "Plan usage options");
     await tapWhere(udid, item);
-    await Bun.sleep(400);
+    await atRest(udid, 400);
   };
   await showSidebar();
 
@@ -3586,7 +3626,7 @@ async function usageChecks(udid: string) {
     await tapWhere(udid, "Plan usage options");
     await shot(udid, "usage-menu");
     await tapWhere(udid, "Projected at reset");
-    await Bun.sleep(400);
+    await atRest(udid, 400);
     await waitFor("pace text", () => has("Claude Code Weekly: on pace for 56% · 45% used, resets"));
     if (!(await has("Claude Code 5-hour: on pace for 14"))) throw new Error(`rows: ${JSON.stringify(await rowLabels())}`);
     if (!(await has("Claude Code Weekly · Opus: too early to project · 2% used"))) throw new Error(`rows: ${JSON.stringify(await rowLabels())}`);
@@ -3768,7 +3808,7 @@ async function attachmentChecks(udid: string, p: Awaited<ReturnType<typeof seedA
     await shot(udid, "attachments-viewer-video-light");
     await swipeLeft();
     await until("paged to 5 of 5", () => has(counter(5)), 5000);
-    await Bun.sleep(800);
+    await atRest(udid, 800);
     await shot(udid, "attachments-viewer-failed-light");
     await tapWhere(udid, "Close");
     await closed();
@@ -3837,7 +3877,7 @@ const isOptions = (l: string) => l === "Options" || l.startsWith("Options, ");
 async function openOptions(udid: string) {
   await tapWhere(udid, isOptions);
   await until("options open", async () => (await labels(udid)).some((l) => l.startsWith("Models, ")), 5000);
-  await Bun.sleep(400);
+  await atRest(udid, 400);
 }
 /** The sheet's Cancel (xmark) header item; the glass header items may be missing from AXe's tree. */
 async function tapHeaderCancel(udid: string) {
@@ -3865,7 +3905,7 @@ async function toggleSidebar(udid: string, show: boolean) {
     : show ? [32, y] : [inbox ? inbox.frame.x + inbox.frame.width - 16 : 268, y];
   await axe("tap", "-x", String(Math.round(x)), "-y", String(Math.round(ty)), "--udid", udid);
   await until(`sidebar ${show ? "shown" : "hidden"}`, async () => sidebarShown(await labels(udid)) === show, 8000);
-  await Bun.sleep(500);
+  await atRest(udid, 500);
 }
 /** A ticket screen for `key` is up: its key and its tab strip. */
 const ticketShown = (l: string[], key: string) => l.includes(key) && l.includes("Spec") && l.includes("Details");
@@ -3927,7 +3967,7 @@ function screens(s: Seeded): Screen[] {
           .then(() => tapWhere(udid, (l) => l.startsWith("Branch, ")))
           .then(() => until("branch sheet", async () => (await labels(udid)).includes("Search branches"), 5000))
           // The field takes focus as the sheet finishes sliding up; typing before that drops keys.
-          .then(() => Bun.sleep(800))
+          .then(() => atRest(udid, 800))
           .then(() => axe("type", "re", "--udid", udid))
           .then(() => until("branch rows", async () => (await labels(udid)).some((x) => x.startsWith("release/v2")), 5000)),
       // The sheet is a Modal, which the next screen's deep link would leave on top.
@@ -3938,8 +3978,8 @@ function screens(s: Seeded): Screen[] {
       url: `harness://new?key=${k(s.draft)}`,
       ready: (l) => l.some(isOptions),
       seconds: 6,
-      prepare: (udid) => tapHeaderCancel(udid).then(() => until("cancel sheet", async () => (await labels(udid)).includes("Discard draft"), 5000)).then(() => Bun.sleep(500)),
-      after: (udid) => tapWhere(udid, "Keep editing").then(() => Bun.sleep(400)),
+      prepare: (udid) => tapHeaderCancel(udid).then(() => until("cancel sheet", async () => (await labels(udid)).includes("Discard draft"), 5000)).then(() => atRest(udid, 500)),
+      after: (udid) => tapWhere(udid, "Keep editing").then(() => atRest(udid, 400)),
     }),
     // A ticket linked to a remote ID: the header shows "JIRA-62 · GREET-n" (RelatedTests has the rules).
     screen("ticket-linked", ["linked"], {
@@ -3967,17 +4007,17 @@ function screens(s: Seeded): Screen[] {
       url: `harness://ticket/${k(s.agents)}`,
       ready: hasLabel(APPROVE_MORE),
       seconds: 6,
-      prepare: (udid) => tapWhere(udid, APPROVE_MORE).then(() => approveMenuUp(udid)).then(() => Bun.sleep(500)),
+      prepare: (udid) => tapWhere(udid, APPROVE_MORE).then(() => approveMenuUp(udid)).then(() => atRest(udid, 500)),
       // The menu closes with a tap outside it. SIM_CHECK_LEAVE_OPEN=1 leaves it up, to watch the next
       // step's reset clear it (`--only=approve-menu,connect`).
-      after: (udid) => (process.env.SIM_CHECK_LEAVE_OPEN ? Promise.resolve() : dismissMenu(udid).then(() => Bun.sleep(400))),
+      after: (udid) => (process.env.SIM_CHECK_LEAVE_OPEN ? Promise.resolve() : dismissMenu(udid).then(() => atRest(udid, 400))),
     }),
     // Settings → Prompts (seedPrompts): the list, and the customized review message.
     screen("prompts", [], { url: "harness://prompts", ready: hasLabel("Agent review") }),
     screen("prompt-customized", [], { url: "harness://prompt/run.review", ready: hasLabel("Reset to built-in") }),
     screen("connect", [], { url: "harness://connect", visit: true }),
     // The board lands on whichever column had work when it first loaded, mid-seed; show Blocked.
-    screen("board", ["blocked"], { url: BOARD, browse: true, prepare: (udid) => tapWhere(udid, (l) => l.startsWith("Blocked,")).then(() => Bun.sleep(700)) }),
+    screen("board", ["blocked"], { url: BOARD, browse: true, prepare: (udid) => tapWhere(udid, (l) => l.startsWith("Blocked,")).then(() => atRest(udid, 700)) }),
     // Planning with the seeded draft's dashed card (Draft badge, no run).
     screen("board-draft", ["draft"], {
       url: BOARD,
@@ -3989,10 +4029,10 @@ function screens(s: Seeded): Screen[] {
           const el = await findElement(udid, card);
           if (el && el.frame.x >= 0 && el.frame.x < 100) return el;
           await axe("swipe", "--start-x", "40", "--start-y", "600", "--end-x", "380", "--end-y", "600", "--duration", "0.25", "--udid", udid);
-          await Bun.sleep(500);
+          await atRest(udid, 500);
           return null;
         }, 12000, 0);
-        await Bun.sleep(500);
+        await atRest(udid, 500);
       },
     }),
     screen("browser", ["browse"], { url: `harness://ticket/${k(s.browse)}?tab=browser`, wait: 2000, browse: true, seconds: 6 }),
@@ -4141,7 +4181,7 @@ async function oneShot(udid: string, url: string) {
   for (const st of steps) {
     if (st.op === "tap") await tapWhere(udid, (l) => l === st.label || l.startsWith(st.label)).catch((e) => console.log(`  --prepare tap ${st.label}: ${(e as Error).message.split("\n")[0]}`));
     else await scrollTo(udid, (l) => l === st.label || l.startsWith(st.label)).catch((e) => console.log(`  --prepare scroll ${st.label}: ${(e as Error).message.split("\n")[0]}`));
-    await Bun.sleep(500);
+    await atRest(udid, 500);
   }
   await shootBoth(udid, name);
   if (!shown && !(await running(udid))) throw new Error(`the app crashed opening ${url}`);
@@ -4220,7 +4260,7 @@ function interactionChains(s: Seeded): Chain[] {
         const first = (l: string) => l === REPLY_ITEMS[0];
         for (let i = 0; i < 8 && ((await findElement(udid, first))?.frame.y ?? 0) < 380; i++) {
           await axe("swipe", "--start-x", "200", "--start-y", "420", "--end-x", "200", "--end-y", "620", "--duration", "0.3", "--udid", udid);
-          await Bun.sleep(400);
+          await atRest(udid, 400);
         }
         const widths: string[] = [];
         for (const item of REPLY_ITEMS) {
@@ -4241,7 +4281,7 @@ function interactionChains(s: Seeded): Chain[] {
         await approveMenuUp(udid);
         await tapWhere(udid, "Approve and…");
         await tapWhere(udid, instructionsField);
-        await Bun.sleep(500); // the keyboard comes up: typing before it does drops keys
+        await atRest(udid, 500); // the keyboard comes up: typing before it does drops keys
         await axe("type", text, "--udid", udid);
         await tapWhere(udid, "Approve");
         const t = await settle(s.agents.key, (x) => x.humanReview === "approved", 15000);
@@ -4264,7 +4304,7 @@ function interactionChains(s: Seeded): Chain[] {
         await until("inline error", async () => (await labels(udid)).some((l) => l.startsWith("Unknown variable {{brnch}}")), 5000);
         await shot(udid, "prompt-invalid-light");
         await tapSave(); // disabled while invalid
-        await Bun.sleep(300);
+        await atRest(udid, 300);
         if ((await override("system.work")) !== null) throw new Error("an invalid prompt was saved");
         // Take the bad variable back out (its ten characters) and write a good line instead.
         await axe("key-sequence", "--keycodes", Array(10).fill("42").join(","), "--delay", "0.02", "--udid", udid);
@@ -4280,7 +4320,7 @@ function interactionChains(s: Seeded): Chain[] {
         // The confirm alert: its buttons are in the AX tree before it takes taps (the
         // alert drops a tap that lands during its presentation), so let it settle first.
         await until("confirm alert", () => findElement(udid, (l) => l === "Reset"), 5000);
-        await Bun.sleep(600);
+        await atRest(udid, 600);
         await tapWhere(udid, "Reset");
         await until("override cleared", async () => (await override("system.work")) === null, 8000);
         await until("read-only again", async () => (await labels(udid)).includes("Customize"), 5000);
@@ -4294,11 +4334,11 @@ function interactionChains(s: Seeded): Chain[] {
         const el = await until("editor field", () => findElement(udid, (l) => l === "Agent review prompt"), 5000);
         // Its last line, past the end of the text: the cursor goes to the end.
         await axe("tap", "-x", String(Math.round(el.frame.x + el.frame.width - 20)), "-y", String(Math.round(el.frame.y + el.frame.height - 16)), "--udid", udid);
-        await Bun.sleep(400);
+        await atRest(udid, 400);
         await tapWhere(udid, (l) => l.startsWith("{{key}}"));
-        await Bun.sleep(500);
+        await atRest(udid, 500);
         await axe("type", "Z", "--udid", udid);
-        await Bun.sleep(300);
+        await atRest(udid, 300);
         await tapSave();
         const saved = await until("override saved", async () => ((v) => (v !== seeded ? v : null))(await override("run.review")), 8000);
         await api("PATCH", "/settings", { prompts: { "run.review": seeded } });
@@ -4349,7 +4389,7 @@ function interactionChains(s: Seeded): Chain[] {
       const closeMenu = async () => {
         const root = (await tree(udid))[0]!.frame;
         await axe("tap", "-x", String(Math.round(root.width * 0.5)), "-y", String(Math.round(root.height * 0.9)), "--udid", udid);
-        await Bun.sleep(400);
+        await atRest(udid, 400);
       };
       await check("a fresh session shows the grey New gauge", async () => {
         await open(s.gaugeNew, (l) => l.startsWith("New session"));
@@ -4470,7 +4510,7 @@ function interactionChains(s: Seeded): Chain[] {
           await shot(udid, "board-card-preview-failed");
           throw new Error(`${(e as Error).message}; on screen: ${(await labels(udid)).slice(0, 30).join(" | ")}`);
         });
-        await Bun.sleep(800);
+        await atRest(udid, 800);
         await shot(udid, "board-card-preview-light");
         const moves = l.filter((x) => x.startsWith("Move to"));
         if (moves.length) throw new Error(`the menu still moves cards: ${moves.join(", ")}`);
@@ -4502,7 +4542,7 @@ function interactionChains(s: Seeded): Chain[] {
           if (x >= 0 && x < 100) return true;
           // Review is where the board lands, with Planning's chip scrolled off the strip: page back by hand.
           await axe("swipe", "--start-x", "30", "--start-y", "520", "--end-x", "370", "--end-y", "520", "--duration", "0.3", "--udid", udid);
-          await Bun.sleep(700);
+          await atRest(udid, 700);
           return false;
         }, 12000, 0);
         await tapWhere(udid, (l) => l.startsWith(`${s.plan.key} `), { longPress: 1.2 });
@@ -4510,7 +4550,7 @@ function interactionChains(s: Seeded): Chain[] {
           await shot(udid, "board-card-planning-menu-failed");
           throw new Error(`${(e as Error).message}; on screen: ${(await labels(udid)).slice(0, 30).join(" | ")}`);
         });
-        await Bun.sleep(800);
+        await atRest(udid, 800);
         await shot(udid, "board-card-planning-menu-light");
         if (!l.includes("Start work")) throw new Error(`the planning card's menu has no Start work; on screen: ${l.slice(0, 30).join(" | ")}`);
         if (l.includes("Approve") || l.includes("Request changes")) throw new Error(`a planning card offers review actions: ${l.join(" | ")}`);
@@ -4535,16 +4575,14 @@ function interactionChains(s: Seeded): Chain[] {
         });
         // Its folder is the ticket's worktree (main's commit): the file is there, clean, and it has no Diff tab.
         if (l.includes("Modified") || l.some((x) => x.startsWith("Diff"))) throw new Error("a clean file shows as modified");
-        // The code is CodeMirror in a web view, which AXe can't see into: the editor's accessibility
-        // value is the text of the first linked line the page scrolled to and marked (the page
-        // starts after the screen does, so wait for it).
-        const marked = await until("the linked line marked in the editor", async () => {
-          const v = (await nodes(udid)).find((n) => n.AXUniqueId === "file-editor")?.AXValue;
-          return v ? v : null;
-        }, 10000).catch(() => "");
-        await Bun.sleep(600);
+        // The code is CodeMirror in a web view, which AXe can't see into: the probe reads the lines
+        // the page marked (it scrolls and marks after the screen is up, so wait for them).
+        const marked = await probeUntil(udid, "the linked lines marked in the editor", (x) => (x.editor?.markedLines.length ?? 0) > 0).then((x) => x.editor!.markedLines).catch(() => [] as string[]);
+        await atRest(udid, 600);
         await shot(udid, "file-link-tap-light");
-        if (!marked.startsWith("export function greetingFor")) throw new Error(`the linked lines aren't marked in the editor: ${JSON.stringify(marked)}`);
+        if (!marked[0]?.startsWith("export function greetingFor")) throw new Error(`the linked lines aren't marked in the editor: ${JSON.stringify(marked)}`);
+        const want = GREETING_FOR[1] - GREETING_FOR[0] + 1;
+        if (marked.length !== want) throw new Error(`${range} marks ${marked.length} lines in the editor, expected ${want}: ${JSON.stringify(marked)}`);
         return `${GREETINGS_PATH}, ${range}`;
       });
     }),
@@ -4557,13 +4595,13 @@ function interactionChains(s: Seeded): Chain[] {
           const el = await findElement(udid, row);
           if (el && el.frame.y > 140 && el.frame.y < 560) break;
           await axe("swipe", "--start-x", "200", "--start-y", "520", "--end-x", "200", "--end-y", "170", "--duration", "0.6", "--udid", udid);
-          await Bun.sleep(350);
+          await atRest(udid, 350);
         }
         if (!(await findElement(udid, row))) throw new Error(`no Save on blur row; on screen: ${(await labels(udid)).join(" | ")}`);
         await shot(udid, "save-on-blur-off-light");
         const before = (await api<{ saveOnBlur?: boolean }>("GET", "/settings")).saveOnBlur ?? false;
         // The scroll's momentum has to be over before a tap lands where the switch was.
-        await Bun.sleep(1200);
+        await atRest(udid, 1200);
         // The row's text and its switch share the label: the switch is the one on the right.
         const sw = (await nodes(udid)).filter((n) => n.AXLabel === "Save on blur").sort((a, b) => b.frame.x - a.frame.x)[0];
         if (!sw) throw new Error("no Save on blur switch");
@@ -4571,7 +4609,7 @@ function interactionChains(s: Seeded): Chain[] {
         // right end, where the switch is, not the middle.
         // A press held for a moment: the switch ignores the instantaneous tap AXe sends.
         await axe("touch", "-x", String(Math.round(sw.frame.x + sw.frame.width - 28)), "-y", String(Math.round(sw.frame.y + sw.frame.height / 2)), "--down", "--up", "--delay", "0.15", "--udid", udid);
-        await Bun.sleep(1000);
+        await atRest(udid, 1000);
         await shot(udid, "save-on-blur-on-light");
         const after = await until("the setting flipped on the service", async () => (((await api<{ saveOnBlur?: boolean }>("GET", "/settings")).saveOnBlur ?? false) !== before ? true : null), 6000).catch(async (e) => {
           await shot(udid, "save-on-blur-failed", true);
@@ -4586,22 +4624,24 @@ function interactionChains(s: Seeded): Chain[] {
       await check("the file editor edits, shows the unsaved dot and writes the file with Save", async () => {
         const dot = async () => (await labels(udid)).includes("Unsaved changes");
         await goto(udid, `harness://file/${GREETINGS_PATH}?ticket=${k(s.fileLink)}`, (l) => l.includes(GREETINGS_PATH));
-        await until("the editor", async () => (await nodes(udid)).some((n) => n.AXUniqueId === "file-editor"), 10000);
+        await probeUntil(udid, "the editor", (x) => !!x.editor);
         // The page starts after the screen does: tap into it until a keystroke takes.
         const typed = "EDITED_BY_SIM_CHECK";
         await until("a keystroke in the editor marks the file unsaved", async () => {
           if (await dot()) return true;
           await axe("tap", "-x", "200", "-y", "500", "--udid", udid);
           await axe("type", typed, "--udid", udid);
-          await Bun.sleep(600);
-          return dot();
-        }, 20000, 1000);
+          await probeUntil(udid, "the editor dirty", (x) => x.editor?.dirty === true, 1500).catch(() => {});
+          return until("the unsaved dot", dot, 1500, 100).catch(() => false);
+        }, 20000, 250);
         await shot(udid, "file-edit-dirty-light");
         const wd = (await ticketOf(s.fileLink.key)).workdir!;
         const onDisk = () => readFileSync(join(wd, GREETINGS_PATH), "utf8");
         if (onDisk().includes(typed)) throw new Error("the edit reached the disk before Save");
         await tapWhere(udid, "Save");
         await until("the unsaved dot gone", async () => !(await dot()), 8000);
+        const editor = (await probe(udid))?.editor;
+        if (editor?.dirty) throw new Error("the unsaved dot is gone but the editor still says dirty");
         if (!onDisk().includes(typed)) throw new Error("Save didn't write the edit to the file");
         return "typed, unsaved dot, Save wrote the file";
       });
