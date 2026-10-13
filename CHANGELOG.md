@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261013.0325](https://github.com/markhuot/harness/releases/tag/app-20261013.0325) - 2026-10-13
+
 ### Added
 
 - On iPhone and iPad, a file you open from a link is now its own card in the dock next to your open tickets, instead of a screen stacked on whatever ticket was up. Swipe along the dock (iPhone) or tap its card (iPad) to move between a file and tickets, open the same file again and it comes forward instead of adding a second card, and a file's ✕ closes just it. A file you leave with unsaved edits is saved (or, with Save on blur off, asked whether to save or discard when you close it) and never dropped, and a docked file comes back after a relaunch. A ticket you open from a file's "Open" menu gets a card of its own.
