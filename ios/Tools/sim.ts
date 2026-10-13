@@ -1,30 +1,50 @@
-// The one shared iOS simulator that agents and scripts test on, and the lock that takes turns on
-// it. Every simulator runs on the iOS 27.0 runtime: this never picks another runtime and never
+// The pool of shared iOS simulators that agents and scripts test on, and the locks that take turns
+// on them. Every simulator runs on the iOS 27.0 runtime: this never picks another runtime and never
 // downloads one. See CLAUDE.md → Simulators.
 //
-//   bun ios/Tools/sim.ts ensure [--device=name] [--ipad]      find or create the device (iOS 27.0), boot it, print its UDID
+//   bun ios/Tools/sim.ts ensure [--all] [--device=name] [--ipad]  find or create the device (iOS 27.0), boot it, print its UDID
+//                                                                 (--all: every pool slot the disk has room for)
 //   bun ios/Tools/sim.ts with-lock [--device=name] [--ipad] [--timeout=minutes] -- <command…>
-//                                                                 wait for the device, run the command with SIM_UDID set, let go
-//   bun ios/Tools/sim.ts shutdown [--device=name]             shut the device down once nobody holds it
+//                                                                 wait for a free slot, run the command with SIM_UDID set, let go
+//   bun ios/Tools/sim.ts shutdown [--device=name]             shut down the slots nobody holds
 //   bun ios/Tools/sim.ts reap                                 clean up after dead sim-check runs: shut down unheld
 //                                                                 "sim-check *" devices, stop orphaned daemons, remove temp dirs
-//   bun ios/Tools/sim.ts status                               the device and who holds its lock
+//   bun ios/Tools/sim.ts status                               each slot and who holds its lock
 //   bun ios/Tools/sim.ts disk [--min=GiB]                     free disk space; exits 1 below the minimum (default 5), and
 //                                                                 names installed iOS runtimes other than 27.0
 //
-// The device is "harness-shared" (an iPhone 18 Pro) unless --device names another. Locks are files
-// under ~/.harness/tmp/sim-locks (HARNESS_SIM_LOCK_DIR overrides it). Each records the holder's PID
-// and process start time, so a lock whose holder died (crashed, killed) is taken over. with-lock
-// sets HARNESS_SIM_LOCKED for its command, so a script under it that takes the same lock itself
-// (sim-check, say) goes ahead instead of waiting on its parent.
+// The iPhone pool is "harness-shared", "harness-shared-2", … (HARNESS_SIM_POOL_SIZE slots, default 2;
+// iPhone 18 Pro each); with-lock takes the first free one. --device names one simulator instead, and
+// --ipad the single "harness-shared-ipad". Locks are files under ~/.harness/tmp/sim-locks
+// (HARNESS_SIM_LOCK_DIR overrides it), one per simulator. Each records the holder's PID and process
+// start time, so a lock whose holder died (crashed, killed) is taken over. with-lock sets
+// HARNESS_SIM_LOCKED to the slot it took for its command, so a script under it that asks for a
+// slot itself (sim-check, say) goes ahead with that one instead of waiting on its parent.
 import { existsSync, linkSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, statfsSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
+import { listKept } from "./sim-reuse";
 
 export const SHARED_DEVICE = "harness-shared";
 /** The iPad sim-check runs on with --ipad: kept (booted) between runs like SHARED_DEVICE, since creating and installing on a fresh one cost 50–80 s of every run. */
 export const SHARED_IPAD_DEVICE = "harness-shared-ipad";
-export const isSharedDevice = (name: string) => name === SHARED_DEVICE || name === SHARED_IPAD_DEVICE;
+/** A pool slot (harness-shared, harness-shared-2, …) or the shared iPad: simulators that stay up between runs and are never deleted. */
+export const isSharedDevice = (name: string) => name === SHARED_IPAD_DEVICE || /^harness-shared(-\d+)?$/.test(name);
+/** The iPhone pool's default size; HARNESS_SIM_POOL_SIZE overrides it. */
+export const DEFAULT_POOL_SIZE = 2;
+/** How many simulators the pool may grow to. */
+export function poolSize(env: Record<string, string | undefined> = process.env): number {
+  const n = Number(env.HARNESS_SIM_POOL_SIZE);
+  return Number.isInteger(n) && n >= 1 ? n : DEFAULT_POOL_SIZE;
+}
+/**
+ * The pool's slots, in the order they fill. Slot 1 is the existing "harness-shared" (kept under its
+ * own name so the simulator other agents already use is reused, not renamed or recreated); the rest
+ * are "harness-shared-2", "harness-shared-3", …
+ */
+export function poolSlots(size = poolSize()): string[] {
+  return Array.from({ length: size }, (_, i) => (i === 0 ? SHARED_DEVICE : `${SHARED_DEVICE}-${i + 1}`));
+}
 /** The only iOS runtime simulators run on. */
 export const IOS_RUNTIME = "27.0";
 export const DEVELOPER_DIR = process.env.DEVELOPER_DIR ?? "/Applications/Xcode-27.0.0.app/Contents/Developer";
@@ -275,11 +295,91 @@ export async function ensureDevice(name = SHARED_DEVICE, opts: EnsureOptions = {
   );
 }
 
-/** The device's UDID and state on the iOS 27.0 runtime, or null when it doesn't exist. */
-async function findDevice(name: string, run: Simctl = simctl): Promise<Device | null> {
+/** The available devices on the iOS 27.0 runtime. */
+async function listDevices(run: Simctl = simctl): Promise<Device[]> {
   const runtime = pinnedRuntime((JSON.parse(await run("list", "runtimes", "--json")) as { runtimes: Runtime[] }).runtimes);
   const devices = (JSON.parse(await run("list", "devices", "--json")) as { devices: Record<string, Device[]> }).devices;
-  return (devices[runtime.identifier] ?? []).find((d) => d.isAvailable && d.name === name) ?? null;
+  return (devices[runtime.identifier] ?? []).filter((d) => d.isAvailable);
+}
+
+/** The device's UDID and state on the iOS 27.0 runtime, or null when it doesn't exist. */
+async function findDevice(name: string, run: Simctl = simctl): Promise<Device | null> {
+  return (await listDevices(run)).find((d) => d.name === name) ?? null;
+}
+
+// ---------------------------------------------------------------- the pool
+// Agents take turns on a small pool of shared iPhone simulators instead of one: `acquirePool` locks
+// the first free slot. Disk is what limits the pool (a simulator grows to 3–8 GB), so a slot beyond
+// the first is only created or booted while `bun run sim disk` would pass; with less free, callers
+// wait on the slots that are already up. The iPad keeps its one simulator: --ipad runs are rare, and a
+// second iPad would cost the disk a second iPhone does for little.
+
+export interface SlotView { name: string; exists: boolean; booted: boolean; held: boolean }
+
+/**
+ * The slots to try locking, best first. A free slot that exists goes first (`prefer`red ones ahead of
+ * the rest, then pool order). Only when none is free does a slot that doesn't exist yet qualify, so
+ * the pool grows lazily. Beyond the first slot, a simulator that isn't already booted is created or
+ * booted only with disk to spare (`diskOk`); the first slot is always a candidate (creating it checks
+ * the disk itself). Held slots are never candidates: the caller waits instead of queueing on one.
+ */
+export function slotCandidates(slots: readonly SlotView[], o: { prefer?: readonly string[]; diskOk: boolean }): string[] {
+  const prefer = o.prefer ?? [];
+  const rank = (s: SlotView) => (prefer.includes(s.name) ? prefer.indexOf(s.name) : prefer.length);
+  const allowed = slots.filter((s, i) => !s.held && (i === 0 || s.booted || o.diskOk));
+  const ready = allowed.filter((s) => s.exists).sort((a, b) => rank(a) - rank(b) || slots.indexOf(a) - slots.indexOf(b));
+  const fresh = allowed.filter((s) => !s.exists);
+  return [...ready, ...fresh].map((s) => s.name);
+}
+
+/** The pool slots the kept `--reuse` states (newest first) were made on, so a rerun goes back to the simulator that holds its app. */
+export async function keptSlots(tmp = tmpdir(), devices: () => Promise<Device[]> = listDevices): Promise<string[]> {
+  const kept = (await listKept(tmp, HOME_PREFIX, async () => true)).sort((a, b) => b.state.savedAt - a.state.savedAt);
+  const all = await devices();
+  const names = kept.flatMap((k) => k.state.udids).map((u) => all.find((d) => d.udid === u)?.name);
+  return [...new Set(names.filter((n): n is string => !!n && isSharedDevice(n) && n !== SHARED_IPAD_DEVICE))];
+}
+
+export interface PoolOptions extends AcquireOptions {
+  slots?: string[];
+  /** Slots to take first when free (the one a kept `--reuse` state was made on). */
+  prefer?: string[];
+  /** The devices that exist on the iOS 27.0 runtime. */
+  devices?: () => Promise<Device[]>;
+  freeGiB?: () => number;
+  minFreeGiB?: number;
+}
+
+/**
+ * Waits (30 minutes by default) for any slot of the pool and returns the one it locked and the
+ * function that lets go of it. Inside `with-lock` the slot is already ours (HARNESS_SIM_LOCKED), so
+ * that one comes back at once.
+ */
+export async function acquirePool(opts: PoolOptions = {}): Promise<{ name: string; release: () => void }> {
+  const dir = opts.dir ?? lockDir();
+  const slots = opts.slots ?? poolSlots();
+  const mineAlready = [...inherited()].find((n) => slots.includes(n) || /^harness-shared(-\d+)?$/.test(n));
+  if (mineAlready) return { name: mineAlready, release: () => {} };
+  const end = Date.now() + (opts.timeoutMs ?? 30 * 60_000);
+  let told = false;
+  for (;;) {
+    const devices = await (opts.devices ?? listDevices)();
+    const views: SlotView[] = slots.map((name) => {
+      const d = devices.find((x) => x.name === name);
+      return { name, exists: !!d, booted: d?.state === "Booted", held: lockHolder(name, dir) !== null };
+    });
+    const diskOk = (opts.freeGiB ?? freeGiB)() >= (opts.minFreeGiB ?? MIN_FREE_GIB);
+    for (const name of slotCandidates(views, { prefer: opts.prefer, diskOk })) {
+      if (tryLock(name, dir)) return { name, release: () => releaseLock(name, dir) };
+    }
+    const holders = slots.map((n) => lockHolder(n, dir)).filter((h): h is Owner => !!h);
+    if (Date.now() >= end) {
+      throw new Error(`timed out waiting for a shared simulator (${slots.join(", ")})${holders.length ? `; held by ${holders.map((h) => `pid ${h.pid}: ${h.command}`).join("; ")}` : ""}${diskOk ? "" : "; disk is low, so no more simulators were created"}`);
+    }
+    if (!told) opts.onWait?.(holders[0] ?? null);
+    told = true;
+    await Bun.sleep(opts.pollMs ?? 500);
+  }
 }
 
 // ---------------------------------------------------------------- reaping
@@ -473,36 +573,72 @@ if (import.meta.main) {
   const command = dash === -1 ? [] : argv.slice(dash + 1);
   const opt = (name: string) => opts.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3);
   const kind: DeviceKind = opts.includes("--ipad") ? "ipad" : "iphone";
-  const name = opt("device") ?? SHARED_DEVICE;
-  const waiting = (holder: Owner | null) => console.error(`waiting for the "${name}" simulator${holder ? ` (held by pid ${holder.pid}: ${holder.command})` : ""}…`);
+  // The iPhone pool unless --device names one simulator or --ipad asks for the (single) shared iPad.
+  const pooled = !opt("device") && kind === "iphone";
+  const name = opt("device") ?? (kind === "ipad" ? SHARED_IPAD_DEVICE : SHARED_DEVICE);
+  const waiting = (holder: Owner | null) =>
+    console.error(`waiting for ${pooled ? `a shared simulator (${poolSlots().join(", ")})` : `the "${name}" simulator`}${holder ? ` (held by pid ${holder.pid}: ${holder.command})` : ""}…`);
   try {
     if (cmd === "ensure") {
-      console.log(await ensureDevice(name, { kind }));
+      if (opts.includes("--all") && pooled) {
+        // Every slot, the first always and the rest only while the disk has room.
+        for (const [i, slot] of poolSlots().entries()) {
+          if (i > 0 && freeGiB() < MIN_FREE_GIB && !(await findDevice(slot))) {
+            console.error(`${slot}: not created, only ${freeGiB().toFixed(1)} GiB of disk is free`);
+            continue;
+          }
+          console.log(`${slot} ${await ensureDevice(slot, { kind })}`);
+        }
+      } else {
+        console.log(await ensureDevice(name, { kind }));
+      }
     } else if (cmd === "with-lock") {
       if (!command.length) throw new Error("with-lock needs a command after --");
       await reap({ except: [name] }).catch((e: Error) => console.error(`reap: ${e.message}`));
-      const release = await acquire(name, { timeoutMs: Number(opt("timeout") ?? 30) * 60_000, onWait: waiting });
-      const udid = await ensureDevice(name, { kind });
-      const locked = [...inherited().add(name)].join(",");
+      const timeoutMs = Number(opt("timeout") ?? 30) * 60_000;
+      let slot = name;
+      let release: () => void;
+      if (pooled) {
+        // A --reuse run goes back to the slot its kept state was made on, if that one is free.
+        const prefer = command.includes("--reuse") ? await keptSlots() : [];
+        ({ name: slot, release } = await acquirePool({ timeoutMs, onWait: waiting, prefer }));
+      } else {
+        release = await acquire(name, { timeoutMs, onWait: waiting });
+      }
+      const udid = await ensureDevice(slot, { kind });
+      const locked = [...inherited().add(slot)].join(",");
       const child = Bun.spawn(command, { env: { ...process.env, DEVELOPER_DIR, SIM_UDID: udid, HARNESS_SIM_LOCKED: locked }, stdio: ["inherit", "inherit", "inherit"] });
       for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) process.on(sig, () => child.kill(sig));
       const code = await child.exited;
       release();
       process.exit(code);
     } else if (cmd === "shutdown") {
-      await withLock(name, async () => {
-        const d = await findDevice(name);
-        if (d?.state === "Booted") await simctl("shutdown", d.udid);
-        console.log(d ? `${name} (${d.udid}) is shut down` : `no simulator named ${name}`);
-      }, { onWait: waiting });
+      // The pool: every slot nobody holds (a held one is in use, so it's skipped, not waited for).
+      for (const slot of pooled ? poolSlots() : [name]) {
+        const d = await findDevice(slot);
+        if (!d) {
+          console.log(`no simulator named ${slot}`);
+        } else if (!tryLock(slot)) {
+          console.log(`${slot} (${d.udid}) is held, left alone`);
+        } else {
+          try {
+            if (d.state === "Booted") await simctl("shutdown", d.udid);
+            console.log(`${slot} (${d.udid}) is shut down`);
+          } finally {
+            releaseLock(slot);
+          }
+        }
+      }
     } else if (cmd === "reap") {
       const done = await reap({ log: console.log, includeKept: opts.includes("--kept") });
       if (!done.shutdown.length && !done.kill.length && !done.remove.length) console.log("nothing left behind");
     } else if (cmd === "status") {
-      const d = await findDevice(name);
-      const holder = lockHolder(name);
-      console.log(d ? `${name} ${d.udid} ${d.state}` : `${name}: not created yet (\`ensure\` creates it)`);
-      console.log(holder ? `held by pid ${holder.pid} since ${holder.at}: ${holder.command}` : "not held");
+      for (const slot of pooled ? poolSlots() : [name]) {
+        const d = await findDevice(slot);
+        const holder = lockHolder(slot);
+        console.log(d ? `${slot} ${d.udid} ${d.state}` : `${slot}: not created yet (\`ensure\` creates it)`);
+        console.log(holder ? `  held by pid ${holder.pid} since ${holder.at}: ${holder.command}` : "  not held");
+      }
       console.log(`${freeGiB().toFixed(1)} GiB free`);
     } else if (cmd === "disk") {
       const min = Number(opt("min") ?? MIN_FREE_GIB);
@@ -513,7 +649,7 @@ if (import.meta.main) {
       }
       checkDisk(min);
     } else {
-      throw new Error("usage: sim.ts ensure | with-lock [--timeout=minutes] -- <command…> | shutdown | reap | status | disk [--min=GiB]  (each takes --device=name; ensure and with-lock take --ipad)");
+      throw new Error("usage: sim.ts ensure [--all] | with-lock [--timeout=minutes] -- <command…> | shutdown | reap | status | disk [--min=GiB]  (each takes --device=name for one simulator instead of the pool, or --ipad for the iPad)");
     }
   } catch (e) {
     console.error((e as Error).message);

@@ -11,7 +11,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { buildPairUrl, type Project, type Ticket, type TicketDetail } from "@harness/shared";
-import { acquire, checkDisk, ensureDevice, freeGiB, SHARED_DEVICE, type Device } from "./sim";
+import { acquire, acquirePool, checkDisk, ensureDevice, freeGiB, isSharedDevice, SHARED_DEVICE, type Device } from "./sim";
 import { axeFor, hasAxe, screenKey, screenState } from "./axe";
 
 const IOS = resolve(import.meta.dir, "..");
@@ -177,7 +177,7 @@ function freePort(): number {
  * any other name has to exist already.
  */
 async function simulatorFor(name: string): Promise<string> {
-  if (name === SHARED_DEVICE) return ensureDevice(name, { log });
+  if (isSharedDevice(name)) return ensureDevice(name, { log });
   const list = JSON.parse(await simctl("list", "devices", "--json")) as { devices: Record<string, Device[]> };
   const d = Object.values(list.devices).flat().find((x) => x.isAvailable && (x.name === name || x.udid === name));
   if (!d) throw new Error(`no simulator named ${name}; dev-sim only ever creates ${SHARED_DEVICE} (drop --sim to use it)`);
@@ -407,8 +407,8 @@ async function main(o: Options): Promise<void> {
     if (!existsSync(app)) throw new UsageError(`${app} doesn't exist; drop --no-build to build it`);
   }
 
-  // The simulator boots and the app builds while the daemon starts and seeds.
-  const device = o.seedOnly ? null : Promise.all([simulatorFor(o.sim), o.build ? buildApp() : Promise.resolve(o.app ?? DEFAULT_APP)]);
+  // The app builds while the daemon starts and seeds; the simulator is taken once it has.
+  const device = o.seedOnly ? null : o.build ? buildApp() : Promise.resolve(o.app ?? DEFAULT_APP);
   device?.catch(() => {}); // awaited below; don't let an early failure go unhandled meanwhile
   const d = await startDaemon();
   let stopped = false;
@@ -433,8 +433,17 @@ async function main(o: Options): Promise<void> {
     const seeded = await seed(d);
     printSeeded(d, seeded);
     if (device) {
-      const [udid, app] = await device;
-      release = await acquire(o.sim, { onWait: (h) => log(`waiting for the ${o.sim} simulator${h ? ` (held by pid ${h.pid}: ${h.command})` : ""}…`) });
+      const app = await device;
+      // The default is any free slot of the shared pool; --sim names one other simulator.
+      let slot = o.sim;
+      if (o.sim === SHARED_DEVICE) {
+        const got = await acquirePool({ onWait: (h) => log(`waiting for a shared simulator${h ? ` (held by pid ${h.pid}: ${h.command})` : ""}…`) });
+        slot = got.name;
+        release = got.release;
+      } else {
+        release = await acquire(o.sim, { onWait: (h) => log(`waiting for the ${o.sim} simulator${h ? ` (held by pid ${h.pid}: ${h.command})` : ""}…`) });
+      }
+      const udid = await simulatorFor(slot);
       try {
         const axe = axeFor(udid, process.env.DEVELOPER_DIR!);
         await installAndPair(udid, axe, app, buildPairUrl(d.base, d.token));

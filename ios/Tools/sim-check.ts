@@ -143,7 +143,7 @@ import { join, resolve } from "node:path";
 import { buildPairUrl, reviewPassed, type ActivityEntry, type Project, type PromptEntry, type SpecRevision, type Ticket, type TicketDetail, type TicketPage, type TranscriptEntry, type Watcher } from "@harness/shared";
 import { findTheme } from "@harness/shared/themes";
 import { Database } from "bun:sqlite";
-import { acquire, checkDisk, ensureDevice, markKept, isSharedDevice, reap, SHARED_DEVICE, SHARED_IPAD_DEVICE, writeRunOwner } from "./sim";
+import { acquire, acquirePool, checkDisk, ensureDevice, markKept, isSharedDevice, reap, SHARED_IPAD_DEVICE, writeRunOwner } from "./sim";
 import { CheckSelector, noMatchMessage, parseGrep } from "./sim-grep";
 import { chooseKept, hashApp, hashService, listKept, MARKER_KEY, planApp, REUSE_VERSION, writeReuseState, type ReuseState, type Want } from "./sim-reuse";
 import { PROBE_FILE, parseState, settled as probeSettled, waitFor as probeWaitFor, type DebugState } from "./probe";
@@ -495,8 +495,8 @@ async function running(udid: string): Promise<boolean> {
 
 /**
  * The simulators to drive, each held under its lock (Tools/sim.ts) until this run exits, so two
- * runs or agents never install over each other: --udid=a,b, or the shared "harness-shared" iPhone
- * ("harness-shared-ipad" with --ipad), plus "sim-check 2" … "sim-check N" with --shards=N. Devices
+ * runs or agents never install over each other: --udid=a,b, or any free simulator of the shared
+ * iPhone pool ("harness-shared", "harness-shared-2"; "harness-shared-ipad" with --ipad), plus "sim-check 2" … "sim-check N" with --shards=N. Devices
  * that don't exist yet are created on the iOS 27.0 runtime, and all of them are booted. First it
  * cleans up after runs that died (Tools/sim.ts reap): their booted devices and orphaned daemons.
  */
@@ -504,12 +504,19 @@ async function pickDevices(n: number): Promise<string[]> {
   const given = opt("udid")?.split(",").filter(Boolean);
   type Device = { udid: string; name: string; state: string; isAvailable: boolean };
   const list = async () => Object.values((JSON.parse(await simctl("list", "devices", "--json")) as { devices: Record<string, Device[]> }).devices).flat();
-  const wanted = given ?? Array.from({ length: n }, (_, i) => (ipad ? (i === 0 ? SHARED_IPAD_DEVICE : `sim-check iPad ${i + 1}`) : i === 0 ? SHARED_DEVICE : `sim-check ${i + 1}`));
-  const names = (devices: Device[]) => wanted.map((id) => devices.find((x) => x.udid === id)?.name ?? id);
+  // The iPhone pool's slot is chosen below, once the others are held; "" stands for it here.
+  const wanted = given ?? Array.from({ length: n }, (_, i) => (ipad ? (i === 0 ? SHARED_IPAD_DEVICE : `sim-check iPad ${i + 1}`) : i === 0 ? "" : `sim-check ${i + 1}`));
+  const names = (devices: Device[]) => wanted.filter(Boolean).map((id) => devices.find((x) => x.udid === id)?.name ?? id);
   await reap({ except: names(await list()), log: console.log }).catch((e: Error) => console.log(`reap: ${e.message}`));
   const all = await list();
   return Promise.all(
     wanted.map(async (id) => {
+      if (id === "") {
+        // Any free slot of the shared pool, the one the kept --reuse state's app is on first.
+        const prefer = (attached?.udids ?? []).map((u) => all.find((x) => x.udid === u)?.name).filter((x): x is string => !!x);
+        const { name } = await acquirePool({ prefer, onWait: (h) => console.log(`waiting for a shared simulator${h ? ` (held by pid ${h.pid}: ${h.command})` : ""}…`) });
+        return ensureDevice(name, { kind: "iphone", log: console.log });
+      }
       const d = all.find((x) => x.isAvailable && (x.udid === id || x.name === id));
       if (!d && given) throw new Error(`--udid: no simulator ${id}`);
       const name = d?.name ?? id;

@@ -4,11 +4,18 @@ import { join } from "node:path";
 import { tempDir } from "@harness/shared/testing";
 import {
   acquire,
+  acquirePool,
   checkDisk,
   deviceTypeFor,
   ensureDevice,
   etimeSeconds,
   extraRuntimes,
+  isSharedDevice,
+  keptSlots,
+  poolSize,
+  poolSlots,
+  slotCandidates,
+  type SlotView,
   lockHolder,
   markKept,
   parseSimDaemons,
@@ -357,4 +364,106 @@ test("planReap leaves kept homes alone, and stops their daemons and removes them
   // A --reuse run that attached to the kept home took over its owner file: it's live now, so reap --kept leaves it be.
   const attached = { ...kept, owner: { pid: 3, start: "s", scratch: kept.owner.scratch }, ownerAlive: true };
   expect(planReap({ ...input, dirs: [attached, live], includeKept: true })).toEqual({ shutdown: [], kill: [], remove: [] });
+});
+
+// ---------------------------------------------------------------- the pool
+
+const view = (name: string, o: Partial<SlotView> = {}): SlotView => ({ name, exists: true, booted: true, held: false, ...o });
+const A = "harness-shared";
+const B = "harness-shared-2";
+
+test("poolSlots keeps the existing harness-shared as slot 1; poolSize reads HARNESS_SIM_POOL_SIZE and ignores junk", () => {
+  expect(poolSlots(3)).toEqual([A, B, "harness-shared-3"]);
+  expect(poolSize({})).toBe(2);
+  expect(poolSize({ HARNESS_SIM_POOL_SIZE: "3" })).toBe(3);
+  for (const bad of ["0", "-1", "x", "1.5", ""]) expect(poolSize({ HARNESS_SIM_POOL_SIZE: bad })).toBe(2);
+  expect(isSharedDevice(B) && isSharedDevice(A) && isSharedDevice("harness-shared-ipad")).toBe(true);
+  expect(isSharedDevice("harness-shared-x") || isSharedDevice("sim-check 2")).toBe(false);
+});
+
+test("slotCandidates: the first free existing slot wins, held ones are skipped, preferred ones go first", () => {
+  expect(slotCandidates([view(A), view(B)], { diskOk: true })).toEqual([A, B]);
+  expect(slotCandidates([view(A, { held: true }), view(B)], { diskOk: true })).toEqual([B]);
+  expect(slotCandidates([view(A), view(B)], { diskOk: true, prefer: [B] })).toEqual([B, A]);
+  expect(slotCandidates([view(A, { held: true }), view(B, { held: true })], { diskOk: true, prefer: [B] })).toEqual([]);
+});
+
+test("slotCandidates: the pool grows lazily, and only with disk to spare", () => {
+  const grow = [view(A, { held: true }), view(B, { exists: false, booted: false })];
+  expect(slotCandidates(grow, { diskOk: true })).toEqual([B]);
+  expect(slotCandidates(grow, { diskOk: false })).toEqual([]); // wait on the first slot instead
+  // an existing slot is taken before a missing one is created
+  expect(slotCandidates([view(A, { exists: false, booted: false }), view(B)], { diskOk: false })).toEqual([B, A]);
+});
+
+test("slotCandidates: under low disk a shut-down slot beyond the first isn't booted, a booted one still is, the first always is", () => {
+  expect(slotCandidates([view(A, { held: true }), view(B, { booted: false })], { diskOk: false })).toEqual([]);
+  expect(slotCandidates([view(A, { held: true }), view(B)], { diskOk: false })).toEqual([B]);
+  expect(slotCandidates([view(A, { booted: false }), view(B)], { diskOk: false })).toEqual([A, B]);
+});
+
+const slotDev = (name: string, state = "Booted", udid = `U-${name}`) => ({ udid, name, state, isAvailable: true });
+
+test("acquirePool: two callers get different slots, a third waits for one to be released", async () => {
+  const dir = tempDir();
+  const opts = { dir, pollMs: 10, devices: async () => [slotDev(A), slotDev(B)], freeGiB: () => 100 };
+  const first = await acquirePool(opts);
+  const second = await acquirePool(opts);
+  expect([first.name, second.name].sort()).toEqual([A, B]);
+  let got: string | null = null;
+  const third = acquirePool(opts).then((r) => ((got = r.name), r));
+  await Bun.sleep(60);
+  expect(got).toBeNull();
+  second.release();
+  expect((await third).name).toBe(second.name);
+  first.release();
+  (await third).release();
+});
+
+test("acquirePool: a slot whose holder died is taken over, and under low disk it waits instead of creating slot 2", async () => {
+  const dir = tempDir();
+  const child = await holdInChild(dir, A, 60_000);
+  const low = { dir, pollMs: 10, devices: async () => [slotDev(A)], freeGiB: () => 1 };
+  await expect(acquirePool({ ...low, timeoutMs: 100 })).rejects.toThrow(/timed out waiting for a shared simulator.*pid \d+.*disk is low/);
+  expect(existsSync(join(dir, `${B}.lock`))).toBe(false);
+  child.kill("SIGKILL");
+  await child.exited;
+  const got = await acquirePool(low);
+  expect(got.name).toBe(A); // the dead holder's lock was reaped, per slot
+  got.release();
+  // with room, the same situation (slot 1 held) creates slot 2
+  const again = await holdInChild(dir, A, 60_000);
+  const roomy = await acquirePool({ ...low, freeGiB: () => 50 });
+  expect(roomy.name).toBe(B);
+  roomy.release();
+  again.kill();
+});
+
+test("acquirePool inside with-lock returns the slot the parent holds, even when it's slot 2", async () => {
+  const dir = tempDir();
+  const parent = await holdInChild(dir, B, 5000);
+  process.env.HARNESS_SIM_LOCKED = B;
+  try {
+    const got = await acquirePool({ dir, timeoutMs: 100, devices: async () => [slotDev(A), slotDev(B)] });
+    expect(got.name).toBe(B);
+    got.release();
+    expect(lockHolder(B, dir)?.pid).toBe(parent.pid);
+  } finally {
+    delete process.env.HARNESS_SIM_LOCKED;
+    parent.kill();
+  }
+});
+
+test("keptSlots maps the kept --reuse states' simulators to pool slots, newest first, ignoring other devices", async () => {
+  const { writeReuseState } = await import("./sim-reuse");
+  const tmp = tempDir();
+  const keep = (name: string, savedAt: number, udids: string[]) => {
+    const home = join(tmp, `harness-sim-home-${name}`);
+    mkdirSync(home);
+    writeFileSync(join(home, "keep"), "");
+    writeReuseState(home, { version: 2, savedAt, port: 1, scratch: "", daemonPid: 1, modeKey: "walk", seeds: [], seeded: {}, udids, appHash: "", installed: [], repoRoot: "", serviceHash: "" });
+  };
+  keep("old", 1, ["U-" + A]);
+  keep("new", 2, ["U-" + B, "U-sim-check 2", "gone"]);
+  expect(await keptSlots(tmp, async () => [slotDev(A), slotDev(B), slotDev("sim-check 2")])).toEqual([B, A]);
 });
