@@ -3578,6 +3578,9 @@ the conventions, and ios/README.md the build and test commands.
 - **Checks.** `ios/Tools/sim-check.ts` runs a simulator walk-through against a real daemon on a
   throwaway home, through the accessibility tree (AXe) and deep links, and validates what needs a
   simulator by real taps (no screenshots). Shots are opt-in: `--screens`, `--only=<name>`, `--shot=<link>`.
+  `--grep=<pattern>` picks single checks (a check names the earlier ones it starts from, which run as
+  setup), and `--keep` then `--reuse` reattaches to the kept daemon, seeds and paired app (state in
+  the kept home's `reuse.json`, with a hash of the built app; `sim reap --kept` clears it).
 - **Builds.** `release/publish-install.sh` archives the Release app with `ios/Tools/build.ts`,
   exports a development IPA (and uploads a TestFlight build), packages and Developer ID signs the
   Mac app, uploads both to the GitHub release of the annotated `app-YYYYMMDD.HHMM` tag on HEAD (it

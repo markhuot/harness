@@ -9,6 +9,11 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- For people working on Harness: `sim-check --grep=<pattern>` runs just the checks whose names match (a case-insensitive substring, or `/regex/flags`), so debugging one new check no longer reruns a whole `--sheets` pass. A check that starts from what an earlier one left on screen declares it, and those earlier checks run first as setup; a pattern that matches nothing fails and lists the nearest check names.
+- For people working on Harness: `sim-check --reuse` attaches to what the last `--keep` run left (its daemon, seeded tickets and paired app), skipping the build, install, keychain reset, seeding and pairing, so editing and rerunning one check takes seconds instead of minutes. It reinstalls (keeping the daemon and seeds) when the built app's hash changed, falls back to a full run with a stated reason when no kept state fits, and keeps its state for the next run. `--rebuild` builds first, `sim-check --help` prints every flag, and `bun run sim reap --kept` stops kept daemons and removes their folders.
+
 ## [app-20261013.0325](https://github.com/markhuot/harness/releases/tag/app-20261013.0325) - 2026-10-13
 
 ### Added

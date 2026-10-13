@@ -29,7 +29,9 @@ change has screenshots in the spec's Status.
   describes. Run the mode for the area you touched (`--only=<check>`, `--sheets`, `--ipad --sheets`,
   `--stick`…), not the whole suite: validation takes no screenshots. Spec screenshots come from
   `--only=<screen>` or `--shot=<link>` (e.g. `--shot='harness://ticket/{headings}?tab=spec'`), never
-  a full `--screens` run.
+  a full `--screens` run. To debug one check, run the mode once with `--keep`, then
+  `--reuse --grep=<check name>` as often as you like (seconds, not minutes); `bun run sim reap --kept`
+  clears what `--keep` left.
 
 ## Simulators
 
