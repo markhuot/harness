@@ -71,6 +71,15 @@ describe("the seeded world", () => {
     expect(models.models.map((m) => m.name)).toEqual(["Opus 5.5", "Fable 5.1", "Sonnet 5", "Haiku 4.5"]);
   });
 
+  test("watchers run harmless stand-ins in the states the Inbox shows", async () => {
+    const watchers = await world.api<{ name: string; live: { state: string }; lastError: string | null }[]>("GET", "/watchers");
+    const by = Object.fromEntries(watchers.map((w) => [w.name, w]));
+    await Bun.sleep(1500); // the supervisor has started them and the failing one has failed once
+    const fresh = Object.fromEntries((await world.api<typeof watchers>("GET", "/watchers")).map((w) => [w.name, w]));
+    expect([fresh.jira!.live.state, fresh["sentry-alerts"]!.live.state, by.jira!.name]).toEqual(["running", "stopped", "jira"]);
+    expect(fresh["status-page"]!.lastError).toContain("Could not resolve host");
+  });
+
   test("a spec's media are real files the service serves, one of them missing like a deleted attachment", async () => {
     const d = await world.api<TicketDetail>("GET", "/tickets/HARNESS-2");
     const ids = [...d.ticket.spec.matchAll(/attachment:([0-9a-f-]+)/g)].map((m) => m[1]!);

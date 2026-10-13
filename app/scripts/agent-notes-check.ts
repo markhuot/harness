@@ -26,6 +26,8 @@ try {
   await waitHealthy(base, 15000);
   app =await launchApp({ baseUrl: base, token, theme });
   const { js, exists, go } = app;
+  // The app is connected and has loaded the board before the first route is set.
+  await until("board", () => exists(".card"), 15000);
   const openDetails = async (key: string) => {
     await go(`#/board/all/ticket/${key}/details`);
     await until(`${key} details`, () => js<boolean>(`document.querySelector("[data-testid=detail-key]")?.textContent.includes(${JSON.stringify(key)}) === true`), 10000);

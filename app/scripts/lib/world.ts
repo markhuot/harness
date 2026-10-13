@@ -762,19 +762,18 @@ export async function bootWorld(opts: Pick<StartDaemonOptions, "delayMs" | "read
   triage(2, mhp.path, "Checkout rewrite: UI ready for review", 61, "dispatched", "Dispatched to MH-130 (MH-62) in MH (started).", [["user", { type: "text", text: "New output from watcher jira:\n\nMH-62 Checkout rewrite: UI ready for review" }]]);
   triage(3, ny.path, "Recipe card print styles broken in Safari", 2, "triaging", null, [["user", { type: "text", text: `New output from watcher jira:\n\nFOO-131 Recipe card print styles broken in Safari\n\nPrompt: ${JIRA_PROMPT}` }]]);
 
-  // Watchers, all stopped: an enabled one would run its command on this Mac.
+  // Watchers in the states the Inbox shows: one running, one failing, one waiting for its next
+  // interval, one stopped. Their commands are harmless stand-ins that run on this Mac and touch
+  // nothing (the real ones would call Jira, a status page and GitHub).
   const watcher = db.query(
-    "INSERT INTO watchers (id, name, command, args, prompt, cwd, env, mode, interval_sec, enabled, driver, models, last_run_at, last_error, created_at, updated_at) VALUES ($id, $name, $cmd, '[]', $prompt, NULL, '{}', $mode, $interval, 0, NULL, $models, $last, $err, $c, $c)",
+    "INSERT INTO watchers (id, name, command, args, prompt, cwd, env, mode, interval_sec, enabled, driver, models, last_run_at, last_error, created_at, updated_at) VALUES ($id, $name, $cmd, '[]', $prompt, NULL, '{}', $mode, $interval, $enabled, NULL, $models, $last, $err, $c, $c)",
   );
-  const w = (name: string, command: string, prompt: string, o: { mode?: string; interval?: number; models?: object; last?: number; err?: string } = {}) =>
-    watcher.run({ $id: id(), $name: name, $cmd: command, $prompt: prompt, $mode: o.mode ?? "loop", $interval: o.interval ?? 60, $models: JSON.stringify(o.models ?? {}), $last: o.last ?? now() - 60_000, $err: o.err ?? null, $c: now() - 86400_000 });
-  w("jira", "~/Sites/Jira/watch-jira.js", JIRA_PROMPT);
-  w("status-page", "while true; do curl -s https://status.example.com/api/incidents.json; sleep 300; done", "Only surface new incidents that affect the NYTIMES site.", {
-    last: now() - 4 * 60_000,
-    err: "Command exited with code 6: curl: (6) Could not resolve host: status.example.com\ncurl: (6) Could not resolve host: status.example.com\nThe watcher's loop exits when curl fails, so every restart hits the same DNS error until the host resolves again.",
-  });
-  w("gh-reviews", "gh search prs --review-requested=@me --state=open --json url,title", "Dispatch review requests for harness to HARNESS.", { mode: "interval", interval: 300, models: { "claude-code": "sonnet" } });
-  w("sentry-alerts", "sentry-cli events list --project web --max-rows 20", JIRA_PROMPT, { last: now() - 3 * 86400_000 });
+  const w = (name: string, command: string, prompt: string, o: { mode?: string; interval?: number; models?: object; last?: number; enabled?: boolean } = {}) =>
+    watcher.run({ $id: id(), $name: name, $cmd: command, $prompt: prompt, $mode: o.mode ?? "loop", $interval: o.interval ?? 60, $enabled: o.enabled === false ? 0 : 1, $models: JSON.stringify(o.models ?? {}), $last: o.last ?? null, $err: null, $c: now() - 86400_000 });
+  w("jira", "sleep 3600", JIRA_PROMPT);
+  w("status-page", "echo 'curl: (6) Could not resolve host: status.example.com' >&2; exit 6", "Only surface new incidents that affect the NYTIMES site.");
+  w("gh-reviews", "true", "Dispatch review requests for harness to HARNESS.", { mode: "interval", interval: 300, models: { "claude-code": "sonnet" } });
+  w("sentry-alerts", "sentry-cli events list --project web --max-rows 20", JIRA_PROMPT, { enabled: false, last: now() - 3 * 86400_000 });
 
   // ------------------------------------------------------------------ settings
   setting("defaultDriver", "dummy");

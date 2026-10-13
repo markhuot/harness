@@ -28,6 +28,8 @@ try {
   const api = makeApi(base, token);
   app = await launchApp({ baseUrl: base, token, theme });
   const { js, exists, go, type } = app;
+  // The app is connected and has loaded the board (and the driver list) before the first route is set.
+  await until("board", () => exists(".card"), 15000);
   const open = async (key: string) => {
     await go(`#/board/all/ticket/${key}`);
     await until(`${key} header`, () => js<boolean>(`document.querySelector("[data-testid=detail-key]")?.textContent.includes(${JSON.stringify(key)}) && !!document.querySelector("[data-testid=context-gauge]")`), 10000);
