@@ -63,10 +63,9 @@
 //      (no other simulator changes) and puts it back after; text goes in by tapping the on-screen keys
 //
 //   --mentions: in New session's Spec field and the ticket composer, typing `@…` lists the project's
-//      files, tapping one completes it, and the run the spec starts gets the file attached ("Attached
-//      @…" in the transcript); typing `/co` in New session on a claude-code project (the fake CLI)
-//      lists its commands, a tap completes one, and the CLI gets the spec as typed; the toolbar's Plan
-//      first launches a draft in planning and lands on its Spec tab; mentions-*.png, new-session-toolbar*.png
+//      files and tapping one completes it; typing `/co` in New session on a claude-code project (the fake
+//      CLI) lists its commands and a tap completes one; the toolbar launches the draft, and Plan first
+//      lands on the ticket's Spec tab (what the run gets is drafts.test.ts); mentions-*.png, new-session-toolbar*.png
 //
 //   --drafts: typing in the ticket composer, then moving the caret, keeps what's typed and the
 //      saved draft (the draft rules are MessageDraftsTests)
@@ -140,7 +139,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
-import { buildPairUrl, reviewPassed, type ActivityEntry, type Project, type PromptEntry, type SpecRevision, type Ticket, type TicketDetail, type TicketPage, type TranscriptEntry, type Watcher } from "@harness/shared";
+import { buildPairUrl, reviewPassed, type ActivityEntry, type Project, type PromptEntry, type Ticket, type TicketDetail, type TicketPage, type TranscriptEntry, type Watcher } from "@harness/shared";
 import { findTheme } from "@harness/shared/themes";
 import { freePort, startDaemon as startDaemonShared, until as untilShared, type TestDaemon } from "@harness/shared/testing/daemon";
 import { startDaemonProxy } from "@harness/shared/testing/proxy";
@@ -3379,11 +3378,9 @@ async function mentionChecks(udid: string, p: Awaited<ReturnType<typeof seedMent
     const width = (await tree(udid))[0]!.frame.width;
     await axe("tap", "-x", String(Math.round(width - 38 - fromRight * 56)), "-y", "100", "--udid", udid);
   };
-  /** The spec as typed in New session: revision 1 (the dummy's run adds a Status section after it). */
-  const typed = async (key: string) => (await api<SpecRevision>("GET", `/tickets/${encodeURIComponent(key)}/spec/revisions/1`)).body;
 
   // (Picking a folder keeps the list open inside it: insertMention and mentionCaret's unit tests.)
-  await check("New session: @READ lists README.md, a tap completes it, the run gets the file", async () => {
+  await check("New session: @READ lists README.md, a tap completes it, and the toolbar launches", async () => {
     await goto(udid, `harness://new?projectId=${encodeURIComponent(p.project.id)}`, (l) => l.some((x) => x.startsWith("Spec")));
     await tapWhere(udid, (l) => l.startsWith("Spec"));
     await axe("type", "Summarize @READ", "--udid", udid);
@@ -3396,13 +3393,11 @@ async function mentionChecks(udid: string, p: Awaited<ReturnType<typeof seedMent
     moved(udid);
     // The draft is saved while it's typed; wait for it to launch.
     const t = await until("ticket launched", async () => (await api<Ticket[]>("GET", `/tickets?projectId=${p.project.id}`)).find((x) => x.key !== p.ticket.key && !x.draft), 10000);
-    const spec = await typed(t.key);
-    if (spec !== "Summarize @README.md") throw new Error(`spec is ${JSON.stringify(spec)}`);
-    await until("Attached status", async () => (await texts(t.key)).includes("Attached @README.md"), 15000);
-    return `${t.key}: ${spec}`;
+    // What the run got (the file, the spec as typed) is drafts.test.ts's "a draft's @-mentioned file reaches the run".
+    return t.key;
   });
 
-  await check("New session: the toolbar's Plan first launches the draft in planning, on its Spec tab", async () => {
+  await check("New session: the toolbar's Plan first opens the launched ticket on its Spec tab", async () => {
     const before = new Set((await api<Ticket[]>("GET", `/tickets?projectId=${p.project.id}`)).map((x) => x.key));
     await goto(udid, `harness://new?projectId=${encodeURIComponent(p.project.id)}`, (l) => l.some((x) => x.startsWith("Spec")));
     await shootBoth(udid, "new-session-toolbar-empty");
@@ -3413,15 +3408,15 @@ async function mentionChecks(udid: string, p: Awaited<ReturnType<typeof seedMent
     await tapToolbar(1);
     moved(udid);
     const t = await until("ticket launched", async () => (await api<Ticket[]>("GET", `/tickets?projectId=${p.project.id}`)).find((x) => !before.has(x.key) && !x.draft), 10000);
-    if (t.status !== "planning") throw new Error(`${t.key} launched in ${t.status}, not planning`);
+    // That Plan first lands in planning is drafts.test.ts ("start false") and launchBodies.json's {"start":false}.
     // The Spec tab's revision bar ("Show changes") is on no other tab.
     await until(`${t.key}'s Spec tab`, async () => (await labels(udid)).includes("Show changes"), 8000).catch(async (e) => {
       throw new Error(`${(e as Error).message}; on screen: ${(await labels(udid)).join(" | ")}`);
     });
-    return `${t.key} in planning, on its Spec tab`;
+    return `${t.key}, on its Spec tab`;
   });
 
-  await check("composer: @src/a lists src/app.ts, the message's run gets the file", async () => {
+  await check("composer: @src/a lists src/app.ts, a tap completes it and Send posts the message", async () => {
     await goto(udid, `harness://ticket/${encodeURIComponent(p.ticket.key)}?tab=transcript`, (l) => l.some((x) => x.startsWith("Message the agent")));
     await tapWhere(udid, (l) => l.startsWith("Message the agent"));
     // iOS may capitalize the first word, so the message is compared without case.
@@ -3437,11 +3432,10 @@ async function mentionChecks(udid: string, p: Awaited<ReturnType<typeof seedMent
     await until("message with the mention", async () => (await texts(p.ticket.key)).some((t) => t.toLowerCase() === "see @src/app.ts"), 10000).catch(async (e) => {
       throw new Error(`${(e as Error).message}; transcript ends ${JSON.stringify((await texts(p.ticket.key)).slice(-4))}`);
     });
-    await until("Attached status", async () => (await texts(p.ticket.key)).includes("Attached @src/app.ts"), 15000);
     return "see @src/app.ts";
   });
 
-  await check("New session: /co lists the agent's commands, a tap completes one, the CLI gets it as typed", async () => {
+  await check("New session: /co lists the agent's commands, a tap completes one, and the toolbar launches", async () => {
     await goto(udid, `harness://new?projectId=${encodeURIComponent(p.slash.id)}`, (l) => l.some((x) => x.startsWith("Spec")));
     await tapWhere(udid, (l) => l.startsWith("Spec"));
     await axe("type", "/co", "--udid", udid);
@@ -3457,22 +3451,9 @@ async function mentionChecks(udid: string, p: Awaited<ReturnType<typeof seedMent
     await tapToolbar(0);
     moved(udid);
     const t = await until("ticket launched", async () => (await api<Ticket[]>("GET", `/tickets?projectId=${p.slash.id}`)).find((x) => !x.draft), 10000);
-    const spec = await typed(t.key);
-    if (spec !== "/code-walk this branch") throw new Error(`spec is ${JSON.stringify(spec)}`);
-    const sent = await until(
-      "the agent's prompt",
-      async () =>
-        existsSync(claudeRecord) &&
-        readFileSync(claudeRecord, "utf8")
-          .split("\n")
-          .filter(Boolean)
-          .map((l) => JSON.parse(l) as { argv: string[]; stdin: string })
-          .find((r) => r.argv.includes("--mcp-config"))?.stdin,
-      15000,
-    );
-    // The service wraps the spec in the run's context block, so it is in the prompt, not at its start.
-    if (!sent.includes("/code-walk this branch")) throw new Error(`the CLI got ${JSON.stringify(sent.slice(0, 80))}`);
-    return `${t.key}: ${spec}`;
+    // The run's prompt is the spec as typed (drafts.test.ts "starts with a slash command"), which the CLI reads from
+    // stdin after the run context (claude-code.test.ts "the run context goes in front of the first message").
+    return t.key;
   });
 }
 
@@ -4186,7 +4167,8 @@ function interactionChains(s: Seeded): Chain[] {
         // A message to a blocked ticket is a chat; the dummy picks the work back up only when told to.
         await axe("type", "Use Happy Cog [dummy:unblock]", "--udid", udid);
         await tapWhere(udid, "Send");
-        const t = await settle(s.blocked.key, (x) => x.status !== "blocked", 15000);
+        // The ticket leaving blocked is the service's (steering.test.ts, the unblock tool's tests), over the body
+        // launchBodies.json shares with HarnessClientTests; here it's the tap, and the tab switch (TabsTests).
         // A sent message opens the Transcript, where it and the reply show (never in Activity): the
         // ticket opened on its Spec, so the transcript's run rows on screen mean the tab switched.
         await until("the Transcript", async () => (await labels(udid)).some((l) => RUN_HEADER.test(l)) || null, 10000).catch(async (e: Error) => {
@@ -4194,7 +4176,7 @@ function interactionChains(s: Seeded): Chain[] {
           throw new Error(`${e.message}; on screen: ${(await labels(udid)).slice(0, 30).join(" | ")}`);
         });
         await shot(udid, "composer-sent-transcript");
-        return `${t.key} → ${t.status}, Transcript shown`;
+        return "Transcript shown";
       });
     }),
     chain("transcript-list", ["hello"], 6, async (udid) => {
@@ -4522,8 +4504,8 @@ function interactionChains(s: Seeded): Chain[] {
         return `${GREETINGS_PATH}, ${range}`;
       });
     }),
-    chain("save-on-blur", ["watchers"], 40, async (udid) => {
-      await check("Settings → General has a Save on blur switch that saves to the service", async () => {
+    chain("save-on-blur", ["watchers"], 25, async (udid) => {
+      await check("Settings → General has a Save on blur switch that flips when pressed", async () => {
         await goto(udid, "harness://settings", (l) => l.includes("Settings"));
         // The theme pickers are horizontal strips that swallow a swipe starting on them: swipe from the page's headings.
         const row = (l: string) => l === "Save on blur" || l.startsWith("Save on blur,");
@@ -4535,7 +4517,8 @@ function interactionChains(s: Seeded): Chain[] {
         }
         if (!(await findElement(udid, row))) throw new Error(`no Save on blur row; on screen: ${(await labels(udid)).join(" | ")}`);
         await shot(udid, "save-on-blur-off-light");
-        const before = (await api<{ saveOnBlur?: boolean }>("GET", "/settings")).saveOnBlur ?? false;
+        const valueOf = async () => (await nodes(udid)).filter((n) => n.AXLabel === "Save on blur").sort((x, y) => y.frame.x - x.frame.x)[0] as (AXNode & { AXValue?: string | null }) | undefined;
+        const before = (await valueOf())?.AXValue ?? null;
         // The scroll's momentum has to be over before a tap lands where the switch was.
         await atRest(udid, 1200);
         // The row's text and its switch share the label: the switch is the one on the right.
@@ -4547,13 +4530,17 @@ function interactionChains(s: Seeded): Chain[] {
         await axe("touch", "-x", String(Math.round(sw.frame.x + sw.frame.width - 28)), "-y", String(Math.round(sw.frame.y + sw.frame.height / 2)), "--down", "--up", "--delay", "0.15", "--udid", udid);
         await atRest(udid, 1000);
         await shot(udid, "save-on-blur-on-light");
-        const after = await until("the setting flipped on the service", async () => (((await api<{ saveOnBlur?: boolean }>("GET", "/settings")).saveOnBlur ?? false) !== before ? true : null), 6000).catch(async (e) => {
+        // That the PATCH stores it is http.test.ts (launchBodies.json, shared with HarnessClientTests); here the switch
+        // takes the press and shows the new value.
+        const after = await until("the switch flipped", async () => {
+          const v = (await valueOf())?.AXValue ?? null;
+          return v !== before ? v : null;
+        }, 6000).catch(async (e) => {
           await shot(udid, "save-on-blur-failed", true);
           throw e;
         });
-        if (!after) throw new Error("the switch didn't change the setting");
         await shot(udid, "save-on-blur-on-light");
-        return `${before} → ${!before}`;
+        return `${before} → ${after}`;
       });
     }),
     chain("file-edit", ["fileLink"], 25, async (udid) => {
