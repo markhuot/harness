@@ -17,6 +17,7 @@ import type {
   PluginTicketEvent,
 } from "../../../plugins/sdk/server";
 import type { EventBus } from "../events";
+import { gitBin } from "../git-bin";
 import { isGitRepo } from "../orchestrator/worktree";
 import { safeJoin } from "../safe-path";
 
@@ -153,7 +154,8 @@ export async function execFile(cmd: string, args: string[], opts: PluginExecOpti
   const maxBytes = opts.maxBytes ?? 16 * 1024 * 1024;
   let proc: ReturnType<typeof Bun.spawn>;
   try {
-    proc = Bun.spawn([cmd, ...args], {
+    const bin = cmd === "git" ? await gitBin() : cmd;
+    proc = Bun.spawn([bin, ...args], {
       cwd: opts.cwd,
       env: opts.env ? { ...process.env, ...opts.env } : process.env,
       stdin: opts.stdin !== undefined ? new TextEncoder().encode(opts.stdin) : "ignore",

@@ -4,6 +4,7 @@
 // its last tag still counts as that release, since the next one doesn't exist yet.
 
 import { REPO_ROOT } from "./code-watch";
+import { gitBinSync } from "./git-bin";
 
 /** Set by service/scripts/compile.ts (`--define`) in the compiled executable. */
 declare const HARNESS_RELEASE: string | undefined;
@@ -17,7 +18,7 @@ export const BUNDLED_RELEASE: string | null = typeof HARNESS_RELEASE === "string
  */
 export function describeRelease(root: string = REPO_ROOT): string | null {
   try {
-    const r = Bun.spawnSync(["git", "-C", root, "describe", "--abbrev=0", "--match", "app-*", "HEAD"], { stdout: "pipe", stderr: "ignore" });
+    const r = Bun.spawnSync([gitBinSync(), "-C", root, "describe", "--abbrev=0", "--match", "app-*", "HEAD"], { stdout: "pipe", stderr: "ignore" });
     const tag = r.exitCode === 0 ? r.stdout.toString().trim() : "";
     return tag || null;
   } catch {

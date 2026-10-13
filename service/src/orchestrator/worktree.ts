@@ -5,10 +5,11 @@ import { existsSync, realpathSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { BranchInfo } from "@harness/shared";
 import { harnessBranch } from "@harness/shared";
+import { gitBin } from "../git-bin";
 
 export async function git(args: string[], cwd: string): Promise<{ code: number; stdout: string; stderr: string }> {
   try {
-    const proc = Bun.spawn(["git", ...args], { cwd, stdout: "pipe", stderr: "pipe", stdin: "ignore" });
+    const proc = Bun.spawn([await gitBin(), ...args], { cwd, stdout: "pipe", stderr: "pipe", stdin: "ignore" });
     const [stdout, stderr, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);
     return { code, stdout: stdout.trim(), stderr: stderr.trim() };
   } catch (err) {

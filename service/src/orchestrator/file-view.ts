@@ -5,6 +5,7 @@ import { chmodSync, constants as fsConstants, realpathSync, statSync, type Stats
 import { access, open, rename, unlink } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
 import type { FileDiff, FileGitState, FileView, FileWriteResult } from "@harness/shared";
+import { gitBin } from "../git-bin";
 import { inside, safeJoin } from "../safe-path";
 import { badRequest, conflict, HarnessError, notFound } from "./errors";
 import { invalidatePaths, readHead } from "./files";
@@ -263,7 +264,7 @@ async function gitState(root: string, rel: string): Promise<FileGitState> {
 
 /** Run git without a shell, keeping stdout's bytes as they are (the worktree helper trims). */
 async function git(args: string[], cwd: string, maxBytes = MAX_VIEW_BYTES): Promise<{ code: number; stdout: Uint8Array; stderr: string; over: boolean }> {
-  const proc = Bun.spawn(["git", ...GIT_GLOBAL, ...args], {
+  const proc = Bun.spawn([await gitBin(), ...GIT_GLOBAL, ...args], {
     cwd,
     stdin: "ignore",
     stdout: "pipe",
