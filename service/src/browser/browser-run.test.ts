@@ -6,6 +6,7 @@ import type { Server } from "bun";
 import { browserWait, browserRun, browserRunStatus, browserRunStop, stopBrowserJobs } from "../tools";
 import { fakeContext, fakeOps, fakeSession } from "../tools/fakes";
 import type { ToolContext, ToolResult } from "../tools/types";
+import { QUIET_CHROME_ARGS } from "./chrome.ts";
 import { BrowserManager } from "./manager.ts";
 import { all, chromePath, fixtures, pidAlive, profileDir, scratch, withChrome } from "./wait-support.ts";
 
@@ -27,7 +28,7 @@ withChrome("waits and browser_run (real Chrome)", () => {
   beforeAll(() => {
     server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: fixtures });
     base = `http://127.0.0.1:${server.port}`;
-    browser = new BrowserManager({ profileDir, chromePath: chromePath!, navigationTimeoutMs: 10_000 });
+    browser = new BrowserManager({ profileDir, chromePath: chromePath!, chromeArgs: QUIET_CHROME_ARGS, navigationTimeoutMs: 10_000 });
   });
 
   afterAll(async () => {

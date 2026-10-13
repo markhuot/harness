@@ -27,7 +27,7 @@ import {
 import { fakeContext, fakeOps, fakeSession } from "../tools/fakes";
 import type { ToolContext, ToolResult } from "../tools/types";
 import { describeIf } from "@harness/shared/testing/skip";
-import { findChrome } from "./chrome.ts";
+import { findChrome, QUIET_CHROME_ARGS } from "./chrome.ts";
 import { frameChain } from "./frames.ts";
 import { BrowserManager } from "./manager.ts";
 import { checkCondition, describeCondition } from "./wait.ts";
@@ -166,7 +166,7 @@ withChrome("iframes, refs, keys, select and upload (real Chrome)", () => {
     card = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: cardSite });
     checkout = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: checkoutSite(`http://localhost:${card.port}`) });
     base = `http://127.0.0.1:${checkout.port}`;
-    browser = new BrowserManager({ profileDir, chromePath: chromePath!, navigationTimeoutMs: 10_000 });
+    browser = new BrowserManager({ profileDir, chromePath: chromePath!, chromeArgs: QUIET_CHROME_ARGS, navigationTimeoutMs: 10_000 });
   });
 
   afterAll(async () => {

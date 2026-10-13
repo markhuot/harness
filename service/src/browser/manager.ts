@@ -73,6 +73,8 @@ export interface BrowserManagerOptions {
   extensionPolicyWaitMs?: number;
   /** How long a launch waits for Chrome to install Web Store extensions (tests). */
   extensionInstallWaitMs?: number;
+  /** More Chrome flags, after the usual ones (tests pass QUIET_CHROME_ARGS). */
+  chromeArgs?: string[];
 }
 
 /** How often idle tabs are swept (and Chrome stopped once no tab has a page). */
@@ -1318,7 +1320,7 @@ export class BrowserManager implements BrowserService {
       headless,
       width: BROWSER_DESKTOP.width,
       height: BROWSER_DESKTOP.height,
-      extraArgs: this.extensionHost ? ExtensionHost.chromeArgs : undefined,
+      extraArgs: [...(this.extensionHost ? ExtensionHost.chromeArgs : []), ...(this.opts.chromeArgs ?? [])],
     });
     let cdp: CdpClient;
     try {

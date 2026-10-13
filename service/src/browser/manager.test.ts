@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { Server } from "bun";
 import type { BrowserState } from "@harness/shared";
+import { QUIET_CHROME_ARGS } from "./chrome.ts";
 import { BrowserManager, normalizeUrl } from "./manager.ts";
 import type { BrowserFrame } from "./types.ts";
 import { chromePath, fixtures, html, LONG, profileDir, until, withChrome } from "./test-support.ts";
@@ -34,7 +35,7 @@ withChrome("BrowserManager (real Chrome)", () => {
   beforeAll(() => {
     server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: fixtures });
     base = `http://127.0.0.1:${server.port}`;
-    browser = new BrowserManager({ profileDir, chromePath: chromePath!, navigationTimeoutMs: 10_000 });
+    browser = new BrowserManager({ profileDir, chromePath: chromePath!, chromeArgs: QUIET_CHROME_ARGS, navigationTimeoutMs: 10_000 });
   });
 
   afterAll(async () => {

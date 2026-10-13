@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { join } from "node:path";
 import type { Server } from "bun";
 import type { BrowserState } from "@harness/shared";
+import { QUIET_CHROME_ARGS } from "./chrome.ts";
 import { BrowserManager } from "./manager.ts";
 import type { BrowserFrame } from "./types.ts";
 import { chromePath, chromePages, fixtures, ids, isAlive, memoryTabStore, profileDir, until, withChrome } from "./test-support.ts";
@@ -18,7 +19,7 @@ withChrome("BrowserManager tab lifecycle (real Chrome)", () => {
     server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: fixtures });
     base = `http://127.0.0.1:${server.port}`;
     store = memoryTabStore();
-    browser = new BrowserManager({ profileDir, chromePath: chromePath!, navigationTimeoutMs: 10_000, idleTabMs: () => idleMs, now: () => clock, tabStore: store });
+    browser = new BrowserManager({ profileDir, chromePath: chromePath!, chromeArgs: QUIET_CHROME_ARGS, navigationTimeoutMs: 10_000, idleTabMs: () => idleMs, now: () => clock, tabStore: store });
   });
 
   afterAll(async () => {

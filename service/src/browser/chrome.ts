@@ -160,6 +160,27 @@ export interface LaunchOptions {
   extraArgs?: string[];
 }
 
+/**
+ * Flags that stop a fresh profile's background work: component and field-trial downloads, Safe
+ * Browsing and phishing models, sync, metrics, crash reporting. The real-Chrome tests start a fresh
+ * profile per file, and these cut an idle Chrome's CPU by about a third. The service's own Chrome
+ * keeps that work (Safe Browsing and component updates matter there), so only tests pass them.
+ * Its --disable-features replaces chromeArgs's, so it repeats those features.
+ */
+export const QUIET_CHROME_ARGS = [
+  "--disable-background-networking",
+  "--disable-component-update",
+  "--disable-default-apps",
+  "--disable-sync",
+  "--disable-domain-reliability",
+  "--disable-client-side-phishing-detection",
+  "--disable-field-trial-config",
+  "--disable-breakpad",
+  "--metrics-recording-only",
+  "--no-service-autorun",
+  "--disable-features=Translate,MediaRouter,OptimizationHints,AcceptCHFrame,AutofillServerCommunication,CertificateTransparencyComponentUpdater,InterestFeedContentSuggestions,PrivacySandboxSettings4",
+];
+
 export function chromeArgs(opts: LaunchOptions): string[] {
   const width = opts.width ?? 1280;
   const height = opts.height ?? 800;

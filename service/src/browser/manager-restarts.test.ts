@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import type { Server } from "bun";
+import { QUIET_CHROME_ARGS } from "./chrome.ts";
 import { BrowserManager } from "./manager.ts";
 import { chromePath, fixtures, ids, isAlive, memoryTabStore, profileDir, until, withChrome } from "./test-support.ts";
 
@@ -15,7 +16,7 @@ withChrome("BrowserManager restarts and stopping Chrome (real Chrome)", () => {
 
   test("tabs survive a restart from the store: listed suspended, reopened where they were, numbering carries on", async () => {
     const store = memoryTabStore();
-    const first = new BrowserManager({ profileDir, chromePath: chromePath!, navigationTimeoutMs: 10_000, tabStore: store });
+    const first = new BrowserManager({ profileDir, chromePath: chromePath!, chromeArgs: QUIET_CHROME_ARGS, navigationTimeoutMs: 10_000, tabStore: store });
     try {
       await first.open("rs", `${base}/?rs-1`);
       await first.open("rs", `${base}/links?rs-2`, { newTab: true });
@@ -38,7 +39,7 @@ withChrome("BrowserManager restarts and stopping Chrome (real Chrome)", () => {
       ],
     });
 
-    const second = new BrowserManager({ profileDir, chromePath: chromePath!, navigationTimeoutMs: 10_000, tabStore: store });
+    const second = new BrowserManager({ profileDir, chromePath: chromePath!, chromeArgs: QUIET_CHROME_ARGS, navigationTimeoutMs: 10_000, tabStore: store });
     try {
       expect(await second.tabs("rs")).toEqual([
         { id: 1, url: `${base}/?rs-1`, title: "Last words", loading: false, suspended: true, size: { device: "desktop", width: 1280, height: 800, responsive: true } },
@@ -57,7 +58,7 @@ withChrome("BrowserManager restarts and stopping Chrome (real Chrome)", () => {
 
   test("shutdown with a viewer watching leaves Chrome stopped (the watched tab isn't reopened)", async () => {
     const store = memoryTabStore();
-    const service = new BrowserManager({ profileDir, chromePath: chromePath!, navigationTimeoutMs: 10_000, tabStore: store });
+    const service = new BrowserManager({ profileDir, chromePath: chromePath!, chromeArgs: QUIET_CHROME_ARGS, navigationTimeoutMs: 10_000, tabStore: store });
     await service.open("sd", `${base}/?sd`);
     await service.subscribe("sd", "viewer", () => {}, () => {});
     const pid = service.chromePid!;
@@ -69,7 +70,7 @@ withChrome("BrowserManager restarts and stopping Chrome (real Chrome)", () => {
   }, 60_000);
 
   test("restartBrowser keeps every tab: each reloads its URL in the new Chrome, a watched one at once", async () => {
-    const service = new BrowserManager({ profileDir, chromePath: chromePath!, navigationTimeoutMs: 10_000, tabStore: memoryTabStore() });
+    const service = new BrowserManager({ profileDir, chromePath: chromePath!, chromeArgs: QUIET_CHROME_ARGS, navigationTimeoutMs: 10_000, tabStore: memoryTabStore() });
     try {
       await service.open("rb", `${base}/?rb-1`);
       await service.open("rb", `${base}/page2?rb-2`, { newTab: true });
@@ -100,7 +101,7 @@ withChrome("BrowserManager restarts and stopping Chrome (real Chrome)", () => {
   }, 60_000);
 
   test("Chrome stops once no tab has a page, and the next call relaunches it", async () => {
-    const service = new BrowserManager({ profileDir, chromePath: chromePath!, navigationTimeoutMs: 10_000, tabStore: memoryTabStore() });
+    const service = new BrowserManager({ profileDir, chromePath: chromePath!, chromeArgs: QUIET_CHROME_ARGS, navigationTimeoutMs: 10_000, tabStore: memoryTabStore() });
     try {
       await service.open("st", `${base}/?st`);
       expect(await service.stopChromeIfIdle()).toBe(false); // a live page
