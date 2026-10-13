@@ -111,6 +111,18 @@ export function planApp(
 }
 
 /**
+ * Whether `build.ts device` has to install the app again: it's gone from the device, or isn't the
+ * build (by hashApp) that this machine installed there last. Where the app's data must stay, as on a
+ * phone, an unchanged build is left alone; simulator runs that need a clean container still uninstall.
+ */
+export function planDeviceInstall(o: { installedHash: string | null; builtHash: string; onDevice: boolean }): AppPlan {
+  if (!o.onDevice) return { install: true, reason: "the app isn't on the device" };
+  if (o.installedHash === null) return { install: true, reason: "no record of an earlier install" };
+  if (o.installedHash !== o.builtHash) return { install: true, reason: "the built app changed" };
+  return { install: false };
+}
+
+/**
  * A hash of the built app: every file's relative path and bytes, in a fixed order. Content, not
  * mtimes, since a rebuild that changes nothing rewrites every timestamp.
  */

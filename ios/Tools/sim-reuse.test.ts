@@ -2,7 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { chooseKept, hashApp, hashService, listKept, planApp, readReuseState, REUSE_VERSION, writeReuseState, type Kept, type ReuseState } from "./sim-reuse";
+import { chooseKept, hashApp, hashService, listKept, planApp, planDeviceInstall, readReuseState, REUSE_VERSION, writeReuseState, type Kept, type ReuseState } from "./sim-reuse";
 
 const state = (over: Partial<ReuseState> = {}): ReuseState => ({
   version: REUSE_VERSION, savedAt: 1000, port: 7831, scratch: "/tmp/p", daemonPid: 42, modeKey: "sheets", seeds: [], seeded: { a: 1 }, udids: ["U1"], appHash: "h1", installed: ["i1"], repoRoot: "/repo", serviceHash: "s1", ...over,
@@ -123,4 +123,13 @@ test("state round-trips through a kept home; junk reads as no state; listKept ne
   expect(readReuseState(join(t, "harness-sim-home-shape"))).toBeNull();
   const found = await listKept(t, "harness-sim-home-", async (s) => s.port === 7831);
   expect(found.map((k) => [k.home.split("/").pop(), k.state.savedAt, k.daemonAlive])).toEqual([["harness-sim-home-ok", 7, true]]);
+});
+
+test("a device install is skipped only for the recorded build that is still on the device", () => {
+  const base = { installedHash: "h1", builtHash: "h1", onDevice: true };
+  expect(planDeviceInstall(base)).toEqual({ install: false });
+  expect(planDeviceInstall({ ...base, builtHash: "h2" }).install).toBe(true);
+  expect(planDeviceInstall({ ...base, installedHash: null }).install).toBe(true);
+  // Deleted from the phone since: the record alone doesn't count.
+  expect(planDeviceInstall({ ...base, onDevice: false }).install).toBe(true);
 });

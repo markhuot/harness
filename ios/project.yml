@@ -43,12 +43,14 @@ targets:
         com.apple.security.application-groups: [group.com.markhuot.harness]
         aps-environment: development
     # The syntax highlighter's JavaScriptCore bundle (Shiki, from Tools/highlighter/highlight.ts) is
-    # generated, not committed: bun bundles it into the app on every build (ARCHITECTURE.md
-    # § Syntax highlighting). It runs every time because its inputs are the whole Shiki dependency
-    # tree; build-highlighter.ts leaves the file alone when nothing changed.
+    # generated, not committed: bun bundles it into the app (ARCHITECTURE.md § Syntax highlighting).
+    # Xcode skips each bundle phase while its output is newer than its inputs, which Tools/build.ts
+    # lists in build/bundle-*.xcfilelist before every build (build-cache.ts bundleInputs: the
+    # bundle's sources and bun.lock, which pins Shiki and esbuild).
     preBuildScripts:
       - name: Bundle highlighter
-        basedOnDependencyAnalysis: false
+        inputFileLists: [build/bundle-highlighter.xcfilelist]
+        outputFiles: ["$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/highlighter.js"]
         showEnvVars: false
         script: |
           BUN="$(command -v bun || true)"
@@ -63,7 +65,8 @@ targets:
       # The file editor's CodeMirror bundle (editor/, built by editor/scripts/build.ts) goes in the
       # same way, beside Resources/editor.html, which loads it (ARCHITECTURE.md § File viewer).
       - name: Bundle editor
-        basedOnDependencyAnalysis: false
+        inputFileLists: [build/bundle-editor.xcfilelist]
+        outputFiles: ["$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/editor.js"]
         showEnvVars: false
         script: |
           BUN="$(command -v bun || true)"
