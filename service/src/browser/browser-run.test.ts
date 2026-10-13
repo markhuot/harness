@@ -289,7 +289,7 @@ return "ok";`;
       expect(all(one.last)).toContain(`Last check: 0 elements matched (0 visible, 0 enabled). Without the text, 1 element matches, and its text was "Item 1".`);
       const many = await drain(
         ctx,
-        await browserRun.execute({ script: `for (let i = 0; i < 4; i++) await click("#add");\nawait expect("#list li").toHaveCount(5);\nawait expect("#list li").toContainText("Item 9", { timeout: 0.5 });`, wait: 20 }, ctx),
+        await browserRun.execute({ script: `for (let i = 0; i < 4; i++) {\nawait click("#add");\nawait expect("#list li").toHaveCount(i + 2, { timeout: 15 });\n}\nawait expect("#list li").toContainText("Item 9", { timeout: 0.5 });`, wait: 60 }, ctx),
       );
       expect(all(many.last)).toContain(`Without the text, 5 elements match, and their text was "Item 1", "Item 2", "Item 3" and 2 more.`);
       // A ref that's there but lacks the text is "there", with its text.

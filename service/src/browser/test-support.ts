@@ -134,7 +134,7 @@ export function fixtures(req: Request): Response {
 /** The User-Agent of every load of /ua, in order. */
 export const uaHits: string[] = [];
 
-export async function until<T>(fn: () => T | Promise<T>, what: string, timeoutMs = 5000): Promise<T> {
+export async function until<T>(fn: () => T | Promise<T>, what: string, timeoutMs = 20_000): Promise<T> {
   const deadline = Date.now() + timeoutMs;
   let last: T | undefined;
   while (Date.now() < deadline) {

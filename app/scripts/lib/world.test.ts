@@ -74,11 +74,14 @@ describe("the seeded world", () => {
   test("watchers run harmless stand-ins in the states the Inbox shows", async () => {
     const watchers = await world.api<{ name: string; live: { state: string }; lastError: string | null }[]>("GET", "/watchers");
     const by = Object.fromEntries(watchers.map((w) => [w.name, w]));
-    await Bun.sleep(1500); // the supervisor has started them and the failing one has failed once
-    const fresh = Object.fromEntries((await world.api<typeof watchers>("GET", "/watchers")).map((w) => [w.name, w]));
+    // The supervisor has started them and the failing one has failed once; poll for that rather than guess a delay.
+    let fresh = by;
+    for (const deadline = Date.now() + 15_000; Date.now() < deadline && !fresh["status-page"]?.lastError; await Bun.sleep(100)) {
+      fresh = Object.fromEntries((await world.api<typeof watchers>("GET", "/watchers")).map((w) => [w.name, w]));
+    }
     expect([fresh.jira!.live.state, fresh["sentry-alerts"]!.live.state, by.jira!.name]).toEqual(["running", "stopped", "jira"]);
     expect(fresh["status-page"]!.lastError).toContain("Could not resolve host");
-  });
+  }, 30_000);
 
   test("a spec's media are real files the service serves, one of them missing like a deleted attachment", async () => {
     const d = await world.api<TicketDetail>("GET", "/tickets/HARNESS-2");

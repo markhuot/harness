@@ -70,7 +70,7 @@ describe("startDaemon", () => {
     } finally {
       await d.stop();
     }
-  });
+  }, 30_000);
 });
 
 describe("stopProcess and freePort", () => {

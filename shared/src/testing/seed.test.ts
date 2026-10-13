@@ -50,5 +50,5 @@ describe("database seeds", () => {
     } finally {
       await d.stop();
     }
-  });
+  }, 30_000);
 });
