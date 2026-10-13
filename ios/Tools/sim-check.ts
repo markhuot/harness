@@ -1493,6 +1493,12 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
   const onChild = (l: string[]) => l.includes(`Part of ${key}`) && !has(l, sibling.key);
   const dock = () => dockSheet(udid);
   const say = async (what: string) => console.log(`    ${what}: ${(await labels(udid)).slice(0, 40).join(" | ")}`);
+  // A full pass starts on a board with nothing docked, and each check leaves it so; a picked check, or a
+  // reused app, starts from whatever the last run left (a card still in the dock throws off a flick).
+  if (selector.hasMatcher || attached) {
+    await goto(udid, BOARD);
+    await undock(udid);
+  }
 
   // The checks below that start from the previous one's screen name it in `needs` (see check()).
   const OPEN = `${column ? "a board card" : "a ticket link"} opens its ticket in a sheet over the board`;
