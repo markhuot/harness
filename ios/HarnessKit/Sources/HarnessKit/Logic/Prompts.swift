@@ -115,6 +115,14 @@ public enum Prompts {
         return Templates.error(draft, allowed: entry.variables.map(\.name))
     }
 
+    /// Save is on only for a draft that would change what's stored, has no error and isn't mid-save.
+    public static func canSave(_ entry: PromptEntry, draft: String, saving: Bool) -> Bool {
+        promptDraftDirty(entry, draft: draft) && promptDraftError(entry, draft: draft) == nil && !saving
+    }
+
+    /// What tapping a variable in the editor inserts.
+    public static func variableToken(_ name: String) -> String { "{{\(name)}}" }
+
     /// The text in effect for the editor to start from: the user's override, else the built-in.
     public static func promptStartText(_ entry: PromptEntry) -> String {
         entry.override ?? entry.builtin

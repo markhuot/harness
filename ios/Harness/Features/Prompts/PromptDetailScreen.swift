@@ -60,7 +60,7 @@ private struct PromptDetailView: View {
         let liveError = draft.flatMap { Prompts.promptDraftError(entry, draft: $0) }
         let errorLine = Prompts.promptErrorLine(entry, draft: draft, serverError: serverError)
         let state = Prompts.promptState(entry)
-        let canSave = editing && dirty && liveError == nil && !saving
+        let canSave = draft.map { Prompts.canSave(entry, draft: $0, saving: saving) } ?? false
         let cancellable = dirty || (editing && entry.override == nil)
         let insertable = editing && !compare
 
@@ -233,7 +233,7 @@ private struct PromptDetailView: View {
     }
 
     private func submit() {
-        guard let draft, Prompts.promptDraftDirty(entry, draft: draft), Prompts.promptDraftError(entry, draft: draft) == nil, !saving else { return }
+        guard let draft, Prompts.canSave(entry, draft: draft, saving: saving) else { return }
         save(draft)
     }
 
@@ -253,7 +253,7 @@ private struct PromptDetailView: View {
     private func insertVar(_ name: String) {
         guard let draft else { return }
         let sel = handle.selection
-        let next = Prompts.insertText(draft, start: sel.location, end: sel.location + sel.length, insert: "{{\(name)}}")
+        let next = Prompts.insertText(draft, start: sel.location, end: sel.location + sel.length, insert: Prompts.variableToken(name))
         change(next.text)
         // The new value lands natively on the next frame; then the caret goes right after the
         // insert, where the next insert (and the next keystroke) expects it.

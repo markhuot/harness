@@ -43,10 +43,10 @@ struct DockedTicketText: Equatable {
     }
 
     /// A menu row's one line: "<ref> · <title>", the system truncating the title.
-    var menuLine: String { [ref, title].compactMap { $0 }.joined(separator: " · ") }
+    var menuLine: String { DockLabels.menuLine(ref: ref, title: title) }
 
     /// VoiceOver's name for it, and sim-check's: "<ref>, <title>, docked".
-    var accessibilityLabel: String { [ref, title, "docked"].compactMap { $0 }.joined(separator: ", ") }
+    var accessibilityLabel: String { DockLabels.accessibilityLabel(ref: ref, title: title) }
 }
 
 /// The ref and title on one line: the ref whole, the title truncated into whatever room is left.
