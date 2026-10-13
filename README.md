@@ -91,7 +91,10 @@ desktop agree on keys, reducers, themes and markdown. See [ios/README.md](ios/RE
   (iOS 27.0) and holds its lock for the run, so other agents wait their turn. `--shards=N` splits
   the screens across extra "sim-check 2" … "sim-check N" simulators. `--sheets`, `--ipad`,
   `--ipad --sheets`, `--memory` and the other modes in the header of `ios/Tools/sim-check.ts` each
-  validate one area. `ios/build/screens/timings.json` shows where the time went.
+  validate one area. `--grep=<pattern>` runs only the checks whose names match, and `--keep` then
+  `--reuse` reattaches to the kept daemon, seeds and app so one check reruns in seconds
+  (`sim-check --help` lists every flag; `bun run sim reap --kept` clears kept runs).
+  `ios/build/screens/timings.json` shows where the time went.
   `bun ios/Tools/dev-sim.ts` is the dev loop: it seeds a daemon, installs a fresh build and pairs it.
 - **Simulator:** `bun run sim` (`ios/Tools/sim.ts`) manages the one simulator everyone shares.
   `ensure` creates `harness-shared` (iPhone 18 Pro, pinned to the iOS 27.0 runtime; it never falls

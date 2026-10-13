@@ -9,6 +9,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- For people working on Harness: `sim-check --grep=<pattern>` runs just the checks whose names match (a case-insensitive substring, or `/regex/flags`), so debugging one new check no longer reruns a whole `--sheets` pass. A check that starts from what an earlier one left on screen declares it, and those earlier checks run first as setup; a pattern that matches nothing fails and lists the nearest check names.
+- For people working on Harness: `sim-check --reuse` attaches to what the last `--keep` run left (its daemon, seeded tickets and paired app), skipping the build, install, keychain reset, seeding and pairing, so editing and rerunning one check takes seconds instead of minutes. It reinstalls (keeping the daemon and seeds) when the built app's hash changed, falls back to a full run with a stated reason when no kept state fits, and keeps its state for the next run. `--rebuild` builds first, `sim-check --help` prints every flag, and `bun run sim reap --kept` stops kept daemons and removes their folders.
+- For people working on Harness: `sim-check --reuse` is safer. It attaches only to a kept daemon running this checkout's unedited `service/src`, reinstalls when the app on the simulator was installed over by dev-sim or by hand, keeps `bun run sim reap --kept` from stopping a daemon a run is using, no longer mixes `--memory` state with `--sheets`, picks a daemon port nothing is listening on, and a failure before the daemon starts now prints its real error.
+
 ### Changed
 
 - For people working on Harness: the real-Chrome browser tests are split into smaller files (`manager*.test.ts`, `wait-run`, `wait-timeout` and `browser-run`, with shared fixtures in `test-support.ts` and `wait-support.ts`), so the parallel runner spreads them across workers, each file with its own Chrome and profile. The slowest single file drops from about 50 s to about 20 s when the machine is idle, and the Chrome shutdown hooks wait up to 30 s so a busy machine no longer fails them.

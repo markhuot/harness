@@ -163,7 +163,17 @@ simulator, build or app.
 bun ios/Tools/sim-check.ts --no-build --only=approve-and     # one check (or: bun run --cwd ios sim-check …)
 bun ios/Tools/sim-check.ts --no-build --only=connect          # one catalog screen, shot light and dark
 bun ios/Tools/sim-check.ts --no-build --shot='harness://ticket/{headings}?tab=spec'
+bun ios/Tools/sim-check.ts --sheets --keep                    # leave the daemon, seeds and paired app running
+bun ios/Tools/sim-check.ts --sheets --reuse --grep="dirty file"   # then one check, in seconds
 ```
+
+`--grep=<pattern>` (a case-insensitive substring, or `/regex/flags`) runs only the checks whose names
+match. A check that depends on what an earlier one left on screen declares it with `needs` in
+`check()`, and the earlier checks run first as setup. `--reuse` attaches to the last `--keep` run's
+daemon, seeded tickets and paired app instead of building, installing, seeding and pairing (it uses
+the app already built; `--rebuild` builds first). A changed app is reinstalled and paired again
+against the same daemon; with nothing that fits it says why and does a full run. It keeps its state
+too. `bun run sim reap --kept` stops kept daemons and removes their folders.
 
 It builds with `build.ts sim` (skip with `--no-build`), installs
 `ios/build/dd/Build/Products/Release-iphonesimulator/Harness.app` and, for a shot run, saves screenshots to
