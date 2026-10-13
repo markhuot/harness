@@ -33,7 +33,7 @@ withChrome("waits and browser_run (real Chrome)", () => {
   afterAll(async () => {
     await browser?.shutdown();
     void server?.stop(true);
-  });
+  }, 30_000); // closing Chrome can take a while on a busy machine
 
   describe("default timeout", () => {
     test("a wait times out at 15 s by default, and a longer timeout outlasts it", async () => {

@@ -24,7 +24,7 @@ withChrome("BrowserManager tab lifecycle (real Chrome)", () => {
   afterAll(async () => {
     await browser?.shutdown();
     void server?.stop(true);
-  });
+  }, 30_000); // closing Chrome can take a while on a busy machine
 
   const pages = () => chromePages(browser);
 

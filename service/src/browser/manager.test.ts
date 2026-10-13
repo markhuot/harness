@@ -40,7 +40,7 @@ withChrome("BrowserManager (real Chrome)", () => {
   afterAll(async () => {
     await browser?.shutdown();
     void server?.stop(true);
-  });
+  }, 30_000); // closing Chrome can take a while on a busy machine
 
   test("state is null before a session has a tab; open returns title and url", async () => {
     expect(await browser.state("s-open")).toBeNull();

@@ -33,7 +33,7 @@ withChrome("waits and browser_run (real Chrome)", () => {
   afterAll(async () => {
     await browser?.shutdown();
     void server?.stop(true);
-  });
+  }, 30_000); // closing Chrome can take a while on a busy machine
 
   describe("browser_run", () => {
     /** Poll a job to its end; every report's text, in order. */

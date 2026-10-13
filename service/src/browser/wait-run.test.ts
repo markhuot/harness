@@ -33,7 +33,7 @@ withChrome("waits and browser_run (real Chrome)", () => {
   afterAll(async () => {
     await browser?.shutdown();
     void server?.stop(true);
-  });
+  }, 30_000); // closing Chrome can take a while on a busy machine
 
   describe("one wait engine", () => {
     test("browser_wait sees a button gone across the reload, and wait_for on browser_click does the same", async () => {

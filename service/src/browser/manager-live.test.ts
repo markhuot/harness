@@ -21,7 +21,7 @@ withChrome("BrowserManager (real Chrome)", () => {
   afterAll(async () => {
     await browser?.shutdown();
     void server?.stop(true);
-  });
+  }, 30_000); // closing Chrome can take a while on a busy machine
 
   describe("screencast", () => {
     test("subscribe yields frames with dimensions; unsubscribe stops them", async () => {

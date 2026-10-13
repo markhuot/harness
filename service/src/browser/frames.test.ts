@@ -173,7 +173,7 @@ withChrome("iframes, refs, keys, select and upload (real Chrome)", () => {
     await browser?.shutdown();
     void checkout?.stop(true);
     void card?.stop(true);
-  });
+  }, 30_000); // closing Chrome can take a while on a busy machine
 
   test("the card iframe really runs out of process, and its own document can't be reached from the page", async () => {
     const ctx = await ctxAt();
