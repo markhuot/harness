@@ -142,7 +142,8 @@ import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { buildPairUrl, reviewPassed, type ActivityEntry, type Project, type PromptEntry, type SpecRevision, type Ticket, type TicketDetail, type TicketPage, type TranscriptEntry, type Watcher } from "@harness/shared";
 import { findTheme } from "@harness/shared/themes";
-import { Database } from "bun:sqlite";
+import { freePort as freePortShared, startDaemon as startDaemonShared, until as untilShared, type TestDaemon } from "@harness/shared/testing/daemon";
+import { git, readSetting, seedRepo, seedDummySettings, setSessionContext, startCompactRun as startCompactRunAt, writeSetting } from "@harness/shared/testing/seed";
 import { acquire, checkDisk, ensureDevice, markKept, isSharedDevice, reap, SHARED_DEVICE, SHARED_IPAD_DEVICE, writeRunOwner } from "./sim";
 import { CheckSelector, noMatchMessage, parseGrep } from "./sim-grep";
 import { chooseKept, hashApp, hashService, listKept, MARKER_KEY, planApp, REUSE_VERSION, writeReuseState, type ReuseState, type Want } from "./sim-reuse";
@@ -422,22 +423,11 @@ async function scrollTo(udid: string, match: (label: string) => boolean, tries =
   }
   throw new Error("scrollTo: element never came into view");
 }
-async function until<T>(label: string, fn: () => Promise<T | null | undefined | false>, ms = 20000, every = 150): Promise<T> {
-  const end = Date.now() + ms;
-  let last: unknown;
-  while (Date.now() < end) {
+const until = <T>(label: string, fn: () => Promise<T | null | undefined | false>, ms = 20000, every = 150): Promise<T> =>
+  untilShared(label, fn, ms, every, () => {
     const cap = capOf.getStore();
     if (cap && Date.now() > cap.deadline) throw new Error(`"${cap.name}" ran past its ${Math.round(CHECK_CAP_MS / 1000)} s cap (waiting for ${label})`);
-    try {
-      const v = await fn();
-      if (v) return v;
-    } catch (e) {
-      last = e;
-    }
-    await Bun.sleep(every);
-  }
-  throw new Error(`timed out: ${label}${last ? ` (${(last as Error).message})` : ""}`);
-}
+  });
 // ---------------------------------------------------------------- debug state probe
 // The app (a SIM_CHECK build, which build.ts's simulator build is) writes its router, dock and
 // editor state, and whether it is settled, to a JSON file in its container: see Tools/probe.ts.
@@ -473,9 +463,6 @@ async function atRest(udid: string, fallbackMs: number): Promise<void> {
     noProbe.add(udid); // not a SIM_CHECK build: don't wait for it again
     await Bun.sleep(fallbackMs);
   }
-}
-async function git(cwd: string, ...a: string[]) {
-  await sh(["git", "-c", "user.name=Harness Test", "-c", "user.email=test@example.com", "-c", "commit.gpgsign=false", ...a], { cwd });
 }
 
 // ---------------------------------------------------------------- simulators
@@ -852,6 +839,7 @@ let port = 0;
 let base = "";
 /** The daemon's process, when this run started it; a reused daemon belongs to the run that kept it. */
 let daemon: ReturnType<typeof Bun.spawn> | null = null;
+let testDaemon: TestDaemon | null = null;
 let daemonPid = 0;
 /** The kept state a --reuse run attached to. */
 let attached: ReuseState | null = null;
@@ -874,17 +862,7 @@ async function daemonAnswers(s: ReuseState, dir: string): Promise<boolean> {
   if (!existsSync(join(dir, "token"))) return false;
   return fetch(`http://127.0.0.1:${s.port}/health`, { signal: AbortSignal.timeout(2000) }).then((r) => r.ok, () => false);
 }
-/** A port from the daemon pool that nothing is listening on (kept daemons hold theirs indefinitely). */
-function freePort(): number {
-  for (let i = 0; i < 200; i++) {
-    const p = 7830 + Math.floor(Math.random() * 60);
-    try {
-      Bun.listen({ hostname: "127.0.0.1", port: p, socket: { data() {} } }).stop(true);
-      return p;
-    } catch {}
-  }
-  throw new Error("no free daemon port in 7830-7889");
-}
+const freePort = () => freePortShared({ from: 7830, span: 60 });
 /** The daemon this run's checks talk to: the kept one for --reuse when one fits, otherwise a new one. */
 async function startDaemon(want: Want) {
   if (reuse) {
@@ -925,18 +903,15 @@ async function startDaemon(want: Want) {
   // Lets a later run's reap tell this run's dirs (and daemon) from a dead run's.
   writeRunOwner(home, scratch);
   claudeRecord = join(home, "fake-claude.ndjson");
-  const fakeClaude = mentionsOnly
+  const fakeClaude: Record<string, string> = mentionsOnly
     ? {
         HARNESS_CLAUDE_BIN: join(repoRoot, "service/src/drivers/__fixtures__/fake-claude.ts"),
         FAKE_CLAUDE_COMMANDS: JSON.stringify(SLASH_COMMANDS),
         FAKE_CLAUDE_RECORD: claudeRecord,
       }
     : {};
-  daemon = Bun.spawn(["bun", join(repoRoot, "service/src/daemon.ts")], {
-    env: { ...process.env, HARNESS_HOME: home, HARNESS_PORT: String(port), HARNESS_DUMMY_DRIVER: "1", HARNESS_DUMMY_DELAY_MS: "1", ...fakeClaude },
-    stdout: Bun.file(join(home, "daemon.out")),
-    stderr: Bun.file(join(home, "daemon.err")),
-  });
+  testDaemon = await startDaemonShared({ home, port, delayMs: 1, env: fakeClaude });
+  daemon = testDaemon.proc;
   daemonPid = daemon.pid;
 }
 // --usage: the dummy driver reports no plan usage, and the real ones read the account's login, so
@@ -1041,7 +1016,7 @@ async function api<T>(method: string, path: string, body?: unknown): Promise<T> 
 }
 const ticketOf = async (key: string) => (await api<TicketDetail>("GET", `/tickets/${key}`)).ticket;
 const settle = (key: string, pred: (t: Ticket) => boolean, ms = 60000) => until(`${key} settles`, async () => ((t) => (pred(t) ? t : null))(await ticketOf(key)), ms, 100);
-const settings = () => api("PATCH", "/settings", { defaultDriver: "dummy", classifier: "off" });
+const settings = () => seedDummySettings(api);
 
 /** Resolves once the walk-through's tickets exist, before their runs settle: the app can pair then. */
 let ticketsCreated!: () => void;
@@ -1165,15 +1140,8 @@ async function seedPrompts() {
   await api("PATCH", "/settings", {
     prompts: { "run.review": "Review {{ticket}} carefully.\n\nRead it with get_ticket { key: \"{{key}}\" }.\n\nCheck the tests first, then the diff." },
   });
-  const db = new Database(join(home, "harness.db"));
-  try {
-    db.exec("PRAGMA busy_timeout = 5000;");
-    const row = db.query("SELECT value FROM settings WHERE key = 'prompts'").get() as { value: string } | null;
-    const prompts = { ...(row ? (JSON.parse(row.value) as Record<string, unknown>) : {}), "system.files": "## Files\nRead files with {{readTool}}. Never use {{shellTool}} to edit files." };
-    db.query("INSERT INTO settings (key, value) VALUES ('prompts', $v) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run({ $v: JSON.stringify(prompts) });
-  } finally {
-    db.close();
-  }
+  const prompts = { ...(readSetting<Record<string, unknown>>(home, "prompts") ?? {}), "system.files": "## Files\nRead files with {{readTool}}. Never use {{shellTool}} to edit files." };
+  writeSetting(home, "prompts", prompts);
 }
 
 /**
@@ -1183,27 +1151,13 @@ async function seedPrompts() {
 /** A ticket's session context (what recording a model call leaves), and with `compacting` a compact run going. */
 function seedContext(t: Ticket | undefined, c: { input: number; cacheRead: number; cacheWrite: number; estimated?: boolean; misses?: number; missTokens?: number }) {
   if (!t) return;
-  const db = new Database(join(home, "harness.db"));
-  try {
-    db.exec("PRAGMA busy_timeout = 5000;");
-    const ctx = { output: 0, estimated: false, at: Date.now(), prefix: 50000, misses: 0, missTokens: 0, ...c };
-    db.query("UPDATE sessions SET context = $c WHERE id = $id").run({ $c: JSON.stringify(ctx), $id: t.sessionId });
-  } finally {
-    db.close();
-  }
+  setSessionContext(home, t.sessionId, { output: 0, estimated: false, at: Date.now(), prefix: 50000, misses: 0, missTokens: 0, ...c });
 }
 
 /** A compact run going on the ticket's session, which is what makes `compacting` true. The service's
  *  startup sweep fails runs it didn't start, so this goes in right before the app loads the ticket. */
 function startCompactRun(t: Ticket) {
-  const db = new Database(join(home, "harness.db"));
-  try {
-    db.exec("PRAGMA busy_timeout = 5000;");
-    db.query("INSERT INTO runs (id, session_id, kind, status, driver, prompt, attachments, created_at, started_at) VALUES ($id, $s, 'compact', 'running', 'claude-code', '/compact', '[]', $t, $t)")
-      .run({ $id: `sim-compact-${t.key}`, $s: t.sessionId, $t: Date.now() });
-  } finally {
-    db.close();
-  }
+  startCompactRunAt(home, t.sessionId, `sim-compact-${t.key}`);
 }
 
 async function seed(needs: Set<SeedName>) {
@@ -1211,15 +1165,12 @@ async function seed(needs: Set<SeedName>) {
   await settings();
   await seedPrompts();
   // A git repo so tickets get worktrees and the git plugin's Changes tab.
-  const repo = join(scratch, "greeter");
-  mkdirSync(join(repo, "src"), { recursive: true });
-  writeFileSync(join(repo, "README.md"), "# Greeter\n\nSays hello.\n");
-  writeFileSync(join(repo, "src/app.ts"), 'export function main(name = "world") {\n  console.log("Hello, " + name);\n}\n');
-  writeFileSync(join(repo, "config.json"), '{\n  "verbose": false\n}\n');
-  writeFileSync(join(repo, GREETINGS_PATH), greetings(false));
-  await git(repo, "init", "-q", "-b", "main");
-  await git(repo, "add", "-A");
-  await git(repo, "commit", "-qm", "Initial commit");
+  const repo = await seedRepo(join(scratch, "greeter"), {
+    "README.md": "# Greeter\n\nSays hello.\n",
+    "src/app.ts": 'export function main(name = "world") {\n  console.log("Hello, " + name);\n}\n',
+    "config.json": '{\n  "verbose": false\n}\n',
+    [GREETINGS_PATH]: greetings(false),
+  });
   // More branches for the branch picker: one free, one checked out in another worktree.
   await git(repo, "branch", "feature/greet-emoji");
   await git(repo, "worktree", "add", "-q", "-b", "release/v2", join(scratch, "greeter-release"));
@@ -4752,6 +4703,7 @@ try {
   // Which seed a kept daemon must hold for --reuse to attach to it.
   const modeKey = `${walkThrough ? "walk" : pagingOnly ? "paging" : stickOnly ? "stick" : keyboardOnly ? "keyboard" : mentionsOnly ? "mentions" : attachmentsOnly ? "attachments" : draftsOnly ? "drafts" : memoryOnly ? "memory" : "sheets"}${ipad ? "-ipad" : ""}`;
   await startDaemon({ modeKey, seeds: [...seedNeeds], repoRoot, serviceHash });
+  // A new daemon is already answering (startDaemon waited for it); a reused one is checked here.
   await timed("daemon healthy", () => until("daemon healthy", async () => (await fetch(`${base}/health`)).ok && existsSync(join(home, "token")), 20000, 50));
   token = readFileSync(join(home, "token"), "utf8").trim();
   // The simulators boot, the app builds and the daemon seeds all at once.
@@ -4881,12 +4833,7 @@ try {
     await timed("daemon shutdown", async () => {
       // The daemon closes its Chrome on SIGTERM, which can take a while; a Chrome killed mid-close
       // leaks its code-sign clone, and one left running outlives this run (and its deleted home).
-      daemon?.kill("SIGTERM");
-      if (daemon && (await Promise.race([daemon.exited.then(() => true), Bun.sleep(20000).then(() => false)])) === false) {
-        console.log("the daemon didn't stop in 20 s; killing it and its Chrome");
-        daemon.kill("SIGKILL");
-        Bun.spawnSync(["pkill", "-f", `user-data-dir=${join(home, "chrome-profile")}`]);
-      }
+      await testDaemon?.stop({ termMs: 20000 });
     });
     removeTemp();
     await timed("simulator shutdown", shutDownDevices);
