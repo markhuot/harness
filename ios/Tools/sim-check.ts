@@ -598,7 +598,10 @@ async function whenShown(udid: string, before: string | undefined, ready?: (l: s
   const t0 = performance.now();
   let looks = 0;
   try {
-    return await whenShownLoop(udid, before, ready, ms, () => looks++);
+    const shown = await whenShownLoop(udid, before, ready, ms, () => looks++);
+    // A wait that ran out is a stall (a sheet or menu left over the app, say), not a slow screen: counted apart so the profile names it.
+    if (!shown) profile.poll("whenShown gave up", 0, performance.now() - t0);
+    return shown;
   } finally {
     profile.poll("whenShown", looks, performance.now() - t0);
   }
@@ -649,8 +652,13 @@ async function whenShownLoop(udid: string, before: string | undefined, ready: ((
 async function visit(udid: string, url: string, ready?: (l: string[]) => boolean): Promise<boolean> {
   const before = lastUrl.get(udid) === url ? undefined : lastTree.get(udid);
   lastUrl.set(udid, url);
+  const was = hasAxe && !noProbe.has(udid) ? await probe(udid) : null;
   await simctl("openurl", udid, url);
   if (!hasAxe) return sleep(2500).then(() => true);
+  // The app's router moving, and settling, is the link landing: the first look at the screen is then
+  // usually the last, not the third. Where it doesn't move (the screen was already up) this gives up
+  // after a moment and whenShown reads the screen as before; `ready` still decides.
+  if (was) await probeUntil(udid, "the link to land", (s) => s.settled && JSON.stringify(s.router) !== JSON.stringify(was.router), 1200).catch(() => {});
   if (await whenShown(udid, before, ready)) return true;
   // Never got there: a step before left a menu, alert or sheet over the app (or it crashed). Clear
   // the board and try once more, so one stuck step costs one timeout, not every step after it.
@@ -665,7 +673,8 @@ async function visit(udid: string, url: string, ready?: (l: string[]) => boolean
  * (their Cancel, "Dismiss context menu" or Done), undocks, deep-links to the board, and quits and
  * relaunches the app if that doesn't show it.
  */
-async function resetBoard(udid: string) {
+const resetBoard = (udid: string) => timed("reset board", () => resetBoardNow(udid));
+async function resetBoardNow(udid: string) {
   console.log(`    [${udid.slice(0, 4)}] resetting to a clean board`);
   for (let i = 0; i < 3; i++) {
     const el = await findElement(udid, (l) => l === "Dismiss context menu" || l === "Cancel" || l === "Done").catch(() => null);
@@ -4229,8 +4238,13 @@ function interactionChains(s: Seeded): Chain[] {
         });
       const closeMenu = async () => {
         const root = (await tree(udid))[0]!.frame;
-        await axe("tap", "-x", String(Math.round(root.width * 0.5)), "-y", String(Math.round(root.height * 0.9)), "--udid", udid);
-        await atRest(udid, 400);
+        // The About popover sits over the menu: one tap outside can close only the top one, and a menu left up covers the next deep link.
+        for (let tap = 0; tap < 3; tap++) {
+          await axe("tap", "-x", String(Math.round(root.width * 0.5)), "-y", String(Math.round(root.height * 0.9)), "--udid", udid);
+          await atRest(udid, 400);
+          const l = await labels(udid);
+          if (!l.includes("Limit…") && !l.some((x) => x.startsWith("How much conversation the next run") || x.startsWith("A cache miss is a model call"))) break;
+        }
       };
       // The label in each state (New, over the limit, the miss badge, Copilot's estimate) is the context-gauge-states snapshot.
       // The meta row's contents (the key, then the gauge, no status, project or Conductor pill) are the ticket-hero-gauge
@@ -4286,6 +4300,9 @@ function interactionChains(s: Seeded): Chain[] {
           throw new Error(`${e.message}; on screen: ${(await labels(udid)).join(" | ")}`);
         });
         await shot(udid, "gauge-limit-light");
+        // Left open it covers the next deep link, which then waits out whenShown's 12 s and a board reset.
+        await tapWhere(udid, "dismiss popup"); // the sheet's Cancel isn't in AXe's tree; a tap outside the sheet closes it
+        await until("the limit sheet closed", async () => !(await labels(udid)).some((x) => x.startsWith("How many tokens the gauge counts up to")), 5000);
         return "confirmed and cancelled; limit sheet open";
       });
       await check("the misses row in the gauge menu opens its explanation", async () => {
