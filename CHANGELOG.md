@@ -44,6 +44,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
+- For people working on Harness: `bun run typecheck` passes again; the seed library's settings test no longer fails `tsc -p service` and `tsc -p app`.
 - For people working on Harness: `bun run sim snapshots` (and `bun run verify`'s snapshot layer) now takes any free simulator of the pool, or the one a parent `sim with-lock` already holds, instead of always waiting on `harness-shared` while `harness-shared-2` sits idle.
 - For people working on Harness: a simulator lock can no longer be deleted out from under the process that just took it (a race when two runs cleared the same dead holder), and a run whose new pool simulator was refused for low disk now creates it once disk frees up instead of waiting up to 30 minutes on a held one.
 - For people working on Harness: two `sim-check --reuse` runs started in the same checkout no longer attach to the same kept daemon at once; the second stops with a message naming the run that holds it. The claim re-checks the home after taking the lock, so a run that just ended can't leave the next one attached to a deleted home.
