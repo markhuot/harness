@@ -11,6 +11,8 @@
 //   bun ios/Tools/sim.ts status                               the device and who holds its lock
 //   bun ios/Tools/sim.ts disk [--min=GiB]                     free disk space; exits 1 below the minimum (default 5), and
 //                                                                 names installed iOS runtimes other than 27.0
+//   bun ios/Tools/sim.ts snapshots [--iphone] [--ipad] [--only=Class/test] [--record] [--out=dir]
+//                                                                 the hosted snapshot tests (snapshots.ts), each device under its own lock
 //
 // The device is "harness-shared" (an iPhone 18 Pro) unless --device names another. Locks are files
 // under ~/.harness/tmp/sim-locks (HARNESS_SIM_LOCK_DIR overrides it). Each records the holder's PID
@@ -512,8 +514,13 @@ if (import.meta.main) {
         console.error(`the iOS ${r.version} runtime (${((r.sizeBytes ?? 0) / 1e9).toFixed(1)} GB) is installed but nothing runs on it: ask the human to remove it with \`xcrun simctl runtime delete ${r.identifier}\``);
       }
       checkDisk(min);
+    } else if (cmd === "snapshots") {
+      // The hosted snapshot tests (snapshots.ts): takes each device's lock itself.
+      const child = Bun.spawn(["bun", join(import.meta.dir, "snapshots.ts"), ...opts], { stdio: ["inherit", "inherit", "inherit"] });
+      for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) process.on(sig, () => child.kill(sig));
+      process.exit(await child.exited);
     } else {
-      throw new Error("usage: sim.ts ensure | with-lock [--timeout=minutes] -- <command…> | shutdown | reap | status | disk [--min=GiB]  (each takes --device=name; ensure and with-lock take --ipad)");
+      throw new Error("usage: sim.ts ensure | with-lock [--timeout=minutes] -- <command…> | shutdown | reap | status | disk [--min=GiB] | snapshots [--iphone] [--ipad] [--only=…] [--record] [--out=dir]  (each takes --device=name; ensure and with-lock take --ipad)");
     }
   } catch (e) {
     console.error((e as Error).message);

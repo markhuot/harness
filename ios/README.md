@@ -70,6 +70,10 @@ The path of what it built is the only line on stdout.
 - **Service integration** starts a real daemon on a temp `HARNESS_HOME` and drives it with
   `HarnessClient`: `HARNESS_INTEGRATION=1 swift test --filter Integration` (from `ios/HarnessKit`;
   needs `bun` on `PATH`).
+- **Snapshot tests** render the main screens in-process from fixture models and compare them with
+  reference PNGs, on the shared iPhone and iPad simulators: `bun run sim snapshots` (`--record` to
+  update the references, `--out=<dir>` to write the renders, e.g. for a spec's screenshots, with no
+  daemon). ARCHITECTURE.md § Snapshot tests has what is covered and how a diff is reported.
 - **Config and fixtures** (bun): `bun run test` from the repo root covers `ios/Tools/config.test.ts`
   (Info.plist keys in `project.yml`) and `shared/src/fixtures.test.ts` (fixture freshness).
 

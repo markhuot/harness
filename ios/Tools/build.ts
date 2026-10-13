@@ -5,6 +5,9 @@
 // Progress goes to stderr, and the path of what was built is the one line on stdout.
 //
 //   bun ios/Tools/build.ts sim                         Release, iphonesimulator, ad-hoc signed, arm64
+//   bun ios/Tools/build.ts snapshots                   Debug build-for-testing of the snapshot tests (HarnessSnapshotTests),
+//                                                      into ios/build/dd-snapshots; prints the .xctestrun path
+//                                                      (Tools/snapshots.ts, `bun run sim snapshots`, runs it)
 //   bun ios/Tools/build.ts archive --build-number N    Release archive for devices (CFBundleVersion N),
 //                                                      signed automatically with team 47P4ZSALX4
 //   bun ios/Tools/build.ts export --method dev|testflight
@@ -27,12 +30,15 @@ import { deviceAppUrl, hashApp, planDeviceInstall } from "./sim-reuse";
 export const IOS = resolve(import.meta.dir, "..");
 export const BUILD = join(IOS, "build");
 export const DERIVED_DATA = join(BUILD, "dd");
+/** Its own derived data: the snapshot tests build Debug, the app builds Release. */
+export const SNAPSHOT_DERIVED_DATA = join(BUILD, "dd-snapshots");
 export const TEAM_ID = "47P4ZSALX4";
 export const BUNDLE_ID = "com.markhuot.harness";
 
 export type Method = "dev" | "testflight";
 export type Options =
   | { command: "sim" }
+  | { command: "snapshots" }
   | { command: "archive"; buildNumber: string; archivePath: string }
   | { command: "export"; method: Method; archivePath: string; exportPath: string }
   | { command: "device"; device: string; launch: boolean }
@@ -64,6 +70,7 @@ export function parseArgs(argv: string[]): Options {
   }
   const allowed: Record<string, string[]> = {
     sim: [],
+    snapshots: [],
     archive: ["build-number", "archive-path"],
     export: ["method", "archive-path", "export-path"],
     device: ["device", "launch"],
@@ -85,6 +92,7 @@ export function parseArgs(argv: string[]): Options {
   };
   switch (command) {
     case "sim":
+    case "snapshots":
       return { command };
     case "archive":
       return { command, buildNumber: buildNumber(), archivePath: resolve(str("archive-path") ?? DEFAULT_ARCHIVE) };
@@ -231,6 +239,22 @@ function sim(): string {
   return join(DERIVED_DATA, "Build/Products/Release-iphonesimulator/Harness.app");
 }
 
+/** Builds the snapshot tests and the app that hosts them; returns the .xctestrun file xcodebuild test-without-building takes. */
+function snapshots(): string {
+  prepare();
+  log("==> Building the snapshot tests (Debug, arm64, ad-hoc signed)");
+  run("snapshots", [
+    "xcodebuild", "-project", join(IOS, "Harness.xcodeproj"), "-scheme", "HarnessSnapshots", "-derivedDataPath", SNAPSHOT_DERIVED_DATA,
+    "-configuration", "Debug", "-sdk", "iphonesimulator", "-destination", "generic/platform=iOS Simulator",
+    "ARCHS=arm64", "ONLY_ACTIVE_ARCH=YES", "CODE_SIGN_IDENTITY=-", "CODE_SIGNING_REQUIRED=NO", "build-for-testing",
+  ]);
+  const products = join(SNAPSHOT_DERIVED_DATA, "Build/Products");
+  const found = new Bun.Glob("*.xctestrun").scanSync({ cwd: products });
+  const file = [...found][0];
+  if (!file) fail(`no .xctestrun in ${products}`);
+  return join(products, file);
+}
+
 function archive(o: Extract<Options, { command: "archive" }>): string {
   prepare();
   log(`==> Archiving (Release, build ${o.buildNumber})`);
@@ -313,6 +337,7 @@ if (import.meta.main) {
     } else {
       const out =
         o.command === "sim" ? sim()
+        : o.command === "snapshots" ? snapshots()
         : o.command === "archive" ? archive(o)
         : o.command === "export" ? exportArchive(o)
         : device(o);
