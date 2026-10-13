@@ -113,7 +113,7 @@
 //
 //   DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer bun ios/Tools/sim-check.ts [--no-build] [--app=path] [--shards=N] [--udid=…,…] [--keep] [--screens | --only=name,name | --shot=link [--prepare=…]] [--themes=id,id] [--paging] [--stick] [--keyboard] [--mentions] [--drafts] [--attachments] [--sheets] [--memory] [--usage] [--ipad]
 import { AsyncLocalStorage } from "node:async_hooks";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { buildPairUrl, reviewPassed, type ActivityEntry, type Project, type PromptEntry, type SpecRevision, type Ticket, type TicketDetail, type TicketPage, type TranscriptEntry, type Watcher } from "@harness/shared";
@@ -1274,7 +1274,7 @@ async function seedSheets() {
   const long = Array.from({ length: 40 }, (_, i) => `Paragraph ${i + 1}: enough words here to wrap onto a second line of the spec on a phone's width.`).join("\n\n");
   await create(`Dock the sheet under the board\n\n${long}`, { parentId: conductor.id });
   await create("Swipe the sheet away", { parentId: conductor.id });
-  writeFileSync(join(scratch, "sheets", DOCK_FILE), "export const notes = [\"dock me\"];\n");
+  writeFileSync(join(scratch, "sheets", DOCK_FILE), 'export const notes = [\n  "dock me",\n  "line three",\n  "line four",\n];\n');
   return { project, conductor };
 }
 
@@ -1862,6 +1862,23 @@ async function fileDockChecks(udid: string, p: { project: Project; conductor: Ti
   const count = async () => dockCount(await labels(udid));
   const say = async (what: string) => console.log(`    ${what}: ${(await labels(udid)).slice(0, 40).join(" | ")}`);
 
+  /** Types into the open file's editor until the unsaved dot shows (the page starts after the screen does). */
+  const typeUnsaved = async (text: string) => {
+    const dot = async () => (await labels(udid)).includes("Unsaved changes");
+    let attempt = 0;
+    await until("a keystroke in the editor marks the file unsaved", async () => {
+      if (await dot()) return true;
+      // The file is a few short lines, so only the editor's first rows take a tap: walk down from just under the info bar.
+      // Under the info bar's Save button, in the editor's own column (the iPad's is the panel).
+      const save = await findElement(udid, (l) => l === "Save");
+      const x = save ? Math.round(save.frame.x + 20) : 200;
+      const y = (save ? Math.round(save.frame.y + save.frame.height) : 160) + 30 + 30 * (attempt++ % 5);
+      await axe("tap", "-x", String(x), "-y", String(y), "--udid", udid);
+      await axe("type", text, "--udid", udid);
+      await Bun.sleep(600);
+      return dot();
+    }, 20000, 1000);
+  };
   await check("a file opened from a link is its own card next to the ticket's", async () => {
     await goto(udid, BOARD);
     if (ipad) {
@@ -1925,6 +1942,24 @@ async function fileDockChecks(udid: string, p: { project: Project; conductor: Ti
     if ((await count()) !== expected) throw new Error(`${await count()} docked after a second open, expected ${expected}`);
     return "no second card";
   });
+  await check("linking other lines of the docked file scrolls its editor there", async () => {
+    const marked = () => nodes(udid).then((n) => n.find((x) => x.AXUniqueId === "file-editor")?.AXValue ?? "");
+    await goto(udid, `${link}#L3`);
+    await until("the editor", editorUp, 12000);
+    await until("the new lines marked in the open editor", async () => ((await marked()).includes("line three") ? true : null), 10000).catch(async (e) => {
+      await say(`marked "${await marked()}"`);
+      await shot(udid, "file-reveal-failed", true);
+      throw e;
+    });
+    await Bun.sleep(600);
+    await shot(udid, "file-reveal-line-three", true);
+    await goto(udid, `${link}#L4-L4`);
+    await until("the next link's lines marked", async () => ((await marked()).includes("line four") ? true : null), 10000);
+    if (!ipad) await dockSheet(udid);
+    const expected = ipad ? 1 : 2;
+    if ((await count()) !== expected) throw new Error(`${await count()} docked after relinking lines, expected ${expected}`);
+    return "line three, then line four, same card";
+  });
   await check("a dirty file card's Close asks, and Discard closes the card", async () => {
     const dot = async () => (await labels(udid)).includes("Unsaved changes");
     // The iPhone left the file docked at the bottom card: bring it up.
@@ -1933,19 +1968,7 @@ async function fileDockChecks(udid: string, p: { project: Project; conductor: Ti
       await until("the editor", editorUp, 8000);
       await Bun.sleep(1500);
     }
-    let attempt = 0;
-    await until("a keystroke in the editor marks the file unsaved", async () => {
-      if (await dot()) return true;
-      // The file is one line, so only the editor's first rows take a tap: walk down from just under the info bar.
-      // Under the info bar's Save button, in the editor's own column (the iPad's is the panel).
-      const save = await findElement(udid, (l) => l === "Save");
-      const x = save ? Math.round(save.frame.x + 20) : 200;
-      const y = (save ? Math.round(save.frame.y + save.frame.height) : 160) + 30 + 30 * (attempt++ % 5);
-      await axe("tap", "-x", String(x), "-y", String(y), "--udid", udid);
-      await axe("type", "DISCARD_ME", "--udid", udid);
-      await Bun.sleep(600);
-      return dot();
-    }, 20000, 1000);
+    await typeUnsaved("DISCARD_ME");
     await Bun.sleep(1500);
     await shot(udid, "file-card-dirty-close", true);
     if (ipad) {
@@ -1965,7 +1988,43 @@ async function fileDockChecks(udid: string, p: { project: Project; conductor: Ti
       const l = await labels(udid);
       return !l.some(fileCard) && !l.includes(`Close ${DOCK_FILE}`);
     }, 8000);
-    return "Close → Discard closed the card";
+    await Bun.sleep(1500);
+    if (readFileSync(join(scratch, "sheets", DOCK_FILE), "utf8").includes("DISCARD_ME")) throw new Error("Discard saved the edit to the file");
+    return "Close → Discard closed the card, and the file is as it was";
+  });
+  await check("a failed save as a file card closes keeps the edits: the card comes back with them and Save retries", async () => {
+    const dir = join(scratch, "sheets");
+    const onDisk = () => readFileSync(join(dir, DOCK_FILE), "utf8");
+    await api("PATCH", "/settings", { saveOnBlur: true });
+    moved(udid);
+    await goto(udid, BOARD);
+    await goto(udid, link);
+    await until("the editor", editorUp, 12000);
+    await Bun.sleep(1500);
+    // A folder the service can't create the temporary file in: every write fails.
+    chmodSync(dir, 0o555);
+    try {
+      await typeUnsaved("KEEP_ME");
+      if (!ipad) await dockSheet(udid);
+      await tapWhere(udid, `Close ${DOCK_FILE}`);
+      // The card closed with a write that failed: it comes back, holding the edits and the failure.
+      await until("the card back with its edits and the failure", async () => {
+        const l = await labels(udid);
+        return l.some((x) => x.startsWith("Save failed")) && l.includes("Save") ? true : null;
+      }, 15000).catch(async (e) => {
+        await say("after Close with a failing write");
+        await shot(udid, "file-card-failed-save", true);
+        throw e;
+      });
+      await shot(udid, "file-card-failed-save", true);
+      if (onDisk().includes("KEEP_ME")) throw new Error("the failing write reached the disk");
+    } finally {
+      chmodSync(dir, 0o755);
+    }
+    await tapWhere(udid, "Save");
+    await until("the edits written", async () => (onDisk().includes("KEEP_ME") ? true : null), 10000);
+    await api("PATCH", "/settings", { saveOnBlur: false });
+    return "Close with a failing write → card back with the edits → Save wrote them";
   });
   await check("a file card's ✕ closes only it", async () => {
     // The dirty check closed the file with taps: the same link again needs the board in between to land.
@@ -4157,20 +4216,28 @@ function interactionChains(s: Seeded): Chain[] {
         const row = (l: string) => l === "Save on blur" || l.startsWith("Save on blur,");
         for (let i = 0; i < 40; i++) {
           const el = await findElement(udid, row);
-          if (el && el.frame.y > 140 && el.frame.y < 700) break;
+          if (el && el.frame.y > 140 && el.frame.y < 560) break;
           await axe("swipe", "--start-x", "200", "--start-y", "520", "--end-x", "200", "--end-y", "170", "--duration", "0.6", "--udid", udid);
           await Bun.sleep(350);
         }
         if (!(await findElement(udid, row))) throw new Error(`no Save on blur row; on screen: ${(await labels(udid)).join(" | ")}`);
         await shot(udid, "save-on-blur-off-light");
         const before = (await api<{ saveOnBlur?: boolean }>("GET", "/settings")).saveOnBlur ?? false;
+        // The scroll's momentum has to be over before a tap lands where the switch was.
+        await Bun.sleep(1200);
         // The row's text and its switch share the label: the switch is the one on the right.
         const sw = (await nodes(udid)).filter((n) => n.AXLabel === "Save on blur").sort((a, b) => b.frame.x - a.frame.x)[0];
         if (!sw) throw new Error("no Save on blur switch");
-        await axe("tap", "-x", String(Math.round(sw.frame.x + sw.frame.width / 2)), "-y", String(Math.round(sw.frame.y + sw.frame.height / 2)), "--udid", udid);
+        // The Toggle's accessibility frame can be the row's width (its label is hidden): tap the
+        // right end, where the switch is, not the middle.
+        // A press held for a moment: the switch ignores the instantaneous tap AXe sends.
+        await axe("touch", "-x", String(Math.round(sw.frame.x + sw.frame.width - 28)), "-y", String(Math.round(sw.frame.y + sw.frame.height / 2)), "--down", "--up", "--delay", "0.15", "--udid", udid);
         await Bun.sleep(1000);
         await shot(udid, "save-on-blur-on-light");
-        const after = await until("the setting flipped on the service", async () => (((await api<{ saveOnBlur?: boolean }>("GET", "/settings")).saveOnBlur ?? false) !== before ? true : null), 6000);
+        const after = await until("the setting flipped on the service", async () => (((await api<{ saveOnBlur?: boolean }>("GET", "/settings")).saveOnBlur ?? false) !== before ? true : null), 6000).catch(async (e) => {
+          await shot(udid, "save-on-blur-failed", true);
+          throw e;
+        });
         if (!after) throw new Error("the switch didn't change the setting");
         await shot(udid, "save-on-blur-on-light");
         return `${before} → ${!before}`;

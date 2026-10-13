@@ -21,6 +21,12 @@ final class FileEditorSession {
     /// process died) restores the unsaved contents instead.
     @ObservationIgnored private var openedOnce = false
     @ObservationIgnored private var discarded = false
+    /// The contents the user discarded: a late change event carrying the same text isn't new typing.
+    @ObservationIgnored private var discardedContents: String?
+    /// Edits an earlier screen of this file couldn't save, which this one opens on.
+    @ObservationIgnored private var kept: UnsavedEdits.Entry?
+    /// A save on leave failed and the screen is gone: the owner shows the file again, with the edits.
+    @ObservationIgnored var onLeaveFailed: (() -> Void)?
 
     init(client: any FileViewerClient, root: FileRoot, path: String, range: ClosedRange<Int>?, theme: FileEditorTheme, background: UIColor, saveOnBlur: @escaping () -> Bool) {
         loader = FileViewerLoader(client: client, root: root, path: path)
@@ -28,6 +34,7 @@ final class FileEditorSession {
         self.range = range
         self.theme = theme
         self.saveOnBlur = saveOnBlur
+        kept = UnsavedEdits.shared.take(root, path: path)
         for host in [fileHost, diffHost] { host.setBackground(background) }
         fileHost.onReady = { [weak self] in self?.openFile() }
         diffHost.onReady = { [weak self] in self?.openDiff() }
@@ -74,12 +81,18 @@ final class FileEditorSession {
         let editable = FileEditRules.canEdit(view)
         if !openedOnce {
             openedOnce = true
-            model.opened(contents)
+            if let kept { model.restored(kept) } else { model.opened(contents) }
         }
         fileHost.send(.open(
             contents: model.latest ?? contents, language: language, theme: theme, range: range,
             readOnly: !editable, saved: model.saved))
         if range != nil { Task { await fileHost.readRevealedLine() } }
+    }
+
+    /// A link to this open file marked other lines: the editor scrolls to and marks them.
+    func reveal(_ lines: ClosedRange<Int>) {
+        fileHost.send(.reveal(lines))
+        Task { await fileHost.readRevealedLine() }
     }
 
     private func openDiff() {
@@ -92,7 +105,7 @@ final class FileEditorSession {
     private func fileEvent(_ event: FileEditorEvent) {
         switch event {
         case let .change(contents, dirty):
-            discarded = false
+            if contents != discardedContents { discarded = false }
             model.edited(contents: contents, dirty: dirty)
         case let .dirty(dirty): model.dirtyChanged(dirty)
         case let .save(contents): saveNow(contents)
@@ -152,11 +165,24 @@ final class FileEditorSession {
         guard FileEditRules.leave(dirty: model.dirty, saveOnBlur: saveOnBlur()) != .none else { return }
         // Through save(), so the editor's saved baseline follows (this fires too when a view is
         // pushed over the file, and the screen comes back).
-        Task { await save() }
+        Task {
+            guard await save() == false, let latest = model.latest, model.dirty else { return }
+            // The write failed and nothing here can ask again: the edits wait for the file to open.
+            UnsavedEdits.shared.keep(model.root, path: model.path, contents: latest, saved: model.saved, error: model.saveError)
+            onLeaveFailed?()
+        }
+    }
+
+    /// The screen is back on screen (a view pushed over it was popped), so it still holds the edits.
+    func didReturn() {
+        _ = UnsavedEdits.shared.take(model.root, path: model.path)
     }
 
     /// "Discard changes" on the back button: leaving then drops the edits instead of saving them.
-    func discard() { discarded = true }
+    func discard() {
+        discarded = true
+        discardedContents = model.latest
+    }
 }
 
 /// A UIKit background-task assertion held for the length of one save.

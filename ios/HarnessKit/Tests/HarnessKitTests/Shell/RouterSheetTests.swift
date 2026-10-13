@@ -546,12 +546,22 @@ struct RouterSheetTests {
         r.push(.file(file("a.ts", start: "40")))
         #expect(r.dockedSheets.count == 3)
         #expect(r.ticketSheet?.title == "a.ts")
-        // The first link's lines stay, so the open editor isn't torn down (it may hold edits).
+        // The card keeps its root, so the open editor isn't torn down (it may hold edits), and the
+        // newer link's lines are handed to it to scroll to.
         #expect(r.ticketSheet?.file?.start == "3")
+        #expect(r.ticketSheet?.revealed?.range == 40...40)
+        // The same lines linked again are a new reveal; a link without lines reveals nothing.
+        r.push(t("B-1"))
+        r.push(.file(file("a.ts", start: "40")))
+        #expect(r.ticketSheet?.revealed?.count == 2)
+        r.push(t("B-1"))
+        r.push(.file(file("a.ts")))
+        #expect(r.ticketSheet?.revealed?.count == 2)
         // Another file, or the same path in another ticket, is a different card.
         r.push(.file(file("a.ts", ticket: "B-1")))
         r.push(.file(file("z.ts")))
         #expect(r.dockedSheets.count == 5)
+        #expect(r.ticketSheet?.revealed == nil)
     }
 
     @Test func swipingStepsThroughFilesAndTicketsTogether() {

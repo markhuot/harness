@@ -13,13 +13,15 @@ struct FileViewerScreen: View {
     /// The docked sheet this file is the root of (a file card), nil when it's pushed onto a stack.
     /// Leaving a card closes it by id; leaving a pushed file pops it.
     var cardID: Int?
+    /// Lines a later link marked in this open card (`TicketSheet.revealed`).
+    var reveal: FileReveal?
 
     @Environment(\.palette) private var c
 
     var body: some View {
         let target = FileViewer.readFileParams(params)
         if let target, let root = target.root {
-            FileViewerContent(root: root, path: target.path, range: target.range, cardID: cardID)
+            FileViewerContent(root: root, path: target.path, range: target.range, cardID: cardID, reveal: reveal)
         } else {
             EmptyState(
                 icon: "fileText",
@@ -44,6 +46,7 @@ private struct FileViewerContent: View {
     let path: String
     let range: ClosedRange<Int>?
     let cardID: Int?
+    let reveal: FileReveal?
 
     @Environment(BoardStore.self) private var store
     @Environment(Router.self) private var router
@@ -61,6 +64,8 @@ private struct FileViewerContent: View {
     @State private var session: FileEditorSession?
     @State private var tab = FileViewerTab.file
     @State private var askingToLeave = false
+    /// The lines a later link marked, once one has: they replace the opening link's.
+    @State private var revealedRange: ClosedRange<Int>?
     private var saveOnBlur: Bool { SettingsRules.saveOnBlur(store.state.settings?.saveOnBlur) }
 
     var body: some View {
@@ -69,12 +74,14 @@ private struct FileViewerContent: View {
         let shownPath = view?.path ?? path
         let hasDiff = view.map(FileViewerRules.hasDiff) ?? false
         let shown = hasDiff ? tab : .file
+        let shownRange = revealedRange ?? range
         let dirty = session?.model.dirty ?? false
-        // Dirty with Save on blur off: the back button asks, and swiping back or down can't skip it.
-        let guarded = dirty && !saveOnBlur
+        // Dirty with Save on blur off, or after a save that failed: the back button asks, and
+        // swiping back or down can't skip it.
+        let guarded = dirty && (!saveOnBlur || session?.model.saveError != nil)
         VStack(spacing: 0) {
             FileInfoBar(
-                path: shownPath, view: view, lineCount: loader?.text?.lines.count, range: range,
+                path: shownPath, view: view, lineCount: loader?.text?.lines.count, range: shownRange,
                 editing: shown == .file ? session?.model : nil, canEdit: view.map(FileEditRules.canEdit) ?? false
             ) { session?.saveNow() }
             if hasDiff, let loader {
@@ -143,6 +150,15 @@ private struct FileViewerContent: View {
             let s = FileEditorSession(
                 client: client, root: root, path: path, range: range, theme: FileEditorTheme(c.theme.pluginInfo),
                 background: UIColor(c.bg), saveOnBlur: { [store] in SettingsRules.saveOnBlur(store.state.settings?.saveOnBlur) })
+            s.onLeaveFailed = { [router, cardID] in
+                // The card is gone and its save failed: it comes back holding the edits (a pushed file
+                // is still under its sheet; the edits wait for the file to open).
+                guard let cardID, !router.dockedSheets.contains(where: { $0.id == cardID }) else { return }
+                router.push(.file(FileRouteParams(
+                    path: path, ticket: { if case let .ticket(k) = root { k } else { nil } }(),
+                    project: { if case let .project(id) = root { id } else { nil } }(),
+                    start: range.map { String($0.lowerBound) }, end: range.map { String($0.upperBound) })))
+            }
             session = s
             await s.start()
         }
@@ -151,7 +167,13 @@ private struct FileViewerContent: View {
                 // The panel's ✕ and Escape: a dirty file with Save on blur off asks first.
                 panelCloser?.take(onScreen) {
                     // Read when it's pressed: this closure outlives the body that made it.
-                    if (session?.model.dirty ?? false) && !saveOnBlur { closingCard = true; askingToLeave = true } else { closeCard() }
+                    if (session?.model.dirty ?? false) && (!saveOnBlur || session?.model.saveError != nil) {
+                        closingCard = true
+                        askingToLeave = true
+                    } else if session?.model.dirty ?? false {
+                        // Save on blur: write first, and keep the card (with the failure showing) if that fails.
+                        Task { if await session?.save() == true { closeCard() } }
+                    } else { closeCard() }
                 }
             } else {
                 panelCloser?.release(onScreen)
@@ -159,6 +181,13 @@ private struct FileViewerContent: View {
                 session?.fileHost.resignFocus()
                 session?.didBackground()
             }
+        }
+        .onChange(of: reveal) { _, next in
+            // The card is already open: scroll it to the new lines (a link to this file again).
+            guard let lines = next?.range else { return }
+            revealedRange = lines
+            tab = .file
+            session?.reveal(lines)
         }
         .onChange(of: tab) { _, _ in
             // The editor under the other tab loses focus: its blur saves (Save on blur) and the keyboard goes down.
@@ -172,6 +201,7 @@ private struct FileViewerContent: View {
             default: break
             }
         }
+        .onAppear { session?.didReturn() }
         .onDisappear {
             panelCloser?.release(onScreen)
             session?.didLeave()
@@ -219,7 +249,7 @@ private struct FileViewerContent: View {
                 haptic(.success)
             }
             Button("Copy link", systemImage: "link") {
-                UIPasteboard.general.string = FileViewerRules.link(path: shownPath, root: root, range: range)
+                UIPasteboard.general.string = FileViewerRules.link(path: shownPath, root: root, range: revealedRange ?? range)
                 haptic(.success)
             }
             if case let .ticket(key) = root {

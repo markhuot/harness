@@ -242,7 +242,7 @@ struct TicketSheetContent: View {
         switch sheet.root {
         case let .ticket(key, tab): RouteScreen(route: .ticket(key: key, tab: tab))
         case let .newSession(projectId, key): NewSessionScreen(projectId: projectId, key: key)
-        case let .file(params): FileViewerScreen(params: params, cardID: sheet.id)
+        case let .file(params): FileViewerScreen(params: params, cardID: sheet.id, reveal: router.dockedSheets.first { $0.id == sheet.id }?.revealed ?? sheet.revealed)
         }
     }
 }

@@ -384,6 +384,9 @@ public final class Router {
         if let i = list.firstIndex(where: { $0.shows(root) }) {
             var s = list.remove(at: i)
             if case let .ticket(key, tab?) = root, s.showsOnTop(key) { _ = s.showTab(tab) }
+            // A link to lines of the file already docked scrolls its open editor there (the editor
+            // stays, since it may hold edits).
+            if case let .file(params) = root, params.start != nil { s.reveal(params) }
             list.insert(s, at: 0)
         } else if case let .ticket(key, tab) = root, let i = list.firstIndex(where: { $0.rootKey == key }) {
             var s = list.remove(at: i)
@@ -544,6 +547,19 @@ private struct LossyList<Element: Decodable>: Decodable {
     }
 }
 
+/// A link's lines on an already open file card. `count` makes the same lines, linked again after the
+/// user scrolled away, a change the card sees.
+public struct FileReveal: Hashable, Sendable {
+    public let start: String?
+    public let end: String?
+    public let count: Int
+
+    /// The lines as the editor takes them.
+    public var range: ClosedRange<Int>? {
+        FileViewer.readFileParams(FileRouteParams(path: "-", start: start, end: end))?.range
+    }
+}
+
 /// One of the main window's ticket sheets (`Router.dockedSheets`; the top is `Router.ticketSheet`
 /// or `Router.dock`): a ticket with the screens pushed above it, a file, or New session.
 public struct TicketSheet: Hashable, Sendable, Identifiable {
@@ -559,6 +575,13 @@ public struct TicketSheet: Hashable, Sendable, Identifiable {
     public internal(set) var root: Root
     /// Pushed above `root`.
     public internal(set) var path: [Route] = []
+    /// The lines the latest link to this file marked, once a link has marked some after the card
+    /// opened: the open editor scrolls to them. Not persisted (a restored card opens on its root's lines).
+    public internal(set) var revealed: FileReveal?
+
+    mutating func reveal(_ params: FileRouteParams) {
+        revealed = FileReveal(start: params.start, end: params.end, count: (revealed?.count ?? 0) + 1)
+    }
 
     /// The ticket on top: the last one pushed, else the root's. Nil for New session with none
     /// pushed.

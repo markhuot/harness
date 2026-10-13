@@ -41,6 +41,16 @@ public final class FileEditorModel {
         revision += 1
     }
 
+    /// The editor opened on edits an earlier screen of this file couldn't save (`UnsavedEdits`): dirty
+    /// against what was on disk, with the failure still showing.
+    public func restored(_ kept: UnsavedEdits.Entry) {
+        latest = kept.contents
+        saved = kept.saved ?? kept.contents
+        dirty = kept.contents != saved
+        saveError = kept.error
+        revision += 1
+    }
+
     public func edited(contents: String, dirty: Bool) {
         latest = contents
         revision += 1

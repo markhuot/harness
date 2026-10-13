@@ -149,16 +149,36 @@ function themeController(host: () => HTMLElement[], initialDark: boolean, setDar
 
 // --- editor ---------------------------------------------------------------------------------
 
-/** "\r\n" for a file whose every line break is CRLF, else null (CodeMirror's default splits on any and writes LF). */
-function detectEol(contents: string): "\r\n" | null {
-  return contents.includes("\r\n") && !/(^|[^\r])\n/.test(contents) ? "\r\n" : null;
+type Eol = "\r\n" | "\n" | "\r";
+
+/**
+ * The line break the document is split and joined on: the file's only one, or the most common when it
+ * mixes them (CRLF, then LF, win a tie). A break of another kind stays in its line as a plain character,
+ * so saving writes back exactly what was read. Null for a file with no line break at all.
+ */
+export function detectEol(contents: string): Eol | null {
+  let crlf = 0;
+  let lf = 0;
+  let cr = 0;
+  for (let i = 0; i < contents.length; i++) {
+    const ch = contents.charCodeAt(i);
+    if (ch === 13) {
+      if (contents.charCodeAt(i + 1) === 10) {
+        crlf++;
+        i++;
+      } else cr++;
+    } else if (ch === 10) lf++;
+  }
+  if (crlf + lf + cr === 0) return null;
+  if (crlf >= lf && crlf >= cr) return "\r\n";
+  return lf >= cr ? "\n" : "\r";
 }
-const eolExtension = (eol: "\r\n" | null): Extension => (eol ? EditorState.lineSeparator.of(eol) : []);
+const eolExtension = (eol: Eol | null): Extension => (eol ? EditorState.lineSeparator.of(eol) : []);
 
 export function createEditor(parent: HTMLElement, options: EditorOptions): EditorHandle {
   const initial = normalizeTheme(options.theme);
   const base = baseExtensions(options.language, initial.appearance === "dark");
-  // A CRLF file keeps its line breaks: the document is split and joined on them, so saving writes what was read.
+  // A file keeps its line breaks: the document is split and joined on them, so saving writes what was read.
   let eol = detectEol(options.contents);
   const eolCompartment = new Compartment();
   let saved: Text = EditorState.create({ doc: options.saved ?? options.contents }).doc;
@@ -250,8 +270,10 @@ export function createEditor(parent: HTMLElement, options: EditorOptions): Edito
       }
       // Only the span that differs is replaced, so the cursor, scroll position and highlight stay where
       // they are. Compared as the document counts it, a line break being one character.
-      const current = view.state.doc.sliceString(0, undefined, "\n");
-      const incoming = contents.split(/\r\n|\r|\n/).join("\n");
+      // NUL stands for the document's line break (the service refuses files that hold one), so a break of
+      // another kind inside a mixed file's line isn't mistaken for a new line.
+      const current = view.state.doc.sliceString(0, undefined, "\0");
+      const incoming = eol ? contents.split(eol).join("\0") : contents;
       let from = 0;
       const max = Math.min(current.length, incoming.length);
       while (from < max && current.charCodeAt(from) === incoming.charCodeAt(from)) from++;
@@ -261,7 +283,7 @@ export function createEditor(parent: HTMLElement, options: EditorOptions): Edito
       try {
         // Not in undo history: Cmd+Z must never bring back the buffer this reload replaced.
         view.dispatch({
-          changes: { from, to: current.length - tail, insert: Text.of(incoming.slice(from, incoming.length - tail).split("\n")) },
+          changes: { from, to: current.length - tail, insert: Text.of(incoming.slice(from, incoming.length - tail).split("\0")) },
           annotations: [Transaction.addToHistory.of(false), reload.of(true)],
         });
       } finally {

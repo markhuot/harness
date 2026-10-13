@@ -1,6 +1,6 @@
 import { undo } from "@codemirror/commands";
 import { afterEach, describe, expect, test } from "bun:test";
-import { createDiffEditor, createEditor, type EditorHandle } from "./editor";
+import { createDiffEditor, createEditor, detectEol, type EditorHandle } from "./editor";
 import { languageName, resolveLanguage } from "./language";
 import { mount, type BridgeEvent } from "./bridge";
 
@@ -134,6 +134,34 @@ describe("dirty", () => {
     expect(h.getContents()).toBe("zero\r\n" + disk);
     h.setContents(disk);
     expect(h.getContents()).toBe(disk);
+    expect(h.isDirty()).toBe(false);
+  });
+
+  test("a file that mixes line endings is written back byte for byte, edits and all", () => {
+    for (const disk of ["a\r\nb\nc\r\nd\r\n", "a\nb\r\nc\nd\n", "a\rb\nc\n", "a\r\nb\r\nc\n"]) {
+      const h = make({ contents: disk });
+      expect(h.getContents()).toBe(disk);
+      expect(h.isDirty()).toBe(false);
+      // An edit on the first line leaves every other line break as it was.
+      h.view.dispatch({ changes: { from: 1, insert: "X" } });
+      expect(h.getContents()).toBe("aX" + disk.slice(1));
+    }
+  });
+
+  test("new lines in a mixed file use its most common line break", () => {
+    expect(detectEol("a\r\nb\r\nc\n")).toBe("\r\n");
+    expect(detectEol("a\nb\nc\r\n")).toBe("\n");
+    expect(detectEol("a\r\nb\n")).toBe("\r\n");
+    expect(detectEol("no breaks")).toBeNull();
+    const h = make({ contents: "a\r\nb\r\nc\n" });
+    h.view.dispatch({ changes: { from: 0, insert: "new\r\n" } });
+    expect(h.getContents()).toBe("new\r\na\r\nb\r\nc\n");
+  });
+
+  test("a reload of a mixed file replaces only what changed", () => {
+    const h = make({ contents: "a\r\nb\nc\r\n" });
+    h.setContents("a\r\nb\nc\r\nd\n");
+    expect(h.getContents()).toBe("a\r\nb\nc\r\nd\n");
     expect(h.isDirty()).toBe(false);
   });
 

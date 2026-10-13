@@ -66,6 +66,29 @@ import Testing
         #expect(m.saveError == nil)
     }
 
+    @Test func editsAFailedLeaveSaveKeptComeBackDirtyAndSaveable() async {
+        let client = WriteClient()
+        client.failure.withLock { $0 = HarnessAPIError(status: 507, message: "Disk full") }
+        let m = model(client)
+        m.edited(contents: "two", dirty: true)
+        #expect(await m.save() == nil)
+        // The screen goes away: what it holds is kept for the file's next screen.
+        let kept = UnsavedEdits()
+        kept.keep(m.root, path: m.path, contents: m.latest ?? "", saved: m.saved, error: m.saveError)
+        #expect(!kept.has(.ticket(key: "T-2"), path: "src/a.ts"))
+        #expect(!kept.has(.project(id: "T-1"), path: "src/a.ts"))
+        let entry = kept.take(.ticket(key: "T-1"), path: "src/a.ts")
+        #expect(kept.take(.ticket(key: "T-1"), path: "src/a.ts") == nil)
+        let reopened = FileEditorModel(client: client, root: .ticket(key: "T-1"), path: "src/a.ts")
+        reopened.restored(try! #require(entry))
+        #expect(reopened.dirty && reopened.latest == "two" && reopened.saved == "one")
+        #expect(reopened.saveError?.contains("Disk full") == true)
+        client.failure.withLock { $0 = nil }
+        #expect(await reopened.save() == "two")
+        #expect(!reopened.dirty && reopened.saveError == nil)
+        #expect(client.writes.withLock { $0 } == ["ticket T-1 src/a.ts two"])
+    }
+
     @Test func typingDuringASaveLeavesTheEditorDirty() async {
         let client = WriteClient()
         let gate = Deferred<Void>()
