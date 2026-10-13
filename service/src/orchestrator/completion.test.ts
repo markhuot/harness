@@ -4,8 +4,8 @@
 // no action", and children landing on their parent's branch.
 
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from "bun:test";
-import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import type { Ticket } from "@harness/shared";
 import { tempDir } from "@harness/shared/testing";
 import { clearPullRequestTargets } from "../store/projects";
@@ -164,6 +164,36 @@ describe("choosing at approval", () => {
     expect(run.runContext).not.toContain("fetch . harness/web-1:main");
     expect(run.prompt).toContain("## Instructions from the human\nCherry-pick onto release-2.4");
     expect(h.get(t).status).toBe("done");
+  });
+
+  // The contract seam with the iPhone app: HarnessKit's ApproveTests builds each of these bodies, and the service
+  // must store what they say. sim-check used to prove this by typing into the Approve and… sheet.
+  test("every review body HarnessKit's Approve builds is accepted and stored as it says", async () => {
+    const fixture = JSON.parse(
+      readFileSync(resolve(import.meta.dir, "../../../ios/HarnessKit/Tests/HarnessKitTests/Fixtures/approve.json"), "utf8"),
+    ) as { approveRequestCases: { name: string; output: { via: string; body: { decision: string; action?: string; instructions?: string } } }[] };
+    const cases = fixture.approveRequestCases.filter((c) => c.output.via === "review");
+    expect(cases.length).toBeGreaterThan(3);
+    expect(cases.some((c) => c.output.body.instructions)).toBe(true);
+    const h = await setup();
+    for (const c of cases) {
+      const t = await h.orch.createTicket({ projectId: h.project.id, spec: `${c.name} [hold-review]` });
+      while (h.driver.holding === 0) await Bun.sleep(1);
+      if (c.output.body.action && !h.project.completionActions.includes(c.output.body.action as never)) {
+        // The app passes an action it doesn't know through; the service is the one to refuse it.
+        expectStatus(() => h.orch.humanReview(t.key, c.output.body), 400, /action must be one of/);
+        expect(h.get(t).humanReview, c.name).toBe("pending");
+      } else {
+        h.orch.humanReview(t.key, c.output.body);
+        expect(h.get(t), c.name).toMatchObject({
+          humanReview: "approved",
+          completionAction: c.output.body.action ?? null,
+          completionInstructions: c.output.body.instructions ?? null,
+        });
+      }
+      h.driver.release();
+      await h.orch.idle();
+    }
   });
 
   test("a new action without instructions drops the earlier action's instructions", async () => {

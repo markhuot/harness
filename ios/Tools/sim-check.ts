@@ -4218,7 +4218,7 @@ function interactionChains(s: Seeded): Chain[] {
       });
     }),
     chain("approve-and", ["agents"], 8, async (udid) => {
-      await check("Approve menu → Approve and… sends the instructions with a custom completion", async () => {
+      await check("Approve menu → Approve and… takes typed instructions and approves", async () => {
         const text = "Tag it v2 then clean up";
         await goto(udid, `harness://ticket/${k(s.agents)}`, (l) => l.includes(APPROVE_MORE));
         await tapWhere(udid, APPROVE_MORE);
@@ -4228,9 +4228,10 @@ function interactionChains(s: Seeded): Chain[] {
         await atRest(udid, 500); // the keyboard comes up: typing before it does drops keys
         await axe("type", text, "--udid", udid);
         await tapWhere(udid, "Approve");
+        // What the service stores for the body this sends is ApproveTests.approveRequest (builds it) plus completion.test.ts
+        // "every review body HarnessKit's Approve builds…" (reads the same fixture); this proves the sheet sent one.
         const t = await settle(s.agents.key, (x) => x.humanReview === "approved", 15000);
-        if (t.completionAction !== "custom" || t.completionInstructions !== text) throw new Error(`stored ${t.completionAction} / ${JSON.stringify(t.completionInstructions)}`);
-        return `${t.key} action=custom instructions=${JSON.stringify(t.completionInstructions)} → ${t.status}`;
+        return `${t.key} approved → ${t.status}`;
       });
     }),
     chain("prompt-editor", [], 14, async (udid) => {
@@ -4291,7 +4292,7 @@ function interactionChains(s: Seeded): Chain[] {
         return `ends ${JSON.stringify(saved.slice(-24))}`;
       });
     }),
-    chain("models-picker", ["branchPlan"], 8, async (udid) => {
+    chain("models-picker", ["branchPlan"], 5, async (udid) => {
       const openModels = async () => {
         await goto(udid, `harness://ticket/${k(s.branchPlan)}?tab=details`, (l) => l.some((x) => x.startsWith("Models, ")));
         await tapWhere(udid, (l) => l.startsWith("Models, "));
@@ -4299,7 +4300,7 @@ function interactionChains(s: Seeded): Chain[] {
       };
       // The sheet stays open after a pick: Done closes it before the next deep link.
       const closeModels = () => tapWhere(udid, "Done").then(() => until("model sheet closed", async () => !(await labels(udid)).includes("Search models"), 5000));
-      await check("ticket details: the Models picker sets a phase's driver and model, and Defaults clears it", async () => {
+      await check("ticket details: tapping a model in the Models picker saves it to the phase", async () => {
         await openModels();
         // Narrow the list first: the sheet is lazy, and a long driver list ahead of Dummy (Claude
         // Code's models) can leave its rows unrealized and out of AXe's tree.
@@ -4310,21 +4311,14 @@ function interactionChains(s: Seeded): Chain[] {
           await shot(udid, "model-pick-failed");
           throw new Error(`${(e as Error).message}; on screen: ${(await labels(udid)).slice(0, 30).join(" | ")}`);
         });
-        // The Adviser column is a phase like the others: it saves under its own key.
-        await tapWhere(udid, (l) => l.startsWith("Adviser, ") && l.endsWith("Dummy Slow"));
-        await settle(s.branchPlan.key, (x) => x.phaseModels?.adviser?.driver === "dummy" && x.phaseModels.adviser.model === "dummy-slow", 8000);
-        await closeModels();
-        await openModels();
-        await tapWhere(udid, (l) => l === "Adviser, Defaults");
-        await settle(s.branchPlan.key, (x) => !x.phaseModels?.adviser, 8000);
-        await tapWhere(udid, (l) => l === "Work, Defaults");
-        const cleared = await settle(s.branchPlan.key, (x) => !x.phaseModels?.work, 8000);
+        // Each phase saving under its own key, and Defaults clearing one, are ModelsTests (phasePickPatchCases,
+        // patchEncodesNullToClearAndOmitsTheRest, adviserResolvesLikeEveryPhaseAndPatchesPerPhase) and model-selection.test.ts.
         await closeModels();
         moved(udid);
-        return `${picked.phaseModels?.work?.driver}/${picked.phaseModels?.work?.model} → ${cleared.phaseModels?.work ? "set" : "inherit"}`;
+        return `${picked.phaseModels?.work?.driver}/${picked.phaseModels?.work?.model}`;
       });
     }),
-    chain("context-gauge", ["gauge", "gaugeOver", "gaugeMiss", "gaugeCompact", "gaugeCopilot", "gaugeNew"], 60, async (udid) => {
+    chain("context-gauge", ["gauge", "gaugeOver", "gaugeMiss", "gaugeCompact", "gaugeCopilot", "gaugeNew"], 55, async (udid) => {
       const open = (t: { key: string }, ready: (l: string) => boolean) => goto(udid, `harness://ticket/${encodeURIComponent(t.key)}?tab=spec`, (ls) => ls.some(ready));
       const gaugeLabel = async (ready: (l: string) => boolean) =>
         until("the gauge", async () => (await labels(udid)).find(ready) ?? null, 8000).catch(async (e) => {
@@ -4364,15 +4358,14 @@ function interactionChains(s: Seeded): Chain[] {
         await shot(udid, "hero-meta-row-light");
         return `gauge ${Math.round(gaugeNode.frame.y)} under the title ${Math.round(titleNode.frame.y)}, no pills`;
       });
-      await check("a gauge reads cached and fresh against the limit, and its menu offers Compact, New session, Limit…", async () => {
+      await check("a gauge opens its menu and its About popover", async () => {
         await open(s.gauge, (l) => l.startsWith("Context 82k"));
-        const l = await gaugeLabel((x) => x.startsWith("Context 82k"));
-        if (!l.startsWith("Context 82k of 250k: 61k cached, 21k fresh")) throw new Error(l);
-        if (l.includes("miss")) throw new Error(`a miss badge with none: ${l}`);
+        // The label's text (cached/fresh split, no miss badge) is ContextGaugeTests.splitsCachedFromFresh and
+        // anEstimateShowsAsteriskSingleToneAndNoMisses; the menu's items are the menu(...) tests there.
+        await gaugeLabel((x) => x.startsWith("Context 82k"));
         await shot(udid, "gauge-normal-light");
         await tapWhere(udid, (x) => x.startsWith("Context 82k"));
-        const menu = await until("the gauge menu", async () => ((x) => (x.includes("Limit…") ? x : null))(await labels(udid)), 5000);
-        for (const item of ["Compact", "New session", "About this gauge"]) if (!menu.includes(item)) throw new Error(`no ${item}: ${menu.join(" | ")}`);
+        await until("the gauge menu", async () => ((x) => (x.includes("Limit…") ? x : null))(await labels(udid)), 5000);
         await shot(udid, "gauge-menu-light");
         await tapWhere(udid, "About this gauge");
         await until("the gauge info", async () => (await labels(udid)).some((x) => x.startsWith("How much conversation the next run")), 5000);
@@ -4404,15 +4397,14 @@ function interactionChains(s: Seeded): Chain[] {
         await shot(udid, "gauge-over-light");
         return l;
       });
-      await check("a session with misses shows the badge, and the menu's top row counts them", async () => {
+      await check("the misses row in the gauge menu opens its explanation", async () => {
         await open(s.gaugeMiss, (l) => l.startsWith("Context 100k"));
+        // "3 misses" and "3 cache misses (377k tokens re-written)" are ContextGaugeTests.missBadgeAndRowByCount.
         const l = await gaugeLabel((x) => x.startsWith("Context 100k"));
-        if (!l.includes("3 misses")) throw new Error(l);
         await tapWhere(udid, (x) => x.startsWith("Context 100k"));
-        const menu = await until("the menu", async () => ((x) => (x.includes("Limit…") ? x : null))(await labels(udid)), 5000);
-        if (!menu.includes("3 cache misses (377k tokens re-written)")) throw new Error(menu.join(" | "));
+        await until("the menu", async () => ((x) => (x.includes("Limit…") ? x : null))(await labels(udid)), 5000);
         await shot(udid, "gauge-misses-light");
-        await tapWhere(udid, "3 cache misses (377k tokens re-written)");
+        await tapWhere(udid, (x) => x.startsWith("3 cache misses"));
         await until("the miss info", async () => (await labels(udid)).some((x) => x.startsWith("A cache miss is a model call")), 5000);
         await shot(udid, "gauge-misses-info-light");
         await closeMenu();
