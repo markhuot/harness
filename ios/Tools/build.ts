@@ -226,7 +226,10 @@ function sim(): string {
     "-destination", "generic/platform=iOS Simulator", "ARCHS=arm64", "ONLY_ACTIVE_ARCH=YES",
     // Ad-hoc signed, not unsigned: the simulator only grants the Keychain to a signed app (its
     // simulated entitlements), and pairing stores the token there.
-    "CODE_SIGN_IDENTITY=-", "CODE_SIGNING_REQUIRED=NO", "build",
+    "CODE_SIGN_IDENTITY=-", "CODE_SIGNING_REQUIRED=NO",
+    // The debug state probe (Harness/App/DebugProbe.swift) is compiled in for this simulator build
+    // only; the device and archive builds never get it.
+    "SWIFT_ACTIVE_COMPILATION_CONDITIONS=$(inherited) SIM_CHECK", "build",
   ]);
   return join(DERIVED_DATA, "Build/Products/Release-iphonesimulator/Harness.app");
 }

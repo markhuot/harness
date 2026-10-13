@@ -364,4 +364,21 @@ describe("bridge", () => {
     m.destroy();
     expect(document.querySelector(".cm-editor")).toBeNull();
   });
+
+  test("probe reports the marked lines, selection and dirty flag, and null without an editor", () => {
+    const m = mount(window, () => {});
+    expect(m.probe()).toBeNull();
+    m.receive({ type: "open", contents: "a\nb\nc\nd", language: "a.js", range: { start: 2, end: 3 } });
+    let p = m.probe()!;
+    expect(p.markedLines).toEqual(["b", "c"]);
+    expect(p.lineCount).toBe(4);
+    expect(p.dirty).toBe(false);
+    m.receive({ type: "setContents", contents: "a" });
+    p = m.probe()!;
+    expect(p.markedLines).toEqual([]);
+    expect(p.lineCount).toBe(1);
+    m.receive({ type: "diff", original: "a", modified: "b" });
+    expect(m.probe()).toBeNull();
+    m.destroy();
+  });
 });
