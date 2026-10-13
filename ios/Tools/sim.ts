@@ -261,9 +261,15 @@ export async function withLock<T>(name: string, fn: () => Promise<T> | T, opts: 
 
 export type Simctl = (...args: string[]) => Promise<string>;
 
+/** Told of each simctl call and how long it took (sim-check's profile counts them). */
+let spawnObserver: ((cmd: string[], ms: number) => void) | null = null;
+export const setSpawnObserver = (fn: typeof spawnObserver) => void (spawnObserver = fn);
+
 export const simctl: Simctl = async (...args) => {
+  const t = performance.now();
   const p = Bun.spawn(["xcrun", "simctl", ...args], { env: { ...process.env, DEVELOPER_DIR }, stdout: "pipe", stderr: "pipe" });
   const [out, err, code] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text(), p.exited]);
+  spawnObserver?.(["xcrun", "simctl", ...args], performance.now() - t);
   if (code !== 0) throw new Error(`xcrun simctl ${args.join(" ")} → ${code}\n${err || out}`);
   return out.trim();
 };

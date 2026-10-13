@@ -144,9 +144,10 @@ import { findTheme } from "@harness/shared/themes";
 import { freePort, startDaemon as startDaemonShared, until as untilShared, type TestDaemon } from "@harness/shared/testing/daemon";
 import { startDaemonProxy } from "@harness/shared/testing/proxy";
 import { git, readSetting, seedRepo, seedDummySettings, setSessionContext, startCompactRun as startCompactRunAt, writeSetting } from "@harness/shared/testing/seed";
-import { acquire, acquireReady, daemonAnswers, checkDisk, ensureDevice, lockHolder, markKept, isSharedDevice, reap, releaseLock, SHARED_IPAD_DEVICE, tryLock, writeRunOwner, exportDeveloperDir } from "./sim";
+import { setSpawnObserver, acquire, acquireReady, daemonAnswers, checkDisk, ensureDevice, lockHolder, markKept, isSharedDevice, reap, releaseLock, SHARED_IPAD_DEVICE, tryLock, writeRunOwner, exportDeveloperDir } from "./sim";
 import { CheckSelector, noMatchMessage, parseGrep } from "./sim-grep";
 import { chooseKept, claimKept, staleAppNote, hashApp, hashService, listKept, MARKER_KEY, planApp, readReuseState, REUSE_VERSION, writeReuseState, type ReuseState, type Want } from "./sim-reuse";
+import { callerSite, diffProfiles, Profile, summarize, type ProfileData } from "./profile";
 import { PROBE_FILE, parseState, settled as probeSettled, waitFor as probeWaitFor, type DebugState } from "./probe";
 import { parsePrepare, plan as planRun, resolveShot, SEED_NAMES, type Entry, type Plan, type SeedName } from "./sim-select";
 
@@ -196,8 +197,10 @@ for (const id of themeShots) if (!findTheme(id)) throw new Error(`--themes: unkn
 checkDisk();
 
 async function sh(cmd: string[], opts: { cwd?: string; quiet?: boolean; allowFail?: boolean; env?: Record<string, string> } = {}) {
+  const t = performance.now();
   const p = Bun.spawn(cmd, { cwd: opts.cwd ?? here, env: { ...env, ...opts.env }, stdout: "pipe", stderr: "pipe" });
   const [out, err, code] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text(), p.exited]);
+  profile.spawn(cmd, performance.now() - t);
   if (code !== 0 && !opts.allowFail) throw new Error(`${cmd.join(" ")} → ${code}\n${err || out}`);
   return out.trim();
 }
@@ -206,11 +209,17 @@ const simctl = (...a: string[]) => sh(["xcrun", "simctl", ...a], { allowFail: fa
 // ---------------------------------------------------------------- timing
 const started = performance.now();
 const timings: { label: string; ms: number }[] = [];
+const profile = new Profile(args);
+setSpawnObserver((cmd, ms) => profile.spawn(cmd, ms));
+/** A fixed sleep, counted in the profile against the line that asked for it. */
+const sleep = (ms: number) => (profile.sleep(ms, callerSite(new Error().stack, /profile\.ts|at sleep /)), Bun.sleep(ms));
+/** Counts a spawn that streams its output (ffmpeg, a recording) and has no one place to time it; returns the command. */
+const counted = (cmd: string[]) => (profile.spawn(cmd, 0), cmd);
 /** Runs fn and records how long it took under label (printed, and written to timings.json at the end). */
 async function timed<T>(label: string, fn: () => Promise<T>): Promise<T> {
   const t = performance.now();
   try {
-    return await fn();
+    return await profile.span(label.startsWith("check: ") ? "check" : label.startsWith("chain: ") ? "chain" : "phase", label.replace(/^(check|chain): /, "").trim(), fn);
   } finally {
     timings.push({ label, ms: Math.round(performance.now() - t) });
   }
@@ -221,6 +230,12 @@ function reportTimings() {
   console.log(`\ntimings (total ${(total / 1000).toFixed(1)} s):`);
   for (const r of rows.slice(0, 40)) console.log(`  ${(r.ms / 1000).toFixed(1).padStart(6)} s  ${r.label}`);
   mkdirSync(shots, { recursive: true });
+  const file = join(shots, "sim-check-profile.json");
+  const prev: ProfileData | null = existsSync(file) ? (() => { try { return JSON.parse(readFileSync(file, "utf8")); } catch { return null; } })() : null;
+  const now = profile.data();
+  console.log("\n" + summarize(now).join("\n"));
+  if (prev?.version === 1) console.log("\n" + diffProfiles(prev, now).join("\n"));
+  writeFileSync(file, JSON.stringify(now, null, 2) + "\n");
   writeFileSync(join(shots, "timings.json"), JSON.stringify({ args, total, timings }, null, 2) + "\n");
 }
 
@@ -281,7 +296,7 @@ function xcodeShim(): string {
   if (existsSync(join(dev, "Library", "PrivateFrameworks", "SimulatorKit.framework"))) return dev;
   rmSync(root, { recursive: true, force: true });
   mkdirSync(join(dev, "Library", "PrivateFrameworks"), { recursive: true });
-  const link = (from: string, to: string) => Bun.spawnSync(["ln", "-s", from, to]);
+  const link = (from: string, to: string) => Bun.spawnSync(counted(["ln", "-s", from, to]));
   for (const e of readdirSync(real)) if (e !== "Developer") link(join(real, e), join(contents, e));
   for (const e of readdirSync(DEVELOPER_DIR)) if (e !== "Library") link(join(DEVELOPER_DIR, e), join(dev, e));
   for (const e of readdirSync(join(DEVELOPER_DIR, "Library"))) if (e !== "PrivateFrameworks") link(join(DEVELOPER_DIR, "Library", e), join(dev, "Library", e));
@@ -323,6 +338,7 @@ async function axe(...a: string[]) {
   const t = performance.now();
   const p = Bun.spawn(["axe", ...a], { env: { ...env, DEVELOPER_DIR: shim }, stdout: "pipe", stderr: "pipe" });
   const [out, err, code] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text(), p.exited]);
+  profile.spawn(["axe", ...a], performance.now() - t);
   if (process.env.SIM_CHECK_DEBUG) {
     const ms = Math.round(performance.now() - t);
     if (code !== 0) console.log(`    axe ${a[0]} → ${code}: ${(err || out).trim().split("\n")[0]}`);
@@ -424,11 +440,19 @@ async function scrollTo(udid: string, match: (label: string) => boolean, tries =
   }
   throw new Error("scrollTo: element never came into view");
 }
-const until = <T>(label: string, fn: () => Promise<T | null | undefined | false>, ms = 20000, every = 150): Promise<T> =>
-  untilShared(label, fn, ms, every, () => {
-    const cap = capOf.getStore();
-    if (cap && Date.now() > cap.deadline) throw new Error(`"${cap.name}" ran past its ${Math.round(CHECK_CAP_MS / 1000)} s cap (waiting for ${label})`);
-  });
+const until = async <T>(label: string, fn: () => Promise<T | null | undefined | false>, ms = 20000, every = 150): Promise<T> => {
+  const t = performance.now();
+  let looks = 0;
+  try {
+    return await untilShared(label, fn, ms, every, () => {
+      looks++;
+      const cap = capOf.getStore();
+      if (cap && Date.now() > cap.deadline) throw new Error(`"${cap.name}" ran past its ${Math.round(CHECK_CAP_MS / 1000)} s cap (waiting for ${label})`);
+    });
+  } finally {
+    profile.poll(label, looks, performance.now() - t);
+  }
+};
 // ---------------------------------------------------------------- debug state probe
 // The app (a SIM_CHECK build, which build.ts's simulator build is) writes its router, dock and
 // editor state, and whether it is settled, to a JSON file in its container: see Tools/probe.ts.
@@ -457,12 +481,12 @@ const probeUntil = (udid: string, label: string, pred: (s: DebugState) => boolea
  */
 const noProbe = new Set<string>();
 async function atRest(udid: string, fallbackMs: number): Promise<void> {
-  if (noProbe.has(udid)) return void (await Bun.sleep(fallbackMs));
+  if (noProbe.has(udid)) return void (await sleep(fallbackMs));
   // Quiet for no longer than the sleep it replaces (capped at 300 ms), counted from the state's last change.
   const s = await probeSettled(() => probe(udid), { quietMs: Math.min(fallbackMs, 300) });
   if (!s) noProbe.add(udid); // never answered: not a SIM_CHECK build, don't wait for it again
   // A stale or frozen file only sleeps this once: the app may be writing again by the next action.
-  if (!s || s === "frozen") await Bun.sleep(fallbackMs);
+  if (!s || s === "frozen") await sleep(fallbackMs);
 }
 
 // ---------------------------------------------------------------- simulators
@@ -571,10 +595,20 @@ const DRAW_MS = 400;
  * timeout (the app crashed or never got there).
  */
 async function whenShown(udid: string, before: string | undefined, ready?: (l: string[]) => boolean, ms = 12000): Promise<boolean> {
+  const t0 = performance.now();
+  let looks = 0;
+  try {
+    return await whenShownLoop(udid, before, ready, ms, () => looks++);
+  } finally {
+    profile.poll("whenShown", looks, performance.now() - t0);
+  }
+}
+async function whenShownLoop(udid: string, before: string | undefined, ready: ((l: string[]) => boolean) | undefined, ms: number, look: () => void): Promise<boolean> {
   let prev = "";
   let sameSince: number | undefined;
   const end = Date.now() + ms;
   while (Date.now() < end) {
+    look();
     const l = await labels(udid);
     if (l.some((x) => x.startsWith("Open in “"))) {
       await tapLabel(udid, "Open");
@@ -605,7 +639,7 @@ async function whenShown(udid: string, before: string | undefined, ready?: (l: s
       console.log(`    [${udid.slice(0, 4)}] changed: -${[...a].filter((x) => !b.has(x)).slice(0, 3).join(" | ")} +${l.filter((x) => !a.has(x)).slice(0, 3).join(" | ")}`);
     }
     prev = t;
-    await Bun.sleep(100);
+    await sleep(100);
   }
   lastTree.set(udid, prev);
   console.log(`    [${udid.slice(0, 4)}] no settled screen after ${ms / 1000} s${prev === before ? " (it never left the previous screen)" : ""}`);
@@ -616,7 +650,7 @@ async function visit(udid: string, url: string, ready?: (l: string[]) => boolean
   const before = lastUrl.get(udid) === url ? undefined : lastTree.get(udid);
   lastUrl.set(udid, url);
   await simctl("openurl", udid, url);
-  if (!hasAxe) return Bun.sleep(2500).then(() => true);
+  if (!hasAxe) return sleep(2500).then(() => true);
   if (await whenShown(udid, before, ready)) return true;
   // Never got there: a step before left a menu, alert or sheet over the app (or it crashed). Clear
   // the board and try once more, so one stuck step costs one timeout, not every step after it.
@@ -690,7 +724,7 @@ async function recordFrames(
   { vf = "crop=iw:ih/2:0:0,scale=16:8,format=gray", bytes = 128 } = {},
 ): Promise<Uint8Array[]> {
   const video = join(shots, `${name}.mp4`);
-  const rec = Bun.spawn(["xcrun", "simctl", "io", udid, "recordVideo", "--force", video], { env, stdout: "ignore", stderr: "pipe" });
+  const rec = Bun.spawn(counted(["xcrun", "simctl", "io", udid, "recordVideo", "--force", video]), { env, stdout: "ignore", stderr: "pipe" });
   const reader = rec.stderr.getReader();
   let said = "";
   while (!said.includes("Recording started")) {
@@ -701,12 +735,12 @@ async function recordFrames(
   reader.releaseLock();
   try {
     await fn();
-    await Bun.sleep(400);
+    await sleep(400);
   } finally {
     rec.kill("SIGINT");
     await rec.exited;
   }
-  const ff = Bun.spawn(["ffmpeg", "-v", "error", "-i", video, "-vf", vf, "-fps_mode", "passthrough", "-f", "rawvideo", "-"], { stdout: "pipe", stderr: "pipe" });
+  const ff = Bun.spawn(counted(["ffmpeg", "-v", "error", "-i", video, "-vf", vf, "-fps_mode", "passthrough", "-f", "rawvideo", "-"]), { stdout: "pipe", stderr: "pipe" });
   const raw = new Uint8Array(await new Response(ff.stdout).arrayBuffer());
   if ((await ff.exited) !== 0) throw new Error(`ffmpeg: ${await new Response(ff.stderr).text()}`);
   const frames: Uint8Array[] = [];
@@ -723,7 +757,7 @@ async function inkIn(udid: string, r: { x: number; y: number; width: number; hei
   const file = join(shots, ".ink.png");
   await simctl("io", udid, "screenshot", file);
   const crop = `scale=${W}:-1,crop=${Math.round(r.width)}:${Math.round(r.height)}:${Math.round(r.x)}:${Math.round(r.y)},format=gray`;
-  const ff = Bun.spawn(["ffmpeg", "-v", "error", "-i", file, "-vf", crop, "-f", "rawvideo", "-"], { stdout: "pipe", stderr: "pipe" });
+  const ff = Bun.spawn(counted(["ffmpeg", "-v", "error", "-i", file, "-vf", crop, "-f", "rawvideo", "-"]), { stdout: "pipe", stderr: "pipe" });
   const px = new Uint8Array(await new Response(ff.stdout).arrayBuffer());
   if ((await ff.exited) !== 0) throw new Error(`ffmpeg: ${await new Response(ff.stderr).text()}`);
   rmSync(file, { force: true });
@@ -736,7 +770,7 @@ async function grayIn(udid: string, r: { x: number; y: number; width: number; he
   const file = join(shots, ".gray.png");
   await simctl("io", udid, "screenshot", file);
   const crop = `scale=${W}:-1,crop=${Math.round(r.width)}:${Math.round(r.height)}:${Math.round(r.x)}:${Math.round(r.y)},format=gray`;
-  const ff = Bun.spawn(["ffmpeg", "-v", "error", "-i", file, "-vf", crop, "-f", "rawvideo", "-"], { stdout: "pipe", stderr: "pipe" });
+  const ff = Bun.spawn(counted(["ffmpeg", "-v", "error", "-i", file, "-vf", crop, "-f", "rawvideo", "-"]), { stdout: "pipe", stderr: "pipe" });
   const px = new Uint8Array(await new Response(ff.stdout).arrayBuffer());
   if ((await ff.exited) !== 0) throw new Error(`ffmpeg: ${await new Response(ff.stderr).text()}`);
   rmSync(file, { force: true });
@@ -804,7 +838,7 @@ const frameDiff = (a: Uint8Array, b: Uint8Array) => a.reduce((s, v, i) => s + Ma
  * Saves the screen as <name>-light.png and <name>-dark.png: the current appearance first, then the
  * other, so the next screen starts where this one ended and each screen costs one flip.
  */
-async function shootBoth(udid: string, name: string, redrawn: () => Promise<unknown> = () => Bun.sleep(FLIP_MS)) {
+async function shootBoth(udid: string, name: string, redrawn: () => Promise<unknown> = () => sleep(FLIP_MS)) {
   if (!shotsWanted) return;
   const first = looks.get(udid) ?? "light";
   const second: Look = first === "light" ? "dark" : "light";
@@ -978,8 +1012,8 @@ for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
     console.error(`sim-check: ${sig}, stopping the daemon, shutting down its simulators and removing ${home}`);
     if (!keep) {
       daemon?.kill("SIGKILL");
-      Bun.spawnSync(["pkill", "-f", `user-data-dir=${join(home, "chrome-profile")}`]);
-      await Promise.race([shutDownDevices(), Bun.sleep(15000)]);
+      Bun.spawnSync(counted(["pkill", "-f", `user-data-dir=${join(home, "chrome-profile")}`]));
+      await Promise.race([shutDownDevices(), sleep(15000)]);
     }
     process.exit(130); // runs removeTemp and lets go of the simulator locks
   });
@@ -1381,7 +1415,7 @@ async function dockSheet(udid: string, opts: { ghost?: boolean; shotName?: strin
   const x = String(Math.round(width / 2));
   const drag = axe("swipe", "--start-x", x, "--start-y", "90", "--end-x", x, "--end-y", String(Math.round(height - 110)), "--duration", "3", "--udid", udid);
   if (opts.ghost || opts.shotName) {
-    await Bun.sleep(2600);
+    await sleep(2600);
     if (opts.ghost) {
       const seen = await until("the ghost dock card", async () => (await labels(udid)).some((l) => l.startsWith("Dock card")), 1500).catch(() => null);
       if (!seen) throw new Error("holding the sheet low didn't show the ghost dock card");
@@ -1692,10 +1726,10 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
     const x = String(Math.round(W / 2));
     const pid = await appPid(udid);
     const swipe = axe("swipe", "--start-x", x, "--start-y", "90", "--end-x", x, "--end-y", String(Math.round(H - 110)), "--duration", "0.1", "--delta", "100", "--udid", udid);
-    await Bun.sleep(150);
-    Bun.spawnSync(["kill", "-STOP", String(pid)]);
-    await Bun.sleep(1000);
-    Bun.spawnSync(["kill", "-CONT", String(pid)]);
+    await sleep(150);
+    Bun.spawnSync(counted(["kill", "-STOP", String(pid)]));
+    await sleep(1000);
+    Bun.spawnSync(counted(["kill", "-CONT", String(pid)]));
     await swipe;
     await until("the sheet gone", async () => {
       const l = await labels(udid);
@@ -1754,7 +1788,7 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
     await tapWhere(udid, isDock);
     moved(udid);
     await until("the spec again", async () => (await specTop()) !== undefined, 8000);
-    await Bun.sleep(1500); // the restore keeps trying while the content settles
+    await sleep(1500); // the restore keeps trying while the content settles
     const after = (await specTop())!;
     // Not to the point: the hero, which is expanded again on the way back, moves the text under it
     // by about its collapse. Scrolled most of the way it was, rather than back at the top.
@@ -2162,7 +2196,7 @@ async function fileDockChecks(udid: string, p: { project: Project; conductor: Ti
       const l = await labels(udid);
       return !l.some(fileCard) && !l.includes(`Close ${DOCK_FILE}`);
     }, 8000);
-    await Bun.sleep(1500);
+    await sleep(1500);
     if (readFileSync(join(scratch, "sheets", DOCK_FILE), "utf8").includes("DISCARD_ME")) throw new Error("Discard saved the edit to the file");
     return "Close → Discard closed the card, and the file is as it was";
   }, CHECK_CAP_MS, [RELINK]);
@@ -2235,7 +2269,7 @@ async function memoryChecks(udid: string, p: { project: Project }) {
     const pid = (await sh(["pgrep", "-f", `${udid}/.*/Harness\\.app/Harness`], { allowFail: true, quiet: true })).trim().split("\n")[0];
     if (!pid) throw new Error("no Harness process for this simulator");
     const footprint = async () => {
-      await Bun.sleep(2500); // the last screen settles and parks
+      await sleep(2500); // the last screen settles and parks
       const out = await sh(["footprint", "-p", pid], { allowFail: true, quiet: true });
       const m = out.match(/Footprint:\s+([\d.]+)\s+(KB|MB|GB)/);
       if (!m) throw new Error(`footprint said: ${out.slice(0, 200)}`);
@@ -2603,7 +2637,7 @@ async function panelChecks(udid: string, s: { project: Project; conductor: Ticke
     }
     // Where its ✕ would sit: a tap there leaves the panel up (an empty New session's Cancel closes at once).
     await tapBack();
-    await Bun.sleep(1500); // nothing should happen, so there's no state to wait for: a dock or close lands within this
+    await sleep(1500); // nothing should happen, so there's no state to wait for: a dock or close lands within this
     if (!panelOn(await labels(udid), "New session")) throw new Error("a second ✕ in New session's bar closed the panel");
     // The prompt has focus as New session opens; typing saves a draft, whose card the board lists.
     await axe("type", words, "--udid", udid);
@@ -2787,7 +2821,7 @@ async function panelChecks(udid: string, s: { project: Project; conductor: Ticke
     // AXe can't pause mid-drag, so the slow swipe is the hold: the finger is in the trailing 40%,
     // with the panel well clear of rest, for the last couple of seconds of it.
     const drag = axe("swipe", "--start-x", String(from), "--start-y", y, "--end-x", String(Math.round(W - 10)), "--end-y", y, "--duration", "3", "--udid", udid);
-    await Bun.sleep(2600);
+    await sleep(2600);
     const ghost = await until("the ghost dock card", async () => (await labels(udid)).some((l) => l.startsWith("Dock card")), 1500).catch(() => null);
     if (!ghost) throw new Error("holding the panel in the trailing 40% didn't show the ghost dock card");
     if (shotsWanted) await shot(udid, "panel-dock-ghost");
@@ -3050,7 +3084,7 @@ async function stickChecks(udid: string, p: Awaited<ReturnType<typeof seedStick>
   // reaches the bottom of the screen, and only the scroll content's inset keeps the last row clear.
   for (const tab of ["spec", "activity", "transcript"]) {
     await goto(udid, `harness://ticket/${encodeURIComponent(key)}?tab=${tab}`);
-    await Bun.sleep(1200);
+    await sleep(1200);
     if (tab !== "spec") await swipe("down", 1);
     await shot(udid, `stick-under-composer-${tab}`);
   }
@@ -3302,7 +3336,7 @@ async function keyboardChecksWithSoftwareKeyboard(udid: string, p: Awaited<Retur
 
 /** One column of a screenshot as gray levels, `height` pixels from row `y` down. */
 async function grayColumn(file: string, x: number, y: number, height: number) {
-  const p = Bun.spawn(["ffmpeg", "-loglevel", "error", "-i", file, "-vf", `crop=1:${height}:${x}:${y}`, "-f", "rawvideo", "-pix_fmt", "gray", "-"], { stdout: "pipe", stderr: "pipe" });
+  const p = Bun.spawn(counted(["ffmpeg", "-loglevel", "error", "-i", file, "-vf", `crop=1:${height}:${x}:${y}`, "-f", "rawvideo", "-pix_fmt", "gray", "-"]), { stdout: "pipe", stderr: "pipe" });
   const [out, err, code] = await Promise.all([new Response(p.stdout).arrayBuffer(), new Response(p.stderr).text(), p.exited]);
   if (code !== 0) throw new Error(`ffmpeg column ${x} of ${file} → ${code}\n${err.slice(-500)}`);
   return new Uint8Array(out);
@@ -3550,7 +3584,7 @@ const SMALL = { width: 300, height: 652 };
 async function litBox(file: string, top: number, bottom: number) {
   // skip=0: cropdetect skips the first two frames by default, and a screenshot has one. Its x1…y2
   // are the exact bounds (its crop= rounds them).
-  const p = Bun.spawn(["ffmpeg", "-hide_banner", "-i", file, "-vf", `crop=iw:ih-${top + bottom}:0:${top},cropdetect=limit=24:round=1:reset=0:skip=0`, "-frames:v", "1", "-f", "null", "-"], { stdout: "pipe", stderr: "pipe" });
+  const p = Bun.spawn(counted(["ffmpeg", "-hide_banner", "-i", file, "-vf", `crop=iw:ih-${top + bottom}:0:${top},cropdetect=limit=24:round=1:reset=0:skip=0`, "-frames:v", "1", "-f", "null", "-"]), { stdout: "pipe", stderr: "pipe" });
   const [err, code] = await Promise.all([new Response(p.stderr).text(), p.exited]);
   const m = [...err.matchAll(/x1:(\d+) x2:(\d+) y1:(\d+) y2:(\d+)/g)].at(-1);
   if (code !== 0 || !m) throw new Error(`cropdetect on ${file} → ${code}\n${err.slice(-500)}`);
@@ -3636,11 +3670,11 @@ async function attachmentChecks(udid: string, p: Awaited<ReturnType<typeof seedA
       });
       if (up) break;
     }
-    await Bun.sleep(800);
+    await sleep(800);
   };
 
   await goto(udid, `harness://ticket/${encodeURIComponent(p.ticket.key)}?tab=spec`, (l) => l.includes("Image phone.png"));
-  await Bun.sleep(1200); // let the images and the video's first frame load
+  await sleep(1200); // let the images and the video's first frame load
   // Every attachment inline, the thumbnails' 100 pt squares and the full-width figure are the spec-attachments snapshot.
   await shootBoth(udid, "attachments-inline");
   await check("tapping an inline image opens the viewer on it; swiping pages; Close closes", async () => {
@@ -3653,7 +3687,7 @@ async function attachmentChecks(udid: string, p: Awaited<ReturnType<typeof seedA
     await until("paged to 3 of 5", () => has(counter(3)), 5000);
     await swipeLeft();
     await until("paged to 4 of 5", () => has(counter(4)), 5000);
-    await Bun.sleep(1500); // the video's first frames
+    await sleep(1500); // the video's first frames
     await shot(udid, "attachments-viewer-video-light");
     await swipeLeft();
     await until("paged to 5 of 5", () => has(counter(5)), 5000);
@@ -3692,7 +3726,7 @@ async function attachmentChecks(udid: string, p: Awaited<ReturnType<typeof seedA
     await open("Image small.png", 3);
     await swipeLeft();
     await until("on the video", () => has(counter(4)), 5000);
-    await Bun.sleep(1000);
+    await sleep(1000);
     await swipeDown();
     await closed();
     return "closed";
@@ -3792,7 +3826,7 @@ function screens(s: Seeded): Screen[] {
       url: `harness://file/${GREETINGS_PATH}?ticket=${k(s.changes)}`,
       ready: hasLabel("Modified"),
       seconds: 6,
-      prepare: (udid) => tapWhere(udid, (l) => l.startsWith("Diff")).then(() => Bun.sleep(1500)),
+      prepare: (udid) => tapWhere(udid, (l) => l.startsWith("Diff")).then(() => sleep(1500)),
     }),
     screen("conductor-tickets", ["conductor"], { url: `harness://ticket/${k(s.conductor)}?tab=children`, visit: true }),
     screen("ticket-agents", ["agents"], { url: `harness://ticket/${k(s.agents)}?tab=agents` }),
@@ -3802,7 +3836,7 @@ function screens(s: Seeded): Screen[] {
     screen("planning", ["plan"], { url: `harness://ticket/${k(s.plan)}`, ready: hasLabel("Start work") }),
     // The plugin's WebView shows a spinner ("In progress") until its page has loaded, and reloads
     // when the appearance flips.
-    screen("changes", ["changes"], { url: `harness://ticket/${k(s.changes)}?tab=plugin:git:changes`, ready: pluginLoaded, wait: 500, seconds: 9, visit: true, redrawn: (udid) => Bun.sleep(FLIP_MS).then(() => until("plugin reloaded", async () => pluginLoaded(await labels(udid)), 8000).catch(() => {})) }),
+    screen("changes", ["changes"], { url: `harness://ticket/${k(s.changes)}?tab=plugin:git:changes`, ready: pluginLoaded, wait: 500, seconds: 9, visit: true, redrawn: (udid) => sleep(FLIP_MS).then(() => until("plugin reloaded", async () => pluginLoaded(await labels(udid)), 8000).catch(() => {})) }),
     // The git project's New session with Options open: the TicketSettings rows Details shows.
     screen("new-session-options", [], { url: `harness://new?projectId=${s.project.id}`, ready: (l) => l.some(isOptions), seconds: 6, visit: true, prepare: (udid) => openOptions(udid) }),
     // The same, with the branch sheet open, searching "re": Create re, then release/v2 (checked
@@ -3905,12 +3939,12 @@ function screens(s: Seeded): Screen[] {
               await tapWhere(udid, "Open in New Window");
               await until("the pinned window up", async () => (await labels(udid)).includes(`${key} · Transcript`), 10000);
               moved(udid);
-              await Bun.sleep(800);
+              await sleep(800);
               await shot(udid, "ticket-tear-off-window");
               // Back to the ticket's own window (open: the link brings it forward on its Transcript).
               await simctl("openurl", udid, `harness://ticket/${k(s.hello)}?tab=transcript`);
               await until("the placeholder in the ticket's window", async () => (await labels(udid)).includes("Transcript is in another window"), 10000);
-              await Bun.sleep(800);
+              await sleep(800);
             },
             after: async (udid: string) => {
               const key = s.hello.key;
@@ -3919,7 +3953,7 @@ function screens(s: Seeded): Screen[] {
                 const l = await labels(udid);
                 return !l.includes(`${key} · Transcript`) && !l.includes("Transcript is in another window") && ticketShown(l, key);
               }, 10000).catch((e) => e as Error);
-              await Bun.sleep(800);
+              await sleep(800);
               await shot(udid, "ticket-tear-off-returned");
               if (closed instanceof Error) throw closed;
               await simctl("openurl", udid, BOARD);
@@ -3951,18 +3985,18 @@ async function themeScreens(udid: string) {
     const theme = findTheme(id)!;
     await appearance(udid, theme.appearance);
     await goto(udid, `harness://settings?${theme.appearance}Theme=${id}`);
-    await Bun.sleep(800);
+    await sleep(800);
     // Scroll down to the Appearance pickers.
     await axe("swipe", "--start-x", "200", "--start-y", "780", "--end-x", "200", "--end-y", "260", "--duration", "1", "--udid", udid);
-    await Bun.sleep(900);
+    await sleep(900);
     await shot(udid, `settings-${id}`);
     await goto(udid, BOARD, (l) => onBoard(l) && l.some((x) => /^[A-Z]+-\d+ /.test(x)));
-    await Bun.sleep(600);
+    await sleep(600);
     await shot(udid, `board-${id}`);
   }
   // Back to the defaults for the light/dark pass.
   await goto(udid, "harness://settings?lightTheme=harness-light&darkTheme=harness-dark");
-  await Bun.sleep(600);
+  await sleep(600);
 }
 
 /** The screens on one simulator, each in light and dark. Returns the names the app crashed on. */
@@ -3972,7 +4006,7 @@ async function shootScreens(udid: string, list: Screen[], browsed: Promise<unkno
     if (s.browse) await timed("waiting for the browse ticket", () => browsed.catch(() => {}));
     await timed(`screen: ${s.name}`, async () => {
       const shown = await timed(`  goto: ${s.name}`, () => goto(udid, s.url, s.ready));
-      if (s.wait) await Bun.sleep(s.wait);
+      if (s.wait) await sleep(s.wait);
       // A ticket opened by an earlier screen is docked under the tabs: away with it, for a clean shot.
       if (!/^harness:\/\/(ticket|new)\b/.test(s.url) && lastTree.get(udid)?.includes(", docked")) await undock(udid).catch(() => {});
       if (s.prepare) await s.prepare(udid).catch((e) => console.log(`  ${s.name}: ${(e as Error).message.split("\n")[0]}`));
