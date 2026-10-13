@@ -12,6 +12,8 @@
 //   bun ios/Tools/sim.ts status                               each slot and who holds its lock
 //   bun ios/Tools/sim.ts disk [--min=GiB]                     free disk space; exits 1 below the minimum (default 5), and
 //                                                                 names installed iOS runtimes other than 27.0
+//   bun ios/Tools/sim.ts snapshots [--iphone] [--ipad] [--only=Class/test] [--record] [--out=dir]
+//                                                                 the hosted snapshot tests (snapshots.ts), each device under its own lock
 //
 // The iPhone pool is "harness-shared", "harness-shared-2", … (HARNESS_SIM_POOL_SIZE slots, default 2;
 // iPhone 18 Pro each); with-lock takes the first free one. --device names one simulator instead, and
@@ -724,8 +726,13 @@ if (import.meta.main) {
         console.error(`the iOS ${r.version} runtime (${((r.sizeBytes ?? 0) / 1e9).toFixed(1)} GB) is installed but nothing runs on it: ask the human to remove it with \`xcrun simctl runtime delete ${r.identifier}\``);
       }
       checkDisk(min);
+    } else if (cmd === "snapshots") {
+      // The hosted snapshot tests (snapshots.ts): takes each device's lock itself.
+      const child = Bun.spawn(["bun", join(import.meta.dir, "snapshots.ts"), ...opts], { stdio: ["inherit", "inherit", "inherit"] });
+      for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) process.on(sig, () => child.kill(sig));
+      process.exit(await child.exited);
     } else {
-      throw new Error("usage: sim.ts ensure [--all] | with-lock [--timeout=minutes] -- <command…> | shutdown | reap | status | disk [--min=GiB]  (each takes --device=name for one simulator instead of the pool, or --ipad for the iPad)");
+      throw new Error("usage: sim.ts ensure [--all] | with-lock [--timeout=minutes] -- <command…> | shutdown | reap | status | disk [--min=GiB] | snapshots [--iphone] [--ipad] [--only=…] [--record] [--out=dir]  (each takes --device=name for one simulator instead of the pool, or --ipad for the iPad)");
     }
   } catch (e) {
     console.error((e as Error).message);

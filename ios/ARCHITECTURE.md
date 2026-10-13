@@ -1059,6 +1059,53 @@ What Settings, Project settings, the watcher form and Prompts share (HARNESS-144
 - File/Diff is two labeled buttons, not a segmented Picker, because sim-check taps the label that
   starts with "Diff". The counts use `Text(verbatim:)`, so 25000 doesn't render as "25,000".
 
+## Snapshot tests (HarnessSnapshotTests)
+
+`ios/HarnessSnapshotTests` renders the app's main screens in-process from fixture models and compares
+the pixels with reference PNGs: no daemon, install, pairing or accessibility polling. A run is one
+Debug build, then about a second per screen. sim-check stays for flows that need real taps, a
+daemon or the keyboard.
+
+```sh
+bun run sim snapshots                 # check, iPhone then iPad (harness-shared, harness-shared-ipad)
+bun run sim snapshots --iphone --only=ScreenSnapshotTests/testBoard
+bun run sim snapshots --record        # write/update the references after an intended change
+bun run sim snapshots --out=/tmp/shots   # also write every render as <device>/<name>-{light,dark}.png
+```
+
+- **Screens:** the board (phone pager, iPad columns and sidebar), a ticket's Spec tab and Activity
+  tab (the tab strip, hero, history bar and composer come with them), a ticket sheet's frame (the
+  Request changes sheet) and the docked ticket cards. Each renders in light and dark, on the iPhone
+  and the iPad. These cover the layout, theming and size-class code every other screen shares; a new
+  screen is one `func test…` in `ScreenSnapshotTests.swift` using the same `SnapshotWorld`.
+- **Approach:** an in-house renderer, not swift-snapshot-testing. The repo has no third-party Swift
+  dependency (the only package is local, and the JS side is bundled by bun); swift-snapshot-testing
+  would be the first, plus the swift-syntax it pulls in, for what is a UIHostingController, a PNG
+  and a pixel compare. `SnapshotRenderer` puts the view in a real window in the host app's scene
+  (real size classes, safe areas and traits), `SnapshotAssert` compares.
+- **Hosted:** the test bundle runs inside the app (`@testable import Harness`) under
+  the `HarnessSnapshots` scheme, built `Debug` into `ios/build/dd-snapshots`. Under XCTest
+  `HarnessApp` stays an empty window: `MemoryStorage`, no widgets, no push registration.
+- **Fixtures:** `SnapshotWorld` builds a store from fixed models (`Ticket`, `Project`, `ActivityEntry`,
+  spec revisions) with a stub client and socket, and a real `AppModel` over `MemoryStorage`. Every date
+  derives from `SnapshotWorld.now`, which the screens read as the clock (`\.snapshotNow` in
+  `RelativeTimeText` and `NowReader`). Persisted UI state in `UserDefaults` (the docked tickets) is
+  cleared before and after each test.
+- **Deterministic:** scale 2, animations off, fixed clock and fixtures, light/dark by window style.
+  The renderer captures until three identical frames in a row (after a minimum), so a sheet or
+  push that lands late is waited for, and a screen that never settles (a spinner, a pulsing busy
+  dot, a timer) fails as "kept changing" instead of recording a half-drawn frame: fixtures leave
+  `busy` off for that reason.
+- **References:** `HarnessSnapshotTests/References/<iphone|ipad>/<name>-{light,dark}.png`, committed.
+  They depend on the simulator's iOS runtime (27.0, the only one we use) and the device size.
+- **A diff:** the test fails with the count and share of differing pixels and three paths: the
+  reference, `<name>.actual.png` and `<name>.diff.png` (red where pixels differ over a faded
+  reference), written to `ios/build/snapshots/failures/<device>/`. A pixel differs when a channel
+  is more than 2 off; up to 0.02% of pixels may. A missing reference fails and says how to record it.
+- **Screenshots for a spec:** `bun run sim snapshots --out=<dir> [--only=…]` writes the renders
+  without a daemon, in about the time of the build plus a few seconds, and they are what the
+  references are made of, so they match what the checks guard.
+
 ## Disk budget (parallel agents)
 
 Several tickets build at once on a Mac with little free disk. CLAUDE.md → Simulators has the rules;

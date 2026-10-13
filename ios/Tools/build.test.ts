@@ -122,3 +122,8 @@ test("parseArgs: device needs --device; verify needs a bundle id and one app", (
   expect(() => parseArgs(["verify", "--build-number", "1", "a.app"])).toThrow("--bundle-id");
   expect(() => parseArgs([...verify, "--kind", "native", "a.app"])).toThrow("verify doesn't take --kind");
 });
+
+test("snapshots takes no flags", () => {
+  expect(parseArgs(["snapshots"])).toEqual({ command: "snapshots" });
+  expect(() => parseArgs(["snapshots", "--record"])).toThrow(UsageError);
+});

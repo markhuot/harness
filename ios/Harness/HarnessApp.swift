@@ -11,14 +11,19 @@ struct HarnessApp: App {
     /// The app's phase across all its windows: active while any window is, background once none is.
     @Environment(\.scenePhase) private var scenePhase
 
+    /// The snapshot tests (HarnessSnapshotTests) host their views in this app: it stays an empty
+    /// window, with no Keychain, widgets or push registration.
+    private static let underTest = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+
     init() {
-        let app = AppModel(storage: KeychainStorage())
+        let app = AppModel(storage: Self.underTest ? MemoryStorage() : KeychainStorage())
         _app = State(initialValue: app)
         // Synchronous and quick: the Keychain holds a few small items. Loading before the first
         // frame keeps a cold start from flashing Connect before the saved server appears.
         app.load()
         let widgets = WidgetSync(app: app)
         _widgets = State(initialValue: widgets)
+        guard !Self.underTest else { return }
         widgets.start()
         // Asks for notification permission and an APNs token, then registers it with every saved Mac.
         PushCenter.shared.start(app)
@@ -27,9 +32,13 @@ struct HarnessApp: App {
     var body: some Scene {
         // The main window (more than one on iPad), each with its own Router (MainWindow).
         WindowGroup {
-            MainWindow()
-                .environment(app)
-                .environment(actions)
+            if Self.underTest {
+                Color.clear
+            } else {
+                MainWindow()
+                    .environment(app)
+                    .environment(actions)
+            }
         }
         .handlesExternalEvents(matching: ["\(DeepLink.scheme)://"])
         .onChange(of: scenePhase) { _, phase in

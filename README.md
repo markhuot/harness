@@ -261,6 +261,7 @@ cd service && bun run test # store, orchestrator, drivers, tools, MCP, browser (
 cd app && bun test        # routes, theme resolution, CSS var coverage, keyboard registry, board and pane navigation, palette ranking
 cd ios/HarnessKit && swift test   # the iPhone app's protocol, client, logic and state, against the JSON fixtures
 cd ios && bun run test    # iOS build, simulator and highlighter tooling
+bun run sim snapshots     # the iPhone/iPad screens rendered from fixture models vs. reference PNGs (--record updates them, --out=<dir> writes the renders)
 cd release && bun run test # release prepare, publish checks, TestFlight, install page
 cd plugins/sdk && bun test   # plugin iframe bridge (connect)
 cd plugins/git && bun test   # git plugin routes against real temp repos

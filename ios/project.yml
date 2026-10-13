@@ -130,6 +130,25 @@ targets:
         # phase may only do for declared inputs.
         ENABLE_USER_SCRIPT_SANDBOXING: NO
         PRODUCT_BUNDLE_IDENTIFIER: com.markhuot.harness
+  # The snapshot tests (ARCHITECTURE.md § Snapshot tests): the app's screens rendered in-process from
+  # fixture models. Hosted by the app (`@testable import Harness`) and run in Debug through
+  # `bun run sim snapshots`, never in a release build. The reference PNGs sit beside the sources
+  # and are not part of the bundle.
+  HarnessSnapshotTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: HarnessSnapshotTests
+        excludes: ["References/**"]
+    dependencies:
+      - target: Harness
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.markhuot.harness.snapshottests
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/Harness.app/Harness
+        BUNDLE_LOADER: $(TEST_HOST)
+        ENABLE_TESTABILITY: YES
   # The widgets (ARCHITECTURE.md § Widgets). One set of sources builds both extensions: this one
   # for iPhone and iPad, embedded in the app, and HarnessMacWidgets for the Electron Mac app.
   HarnessWidgets:
@@ -211,3 +230,12 @@ schemes:
     build:
       targets:
         HarnessMacWidgets: all
+  HarnessSnapshots:
+    build:
+      targets:
+        Harness: all
+        HarnessSnapshotTests: [test]
+    test:
+      config: Debug
+      targets:
+        - HarnessSnapshotTests
