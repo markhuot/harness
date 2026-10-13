@@ -39,7 +39,7 @@ describe("database seeds", () => {
     const d = await startDaemon();
     try {
       writeSetting(d.home, "contextGaugeLimit", 400000);
-      expect(readSetting(d.home, "contextGaugeLimit")).toBe(400000);
+      expect(readSetting<number>(d.home, "contextGaugeLimit")).toBe(400000);
       const repo = await seedRepo(tempDir("harness-seed-"), GREETER_FILES);
       const project = await d.api<{ id: string }>("POST", "/projects", { path: repo, name: "greeter", key: "GREET" });
       const t = await d.api<{ key: string; sessionId: string }>("POST", "/tickets", { projectId: project.id, spec: "x", driver: "dummy", start: false });
