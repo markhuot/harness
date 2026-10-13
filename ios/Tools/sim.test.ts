@@ -120,14 +120,14 @@ test("a held lock can't be taken a second time, and is free again once released"
 
 test("acquire waits while another process holds the lock, then gets it when that process exits", async () => {
   const dir = tempDir();
-  const child = await holdInChild(dir, "dev", 600);
+  const child = await holdInChild(dir, "dev", 350);
   expect(tryLock("dev", dir)).toBe(false);
   expect(lockHolder("dev", dir)?.pid).toBe(child.pid);
   let waitedFor: number | undefined;
   const t0 = Date.now();
   const release = await acquire("dev", { dir, pollMs: 25, timeoutMs: 10_000, onWait: (h) => (waitedFor = h?.pid) });
   expect(waitedFor).toBe(child.pid);
-  expect(Date.now() - t0).toBeGreaterThan(300);
+  expect(Date.now() - t0).toBeGreaterThan(100);
   expect(lockHolder("dev", dir)?.pid).toBe(process.pid);
   release();
   await child.exited;

@@ -159,6 +159,27 @@ withChrome("waits and browser_run (real Chrome)", () => {
     }, 30_000);
   });
 
+  describe("default timeout", () => {
+    // The 15 s default itself is asserted without waiting in wait.test.ts; here a short explicit
+    // timeout proves the path a default takes.
+    test("a wait times out at its timeout, and a longer timeout outlasts it", async () => {
+      const ctx = ctxFor();
+      await browser.open(ctx.session.id, `${base}/late?ms=2500`);
+      const started = Date.now();
+      const failed = await browserWait.execute({ selector: ".done", timeout: 1 }, ctx);
+      const took = Date.now() - started;
+      expect(failed.isError).toBe(true);
+      expect(took).toBeGreaterThanOrEqual(1_000);
+      expect(took).toBeLessThan(2_500);
+      expect(all(failed)).toContain("Timed out after 1.");
+      expect(all(failed)).toContain("Last check: 0 elements matched");
+      // The element shows up at 2.5 s: a 10 s timeout sees it.
+      const met = await browserWait.execute({ selector: ".done", timeout: 10 }, ctx);
+      expect(met.isError).toBeUndefined();
+      expect(all(met)).toContain('".done" visible after');
+    }, 30_000);
+  });
+
   describe("count, value and attribute", () => {
     test("browser_click's wait_for waits for a list to empty with count 0", async () => {
       const ctx = ctxFor();

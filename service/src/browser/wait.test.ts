@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { checkCondition, describeCondition, effectiveState } from "./wait.ts";
+import { WAIT_DEFAULT_TIMEOUT_S, checkCondition, describeCondition, effectiveState, timeoutMs } from "./wait.ts";
 
 const error = (input: unknown, ref?: string) => {
   const r = checkCondition(input, ref);
@@ -56,5 +56,14 @@ describe("count, value and attribute conditions", () => {
     expect(describeCondition({ ref: "e4", attribute: { name: "aria-expanded", value: "true" } })).toBe('ref e4 attribute aria-expanded="true"');
     expect(describeCondition({ selector: "a", attribute: { name: "href" } })).toBe('"a" attribute href');
     expect(describeCondition({ ref: "e4", state: "hidden" })).toBe("ref e4 hidden");
+  });
+});
+
+describe("default timeout", () => {
+  test("a wait with no timeout gives up after 15 s; an explicit one replaces it", () => {
+    expect(WAIT_DEFAULT_TIMEOUT_S).toBe(15);
+    expect(timeoutMs({ selector: "li" })).toBe(15_000);
+    expect(timeoutMs({ selector: "li", timeout: 0.5 })).toBe(500);
+    expect(timeoutMs({ selector: "li", timeout: 20 })).toBe(20_000);
   });
 });

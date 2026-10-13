@@ -173,7 +173,7 @@ describe("daemonAnswers", () => {
   });
 
   test("is true for a live daemon with a token, false without the token or once it stops", async () => {
-    const d = await startDaemon();
+    const d = await startDaemon({ entry: fixture("auth-daemon.ts") });
     try {
       const state = { daemonPid: d.proc.pid, port: Number(new URL(d.base).port) };
       expect(await daemonAnswers(state, d.home)).toBe(true);
