@@ -79,6 +79,20 @@ describe("planLayers", () => {
     expect(ids(["ios/Tools/sim.ts"])).toEqual(["bun:ios", "typecheck"]);
   });
 
+  test("HarnessKit source also builds the app through snapshots; its tests need only swift test", () => {
+    expect(ids(["ios/HarnessKit/Sources/HarnessKit/Shell/DebugState.swift"])).toEqual(["swift-test", "snapshots"]);
+    expect(ids(["ios/HarnessKit/Package.swift"])).toEqual(["swift-test", "snapshots"]);
+    expect(ids(["ios/HarnessKit/Tests/HarnessKitTests/DebugStateTests.swift"])).toEqual(["swift-test"]);
+  });
+
+  test("build tooling that makes the app build runs snapshots, with the reason on the layer", () => {
+    for (const f of ["ios/Tools/build.ts", "ios/Tools/build-cache.ts", "ios/Tools/snapshots.ts"]) {
+      expect(ids([f])).toEqual(["bun:ios", "typecheck", "snapshots"]);
+    }
+    expect(planLayers(["ios/Tools/build.ts"]).layers.find((l) => l.id === "snapshots")?.reasons).toEqual(["ios build tooling (a real build)"]);
+    expect(ids(["ios/Tools/build.test.ts"])).toEqual(["bun:ios", "typecheck"]);
+  });
+
   test("light layers come before app checks, which come before simulator layers", () => {
     const got = ids(["ios/Harness/Features/Files/FileViewerScreen.swift", "app/src/renderer/views/PlanUsage.tsx", "service/src/x.ts"]);
     expect(got).toEqual(["bun:app", "bun:service", "typecheck", "app-build", "app-check:plan-usage-check", "snapshots", "sim-check --only=file-link,save-on-blur,file-edit"]);

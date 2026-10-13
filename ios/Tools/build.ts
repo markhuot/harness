@@ -226,10 +226,9 @@ function prepare(): void {
 
 const project = () => ["-project", join(IOS, "Harness.xcodeproj"), "-scheme", "Harness", "-derivedDataPath", DERIVED_DATA];
 
-function sim(): string {
-  prepare();
-  log("==> Building for the simulator (Release, arm64, ad-hoc signed)");
-  run("sim", [
+/** The xcodebuild arguments of the simulator build. */
+export function simArgs(): string[] {
+  return [
     "xcodebuild", ...project(), "-configuration", "Release", "-sdk", "iphonesimulator",
     "-destination", "generic/platform=iOS Simulator", "ARCHS=arm64", "ONLY_ACTIVE_ARCH=YES",
     // Ad-hoc signed, not unsigned: the simulator only grants the Keychain to a signed app (its
@@ -238,7 +237,13 @@ function sim(): string {
     // The debug state probe (Harness/App/DebugProbe.swift) is compiled in for this simulator build
     // only; the device and archive builds never get it.
     "SWIFT_ACTIVE_COMPILATION_CONDITIONS=$(inherited) SIM_CHECK", "build",
-  ]);
+  ];
+}
+
+function sim(): string {
+  prepare();
+  log("==> Building for the simulator (Release, arm64, ad-hoc signed)");
+  run("sim", simArgs());
   return join(DERIVED_DATA, "Build/Products/Release-iphonesimulator/Harness.app");
 }
 
@@ -292,13 +297,18 @@ function exportArchive(o: Extract<Options, { command: "export" }>): string {
   return ipa;
 }
 
+/** The xcodebuild arguments of the device build: Debug, but without SIM_CHECK, so no debug probe. */
+export function deviceArgs(): string[] {
+  return [
+    "xcodebuild", ...project(), "-configuration", "Debug", "-destination", "generic/platform=iOS",
+    "-allowProvisioningUpdates", `DEVELOPMENT_TEAM=${TEAM_ID}`, "CODE_SIGN_STYLE=Automatic", "build",
+  ];
+}
+
 function device(o: Extract<Options, { command: "device" }>): string {
   prepare();
   log(`==> Building Harness (Debug) for ${o.device}`);
-  run("device", [
-    "xcodebuild", ...project(), "-configuration", "Debug", "-destination", "generic/platform=iOS",
-    "-allowProvisioningUpdates", `DEVELOPMENT_TEAM=${TEAM_ID}`, "CODE_SIGN_STYLE=Automatic", "build",
-  ]);
+  run("device", deviceArgs());
   const app = join(DERIVED_DATA, "Build/Products/Debug-iphoneos/Harness.app");
   const records = join(BUILD, "device-installs.json");
   let recorded: Record<string, { hash: string; url: string }> = {};
