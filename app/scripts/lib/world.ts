@@ -232,9 +232,9 @@ export async function bootWorld(opts: Pick<StartDaemonOptions, "delayMs" | "read
     const completedAt = s.completedAt ?? (s.status === "done" ? createdAt + 60_000 : null);
     db.query(
       `INSERT INTO tickets (id, key, project_id, kind, title, spec, status, session_id, driver, parent_id, auto_start, agent_review, human_review, external_ref, external_key, workdir, branch,
-         blocked_reason, position, model, completed_at, completion_action, spec_revision, spec_baseline_revision, resume_at, message_draft, agent_notes, pull_requests, pending_approval, allowed_tools, skip_human_review, created_at, updated_at)
+         blocked_reason, position, model, phase_models, completed_at, completion_action, spec_revision, spec_baseline_revision, resume_at, message_draft, agent_notes, pull_requests, pending_approval, allowed_tools, skip_human_review, created_at, updated_at)
        VALUES ($id, $key, $projectId, $kind, $title, $spec, $status, $sid, $driver, $parentId, $autoStart, $agentReview, $humanReview, $externalRef, $externalKey, $workdir, $branch,
-         $blockedReason, $position, $model, $completedAt, $completionAction, $specRevision, $baseline, $resumeAt, $messageDraft, $agentNotes, $pullRequests, $pendingApproval, $allowedTools, $skipHuman, $createdAt, $updatedAt)`,
+         $blockedReason, $position, $model, $phaseModels, $completedAt, $completionAction, $specRevision, $baseline, $resumeAt, $messageDraft, $agentNotes, $pullRequests, $pendingApproval, $allowedTools, $skipHuman, $createdAt, $updatedAt)`,
     ).run({
       $id: tid,
       $key: key,
@@ -256,6 +256,8 @@ export async function bootWorld(opts: Pick<StartDaemonOptions, "delayMs" | "read
       $blockedReason: s.blockedReason ?? null,
       $position: ++position,
       $model: s.model ?? null,
+      // The ticket's driver is its Work choice (the settings' default driver is dummy, so every new ticket runs on it).
+      $phaseModels: JSON.stringify({ work: { driver: s.driver, model: s.model ?? null } }),
       $completedAt: completedAt,
       $completionAction: s.completionAction ?? null,
       $specRevision: 1 + revisions.length,

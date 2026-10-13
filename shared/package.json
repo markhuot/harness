@@ -17,6 +17,7 @@
     "./testing": "./src/testing/tmp.ts",
     "./testing/skip": "./src/testing/skip.ts",
     "./testing/daemon": "./src/testing/daemon.ts",
-    "./testing/seed": "./src/testing/seed.ts"
+    "./testing/seed": "./src/testing/seed.ts",
+    "./testing/proxy": "./src/testing/proxy.ts"
   }
 }

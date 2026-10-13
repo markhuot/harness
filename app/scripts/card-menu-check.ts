@@ -1,28 +1,17 @@
 // A board card's right-click menu offers its ticket's own actions (state/ticketActions.ts), as
-// the ticket's pane does, in the built app over the DevTools Protocol against the mock service.
+// the ticket's pane does, in the built app over the DevTools Protocol against the seeded world (the real daemon).
 // The native menu can't be read (or captured) over CDP: HARNESS_MENU_LOG makes the main process record each
 // menu's labels (a submenu's in brackets), and HARNESS_MENU_AUTOPICK picks an item without showing it.
 //
 //   bun run build && bun scripts/card-menu-check.ts [--shots=<dir>]
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { bootWorld } from "./lib/world";
 import { api as makeApi, appDir, checker, launchApp, until } from "./lib/drive";
 
 const shots = process.argv.find((a) => a.startsWith("--shots="))?.slice("--shots=".length);
-const port = 7700 + Math.floor(Math.random() * 90);
-const token = "card-menu-token";
-const base = `http://127.0.0.1:${port}`;
-const mock = Bun.spawn(["bun", join(appDir, "scripts/mock-service.ts")], {
-  env: { ...process.env, MOCK_PORT: String(port), MOCK_TOKEN: token, MOCK_QUIET: "1" },
-  stdout: "ignore",
-  stderr: "inherit",
-});
-for (let i = 0; i < 50; i++) {
-  try {
-    if ((await fetch(base + "/health")).ok) break;
-  } catch {}
-  await Bun.sleep(100);
-}
+const world = await bootWorld();
+const { base, token } = world;
 const api = makeApi(base, token);
 const counter = checker();
 const { check } = counter;
@@ -47,7 +36,7 @@ try {
   const planned = await api<{ key: string }>("POST", "/tickets", { projectId: project!.id, spec: "Right-click me in planning", start: false });
   const reviewed = await api<{ key: string }>("POST", "/tickets", { projectId: project!.id, spec: "Right-click me in review", start: false });
   await api("PATCH", `/tickets/${reviewed.key}`, { status: "review" });
-  // The mock plans a new ticket first; wait for the runs to end, or Cancel run shows in place of Re-run agent review (and Approve plan for Start work).
+  // The daemon plans a new ticket first; wait for the runs to end, or Cancel run shows in place of Re-run agent review (and Approve plan for Start work).
   for (const { key } of [planned, reviewed]) await until(`${key} idle`, async () => !(await api<{ ticket: { busy: boolean } }>("GET", `/tickets/${key}`)).ticket.busy, 15000);
   await until("sidebar", () => exists(".card"), 15000);
   await js(`location.hash = "#/board/all"`);
@@ -77,7 +66,7 @@ try {
   console.error("✗", (e as Error).message);
 } finally {
   await app.close();
-  mock.kill();
+  await world.stop();
 }
 console.log(counter.failures ? `${counter.failures} check(s) failed` : "all checks passed");
 process.exit(counter.failures ? 1 : 0);

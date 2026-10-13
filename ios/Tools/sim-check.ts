@@ -143,6 +143,7 @@ import { join, resolve } from "node:path";
 import { buildPairUrl, reviewPassed, type ActivityEntry, type Project, type PromptEntry, type SpecRevision, type Ticket, type TicketDetail, type TicketPage, type TranscriptEntry, type Watcher } from "@harness/shared";
 import { findTheme } from "@harness/shared/themes";
 import { freePort as freePortShared, startDaemon as startDaemonShared, until as untilShared, type TestDaemon } from "@harness/shared/testing/daemon";
+import { startDaemonProxy } from "@harness/shared/testing/proxy";
 import { git, readSetting, seedRepo, seedDummySettings, setSessionContext, startCompactRun as startCompactRunAt, writeSetting } from "@harness/shared/testing/seed";
 import { acquire, checkDisk, ensureDevice, markKept, isSharedDevice, reap, SHARED_DEVICE, SHARED_IPAD_DEVICE, writeRunOwner } from "./sim";
 import { CheckSelector, noMatchMessage, parseGrep } from "./sim-grep";
@@ -940,49 +941,14 @@ const usageFixture = (fiveHourUsed = 82): UsageReport => ({
   ],
 });
 let usageReport: UsageReport = usageFixture();
-const usageClients = new Set<{ send(data: string): void }>();
+const usageProxy = usageOnly
+  ? startDaemonProxy(() => base, { intercept: (req) => (req.method === "GET" && new URL(req.url).pathname === "/usage" ? Response.json({ data: usageReport }) : undefined) })
+  : null;
 const pushUsage = (r: UsageReport) => {
   usageReport = r;
-  for (const c of usageClients) try { c.send(JSON.stringify({ type: "event", event: { kind: "usage.updated", usage: r } })); } catch {}
+  usageProxy?.push({ kind: "usage.updated", usage: r });
 };
-type ProxySocket = { data: { url: string; headers: Record<string, string>; up?: WebSocket; queue: string[] }; send(d: string): void; close(): void };
-const usageProxy = usageOnly
-  ? Bun.serve<ProxySocket["data"]>({
-      port: 0,
-      async fetch(req, server) {
-        const url = new URL(req.url);
-        const upstream = `${base}${url.pathname}${url.search}`;
-        if (req.headers.get("upgrade")?.toLowerCase() === "websocket") {
-          const headers: Record<string, string> = {};
-          req.headers.forEach((v, k) => { if (/^(authorization|cookie|x-)/i.test(k)) headers[k] = v; });
-          if (server.upgrade(req, { data: { url: upstream.replace(/^http/, "ws"), headers, queue: [] } })) return undefined as unknown as Response;
-          return new Response("upgrade failed", { status: 400 });
-        }
-        if (req.method === "GET" && url.pathname === "/usage") return Response.json({ data: usageReport });
-        return fetch(upstream, { method: req.method, headers: req.headers, body: req.body, redirect: "manual" });
-      },
-      websocket: {
-        open(ws: ProxySocket) {
-          usageClients.add(ws);
-          const up = new WebSocket(ws.data.url, { headers: ws.data.headers } as never);
-          ws.data.up = up;
-          up.onopen = () => { for (const m of ws.data.queue) up.send(m); ws.data.queue = []; };
-          up.onmessage = (e) => { try { ws.send(typeof e.data === "string" ? e.data : String(e.data)); } catch {} };
-          up.onclose = () => { try { ws.close(); } catch {} };
-        },
-        message(ws: ProxySocket, m: string | Buffer) {
-          const up = ws.data.up;
-          if (up?.readyState === WebSocket.OPEN) up.send(String(m));
-          else ws.data.queue.push(String(m));
-        },
-        close(ws: ProxySocket) {
-          usageClients.delete(ws);
-          try { ws.data.up?.close(); } catch {}
-        },
-      } as never,
-    })
-  : null;
-const usageBaseOf = () => (usageProxy ? `http://127.0.0.1:${usageProxy.port}` : base);
+const usageBaseOf = () => usageProxy?.base ?? base;
 // The temp dirs go however the run ends (the finally at the bottom, process.exit, an uncaught
 // error, Ctrl-C), except with --keep, which leaves the daemon running in them. A run killed
 // outright (SIGKILL) can't clean up; the next run's reap (Tools/sim.ts) does it instead.

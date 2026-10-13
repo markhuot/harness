@@ -1,27 +1,16 @@
-// ⌘-click on a board card end to end in the built app, over the DevTools Protocol, against the mock
+// ⌘-click on a board card end to end in the built app, over the DevTools Protocol, against the seeded world
 // service: with tickets stacked beside the board, a ⌘-click opens the card in a new pane on the far
 // right of the window, running its full height, and leaves the other panes open; a plain click
 // still replaces the ticket pane beside the board. panes.test.ts covers the tree math underneath.
 //
 //   bun run build && bun scripts/cmd-click-check.ts [--shots=<dir>]
 import { join } from "node:path";
+import { bootWorld } from "./lib/world";
 import { appDir, checker, launchApp, stopped, until } from "./lib/drive";
 
 const shots = process.argv.find((a) => a.startsWith("--shots="))?.slice("--shots=".length);
-const port = 7800 + Math.floor(Math.random() * 90);
-const token = "cmd-click-token";
-const base = `http://127.0.0.1:${port}`;
-const mock = Bun.spawn(["bun", join(appDir, "scripts/mock-service.ts")], {
-  env: { ...process.env, MOCK_PORT: String(port), MOCK_TOKEN: token, MOCK_QUIET: "1" },
-  stdout: "ignore",
-  stderr: "inherit",
-});
-for (let i = 0; i < 50; i++) {
-  try {
-    if ((await fetch(base + "/health")).ok) break;
-  } catch {}
-  await Bun.sleep(100);
-}
+const world = await bootWorld();
+const { base, token } = world;
 const counter = checker();
 const { check } = counter;
 const app = await launchApp({ baseUrl: base, token });
@@ -85,8 +74,7 @@ try {
   check("run", false, (e as Error).message);
 } finally {
   await app.close();
-  mock.kill();
-  await stopped(mock);
+  await world.stop();
 }
 console.log(counter.failures ? `${counter.failures} failed` : "all ⌘-click checks passed");
 process.exit(counter.failures ? 1 : 0);

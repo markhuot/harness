@@ -1,23 +1,18 @@
-// The Details tab's Agent notes field against the mock service: collapsed on open, expanded and
+// The Details tab's Agent notes field against the seeded world (the real daemon): collapsed on open, expanded and
 // collapsed by its toggle, hidden on a ticket with no notes. A screenshot of each state.
 //
 //   bun run build && bun scripts/agent-notes-check.ts [screenshotDir] [--theme=dark]
 import { mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { bootWorld } from "./lib/world";
 import { appDir, checker, launchApp, until, waitHealthy } from "./lib/drive";
 
 const shots = resolve(process.argv.find((a, i) => i > 1 && !a.startsWith("--")) ?? join(appDir, "out", "screenshots", "agent-notes"));
 const theme = (process.argv.find((a) => a.startsWith("--theme="))?.slice(8) ?? "light") as "light" | "dark";
 mkdirSync(shots, { recursive: true });
 
-const port = 7700 + Math.floor(Math.random() * 90);
-const token = "notes-token";
-const base = `http://127.0.0.1:${port}`;
-const mock = Bun.spawn(["bun", join(appDir, "scripts/mock-service.ts")], {
-  env: { ...process.env, MOCK_PORT: String(port), MOCK_TOKEN: token, MOCK_QUIET: "1" },
-  stdout: "ignore",
-  stderr: "inherit",
-});
+const world = await bootWorld();
+const { base, token } = world;
 
 const c = checker();
 const { check } = c;
@@ -38,7 +33,7 @@ try {
   const toggle = `document.querySelector("[data-testid=agent-notes] .agent-notes-toggle")`;
   const expanded = () => js<string | null>(`${toggle}?.getAttribute("aria-expanded") ?? null`);
 
-  // NYTIMES-1 has agent notes in the mock service.
+  // NYTIMES-1 has agent notes in the seeded world.
   await openDetails("NYTIMES-1");
   await until("agent-notes field", () => exists("[data-testid=agent-notes]"), 10000);
   check("the notes field is collapsed on open", (await expanded()) === "false", String(await expanded()));
@@ -64,8 +59,7 @@ try {
   c.fail();
 } finally {
   await app?.close();
-  mock.kill();
-  await mock.exited;
+  await world.stop();
 }
 console.log(c.failures ? `\n${c.failures} check(s) failed` : "\nall checks passed");
 process.exit(c.failures ? 1 : 0);
