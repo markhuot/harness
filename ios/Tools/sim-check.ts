@@ -645,7 +645,7 @@ async function whenShownLoop(udid: string, before: string | undefined, ready: ((
     await sleep(100);
   }
   lastTree.set(udid, prev);
-  console.log(`    [${udid.slice(0, 4)}] no settled screen after ${ms / 1000} s${prev === before ? " (it never left the previous screen)" : ""}`);
+  console.log(`    [${udid.slice(0, 4)}] no settled screen after ${ms / 1000} s${prev === before ? " (it never left the previous screen)" : ""}; on screen: ${prev.split("\n").slice(0, 14).join(" | ")}`);
   return false;
 }
 /** Opens `url` on the running app (launching it if it isn't) and waits for its screen. */
@@ -658,7 +658,17 @@ async function visit(udid: string, url: string, ready?: (l: string[]) => boolean
   // The app's router moving, and settling, is the link landing: the first look at the screen is then
   // usually the last, not the third. Where it doesn't move (the screen was already up) this gives up
   // after a moment and whenShown reads the screen as before; `ready` still decides.
-  if (was) await probeUntil(udid, "the link to land", (s) => s.settled && JSON.stringify(s.router) !== JSON.stringify(was.router), 1200).catch(() => {});
+  if (was) {
+    const t = performance.now();
+    // The router moving is the link landing; settling follows, but an app that is never quiet (a running ticket streaming) gets 500 ms, not the cap.
+    const wasRoute = JSON.stringify(was.router);
+    let movedAt: number | undefined;
+    const landed = await probeUntil(udid, "the link to land", (s) => {
+      if (JSON.stringify(s.router) !== wasRoute) movedAt ??= Date.now();
+      return movedAt !== undefined && (s.settled || Date.now() - movedAt > 500);
+    }, 900).then(() => true, () => false);
+    profile.poll(landed ? "link landed (router moved)" : "link landed (gave up: router didn't move)", 1, performance.now() - t);
+  }
   if (await whenShown(udid, before, ready)) return true;
   // Never got there: a step before left a menu, alert or sheet over the app (or it crashed). Clear
   // the board and try once more, so one stuck step costs one timeout, not every step after it.
@@ -2108,7 +2118,7 @@ async function fileDockChecks(udid: string, p: { project: Project; conductor: Ti
     } else {
       await undock(udid);
     }
-    await goto(udid, `harness://ticket/${encodeURIComponent(key)}?tab=children`, (l) => l.some((x) => x.includes("Part of") || x.includes(key)));
+    await goto(udid, `harness://ticket/${encodeURIComponent(key)}?tab=children`, (l) => l.includes("Tickets") && l.includes("Message the agent"));
     await goto(udid, link);
     await until("the editor", editorUp, 12000);
     if (ipad) {
