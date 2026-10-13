@@ -267,7 +267,7 @@ const ToolRow = memo(function ToolRow({
   const now = useNow(!result && !!call);
   const elapsed = toolElapsed(call, result, now);
   return (
-    <div className={`t-tool${open ? "open" : ""} ${isError ? "error" : ""}`}>
+    <div className={`t-tool ${open ? "open" : ""} ${isError ? "error" : ""}`}>
       <button className="t-tool-head" onClick={() => setOpen(!open)}>
         <Icon name={open ? "chevronDown" : "chevronRight"} size={12} />
         <Icon name={toolIcon(name)} size={12} />

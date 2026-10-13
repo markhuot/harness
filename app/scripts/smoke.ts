@@ -242,6 +242,10 @@ try {
   // Each finished tool row shows the time between its call and result, left of its ✓/✗ icon.
   const toolElapsed = await js<string[]>(`[...document.querySelectorAll(".t-tool-head")].map(h => { const e = h.querySelector(".t-tool-elapsed"); return e && h.lastElementChild === e.nextElementSibling ? e.textContent : ""; })`);
   check("tool rows show elapsed time before the result icon", toolElapsed.length > 0 && toolElapsed.every((t) => t === "7s"), toolElapsed.join(","));
+  // Expanding a tool row adds `open` as its own class (the ".t-tool.open" styles hang off it).
+  await js(`document.querySelector(".t-tool-head").click()`);
+  const toolOpened = await until("tool row open class", () => js<boolean>(`document.querySelector(".t-tool-head").parentElement.matches(".t-tool.open")`).then((v) => v || undefined));
+  check("clicking a tool row gives it the open class", !!toolOpened);
   await js(`location.hash = "#/board/all"`);
 
   // On the all-projects board a card reads "[NYT] NYTIMES-2": the project key leads the top row,
