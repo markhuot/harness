@@ -143,7 +143,7 @@ import { join, resolve } from "node:path";
 import { buildPairUrl, reviewPassed, type ActivityEntry, type Project, type PromptEntry, type SpecRevision, type Ticket, type TicketDetail, type TicketPage, type TranscriptEntry, type Watcher } from "@harness/shared";
 import { findTheme } from "@harness/shared/themes";
 import { Database } from "bun:sqlite";
-import { acquire, acquirePool, checkDisk, ensureDevice, markKept, isSharedDevice, reap, SHARED_IPAD_DEVICE, writeRunOwner } from "./sim";
+import { acquire, acquireReady, daemonAnswers, checkDisk, ensureDevice, markKept, isSharedDevice, reap, SHARED_IPAD_DEVICE, writeRunOwner } from "./sim";
 import { CheckSelector, noMatchMessage, parseGrep } from "./sim-grep";
 import { chooseKept, hashApp, hashService, listKept, MARKER_KEY, planApp, REUSE_VERSION, writeReuseState, type ReuseState, type Want } from "./sim-reuse";
 import { PROBE_FILE, parseState, settled as probeSettled, waitFor as probeWaitFor, type DebugState } from "./probe";
@@ -514,8 +514,8 @@ async function pickDevices(n: number): Promise<string[]> {
       if (id === "") {
         // Any free slot of the shared pool, the one the kept --reuse state's app is on first.
         const prefer = (attached?.udids ?? []).map((u) => all.find((x) => x.udid === u)?.name).filter((x): x is string => !!x);
-        const { name } = await acquirePool({ prefer, onWait: (h) => console.log(`waiting for a shared simulator${h ? ` (held by pid ${h.pid}: ${h.command})` : ""}…`) });
-        return ensureDevice(name, { kind: "iphone", log: console.log });
+        const { udid } = await acquireReady({ prefer, onWait: (h) => console.log(`waiting for a shared simulator${h ? ` (held by pid ${h.pid}: ${h.command})` : ""}…`) }, { kind: "iphone", log: console.log });
+        return udid;
       }
       const d = all.find((x) => x.isAvailable && (x.udid === id || x.name === id));
       if (!d && given) throw new Error(`--udid: no simulator ${id}`);
@@ -872,15 +872,6 @@ const SLASH_COMMANDS = [
 let claudeRecord = "";
 const HOME_PREFIX = "harness-sim-home-";
 /** Whether the kept daemon is still the one that state names: its process is up and it answers on its port. */
-async function daemonAnswers(s: ReuseState, dir: string): Promise<boolean> {
-  try {
-    process.kill(s.daemonPid, 0);
-  } catch {
-    return false;
-  }
-  if (!existsSync(join(dir, "token"))) return false;
-  return fetch(`http://127.0.0.1:${s.port}/health`, { signal: AbortSignal.timeout(2000) }).then((r) => r.ok, () => false);
-}
 /** A port from the daemon pool that nothing is listening on (kept daemons hold theirs indefinitely). */
 function freePort(): number {
   for (let i = 0; i < 200; i++) {

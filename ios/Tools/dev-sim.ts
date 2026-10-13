@@ -11,7 +11,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { buildPairUrl, type Project, type Ticket, type TicketDetail } from "@harness/shared";
-import { acquire, acquirePool, checkDisk, ensureDevice, freeGiB, isSharedDevice, SHARED_DEVICE, type Device } from "./sim";
+import { acquire, acquireReady, checkDisk, ensureDevice, freeGiB, isSharedDevice, SHARED_DEVICE, type Device } from "./sim";
 import { axeFor, hasAxe, screenKey, screenState } from "./axe";
 
 const IOS = resolve(import.meta.dir, "..");
@@ -436,14 +436,16 @@ async function main(o: Options): Promise<void> {
       const app = await device;
       // The default is any free slot of the shared pool; --sim names one other simulator.
       let slot = o.sim;
+      let udid: string;
       if (o.sim === SHARED_DEVICE) {
-        const got = await acquirePool({ onWait: (h) => log(`waiting for a shared simulator${h ? ` (held by pid ${h.pid}: ${h.command})` : ""}…`) });
+        const got = await acquireReady({ onWait: (h) => log(`waiting for a shared simulator${h ? ` (held by pid ${h.pid}: ${h.command})` : ""}…`) }, { log });
         slot = got.name;
         release = got.release;
+        udid = got.udid;
       } else {
         release = await acquire(o.sim, { onWait: (h) => log(`waiting for the ${o.sim} simulator${h ? ` (held by pid ${h.pid}: ${h.command})` : ""}…`) });
+        udid = await simulatorFor(slot);
       }
-      const udid = await simulatorFor(slot);
       try {
         const axe = axeFor(udid, process.env.DEVELOPER_DIR!);
         await installAndPair(udid, axe, app, buildPairUrl(d.base, d.token));
@@ -458,7 +460,7 @@ async function main(o: Options): Promise<void> {
       } finally {
         letGo();
       }
-      log(`simulator: ${o.sim} (${udid}); leave it alone, and delete ios/build and ios/HarnessKit/.build when done`);
+      log(`simulator: ${slot} (${udid}); leave it alone, and delete ios/build and ios/HarnessKit/.build when done`);
     }
   } catch (e) {
     await stopDaemon(d, true);

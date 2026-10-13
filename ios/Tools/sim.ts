@@ -20,10 +20,13 @@
 // start time, so a lock whose holder died (crashed, killed) is taken over. with-lock sets
 // HARNESS_SIM_LOCKED to the slot it took for its command, so a script under it that asks for a
 // slot itself (sim-check, say) goes ahead with that one instead of waiting on its parent.
+// A slot that doesn't exist yet is created only with 8 GiB free (a simulator grows 3–8 GB), one
+// creation at a time, and `--reuse` prefers the slot of a kept state with a live daemon only on a
+// best-effort basis: if that slot is held, the run takes another.
 import { existsSync, linkSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, statfsSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { listKept } from "./sim-reuse";
+import { listKept, type ReuseState } from "./sim-reuse";
 
 export const SHARED_DEVICE = "harness-shared";
 /** The iPad sim-check runs on with --ipad: kept (booted) between runs like SHARED_DEVICE, since creating and installing on a fresh one cost 50–80 s of every run. */
@@ -50,6 +53,8 @@ export const IOS_RUNTIME = "27.0";
 export const DEVELOPER_DIR = process.env.DEVELOPER_DIR ?? "/Applications/Xcode-27.0.0.app/Contents/Developer";
 /** Below this much free disk space, builds and new devices stop rather than fill the disk. */
 export const MIN_FREE_GIB = 5;
+/** Creating a new simulator needs this much free: a fresh one grows 3–8 GB as it's used, so it must not start at the edge of MIN_FREE_GIB. */
+export const NEW_SIM_GIB = 8;
 
 // ---------------------------------------------------------------- runtime pinning
 
@@ -253,10 +258,15 @@ export function freeGiB(path = homedir()): number {
   return (s.bavail * s.bsize) / 2 ** 30;
 }
 
+/** The disk is too full for what was asked; callers that can wait on an existing simulator catch it. */
+export class DiskLowError extends Error {}
+
 /** Throws when the disk has less than `min` GiB free. */
 export function checkDisk(min = MIN_FREE_GIB, free = freeGiB()): void {
-  if (free < min) throw new Error(`only ${free.toFixed(1)} GiB of disk is free (under ${min} GiB); stop and ask the human to free space before building or creating simulators`);
+  if (free < min) throw new DiskLowError(`only ${free.toFixed(1)} GiB of disk is free (under ${min} GiB); stop and ask the human to free space before building or creating simulators`);
 }
+
+const CREATE_LOCK = "sim-create";
 
 export interface EnsureOptions { kind?: DeviceKind; simctl?: Simctl; lockDir?: string; freeGiB?: () => number; log?: (line: string) => void }
 
@@ -278,10 +288,15 @@ export async function ensureDevice(name = SHARED_DEVICE, opts: EnsureOptions = {
       if (!device) {
         const elsewhere = Object.entries(devices).find(([rt, list]) => rt !== runtime.identifier && list.some((d) => d.name === name));
         if (elsewhere) throw new Error(`a simulator named "${name}" exists on ${elsewhere[0]}, not iOS ${runtime.version}; ask the human to delete it, then rerun`);
-        checkDisk(MIN_FREE_GIB, (opts.freeGiB ?? freeGiB)());
-        const type = deviceTypeFor(runtime, opts.kind ?? "iphone");
-        log(`creating simulator "${name}" (${type.name}, iOS ${runtime.version})`);
-        device = { udid: await run("create", name, type.identifier, runtime.identifier), name, state: "Shutdown", isAvailable: true };
+        // One creation at a time across the pool, each checking the disk after the last one finished,
+        // so two processes can't both see room for a simulator that only fits once.
+        const created = await withLock(CREATE_LOCK, async () => {
+          checkDisk(NEW_SIM_GIB, (opts.freeGiB ?? freeGiB)());
+          const type = deviceTypeFor(runtime, opts.kind ?? "iphone");
+          log(`creating simulator "${name}" (${type.name}, iOS ${runtime.version})`);
+          return run("create", name, type.identifier, runtime.identifier);
+        }, { dir: opts.lockDir, timeoutMs: 5 * 60_000 });
+        device = { udid: created, name, state: "Shutdown", isAvailable: true };
       }
       if (device.state !== "Booted") {
         await run("boot", device.udid).catch((e: Error) => {
@@ -295,9 +310,16 @@ export async function ensureDevice(name = SHARED_DEVICE, opts: EnsureOptions = {
   );
 }
 
+/** The pinned runtime, asked of simctl once per `simctl` function: acquirePool polls devices every half second and the runtime doesn't change. */
+const runtimes = new WeakMap<Simctl, Runtime>();
+
 /** The available devices on the iOS 27.0 runtime. */
 async function listDevices(run: Simctl = simctl): Promise<Device[]> {
-  const runtime = pinnedRuntime((JSON.parse(await run("list", "runtimes", "--json")) as { runtimes: Runtime[] }).runtimes);
+  let runtime = runtimes.get(run);
+  if (!runtime) {
+    runtime = pinnedRuntime((JSON.parse(await run("list", "runtimes", "--json")) as { runtimes: Runtime[] }).runtimes);
+    runtimes.set(run, runtime);
+  }
   const devices = (JSON.parse(await run("list", "devices", "--json")) as { devices: Record<string, Device[]> }).devices;
   return (devices[runtime.identifier] ?? []).filter((d) => d.isAvailable);
 }
@@ -320,21 +342,37 @@ export interface SlotView { name: string; exists: boolean; booted: boolean; held
  * The slots to try locking, best first. A free slot that exists goes first (`prefer`red ones ahead of
  * the rest, then pool order). Only when none is free does a slot that doesn't exist yet qualify, so
  * the pool grows lazily. Beyond the first slot, a simulator that isn't already booted is created or
- * booted only with disk to spare (`diskOk`); the first slot is always a candidate (creating it checks
- * the disk itself). Held slots are never candidates: the caller waits instead of queueing on one.
+ * booted only with disk to spare (`diskOk`, MIN_FREE_GIB); a slot that doesn't exist is created only
+ * with `roomForNew` (NEW_SIM_GIB free, the growth margin), the first one included. Held slots are never candidates: the caller waits instead of queueing on one.
  */
-export function slotCandidates(slots: readonly SlotView[], o: { prefer?: readonly string[]; diskOk: boolean }): string[] {
+export function slotCandidates(slots: readonly SlotView[], o: { prefer?: readonly string[]; diskOk: boolean; roomForNew?: boolean }): string[] {
   const prefer = o.prefer ?? [];
   const rank = (s: SlotView) => (prefer.includes(s.name) ? prefer.indexOf(s.name) : prefer.length);
-  const allowed = slots.filter((s, i) => !s.held && (i === 0 || s.booted || o.diskOk));
+  const allowed = slots.filter((s, i) => !s.held && (s.exists ? i === 0 || s.booted || o.diskOk : o.roomForNew ?? o.diskOk));
   const ready = allowed.filter((s) => s.exists).sort((a, b) => rank(a) - rank(b) || slots.indexOf(a) - slots.indexOf(b));
   const fresh = allowed.filter((s) => !s.exists);
   return [...ready, ...fresh].map((s) => s.name);
 }
 
-/** The pool slots the kept `--reuse` states (newest first) were made on, so a rerun goes back to the simulator that holds its app. */
-export async function keptSlots(tmp = tmpdir(), devices: () => Promise<Device[]> = listDevices): Promise<string[]> {
-  const kept = (await listKept(tmp, HOME_PREFIX, async () => true)).sort((a, b) => b.state.savedAt - a.state.savedAt);
+/** A kept daemon that still runs: its pid is alive, its token file exists and /health answers. */
+export async function daemonAnswers(s: ReuseState, dir: string): Promise<boolean> {
+  try {
+    process.kill(s.daemonPid, 0);
+  } catch {
+    return false;
+  }
+  if (!existsSync(join(dir, "token"))) return false;
+  return fetch(`http://127.0.0.1:${s.port}/health`, { signal: AbortSignal.timeout(2000) }).then((r) => r.ok, () => false);
+}
+
+/**
+ * The pool slots the kept `--reuse` states (newest first, live daemons only) were made on, so a rerun
+ * goes back to the simulator that holds its app. Best-effort: if that slot is held, the run takes
+ * another and sim-check reinstalls there.
+ */
+export async function keptSlots(tmp = tmpdir(), devices: () => Promise<Device[]> = listDevices, alive: (s: ReuseState, home: string) => Promise<boolean> = daemonAnswers): Promise<string[]> {
+  // A state whose daemon is gone can't be reused, so its slot is no reason to prefer one.
+  const kept = (await listKept(tmp, HOME_PREFIX, alive)).filter((k) => k.daemonAlive).sort((a, b) => b.state.savedAt - a.state.savedAt);
   const all = await devices();
   const names = kept.flatMap((k) => k.state.udids).map((u) => all.find((d) => d.udid === u)?.name);
   return [...new Set(names.filter((n): n is string => !!n && isSharedDevice(n) && n !== SHARED_IPAD_DEVICE))];
@@ -348,6 +386,10 @@ export interface PoolOptions extends AcquireOptions {
   devices?: () => Promise<Device[]>;
   freeGiB?: () => number;
   minFreeGiB?: number;
+  /** Free GiB needed to create a slot that doesn't exist yet (default NEW_SIM_GIB). */
+  newSlotGiB?: number;
+  /** Slots not to lock (ones whose creation just failed). */
+  exclude?: string[];
 }
 
 /**
@@ -355,31 +397,64 @@ export interface PoolOptions extends AcquireOptions {
  * function that lets go of it. Inside `with-lock` the slot is already ours (HARNESS_SIM_LOCKED), so
  * that one comes back at once.
  */
-export async function acquirePool(opts: PoolOptions = {}): Promise<{ name: string; release: () => void }> {
+export async function acquirePool(opts: PoolOptions = {}): Promise<{ name: string; release: () => void; inherited: boolean }> {
   const dir = opts.dir ?? lockDir();
   const slots = opts.slots ?? poolSlots();
   const mineAlready = [...inherited()].find((n) => slots.includes(n) || /^harness-shared(-\d+)?$/.test(n));
-  if (mineAlready) return { name: mineAlready, release: () => {} };
+  if (mineAlready) return { name: mineAlready, release: () => {}, inherited: true };
   const end = Date.now() + (opts.timeoutMs ?? 30 * 60_000);
   let told = false;
   for (;;) {
-    const devices = await (opts.devices ?? listDevices)();
-    const views: SlotView[] = slots.map((name) => {
-      const d = devices.find((x) => x.name === name);
-      return { name, exists: !!d, booted: d?.state === "Booted", held: lockHolder(name, dir) !== null };
-    });
-    const diskOk = (opts.freeGiB ?? freeGiB)() >= (opts.minFreeGiB ?? MIN_FREE_GIB);
-    for (const name of slotCandidates(views, { prefer: opts.prefer, diskOk })) {
-      if (tryLock(name, dir)) return { name, release: () => releaseLock(name, dir) };
+    const free = (opts.freeGiB ?? freeGiB)();
+    const diskOk = free >= (opts.minFreeGiB ?? MIN_FREE_GIB);
+    const roomForNew = free >= (opts.newSlotGiB ?? NEW_SIM_GIB);
+    // Lock files first: while every slot is held, polling costs no simctl call.
+    const holders = slots.map((n) => lockHolder(n, dir));
+    if (holders.some((h, i) => !h && !opts.exclude?.includes(slots[i] as string))) {
+      const devices = await (opts.devices ?? listDevices)();
+      if (!roomForNew && !devices.some((d) => slots.includes(d.name))) checkDisk(opts.newSlotGiB ?? NEW_SIM_GIB, free); // nothing to wait on
+      const views: SlotView[] = slots.map((name, i) => {
+        const d = devices.find((x) => x.name === name);
+        return { name, exists: !!d, booted: d?.state === "Booted", held: !!holders[i] || !!opts.exclude?.includes(name) };
+      });
+      for (const name of slotCandidates(views, { prefer: opts.prefer, diskOk, roomForNew })) {
+        if (tryLock(name, dir)) return { name, release: () => releaseLock(name, dir), inherited: false };
+      }
     }
-    const holders = slots.map((n) => lockHolder(n, dir)).filter((h): h is Owner => !!h);
+    const held = holders.filter((h): h is Owner => !!h);
     if (Date.now() >= end) {
-      throw new Error(`timed out waiting for a shared simulator (${slots.join(", ")})${holders.length ? `; held by ${holders.map((h) => `pid ${h.pid}: ${h.command}`).join("; ")}` : ""}${diskOk ? "" : "; disk is low, so no more simulators were created"}`);
+      throw new Error(`timed out waiting for a shared simulator (${slots.join(", ")})${held.length ? `; held by ${held.map((h) => `pid ${h.pid}: ${h.command}`).join("; ")}` : ""}${roomForNew ? "" : "; disk is low, so no more simulators were created"}`);
     }
-    if (!told) opts.onWait?.(holders[0] ?? null);
+    if (!told) opts.onWait?.(held[0] ?? null);
     told = true;
     await Bun.sleep(opts.pollMs ?? 500);
   }
+}
+
+/**
+ * `acquirePool` and `ensureDevice` together: the locked slot's simulator is created (when it doesn't
+ * exist yet) and booted. If creating it is refused for disk after the slot was locked (another run
+ * used the room first), the slot is let go and the wait goes on for an existing one.
+ */
+export async function acquireReady(opts: PoolOptions = {}, ensure: EnsureOptions = {}): Promise<{ name: string; udid: string; release: () => void }> {
+  const exclude = [...(opts.exclude ?? [])];
+  for (;;) {
+    const got = await acquirePool({ ...opts, exclude });
+    try {
+      return { name: got.name, release: got.release, udid: await ensureDevice(got.name, { ...ensure, lockDir: ensure.lockDir ?? opts.dir }) };
+    } catch (e) {
+      got.release();
+      if (!(e instanceof DiskLowError) || got.inherited) throw e;
+      exclude.push(got.name);
+    }
+  }
+}
+
+/** Every pool device by name, in slot order: the configured slots plus any harness-shared-N that exists (one made under a larger HARNESS_SIM_POOL_SIZE). */
+export function poolNames(devices: readonly Device[], size = poolSize()): string[] {
+  const n = (name: string) => (name === SHARED_DEVICE ? 1 : Number(name.slice(SHARED_DEVICE.length + 1)));
+  const existing = devices.map((d) => d.name).filter((x) => x !== SHARED_IPAD_DEVICE && /^harness-shared(-\d+)?$/.test(x));
+  return [...new Set([...poolSlots(size), ...existing])].sort((a, b) => n(a) - n(b));
 }
 
 // ---------------------------------------------------------------- reaping
@@ -583,8 +658,8 @@ if (import.meta.main) {
       if (opts.includes("--all") && pooled) {
         // Every slot, the first always and the rest only while the disk has room.
         for (const [i, slot] of poolSlots().entries()) {
-          if (i > 0 && freeGiB() < MIN_FREE_GIB && !(await findDevice(slot))) {
-            console.error(`${slot}: not created, only ${freeGiB().toFixed(1)} GiB of disk is free`);
+          if (i > 0 && freeGiB() < NEW_SIM_GIB && !(await findDevice(slot))) {
+            console.error(`${slot}: not created, only ${freeGiB().toFixed(1)} GiB of disk is free (a new simulator needs ${NEW_SIM_GIB})`);
             continue;
           }
           console.log(`${slot} ${await ensureDevice(slot, { kind })}`);
@@ -598,14 +673,15 @@ if (import.meta.main) {
       const timeoutMs = Number(opt("timeout") ?? 30) * 60_000;
       let slot = name;
       let release: () => void;
+      let udid: string;
       if (pooled) {
         // A --reuse run goes back to the slot its kept state was made on, if that one is free.
         const prefer = command.includes("--reuse") ? await keptSlots() : [];
-        ({ name: slot, release } = await acquirePool({ timeoutMs, onWait: waiting, prefer }));
+        ({ name: slot, release, udid } = await acquireReady({ timeoutMs, onWait: waiting, prefer }, { kind }));
       } else {
         release = await acquire(name, { timeoutMs, onWait: waiting });
+        udid = await ensureDevice(name, { kind });
       }
-      const udid = await ensureDevice(slot, { kind });
       const locked = [...inherited().add(slot)].join(",");
       const child = Bun.spawn(command, { env: { ...process.env, DEVELOPER_DIR, SIM_UDID: udid, HARNESS_SIM_LOCKED: locked }, stdio: ["inherit", "inherit", "inherit"] });
       for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) process.on(sig, () => child.kill(sig));
@@ -614,7 +690,7 @@ if (import.meta.main) {
       process.exit(code);
     } else if (cmd === "shutdown") {
       // The pool: every slot nobody holds (a held one is in use, so it's skipped, not waited for).
-      for (const slot of pooled ? poolSlots() : [name]) {
+      for (const slot of pooled ? poolNames(await listDevices()) : [name]) {
         const d = await findDevice(slot);
         if (!d) {
           console.log(`no simulator named ${slot}`);
@@ -633,7 +709,7 @@ if (import.meta.main) {
       const done = await reap({ log: console.log, includeKept: opts.includes("--kept") });
       if (!done.shutdown.length && !done.kill.length && !done.remove.length) console.log("nothing left behind");
     } else if (cmd === "status") {
-      for (const slot of pooled ? poolSlots() : [name]) {
+      for (const slot of pooled ? poolNames(await listDevices()) : [name]) {
         const d = await findDevice(slot);
         const holder = lockHolder(slot);
         console.log(d ? `${slot} ${d.udid} ${d.state}` : `${slot}: not created yet (\`ensure\` creates it)`);
