@@ -264,7 +264,9 @@ cd ios && bun run test    # iOS build, simulator and highlighter tooling
 cd release && bun run test # release prepare, publish checks, TestFlight, install page
 cd plugins/sdk && bun test   # plugin iframe bridge (connect)
 cd plugins/git && bun test   # git plugin routes against real temp repos
-cd app && bun run smoke   # drives the Electron UI against a mock service
+cd app && bun run smoke   # drives the Electron UI against a seeded world: the real daemon with the dummy driver (app/scripts/lib/world.ts)
+cd app && bun run shoot   # screenshots of every screen and state, against the same seeded world
+cd app && bun run world   # boots that world and leaves it running, for `HARNESS_URL=… HARNESS_TOKEN=… bun run dev`
 cd app && bun run build && bun scripts/approve-plan.ts   # Approve plan against a real daemon, with screenshots
 cd app && bun run real    # drives the Electron UI against a real daemon in a temp home
 cd app && bun run changes # the Changes tab against a real daemon, light + dark screenshots

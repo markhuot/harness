@@ -7,11 +7,12 @@
 //      a single tab stop whose arrow keys change the kind, while the picker still shows left of it.
 //
 //   bun run build && bun scripts/new-session-focus-check.ts [--shots=<dir>] [--theme=dark]
-import { mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { Project } from "@harness/shared";
 import { tempDir } from "@harness/shared/testing";
-import { api as makeApi, appDir, checker, launchApp, stopped, until, waitHealthy } from "./lib/drive";
+import { startDaemon } from "@harness/shared/testing/daemon";
+import { api as makeApi, appDir, checker, launchApp, until } from "./lib/drive";
 
 const shots = process.argv.find((a) => a.startsWith("--shots="))?.slice("--shots=".length);
 const theme = (process.argv.find((a) => a.startsWith("--theme="))?.slice(8) ?? "light") as "light" | "dark";
@@ -21,21 +22,15 @@ const home = tempDir("harness-nsfocus-home-");
 const dirA = tempDir("harness-nsfocus-a-");
 const dirB = tempDir("harness-nsfocus-b-");
 
-const port = 7800 + Math.floor(Math.random() * 90);
-const base = `http://127.0.0.1:${port}`;
-const daemon = Bun.spawn(["bun", join(appDir, "..", "service/src/daemon.ts")], {
-  env: { ...process.env, HARNESS_HOME: home, HARNESS_PORT: String(port), HARNESS_DUMMY_DRIVER: "1" },
-  stdout: "ignore",
-  stderr: "inherit",
-});
+const daemon = await startDaemon({ home, delayMs: 15, logs: "inherit" });
+const { port, base } = daemon;
 
 const counter = checker();
 const { check } = counter;
 let app: Awaited<ReturnType<typeof launchApp>> | null = null;
 
 try {
-  await waitHealthy(base, 15000);
-  const token = readFileSync(join(home, "token"), "utf8").trim();
+  const { token } = daemon;
   const api = makeApi(base, token);
   await api<Project>("POST", "/projects", { path: dirA, name: "alpha", key: "ALP" });
   await api<Project>("POST", "/projects", { path: dirB, name: "beta", key: "BET" });
@@ -129,8 +124,7 @@ try {
   counter.fail();
 } finally {
   await app?.close();
-  daemon.kill();
-  await stopped(daemon);
+  await daemon.stop();
 }
 console.log(counter.failures ? `\n${counter.failures} check(s) failed` : "\nall checks passed");
 process.exit(counter.failures ? 1 : 0);

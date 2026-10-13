@@ -15,11 +15,12 @@
 // with dropEffect "none" and a screen point past the window's edge.
 //
 //   bun run build && bun scripts/tear-off-check.ts [--shots=<dir>] [--theme=dark]
-import { mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { Project, Ticket, TranscriptEntry } from "@harness/shared";
 import { tempDir } from "@harness/shared/testing";
-import { api as makeApi, appDir, checker, launchApp, stopped, until, waitHealthy } from "./lib/drive";
+import { startDaemon } from "@harness/shared/testing/daemon";
+import { api as makeApi, appDir, checker, launchApp, until } from "./lib/drive";
 
 const shots = process.argv.find((a) => a.startsWith("--shots="))?.slice("--shots=".length);
 const theme = (process.argv.find((a) => a.startsWith("--theme="))?.slice(8) ?? "light") as "light" | "dark";
@@ -27,13 +28,8 @@ if (shots) mkdirSync(shots, { recursive: true });
 
 const home = tempDir("harness-tear-home-");
 const projectDir = tempDir("harness-tear-project-");
-const port = 7800 + Math.floor(Math.random() * 90);
-const base = `http://127.0.0.1:${port}`;
-const daemon = Bun.spawn(["bun", join(appDir, "..", "service/src/daemon.ts")], {
-  env: { ...process.env, HARNESS_HOME: home, HARNESS_PORT: String(port), HARNESS_DUMMY_DRIVER: "1", HARNESS_DUMMY_DELAY_MS: "5" },
-  stdout: "ignore",
-  stderr: "inherit",
-});
+const daemon = await startDaemon({ home, delayMs: 5, logs: "inherit" });
+const { port, base } = daemon;
 
 /** A page that fills the viewport with one colour, so a canvas tells which tab it shows. */
 const page = (title: string, colour: string) =>
@@ -70,8 +66,7 @@ const { check } = counter;
 let app: Awaited<ReturnType<typeof launchApp>> | null = null;
 
 try {
-  await waitHealthy(base, 15000);
-  const token = readFileSync(join(home, "token"), "utf8").trim();
+  const { token } = daemon;
   const api = makeApi(base, token);
   const project = await api<Project>("POST", "/projects", { path: projectDir, name: "tear", key: "TEAR" });
   const calls = [
@@ -234,8 +229,7 @@ try {
   if (text) console.log(`--- on screen ---\n${text}`);
 } finally {
   await app?.close();
-  daemon.kill();
-  await stopped(daemon);
+  await daemon.stop();
 }
 console.log(counter.failures ? `\n${counter.failures} check(s) failed` : "\nall tear-off checks passed");
 process.exit(counter.failures ? 1 : 0);

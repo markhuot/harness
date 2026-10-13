@@ -5,18 +5,17 @@
 // click on a small link while the frame is pinch-zoomed.
 //
 //   bun run build && bun scripts/browser-size-real.ts [screenshotDir]
-import { mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { Project, Ticket } from "@harness/shared";
 import { cleanupTempDirs, tempDir } from "@harness/shared/testing";
-import { api as makeApi, appDir, checker, launchApp, until, waitHealthy } from "./lib/drive";
+import { startDaemon } from "@harness/shared/testing/daemon";
+import { api as makeApi, appDir, checker, launchApp, until } from "./lib/drive";
 
 const shots = resolve(process.argv[2] ?? join(appDir, "out", "screenshots", "browser-size-real"));
 mkdirSync(shots, { recursive: true });
 const home = tempDir("harness-size-home-");
 const projectDir = tempDir("harness-size-project-");
-const port = 7900 + Math.floor(Math.random() * 90);
-const base = `http://127.0.0.1:${port}`;
 
 // The link sits at page (628–652, 393–407): 24 × 14 CSS px, small enough that a click mapped
 // through the wrong rect misses it.
@@ -32,18 +31,14 @@ const pages = Bun.serve({
   fetch: (req) => new Response(new URL(req.url).pathname === "/clicked" ? "<title>clicked</title>clicked" : PAGE, { headers: { "content-type": "text/html" } }),
 });
 
-const daemon = Bun.spawn(["bun", join(appDir, "..", "service/src/daemon.ts")], {
-  env: { ...process.env, HARNESS_HOME: home, HARNESS_PORT: String(port), HARNESS_DUMMY_DRIVER: "1", HARNESS_DUMMY_DELAY_MS: "5" },
-  stdout: "inherit",
-  stderr: "inherit",
-});
+const daemon = await startDaemon({ home, delayMs: 5, logs: "inherit" });
+const { port, base } = daemon;
 
 const c = checker();
 const { check } = c;
 let app: Awaited<ReturnType<typeof launchApp>> | null = null;
 try {
-  await waitHealthy(base, 15000);
-  const token = readFileSync(join(home, "token"), "utf8").trim();
+  const { token } = daemon;
   const api = makeApi(base, token);
   const project = await api<Project>("POST", "/projects", { path: projectDir, name: "size", key: "SIZE" });
   app = await launchApp({ baseUrl: base, token });
@@ -136,8 +131,7 @@ try {
   if (app) await app.screenshot(join(shots, "failure.png")).catch(() => {});
 } finally {
   await app?.close();
-  daemon.kill();
-  await daemon.exited;
+  await daemon.stop();
   pages.stop(true);
   cleanupTempDirs();
 }

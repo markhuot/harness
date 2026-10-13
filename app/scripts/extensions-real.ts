@@ -6,11 +6,12 @@
 // checks that Dark Reader is refused.
 //
 //   bun run build && bun scripts/extensions-real.ts [screenshotDir]
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { BrowserExtensionList, Project, Ticket } from "@harness/shared";
 import { tempDir } from "@harness/shared/testing";
-import { api as makeApi, appDir, checker, launchApp, until, waitHealthy } from "./lib/drive";
+import { startDaemon } from "@harness/shared/testing/daemon";
+import { api as makeApi, appDir, checker, launchApp, until } from "./lib/drive";
 
 const REACT = "fmkadmapgofadopljbjfkapdkoienihi";
 const DARK_READER = "eimadpbcbfnmbkopoojfekhnkhdbieeh";
@@ -20,8 +21,6 @@ const shots = resolve(process.argv[2] ?? join(appDir, "out", "screenshots", "ext
 mkdirSync(shots, { recursive: true });
 const home = tempDir("harness-ext-home-");
 const projectDir = tempDir("harness-ext-project-");
-const port = 7900 + Math.floor(Math.random() * 90);
-const base = `http://127.0.0.1:${port}`;
 
 const pages = Bun.serve({
   port: 0,
@@ -29,18 +28,14 @@ const pages = Bun.serve({
   fetch: () => new Response(`<!doctype html><title>Plain page</title><body style="font:16px system-ui;padding:40px"><h1>A page without React</h1>`, { headers: { "content-type": "text/html" } }),
 });
 
-const daemon = Bun.spawn(["bun", join(appDir, "..", "service/src/daemon.ts")], {
-  env: { ...process.env, HARNESS_HOME: home, HARNESS_PORT: String(port), HARNESS_DUMMY_DRIVER: "1", HARNESS_DUMMY_DELAY_MS: "5" },
-  stdout: "inherit",
-  stderr: "inherit",
-});
+const daemon = await startDaemon({ home, delayMs: 5, logs: "inherit" });
+const { port, base } = daemon;
 
 const c = checker();
 const { check } = c;
 let app: Awaited<ReturnType<typeof launchApp>> | null = null;
 try {
-  await waitHealthy(base, 15000);
-  const token = readFileSync(join(home, "token"), "utf8").trim();
+  const { token } = daemon;
   const api = makeApi(base, token);
   const list = () => api<BrowserExtensionList>("GET", "/browser-extensions");
   const statusOf = async (id: string) => (await list()).extensions.find((e) => e.id === id)?.status;
@@ -122,8 +117,7 @@ try {
   c.fail();
 } finally {
   await app?.close();
-  daemon.kill();
-  await daemon.exited;
+  await daemon.stop();
   pages.stop(true);
 }
 console.log(c.failures ? `\n${c.failures} check(s) failed` : "\nall checks passed");

@@ -7,7 +7,7 @@
 //   bun run build && bun scripts/popout-check.ts [--shots=<dir>]
 import { join } from "node:path";
 import { bootWorld } from "./lib/world";
-import { api as makeApi, appDir, checker, launchApp, stopped, until } from "./lib/drive";
+import { api as makeApi, appDir, checker, launchApp, until } from "./lib/drive";
 
 const shots = process.argv.find((a) => a.startsWith("--shots="))?.slice("--shots=".length);
 const world = await bootWorld();

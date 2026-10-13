@@ -6,7 +6,7 @@
 //   bun run build && bun scripts/plan-usage-check.ts [--shots=<dir>]
 import { join } from "node:path";
 import { bootWorld } from "./lib/world";
-import { appDir, checker, launchApp, stopped, until } from "./lib/drive";
+import { appDir, checker, launchApp, until } from "./lib/drive";
 
 const shots = process.argv.find((a) => a.startsWith("--shots="))?.slice("--shots=".length);
 const world = await bootWorld();

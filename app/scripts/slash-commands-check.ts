@@ -10,7 +10,8 @@ import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import type { Project, Ticket } from "@harness/shared";
 import { tempDir } from "@harness/shared/testing";
-import { api as makeApi, appDir, checker, launchApp, stopped, until, waitHealthy } from "./lib/drive";
+import { startDaemon } from "@harness/shared/testing/daemon";
+import { api as makeApi, appDir, checker, launchApp, until } from "./lib/drive";
 
 const shots = process.argv.find((a) => a.startsWith("--shots="))?.slice("--shots=".length);
 const theme = (process.argv.find((a) => a.startsWith("--theme="))?.slice(8) ?? "light") as "light" | "dark";
@@ -29,20 +30,8 @@ const COMMANDS = [
   { name: "compact", description: "Clear conversation history but keep a summary in context", argumentHint: "" },
 ];
 
-const port = 7800 + Math.floor(Math.random() * 90);
-const base = `http://127.0.0.1:${port}`;
-const daemon = Bun.spawn(["bun", join(appDir, "..", "service/src/daemon.ts")], {
-  env: {
-    ...process.env,
-    HARNESS_HOME: home,
-    HARNESS_PORT: String(port),
-    HARNESS_CLAUDE_BIN: join(appDir, "..", "service/src/drivers/__fixtures__/fake-claude.ts"),
-    FAKE_CLAUDE_COMMANDS: JSON.stringify(COMMANDS),
-    FAKE_CLAUDE_RECORD: record,
-  },
-  stdout: "ignore",
-  stderr: "inherit",
-});
+const daemon = await startDaemon({ home, delayMs: 15, env: { HARNESS_CLAUDE_BIN: join(appDir, "..", "service/src/drivers/__fixtures__/fake-claude.ts"), FAKE_CLAUDE_COMMANDS: JSON.stringify(COMMANDS), FAKE_CLAUDE_RECORD: record }, logs: "inherit" });
+const { port, base } = daemon;
 
 const counter = checker();
 const { check } = counter;
@@ -54,8 +43,7 @@ const shot = async (name: string) => {
 };
 
 try {
-  await waitHealthy(base, 15000);
-  const token = readFileSync(join(home, "token"), "utf8").trim();
+  const { token } = daemon;
   const api = makeApi(base, token);
   const project = await api<Project>("POST", "/projects", { path: projectDir, name: "slash", key: "SLASH", defaultDriver: "claude-code" });
 
@@ -190,8 +178,7 @@ try {
   if (text) console.log(`--- on screen ---\n${text}`);
 } finally {
   await app?.close();
-  daemon.kill();
-  await stopped(daemon);
+  await daemon.stop();
 }
 console.log(counter.failures ? `\n${counter.failures} check(s) failed` : "\nall slash command checks passed");
 process.exit(counter.failures ? 1 : 0);

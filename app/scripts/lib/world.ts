@@ -1,5 +1,5 @@
 // The seeded world the app's smoke and shoot scripts (and the other app checks that used to run
-// against app/scripts/mock-service.ts) run in: the REAL daemon with the dummy driver, on a database
+// against an in-memory mock of the service) run in: the REAL daemon with the dummy driver, on a database
 // seeded before it starts. Five projects (NYTIMES, HARNESS with a conductor and its children, the
 // HELLOHARNESS rename case, SITE with a deep Done column, MH with linked remote IDs), a ticket in
 // every state, spec history with media, approvals, context gauges, watchers and triage sessions.
