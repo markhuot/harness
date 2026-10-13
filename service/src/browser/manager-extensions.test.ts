@@ -53,7 +53,11 @@ withChrome("BrowserManager extensions (real Chrome)", () => {
     if (!existsSync("/Library/Managed Preferences/com.google.Chrome.plist")) return;
     if (existsSync(cachedPolicy(settledTemplate))) {
       cpSync(settledTemplate, profileDir, { recursive: true, filter: withoutLocks });
-      return;
+      // A stale or corrupt template falls through to the poll below.
+      if (existsSync(cachedPolicy(profileDir))) return;
+      rmSync(profileDir, { recursive: true, force: true });
+      mkdirSync(profileDir, { recursive: true });
+      rmSync(settledTemplate, { recursive: true, force: true });
     }
     const warm = new BrowserManager({ profileDir, chromePath: chromePath!, tabStore: memoryTabStore() });
     try {
