@@ -257,6 +257,8 @@ export class PlanUsageError extends Error {
     message: string,
     /** True for a rate limit or server error: poll again later, backing off */
     readonly transient = false,
+    /** How long the server asked us to wait (Retry-After), in ms */
+    readonly retryAfterMs?: number,
   ) {
     super(message);
     this.name = "PlanUsageError";

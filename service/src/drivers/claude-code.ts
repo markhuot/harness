@@ -350,6 +350,14 @@ export function buildClaudeArgs(
   return args;
 }
 
+/** A Retry-After header (seconds, or an HTTP date) as milliseconds from now; undefined when absent or unreadable. */
+export function retryAfterMs(value: string | null, now = Date.now()): number | undefined {
+  if (!value) return undefined;
+  const seconds = Number(value);
+  const ms = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(value) - now;
+  return Number.isFinite(ms) && ms > 0 ? ms : undefined;
+}
+
 const CLAUDE_USAGE_URL = "https://api.anthropic.com/api/oauth/usage";
 
 const WINDOWS: { key: string; id: PlanWindow["id"]; label: string; seconds: number }[] = [
@@ -1059,7 +1067,7 @@ export class ClaudeCodeDriver implements Driver {
           lastError = new PlanUsageError("Sign in to Claude Code to see plan usage");
           continue;
         }
-        if (res.status === 429 || res.status >= 500) throw new PlanUsageError(`Claude's usage endpoint answered ${res.status}`, true);
+        if (res.status === 429 || res.status >= 500) throw new PlanUsageError(`Claude's usage endpoint answered ${res.status}`, true, retryAfterMs(res.headers.get("retry-after")));
         if (!res.ok) throw new PlanUsageError(`Claude's usage endpoint answered ${res.status}`);
         return parseClaudeUsage(await res.json());
       } catch (err) {

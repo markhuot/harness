@@ -9,6 +9,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Changed
+
+- The sidebar's Claude plan usage is checked every 10 minutes instead of every 5, and after Claude's usage endpoint answers 429 (or a server error) Harness now leaves it alone for at least the wait the endpoint asks for, doubling up to an hour. Runs finishing and rate-limit warnings no longer re-ask during that wait, which was what kept the "usage endpoint answered 429" error coming back.
+
 ## [app-20261013.0325](https://github.com/markhuot/harness/releases/tag/app-20261013.0325) - 2026-10-13
 
 ### Added

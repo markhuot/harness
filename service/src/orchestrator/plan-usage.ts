@@ -7,9 +7,9 @@ import type { DriverPlanUsage, PlanUsageReport, PlanWindow } from "@harness/shar
 import type { EventBus } from "../events";
 import { PlanUsageError, type Driver, type DriverEvent } from "../drivers/types";
 
-export const POLL_MS = 5 * 60_000;
+export const POLL_MS = 10 * 60_000;
 /** After a failed poll, the next waits this long, doubling per consecutive failure up to the cap. */
-export const BACKOFF_MS = 5 * 60_000;
+export const BACKOFF_MS = 10 * 60_000;
 export const MAX_BACKOFF_MS = 60 * 60_000;
 
 type RateLimit = Extract<DriverEvent, { type: "rate_limit" }>;
@@ -21,6 +21,8 @@ interface Entry extends DriverPlanUsage {
   fromEvents?: boolean;
   /** No poll before this (ms) */
   notBefore: number;
+  /** The last read failed with a rate limit or server error, so even a forced read waits for `notBefore` */
+  transient?: boolean;
 }
 
 export class PlanUsageTracker {
@@ -41,7 +43,7 @@ export class PlanUsageTracker {
     const drivers = this.drivers()
       .filter((d) => this.entries.has(d.id))
       .map((d) => {
-        const { failures: _f, notBefore: _n, fromEvents: _e, ...pub } = this.entries.get(d.id)!;
+        const { failures: _f, notBefore: _n, fromEvents: _e, transient: _t, ...pub } = this.entries.get(d.id)!;
         return pub;
       });
     return { drivers };
@@ -64,7 +66,8 @@ export class PlanUsageTracker {
 
   /**
    * Read the plan usage of every driver that has one (or just `driverId`). A driver in backoff is
-   * skipped unless `force`. Resolves once readings are stored and clients told.
+   * skipped unless `force`, and `force` doesn't override a backoff after a 429 or a server error
+   * (asking again is what keeps it rate limited). Resolves once readings are stored and clients told.
    */
   async refresh(driverId?: string, force = false): Promise<void> {
     const targets = this.drivers().filter((d) => d.planUsage && (!driverId || d.id === driverId));
@@ -75,7 +78,7 @@ export class PlanUsageTracker {
     const running = this.inflight.get(driver.id);
     if (running) return running;
     const prev = this.entries.get(driver.id);
-    if (!force && prev && prev.notBefore > this.now()) return Promise.resolve();
+    if (prev && prev.notBefore > this.now() && (!force || prev.transient)) return Promise.resolve();
     const p = this.read(driver, prev).finally(() => this.inflight.delete(driver.id));
     this.inflight.set(driver.id, p);
     return p;
@@ -103,6 +106,9 @@ export class PlanUsageTracker {
       const message = err instanceof Error ? err.message : String(err);
       const transient = err instanceof PlanUsageError && err.transient;
       const failures = (prev?.failures ?? 0) + 1;
+      const backoff = Math.min(MAX_BACKOFF_MS, BACKOFF_MS * 2 ** (transient ? failures - 1 : 0));
+      // When the server said how long to wait, wait at least that (within the cap).
+      const asked = err instanceof PlanUsageError && err.retryAfterMs ? Math.min(MAX_BACKOFF_MS, err.retryAfterMs) : 0;
       // Keep what the CLI's own rate-limit reports said, so a limit still shows; never a stale bar.
       next = {
         driver: driver.id,
@@ -112,7 +118,8 @@ export class PlanUsageTracker {
         error: message,
         fetchedAt: at,
         failures,
-        notBefore: at + Math.min(MAX_BACKOFF_MS, BACKOFF_MS * 2 ** (transient ? failures - 1 : 0)),
+        notBefore: at + Math.max(backoff, asked),
+        ...(transient ? { transient: true } : {}),
         ...(prev?.fromEvents ? { fromEvents: true } : {}),
       } as Entry;
     }
@@ -146,6 +153,7 @@ export class PlanUsageTracker {
       fetchedAt: at,
       failures: prev?.failures ?? 0,
       notBefore: prev?.notBefore ?? 0,
+      ...(prev?.transient ? { transient: true } : {}),
       fromEvents: true,
     } as Entry;
     this.entries.set(driver.id, next);

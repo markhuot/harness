@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { Settings } from "@harness/shared";
 import { tempDir } from "@harness/shared/testing";
 import { fakeContext } from "../tools/fakes";
-import { ClaudeCodeDriver, parseClaudeUsage, StreamJsonParser } from "./claude-code";
+import { ClaudeCodeDriver, retryAfterMs, parseClaudeUsage, StreamJsonParser } from "./claude-code";
 import { PlanUsageError, type DriverEvent, type RunRequest } from "./types";
 
 const settings = (over: Partial<Settings> = {}): Settings => ({ defaultDriver: "claude-code", maxConcurrentRuns: 4, permissionMode: "ask", classifier: "off", defaultModels: {}, reviewModels: {}, anthropicApiKey: null, ...over });
@@ -146,6 +146,20 @@ describe("ClaudeCodeDriver.planUsage", () => {
   test("with no token anywhere it asks to sign in; when every token is refused it says the same", async () => {
     await expect(driver(() => json(200)).d.planUsage()).rejects.toThrow("Sign in to Claude Code to see plan usage");
     await expect(driver(() => json(401, {}), { login: ["a", "b"] }).d.planUsage()).rejects.toThrow("Sign in to Claude Code to see plan usage");
+  });
+
+  test("a 429 carries the Retry-After the server sent", async () => {
+    const limited = () => new Response("{}", { status: 429, headers: { "retry-after": "1200" } });
+    const err = await driver(limited, { login: ["t"] }).d.planUsage().catch((e) => e);
+    expect((err as PlanUsageError).retryAfterMs).toBe(1_200_000);
+    const none = await driver(() => json(429, {}), { login: ["t"] }).d.planUsage().catch((e) => e);
+    expect((none as PlanUsageError).retryAfterMs).toBeUndefined();
+  });
+
+  test("retryAfterMs reads seconds or an HTTP date, and ignores junk", () => {
+    expect(retryAfterMs("90")).toBe(90_000);
+    expect(retryAfterMs("Wed, 21 Oct 2026 07:30:00 GMT", Date.parse("Wed, 21 Oct 2026 07:00:00 GMT"))).toBe(1_800_000);
+    for (const v of [null, "", "soon", "-5", "0"]) expect(retryAfterMs(v)).toBeUndefined();
   });
 
   test("a 429 or 5xx is transient (the poller backs off); a network failure too", async () => {

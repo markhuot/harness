@@ -71,7 +71,7 @@ describe("PlanUsageTracker", () => {
     expect(t.tracker.report().drivers[0]).toMatchObject({ windows: [], error: "Sign in to Claude Code to see plan usage" });
   });
 
-  test("transient failures back off, doubling up to the cap; a poll in that time is skipped, a forced one isn't", async () => {
+  test("transient failures back off, doubling up to the cap; a poll or a forced read in that time is skipped", async () => {
     const t = setup();
     t.answer(new PlanUsageError("429", true));
     await t.tracker.refresh();
@@ -85,6 +85,9 @@ describe("PlanUsageTracker", () => {
     t.advance(BACKOFF_MS); // the second failure doubled it
     await t.tracker.refresh();
     expect(t.reads()).toBe(2);
+    await t.tracker.refresh(undefined, true);
+    expect(t.reads()).toBe(2); // a run ending or a rate-limit report doesn't hammer a 429
+    t.advance(BACKOFF_MS);
     await t.tracker.refresh(undefined, true);
     expect(t.reads()).toBe(3);
     for (let i = 0; i < 8; i++) {
@@ -100,12 +103,40 @@ describe("PlanUsageTracker", () => {
     expect(t.reads()).toBe(before + 1);
   });
 
+  test("a Retry-After longer than the backoff is waited out, and never past the cap", async () => {
+    const t = setup();
+    t.answer(new PlanUsageError("429", true, BACKOFF_MS * 3));
+    await t.tracker.refresh();
+    t.advance(BACKOFF_MS * 3 - 1);
+    await t.tracker.refresh();
+    expect(t.reads()).toBe(1);
+    t.advance(1);
+    await t.tracker.refresh();
+    expect(t.reads()).toBe(2);
+    t.answer(new PlanUsageError("429", true, MAX_BACKOFF_MS * 10));
+    t.advance(MAX_BACKOFF_MS);
+    await t.tracker.refresh();
+    expect(t.reads()).toBe(3);
+    t.advance(MAX_BACKOFF_MS);
+    await t.tracker.refresh();
+    expect(t.reads()).toBe(4);
+  });
+
+  test("a forced read still goes through the short backoff after a failure that isn't a rate limit", async () => {
+    const t = setup();
+    t.answer(new PlanUsageError("Sign in to Claude Code to see plan usage"));
+    await t.tracker.refresh();
+    await t.tracker.refresh(undefined, true);
+    expect(t.reads()).toBe(2);
+  });
+
   test("a success clears the backoff", async () => {
     const t = setup();
     t.answer(new PlanUsageError("503", true));
     await t.tracker.refresh();
+    t.advance(BACKOFF_MS);
     t.answer([window(5)]);
-    await t.tracker.refresh(undefined, true);
+    await t.tracker.refresh();
     t.advance(1);
     await t.tracker.refresh();
     expect(t.reads()).toBe(3);

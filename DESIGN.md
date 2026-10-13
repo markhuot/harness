@@ -1341,8 +1341,10 @@ The limit that stops work is the account's plan, not one conversation. `GET /usa
 `{ id, label, usedPercent, resetsAt, windowSeconds }` (the length lets clients compute how far
 through the window we are: `1 − (resetsAt − now) ÷ windowSeconds`), a `status`, and an `error`
 when the numbers can't be read. `PlanUsageTracker` (`plan-usage.ts`) keeps the last reading per
-driver, polls every 5 minutes while a WebSocket client is connected and once after each run, and
-backs off (5 minutes doubling to an hour) after a 429, a 5xx or a network failure. The CLI's own
+driver, polls every 10 minutes while a WebSocket client is connected and once after each run, and
+backs off (10 minutes doubling to an hour, or the endpoint's `Retry-After` if longer) after a 429,
+a 5xx or a network failure. Nothing, not even the after-run read or a rate-limit report, reads the
+endpoint again during that backoff. The CLI's own
 `rate_limit_event` (claude-code; each window's `utilization` as a 0–1 share and its reset)
 stands in when the endpoint can't be read, and a warning or rejection reads it again at once.
 
