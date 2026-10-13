@@ -4216,7 +4216,7 @@ function interactionChains(s: Seeded): Chain[] {
         return `${t.key} approved → ${t.status}`;
       });
     }),
-    chain("prompt-editor", [], 14, async (udid) => {
+    chain("prompt-editor", ["hello"], 14, async (udid) => {
       const override = async (id: string) => (await api<PromptEntry[]>("GET", "/prompts")).find((p) => p.id === id)!.override;
       const field = (l: string) => l === "Work run instructions prompt";
       // The header's glass buttons aren't in AXe's tree: Cancel sits where Back does, Save at the trailing edge.
