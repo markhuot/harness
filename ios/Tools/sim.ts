@@ -144,7 +144,7 @@ export function lockHolder(name: string, dir = lockDir()): Owner | null {
  * a time do this, and it reads the holder again under it: someone else may have reaped the lock and
  * taken it in the meantime, and that new lock must stay.
  */
-function reapIfStale(path: string): void {
+export function reapIfStale(path: string, afterRecheck?: () => void): void {
   const first = readOwner(path);
   if (first && alive(first)) return;
   const guard = `${path}.reap`;
@@ -158,8 +158,11 @@ function reapIfStale(path: string): void {
     return;
   }
   try {
+    const gone = !existsSync(path);
     const again = readOwner(path);
-    if (again && alive(again)) return;
+    afterRecheck?.();
+    // Gone already: whoever reaped it may have been followed by a new holder, whose lock must stay.
+    if (gone || (again && alive(again))) return;
     rmSync(path, { force: true });
   } finally {
     rmSync(guard, { recursive: true, force: true });
@@ -383,8 +386,8 @@ export interface PoolOptions extends AcquireOptions {
   minFreeGiB?: number;
   /** Free GiB needed to create a slot that doesn't exist yet (default NEW_SIM_GIB). */
   newSlotGiB?: number;
-  /** Slots not to lock (ones whose creation just failed). */
-  exclude?: string[];
+  /** Slots not to lock (ones whose creation just failed). A function is asked again on every poll, so an exclusion can lapse. */
+  exclude?: string[] | (() => string[]);
 }
 
 /**
@@ -401,16 +404,17 @@ export async function acquirePool(opts: PoolOptions = {}): Promise<{ name: strin
   let told = false;
   for (;;) {
     const free = (opts.freeGiB ?? freeGiB)();
+    const exclude = typeof opts.exclude === "function" ? opts.exclude() : (opts.exclude ?? []);
     const diskOk = free >= (opts.minFreeGiB ?? MIN_FREE_GIB);
     const roomForNew = free >= (opts.newSlotGiB ?? NEW_SIM_GIB);
     // Lock files first: while every slot is held, polling costs no simctl call.
     const holders = slots.map((n) => lockHolder(n, dir));
-    if (holders.some((h, i) => !h && !opts.exclude?.includes(slots[i] as string))) {
+    if (holders.some((h, i) => !h && !exclude.includes(slots[i] as string))) {
       const devices = await (opts.devices ?? listDevices)();
       if (!roomForNew && !devices.some((d) => slots.includes(d.name))) checkDisk(opts.newSlotGiB ?? NEW_SIM_GIB, free); // nothing to wait on
       const views: SlotView[] = slots.map((name, i) => {
         const d = devices.find((x) => x.name === name);
-        return { name, exists: !!d, booted: d?.state === "Booted", held: !!holders[i] || !!opts.exclude?.includes(name) };
+        return { name, exists: !!d, booted: d?.state === "Booted", held: !!holders[i] || exclude.includes(name) };
       });
       for (const name of slotCandidates(views, { prefer: opts.prefer, diskOk, roomForNew })) {
         if (tryLock(name, dir)) return { name, release: () => releaseLock(name, dir), inherited: false };
@@ -432,7 +436,11 @@ export async function acquirePool(opts: PoolOptions = {}): Promise<{ name: strin
  * used the room first), the slot is let go and the wait goes on for an existing one.
  */
 export async function acquireReady(opts: PoolOptions = {}, ensure: EnsureOptions = {}): Promise<{ name: string; udid: string; release: () => void }> {
-  const exclude = [...(opts.exclude ?? [])];
+  const refused: string[] = [];
+  const disk = ensure.freeGiB ?? freeGiB;
+  // A slot whose creation was refused for disk is skipped only while the disk is still short: once
+  // room appears, it is worth creating again rather than waiting on a held slot.
+  const exclude = () => [...(typeof opts.exclude === "function" ? opts.exclude() : (opts.exclude ?? [])), ...(disk() < (opts.newSlotGiB ?? NEW_SIM_GIB) ? refused : [])];
   for (;;) {
     const got = await acquirePool({ ...opts, exclude });
     try {
@@ -440,7 +448,7 @@ export async function acquireReady(opts: PoolOptions = {}, ensure: EnsureOptions
     } catch (e) {
       got.release();
       if (!(e instanceof DiskLowError) || got.inherited) throw e;
-      exclude.push(got.name);
+      refused.push(got.name);
     }
   }
 }

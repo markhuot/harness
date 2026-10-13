@@ -16,7 +16,7 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { IOS } from "./build";
-import { DEVELOPER_DIR, SHARED_DEVICE, SHARED_IPAD_DEVICE, checkDisk, ensureDevice, withLock, type DeviceKind } from "./sim";
+import { DEVELOPER_DIR, SHARED_IPAD_DEVICE, acquire, acquireReady, checkDisk, ensureDevice, type DeviceKind, type EnsureOptions, type PoolOptions } from "./sim";
 
 export interface SnapshotOptions {
   devices: DeviceKind[];
@@ -58,6 +58,22 @@ export function failureLines(output: string): string[] {
   return output.split("\n").filter((l) => /error:|\.(actual|diff)\.png|reference: |If the change is intended/.test(l));
 }
 
+/**
+ * The simulator a snapshot run uses, locked and ready. An iPhone run takes any free slot of the pool
+ * (or the one a parent `sim with-lock` already holds), so it never queues on slot 1 while slot 2 is
+ * idle; the iPad has its single shared simulator.
+ */
+export async function acquireSnapshotDevice(kind: DeviceKind, pool: PoolOptions = {}, ensure: EnsureOptions = {}): Promise<{ name: string; udid: string; release: () => void }> {
+  if (kind === "iphone") return acquireReady(pool, ensure);
+  const release = await acquire(SHARED_IPAD_DEVICE, pool);
+  try {
+    return { name: SHARED_IPAD_DEVICE, udid: await ensureDevice(SHARED_IPAD_DEVICE, { ...ensure, kind, lockDir: ensure.lockDir ?? pool.dir }), release };
+  } catch (e) {
+    release();
+    throw e;
+  }
+}
+
 if (import.meta.main) {
   try {
     const o = parseSnapshotArgs(process.argv.slice(2));
@@ -69,9 +85,9 @@ if (import.meta.main) {
     if (!existsSync(xctestrun)) throw new Error(`no test run file at ${xctestrun}`);
     let failed = false;
     for (const kind of o.devices) {
-      const name = kind === "ipad" ? SHARED_IPAD_DEVICE : SHARED_DEVICE;
-      await withLock(name, async () => {
-        const udid = await ensureDevice(name, { kind });
+      const waiting = () => console.error(`waiting for ${kind === "ipad" ? `the "${SHARED_IPAD_DEVICE}"` : "a shared"} simulator…`);
+      const { name, udid, release } = await acquireSnapshotDevice(kind, { onWait: waiting }, { kind });
+      try {
         const { cmd, env } = testCommand(o, xctestrun, udid, kind);
         if (env.TEST_RUNNER_SNAPSHOT_OUT) mkdirSync(env.TEST_RUNNER_SNAPSHOT_OUT, { recursive: true });
         console.error(`==> ${o.record ? "Recording" : "Checking"} snapshots on ${name}`);
@@ -83,7 +99,9 @@ if (import.meta.main) {
           console.error(failureLines(output).join("\n") || output.split("\n").slice(-40).join("\n"));
           console.error(`${name}: failed; full log in ios/build/snapshots-${kind}.log`);
         } else console.error(`${name}: ${o.record ? "recorded" : "all snapshots match"}${o.out ? `; images in ${join(o.out, kind)}` : ""}`);
-      }, { onWait: () => console.error(`waiting for the "${name}" simulator…`) });
+      } finally {
+        release();
+      }
     }
     process.exit(failed ? 1 : 0);
   } catch (e) {

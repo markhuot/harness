@@ -25,6 +25,7 @@ import {
   markKept,
   parseSimDaemons,
   pinnedRuntime,
+  reapIfStale,
   planReap,
   processStart,
   reap,
@@ -523,6 +524,40 @@ test("acquireReady: when creating the slot is refused for disk after it was lock
   const got = await pending;
   expect([got.name, got.udid]).toEqual([A, "UA"]);
   got.release();
+});
+
+test("acquireReady: a slot refused for disk is tried again once the disk has room, rather than waiting on a held slot", async () => {
+  const dir = tempDir();
+  const holder = await holdInChild(dir, A, 60_000);
+  const sim = fakeSimctl([runtime("27.0")], { "com.apple.CoreSimulator.SimRuntime.iOS-27-0": [{ udid: "UA", name: A, state: "Booted", isAvailable: true }] });
+  let free = 1;
+  const pool = { dir, pollMs: 10, timeoutMs: 5000, devices: async () => (await sim.run("list", "devices", "--json").then((o) => Object.values((JSON.parse(o) as { devices: Record<string, { udid: string; name: string; state: string; isAvailable: boolean }[]> }).devices).flat())), freeGiB: () => 50 };
+  const pending = acquireReady(pool, { simctl: sim.run, lockDir: dir, freeGiB: () => free, log: () => {} });
+  await Bun.sleep(150);
+  expect(sim.calls.some((c) => c[0] === "create")).toBe(false); // refused, and A is held
+  free = 50;
+  const got = await pending;
+  expect(got.name).toBe(B); // created, not waited out
+  expect(sim.calls.some((c) => c[0] === "create")).toBe(true);
+  got.release();
+  holder.kill("SIGKILL");
+});
+
+test("reapIfStale leaves a lock another process created after the stale one was already gone", () => {
+  const dir = tempDir();
+  const path = join(dir, "x.lock");
+  const live = JSON.stringify({ pid: process.pid, start: processStart(process.pid), command: "other", at: new Date().toISOString() });
+  // No lock file at the re-read; a live holder appears right after it. Removing "the stale lock" now would delete theirs.
+  reapIfStale(path, () => writeFileSync(path, live));
+  expect(existsSync(path)).toBe(true);
+});
+
+test("reapIfStale still removes a lock whose holder is dead", () => {
+  const dir = tempDir();
+  const path = join(dir, "y.lock");
+  writeFileSync(path, JSON.stringify({ pid: 2 ** 22 + 12345, start: "never", command: "gone", at: "" }));
+  reapIfStale(path);
+  expect(existsSync(path)).toBe(false);
 });
 
 test("ensureDevice creates a simulator only at NEW_SIM_GIB free, and one at a time across names", async () => {

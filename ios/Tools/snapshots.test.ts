@@ -1,5 +1,16 @@
 import { expect, test } from "bun:test";
-import { failureLines, parseSnapshotArgs, testCommand } from "./snapshots";
+import { tempDir } from "@harness/shared/testing";
+import { acquireSnapshotDevice, failureLines, parseSnapshotArgs, testCommand } from "./snapshots";
+import { lockHolder, tryLock, type Simctl } from "./sim";
+
+const RT = "com.apple.CoreSimulator.SimRuntime.iOS-27-0";
+const dev = (name: string, udid: string) => ({ udid, name, state: "Booted", isAvailable: true });
+const simctlWith = (devices: ReturnType<typeof dev>[]): Simctl => async (...args) => {
+  if (args[0] === "list" && args[1] === "runtimes") return JSON.stringify({ runtimes: [{ identifier: RT, version: "27.0", isAvailable: true }] });
+  if (args[0] === "list") return JSON.stringify({ devices: { [RT]: devices } });
+  return "";
+};
+const pool = (dir: string, devices: ReturnType<typeof dev>[]) => ({ dir, pollMs: 10, timeoutMs: 500, devices: async () => devices, freeGiB: () => 100 });
 
 test("with no device flag both simulators run, and flags are collected", () => {
   expect(parseSnapshotArgs([])).toEqual({ devices: ["iphone", "ipad"], record: false, out: undefined, only: undefined });
@@ -48,4 +59,42 @@ test("no two reference images in a device folder are identical (a screen that re
       seen.set(hash, file);
     }
   }
+});
+
+test("an iPhone snapshot run takes the free pool slot while slot 1 is held, instead of queueing on it", async () => {
+  const dir = tempDir();
+  const devices = [dev("harness-shared", "U1"), dev("harness-shared-2", "U2")];
+  expect(tryLock("harness-shared", dir)).toBe(true);
+  const got = await acquireSnapshotDevice("iphone", pool(dir, devices), { simctl: simctlWith(devices), lockDir: dir, freeGiB: () => 100, log: () => {} });
+  expect([got.name, got.udid]).toEqual(["harness-shared-2", "U2"]);
+  expect(lockHolder("harness-shared-2", dir)).not.toBeNull();
+  got.release();
+  expect(lockHolder("harness-shared-2", dir)).toBeNull();
+});
+
+test("under sim with-lock the snapshot run uses the slot its parent holds and locks nothing more", async () => {
+  const dir = tempDir();
+  const devices = [dev("harness-shared", "U1"), dev("harness-shared-2", "U2")];
+  const before = process.env.HARNESS_SIM_LOCKED;
+  process.env.HARNESS_SIM_LOCKED = "harness-shared-2";
+  try {
+    const got = await acquireSnapshotDevice("iphone", pool(dir, devices), { simctl: simctlWith(devices), lockDir: dir, freeGiB: () => 100, log: () => {} });
+    expect([got.name, got.udid]).toEqual(["harness-shared-2", "U2"]);
+    expect(lockHolder("harness-shared", dir)).toBeNull();
+    expect(lockHolder("harness-shared-2", dir)).toBeNull(); // the parent's lock, not this process's
+    got.release();
+  } finally {
+    if (before === undefined) delete process.env.HARNESS_SIM_LOCKED;
+    else process.env.HARNESS_SIM_LOCKED = before;
+  }
+});
+
+test("the iPad snapshot run locks the single shared iPad", async () => {
+  const dir = tempDir();
+  const devices = [dev("harness-shared-ipad", "UI")];
+  const got = await acquireSnapshotDevice("ipad", pool(dir, devices), { simctl: simctlWith(devices), lockDir: dir, freeGiB: () => 100, log: () => {} });
+  expect([got.name, got.udid]).toEqual(["harness-shared-ipad", "UI"]);
+  expect(lockHolder("harness-shared-ipad", dir)).not.toBeNull();
+  got.release();
+  expect(lockHolder("harness-shared-ipad", dir)).toBeNull();
 });
