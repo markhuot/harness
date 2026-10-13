@@ -7,9 +7,9 @@
 
 /** The tickets (and extras) the walk-through's seed can create; see seed() in sim-check.ts. */
 export const SEED_NAMES = [
-  "hello", "changes", "conductor", "browse", "approval", "configApproval", "blocked", "plan", "agents", "tables",
+  "hello", "changes", "conductor", "browse", "approval", "configApproval", "blocked", "plan", "agents",
   "branchPlan", "quick", "waiting", "draft", "code", "diff", "headings", "fileLink", "linked", "tasks", "watchers",
-  "gauge", "gaugeOver", "gaugeMiss", "gaugeCompact", "gaugeCopilot", "gaugeNew", "noted",
+  "gauge", "gaugeMiss", "gaugeCompact", "noted",
 ] as const;
 export type SeedName = (typeof SEED_NAMES)[number];
 
