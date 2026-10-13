@@ -340,6 +340,15 @@ public final class Router {
         sheets = list
     }
 
+    /// The system took the presented sheet down (a swipe away, the escape gesture, UIKit dismissing
+    /// it): that closes the ticket, like any dismissal. `dock` is only the armed release of the hold
+    /// gesture (DockArming), which docks it instead. Nothing happens unless the ticket sheet was
+    /// presented, so a dismissal the app itself made first can't close a second ticket.
+    public func sheetDismissedBySystem(dock: Bool) {
+        guard ticketSheetState == .presented else { return }
+        if dock { dockSheet() } else { dismissSheet() }
+    }
+
     /// The top sheet closes: the next becomes the top, docked; the last one leaves nothing.
     public func dismissSheet() {
         guard let top = sheets.first else { return }
@@ -596,6 +605,13 @@ public struct TicketSheet: Hashable, Sendable, Identifiable {
         if let route = path.last(where: { if case .ticket = $0 { true } else { false } }) { return route }
         if case let .ticket(key, tab) = root { return .ticket(key: key, tab: tab) }
         return nil
+    }
+
+    /// Every ticket the sheet shows: the root's and the ones pushed above it.
+    public var ticketKeys: [String] {
+        var keys = rootKey.map { [$0] } ?? []
+        for case let .ticket(key, _) in path { keys.append(key) }
+        return keys
     }
 
     /// The root's ticket key; nil for New session.

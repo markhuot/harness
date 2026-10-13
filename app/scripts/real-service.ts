@@ -81,6 +81,8 @@ try {
   check("streaming preview replaced by the persisted message", persisted);
   const toolRows = await js<string[]>(`[...document.querySelectorAll(".t-tool-name")].map(e => e.textContent)`);
   check("tool calls render in the transcript", toolRows.some((n) => /submit_for_review|post_note/.test(n)), toolRows.join(","));
+  const elapsed = await js<string[]>(`[...document.querySelectorAll(".t-tool-head")].map(h => h.querySelector(".t-tool-elapsed")?.textContent ?? "")`);
+  check("every tool row shows its elapsed time", elapsed.length > 0 && elapsed.every((t) => /^\d+[smh]/.test(t)), elapsed.join(","));
   await shot("2-transcript");
 
   // --- 4. Activity tab, then Approve → the complete run starts by itself → Done.

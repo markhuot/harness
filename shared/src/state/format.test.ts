@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import type { TranscriptEntry } from "../protocol";
 import { inlineTokens, parseBlocks, plainText } from "./markdown";
-import { describeApprovalInput, effectiveTab, fitRect, groupTranscript, normalizeUrl, parsePluginTab, pluginTabRoute, toPagePoint, toolPreview } from "./index";
+import { describeApprovalInput, effectiveTab, fitRect, groupTranscript, normalizeUrl, parsePluginTab, pluginTabRoute, toPagePoint, toolElapsed, toolPreview } from "./index";
 
 test("fenced code keeps list- and heading-looking lines verbatim", () => {
   const blocks = parseBlocks("Intro\n```ts\n- not a list\n# not a heading\n```\n- real item");
@@ -274,3 +274,10 @@ test("browser: URL normalization and letterboxed touch → page coordinates", ()
 });
 
 // HARNESS-68: a message to a working in-progress or planning ticket goes into the running agent.
+
+test("a tool's elapsed time runs to now while it runs and stops at its result", () => {
+  const call = { createdAt: 10_000 };
+  expect(toolElapsed(call, undefined, 75_000)).toBe("1m 5s");
+  expect(toolElapsed(call, { createdAt: 13_400 }, 999_000)).toBe("3s");
+  expect(toolElapsed(null, { createdAt: 13_400 }, 999_000)).toBeNull();
+});

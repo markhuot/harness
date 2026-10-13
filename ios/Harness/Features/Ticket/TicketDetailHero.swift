@@ -121,7 +121,7 @@ struct TicketDetailHero: View {
                 .frame(minHeight: TicketSidePanel<EmptyView>.buttonSize)
                 // The hero's 10pt top padding up to the buttons' 4; below, what the title had.
                 .padding(.top, -6)
-                .padding(.bottom, compact ? 20 : -4)
+                .padding(.bottom, compact ? -8 : -4)
         } else {
             row
         }

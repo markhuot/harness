@@ -51,6 +51,15 @@ export function formatDuration(ms: number): string {
   return `${Math.floor(m / 60)}h ${m % 60}m`;
 }
 
+/**
+ * How long a tool call took, or has taken so far: from the call to its result, or to `now` while
+ * it runs. Null for a result with no call, which has no start time.
+ */
+export function toolElapsed(call: { createdAt: number } | null | undefined, result: { createdAt: number } | null | undefined, now: number): string | null {
+  if (!call) return null;
+  return formatDuration((result?.createdAt ?? now) - call.createdAt);
+}
+
 export function relativeTime(ts: number | null | undefined, now = Date.now()): string {
   if (!ts) return "never";
   const s = Math.round((now - ts) / 1000);

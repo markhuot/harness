@@ -56,6 +56,13 @@ public enum Format {
         return "\(m / 60)h \(m % 60)m"
     }
 
+    /// How long a tool call took, or has taken so far: from the call to its result, or to `now`
+    /// while it runs. Nil for a result with no call, which has no start time.
+    public static func toolElapsed(call: TranscriptEntry?, result: TranscriptEntry?, now: Double) -> String? {
+        guard let call else { return nil }
+        return duration((result?.createdAt ?? now) - call.createdAt)
+    }
+
     /// "just now" / "42s ago" / "5m ago" / "3h ago" / "2d ago"; a short date (current locale) past
     /// 30 days; "never" for nil or 0. Each unit rounds from the previous one, as in TS.
     public static func relativeTime(_ ts: Double?, now: Double = Date().timeIntervalSince1970 * 1000) -> String {

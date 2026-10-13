@@ -71,6 +71,18 @@ struct TranscriptLogicTests {
         #expect(TranscriptLogic.toolName(call: nil, result: nil) == "tool")
     }
 
+    @Test("a tool's elapsed time runs to now while it runs and stops at its result")
+    func toolElapsed() {
+        func at(_ e: TranscriptEntry, _ t: Double) -> TranscriptEntry {
+            TranscriptEntry(id: e.id, sessionId: e.sessionId, seq: e.seq, role: e.role, content: e.content, createdAt: t)
+        }
+        let call = at(Self.entry("c", .toolCall(callId: "k", name: "Bash", input: .null)), 10_000)
+        let result = at(Self.entry("r", .toolResult(callId: "k", name: "Bash", output: [], isError: false)), 13_400)
+        #expect(Format.toolElapsed(call: call, result: nil, now: 75_000) == "1m 5s")
+        #expect(Format.toolElapsed(call: call, result: result, now: 999_000) == "3s")
+        #expect(Format.toolElapsed(call: nil, result: result, now: 999_000) == nil)
+    }
+
     @Test("sub-agents don't stream, and work while they run")
     func subagentScope() {
         var state = BoardState()

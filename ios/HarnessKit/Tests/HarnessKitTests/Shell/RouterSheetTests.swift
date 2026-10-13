@@ -297,6 +297,25 @@ struct RouterSheetTests {
         #expect(r.ticketSheetState == .gone)
     }
 
+    @Test func aSystemDismissalClosesTheTicketAndDocksOnlyOnTheArmedRelease() {
+        let r = sheeted()
+        r.openTicket(key: "A-1", tab: nil)
+        r.openTicket(key: "B-1", tab: nil)
+        // A swipe away closes, however it went: the next stays as the docked card, no sheet.
+        r.sheetDismissedBySystem(dock: false)
+        #expect(r.ticketSheetState == .docked && r.dockedSheets.map(\.title) == ["A-1"])
+        // Already docked: a late second report closes nothing more.
+        r.sheetDismissedBySystem(dock: false)
+        #expect(r.dockedSheets.map(\.title) == ["A-1"])
+        r.restoreDock()
+        r.sheetDismissedBySystem(dock: false)
+        #expect(r.ticketSheetState == .gone)
+        // The hold gesture's release docks, keeping the ticket.
+        r.openTicket(key: "C-1", tab: nil)
+        r.sheetDismissedBySystem(dock: true)
+        #expect(r.ticketSheetState == .docked && r.dock?.title == "C-1")
+    }
+
     @Test func openingTheDockedTicketRestoresIt() {
         let r = sheeted()
         r.push(t("C-1"))

@@ -69,6 +69,7 @@ struct TicketDetailComposer: View {
                                   placeholderColor: attention ? c.red : nil,
                                   onFocusChange: { now in
                                       focused = now
+                                      TicketViewMemory.shared.focusChanged(now, key: ticket.key, at: DockHold.now)
                                       draft.focus(now, stored: ticket.messageDraft.optional)
                                   },
                                   fieldBox: MentionFieldBox(border: attention ? c.red : nil, cornerRadius: 22,
@@ -90,7 +91,10 @@ struct TicketDetailComposer: View {
         .onChange(of: ticket.messageDraft.optional, initial: true) { _, saved in draft.sync(saved) }
         .onAppear { draft.onError = { _ in haptic(.error) } }
         // Leaving the ticket with the field focused sends no blur: the draft isn't being typed in anymore.
-        .onDisappear { draft.focus(false, stored: ticket.messageDraft.optional) }
+        .onDisappear {
+            TicketViewMemory.shared.composerDisappeared(key: ticket.key, at: DockHold.now)
+            draft.focus(false, stored: ticket.messageDraft.optional)
+        }
     }
 
     /// Prominent accent glass while writing (focused, or holding a message), plain glass with a dimmed
