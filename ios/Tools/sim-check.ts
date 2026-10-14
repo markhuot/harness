@@ -1800,7 +1800,7 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
     const before = (await specTop())!;
     if (!(start - before > 100)) throw new Error(`the spec didn't scroll: its top went from ${start} to ${before}`);
     await tapWhere(udid, (l) => l.startsWith("Message the agent"));
-    await axe("type", "draft kept", "--udid", udid);
+    await axe("type", "kept", "--udid", udid);
     // With the keyboard up, the hold docks it: the sheet is dismissed and its view torn down.
     await dockSheet(udid);
     await until("the sheet gone", async () => (await specTop()) === undefined && onBoard(await labels(udid)), 8000);
@@ -1813,7 +1813,7 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
     // by about its collapse. Scrolled most of the way it was, rather than back at the top.
     if (!(start - after > (start - before) * 0.7)) throw new Error(`the spec reopened with its top at ${Math.round(after)}, not near ${Math.round(before)} where it was left (${Math.round(start)} unscrolled)`);
     const field = (await nodes(udid)).find((n) => n.AXLabel?.startsWith("Message the agent")) as (AXNode & { AXValue?: string | null }) | undefined;
-    if (!field?.AXValue?.toLowerCase().includes("draft kept")) throw new Error(`the composer reads "${field?.AXValue ?? ""}", not the draft`);
+    if (!field?.AXValue?.toLowerCase().includes("kept")) throw new Error(`the composer reads "${field?.AXValue ?? ""}", not the draft`);
     if (shotsWanted) await shot(udid, "sheet-reopened-restored");
     await goto(udid, BOARD);
     return `scrolled ${Math.round(start - before)}pt, back at ${Math.round(start - after)}pt; draft kept`;
@@ -2195,7 +2195,7 @@ async function fileDockChecks(udid: string, p: { project: Project; conductor: Ti
       await until("the editor", editorUp, 8000);
       await atRest(udid, 1500);
     }
-    await typeUnsaved("DISCARD_ME");
+    await typeUnsaved("qzd");
     await atRest(udid, 1500);
     await shot(udid, "file-card-dirty-close", true);
     if (ipad) {
@@ -2216,7 +2216,7 @@ async function fileDockChecks(udid: string, p: { project: Project; conductor: Ti
       return !l.some(fileCard) && !l.includes(`Close ${DOCK_FILE}`);
     }, 8000);
     await sleep(1500);
-    if (readFileSync(join(scratch, "sheets", DOCK_FILE), "utf8").includes("DISCARD_ME")) throw new Error("Discard saved the edit to the file");
+    if (readFileSync(join(scratch, "sheets", DOCK_FILE), "utf8").includes("qzd")) throw new Error("Discard saved the edit to the file");
     return "Close → Discard closed the card, and the file is as it was";
   }, CHECK_CAP_MS, [RELINK]);
   await check("a failed save as a file card closes keeps the edits: the card comes back with them and Save retries", async () => {
@@ -2231,7 +2231,7 @@ async function fileDockChecks(udid: string, p: { project: Project; conductor: Ti
     // A folder the service can't create the temporary file in: every write fails.
     chmodSync(dir, 0o555);
     try {
-      await typeUnsaved("KEEP_ME");
+      await typeUnsaved("qzk");
       if (!ipad) await dockSheet(udid);
       await tapWhere(udid, `Close ${DOCK_FILE}`);
       // The card closed with a write that failed: it comes back, holding the edits and the failure.
@@ -2244,12 +2244,12 @@ async function fileDockChecks(udid: string, p: { project: Project; conductor: Ti
         throw e;
       });
       await shot(udid, "file-card-failed-save", true);
-      if (onDisk().includes("KEEP_ME")) throw new Error("the failing write reached the disk");
+      if (onDisk().includes("qzk")) throw new Error("the failing write reached the disk");
     } finally {
       chmodSync(dir, 0o755);
     }
     await tapWhere(udid, "Save");
-    await until("the edits written", async () => (onDisk().includes("KEEP_ME") ? true : null), 10000);
+    await until("the edits written", async () => (onDisk().includes("qzk") ? true : null), 10000);
     await api("PATCH", "/settings", { saveOnBlur: false });
     return "Close with a failing write → card back with the edits → Save wrote them";
   });
@@ -4124,7 +4124,7 @@ function interactionChains(s: Seeded): Chain[] {
         await goto(udid, `harness://ticket/${k(s.blocked)}`, (l) => l.some((x) => x.startsWith("Message the agent")));
         await tapWhere(udid, (l) => l.startsWith("Message the agent"));
         // A message to a blocked ticket is a chat; the dummy picks the work back up only when told to.
-        await axe("type", "Use Happy Cog [dummy:unblock]", "--udid", udid);
+        await axe("type", "[dummy:unblock]", "--udid", udid); // typing costs about 0.2 s a key (0.5 s with Shift): the shortest text that does the job
         await tapWhere(udid, "Send");
         // The ticket leaving blocked is the service's (steering.test.ts, the unblock tool's tests), over the body
         // launchBodies.json shares with HarnessClientTests; here it's the tap, and the tab switch (TabsTests).
@@ -4141,7 +4141,7 @@ function interactionChains(s: Seeded): Chain[] {
     // A reply's list items showing their text is the transcript-reply-list snapshot.
     chain("approve-and", ["agents"], 8, async (udid) => {
       await check("Approve menu → Approve and… takes typed instructions and approves", async () => {
-        const text = "Tag it v2 then clean up";
+        const text = "v2"; // typing costs about 0.2 s a key: the sheet needs some instructions, not these
         await goto(udid, `harness://ticket/${k(s.agents)}`, (l) => l.includes(APPROVE_MORE));
         await tapWhere(udid, APPROVE_MORE);
         await approveMenuUp(udid);
@@ -4175,10 +4175,10 @@ function interactionChains(s: Seeded): Chain[] {
         if ((await override("system.work")) !== null) throw new Error("an invalid prompt was saved");
         // Take the bad variable back out (its ten characters) and write a good line instead.
         await axe("key-sequence", "--keycodes", Array(10).fill("42").join(","), "--delay", "0.02", "--udid", udid);
-        await axe("type", " Mind the {{branch}}.", "--udid", udid);
+        await axe("type", " x{{branch}}", "--udid", udid);
         await until("the error gone", async () => !(await labels(udid)).some((l) => l.startsWith("Unknown variable")), 5000);
         await tapSave();
-        const saved = await until("override saved", async () => ((v) => (v?.includes("Mind the {{branch}}.") ? v : null))(await override("system.work")), 8000);
+        const saved = await until("override saved", async () => ((v) => (v?.includes("x{{branch}}") ? v : null))(await override("system.work")), 8000);
         await until("Reset button", async () => (await labels(udid)).includes("Reset to built-in"), 5000);
         await shot(udid, "prompt-saved-light");
         // Typing left the editor scrolled to the end of the long work prompt, above the button.
@@ -4451,7 +4451,7 @@ function interactionChains(s: Seeded): Chain[] {
         await goto(udid, `harness://file/${GREETINGS_PATH}?ticket=${k(s.fileLink)}`, (l) => l.includes(GREETINGS_PATH));
         await probeUntil(udid, "the editor", (x) => !!x.editor);
         // The page starts after the screen does: tap into it until a keystroke takes.
-        const typed = "EDITED_BY_SIM_CHECK";
+        const typed = "qzx"; // short, and not in the file
         await until("a keystroke in the editor marks the file unsaved", async () => {
           if (await dot()) return true;
           await axe("tap", "-x", "200", "-y", "500", "--udid", udid);
