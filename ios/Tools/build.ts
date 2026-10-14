@@ -4,7 +4,9 @@
 // when it fails.
 // Progress goes to stderr, and the path of what was built is the one line on stdout.
 //
-//   bun ios/Tools/build.ts sim                         Release, iphonesimulator, ad-hoc signed, arm64
+//   bun ios/Tools/build.ts sim [--optimized]           Release settings, iphonesimulator, ad-hoc signed, arm64. Compiled without optimization
+//                                                      (-Onone, per-file) unless --optimized: about a third of the clean build time,
+//                                                      and sim-check drives it the same; --optimized for what measures speed or memory
 //   bun ios/Tools/build.ts snapshots                   Debug build-for-testing of the snapshot tests (HarnessSnapshotTests),
 //                                                      into ios/build/dd-snapshots; prints the .xctestrun path
 //                                                      (Tools/snapshots.ts, `bun run sim snapshots`, runs it)
@@ -38,7 +40,7 @@ export const BUNDLE_ID = "com.markhuot.harness";
 
 export type Method = "dev" | "testflight";
 export type Options =
-  | { command: "sim" }
+  | { command: "sim"; optimized: boolean }
   | { command: "snapshots" }
   | { command: "archive"; buildNumber: string; archivePath: string }
   | { command: "export"; method: Method; archivePath: string; exportPath: string }
@@ -48,7 +50,7 @@ export type Options =
 export class UsageError extends Error {}
 
 const DEFAULT_ARCHIVE = join(BUILD, "Harness.xcarchive");
-const BOOLEAN_FLAGS = ["launch"];
+const BOOLEAN_FLAGS = ["launch", "optimized"];
 
 export function parseArgs(argv: string[]): Options {
   const [command, ...rest] = argv;
@@ -70,7 +72,7 @@ export function parseArgs(argv: string[]): Options {
     }
   }
   const allowed: Record<string, string[]> = {
-    sim: [],
+    sim: ["optimized"],
     snapshots: [],
     archive: ["build-number", "archive-path"],
     export: ["method", "archive-path", "export-path"],
@@ -93,6 +95,7 @@ export function parseArgs(argv: string[]): Options {
   };
   switch (command) {
     case "sim":
+      return { command, optimized: flags.has("optimized") };
     case "snapshots":
       return { command };
     case "archive":
@@ -228,7 +231,7 @@ function prepare(): void {
 const project = () => ["-project", join(IOS, "Harness.xcodeproj"), "-scheme", "Harness", "-derivedDataPath", DERIVED_DATA];
 
 /** The xcodebuild arguments of the simulator build. */
-export function simArgs(): string[] {
+export function simArgs(optimized = false): string[] {
   return [
     "xcodebuild", ...project(), "-configuration", "Release", "-sdk", "iphonesimulator",
     "-destination", "generic/platform=iOS Simulator", "ARCHS=arm64", "ONLY_ACTIVE_ARCH=YES",
@@ -237,14 +240,17 @@ export function simArgs(): string[] {
     "CODE_SIGN_IDENTITY=-", "CODE_SIGNING_REQUIRED=NO",
     // The debug state probe (Harness/App/DebugProbe.swift) is compiled in for this simulator build
     // only; the device and archive builds never get it.
-    "SWIFT_ACTIVE_COMPILATION_CONDITIONS=$(inherited) SIM_CHECK", "build",
+    "SWIFT_ACTIVE_COMPILATION_CONDITIONS=$(inherited) SIM_CHECK",
+    // Whole-module optimization of four targets, one after another, is most of a clean build (about 120 s against 40 s).
+    ...(optimized ? [] : ["SWIFT_OPTIMIZATION_LEVEL=-Onone", "SWIFT_COMPILATION_MODE=singlefile"]),
+    "build",
   ];
 }
 
-function sim(): string {
+function sim(optimized: boolean): string {
   prepare();
-  log("==> Building for the simulator (Release, arm64, ad-hoc signed)");
-  run("sim", simArgs());
+  log(`==> Building for the simulator (Release settings, ${optimized ? "optimized" : "unoptimized"}, arm64, ad-hoc signed)`);
+  run("sim", simArgs(optimized));
   return join(DERIVED_DATA, "Build/Products/Release-iphonesimulator/Harness.app");
 }
 
@@ -349,7 +355,7 @@ if (import.meta.main) {
       console.log(`${o.bundleId} ${r.version} (${r.build}), SwiftUI app`);
     } else {
       const out =
-        o.command === "sim" ? sim()
+        o.command === "sim" ? sim(o.optimized)
         : o.command === "snapshots" ? snapshots()
         : o.command === "archive" ? archive(o)
         : o.command === "export" ? exportArchive(o)

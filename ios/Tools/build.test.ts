@@ -130,6 +130,16 @@ test("snapshots takes no flags", () => {
 
 const compilationConditions = (args: string[]) => args.filter((a) => a.startsWith("SWIFT_ACTIVE_COMPILATION_CONDITIONS=")).join(" ");
 
+test("the simulator build skips optimization unless asked: -Onone, per file, for a short clean build", () => {
+  const flags = (args: string[]) => args.filter((a) => a.startsWith("SWIFT_OPTIMIZATION_LEVEL=") || a.startsWith("SWIFT_COMPILATION_MODE="));
+  expect(flags(simArgs())).toEqual(["SWIFT_OPTIMIZATION_LEVEL=-Onone", "SWIFT_COMPILATION_MODE=singlefile"]);
+  expect(flags(simArgs(true))).toEqual([]);
+  expect(parseArgs(["sim"])).toMatchObject({ command: "sim", optimized: false });
+  expect(parseArgs(["sim", "--optimized"])).toMatchObject({ command: "sim", optimized: true });
+  // The build still ends with the action, after the settings.
+  expect(simArgs().at(-1)).toBe("build");
+});
+
 test("the simulator build compiles in the debug probe (SIM_CHECK)", () => {
   expect(compilationConditions(simArgs())).toMatch(/\bSIM_CHECK\b/);
 });

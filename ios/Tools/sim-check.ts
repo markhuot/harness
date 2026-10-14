@@ -4207,7 +4207,9 @@ function interactionChains(s: Seeded): Chain[] {
         await axe("type", "Z", "--udid", udid);
         await atRest(udid, 300);
         await tapSave();
-        const saved = await until("override saved", async () => ((v) => (v !== seeded ? v : null))(await override("run.review")), 8000);
+        const changed = async () => ((v) => (v !== seeded ? v : null))(await override("run.review"));
+        // A tap right after the keyboard's last key can be swallowed. Save leaves the editor open, so tapping it again is harmless.
+        const saved = await until("override saved", changed, 3000).catch(async () => (await tapSave(), until("override saved (second tap)", changed, 8000)));
         await api("PATCH", "/settings", { prompts: { "run.review": seeded } });
         moved(udid);
         if (!saved?.endsWith("then the diff.{{key}}Z")) throw new Error(`expected the text to end "then the diff.{{key}}Z", got ${JSON.stringify(saved)}`);
@@ -4552,8 +4554,9 @@ async function buildApp() {
     return;
   }
   // XcodeGen, then the Release simulator build into ios/build/dd (its log in ios/build/sim.log).
-  console.log("building the app, Release (simulator)…");
-  await sh(["bun", join(here, "Tools", "build.ts"), "sim"], { cwd: repoRoot });
+  // Unoptimized unless --memory: that mode measures the app's footprint, which optimization changes.
+  console.log(`building the app, ${memoryOnly ? "optimized" : "unoptimized"} (simulator)…`);
+  await sh(["bun", join(here, "Tools", "build.ts"), "sim", ...(memoryOnly ? ["--optimized"] : [])], { cwd: repoRoot });
 }
 
 // ---------------------------------------------------------------- main
