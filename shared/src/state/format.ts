@@ -215,6 +215,39 @@ export function toolPreview(name: string, input: unknown): string {
   return input === undefined || input === null ? "" : String(input);
 }
 
+/** Tools whose input names one file; their row shows the file's name instead of the full path. */
+const FILE_TOOLS = new Set(["Read", "Edit", "MultiEdit", "Write", "NotebookEdit"]);
+
+const isLine = (v: unknown): v is number => typeof v === "number" && Number.isInteger(v) && v > 0;
+
+/**
+ * Label for a transcript tool row: `label` is the headline, `detail` the faint text after it (empty
+ * when there's none). A call carrying a `description` (Bash, Agent) shows that, with the raw
+ * preview as the detail so a wrong description can't hide what ran. A file tool shows the file's
+ * name, plus the line range a Read asked for. Anything else is `toolPreview`, as before.
+ * Transcript only: the approval text keeps the exact command (`toolPreview`).
+ */
+export function toolLabel(name: string, input: unknown): { label: string; detail: string } {
+  const preview = toolPreview(name, input);
+  if (input && typeof input === "object" && !Array.isArray(input)) {
+    const o = input as Record<string, unknown>;
+    if (typeof o.description === "string") {
+      const first = o.description.trim().split("\n")[0]!.trim();
+      if (first) return { label: first, detail: first === preview ? "" : preview };
+    }
+    const path = o.file_path;
+    if (FILE_TOOLS.has(name) && typeof path === "string" && path) {
+      const base = path.split("/").filter(Boolean).pop();
+      if (base) {
+        const { offset, limit } = o;
+        const range = isLine(offset) ? `:${offset}–${isLine(limit) ? offset + limit - 1 : ""}` : isLine(limit) ? `:1–${limit}` : "";
+        return { label: base + range, detail: path };
+      }
+    }
+  }
+  return { label: preview, detail: "" };
+}
+
 /** Icon for a tool row. */
 export function toolIcon(name: string): "terminal" | "globe" | "tool" {
   return name === "bash" || name === "Bash" ? "terminal" : name.startsWith("browser") ? "globe" : "tool";

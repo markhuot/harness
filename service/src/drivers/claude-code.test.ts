@@ -134,6 +134,7 @@ describe("buildClaudeArgs", () => {
     expect(argValue(args, "--permission-mode")).toBe("acceptEdits");
     expect(argValue(args, "--allowedTools")).toBe("mcp__harness");
     expect(argValue(args, "--append-system-prompt")).toBe("SYS");
+    expect(argValue(args, "--thinking-display")).toBe("summarized");
     expect(JSON.parse(argValue(args, "--mcp-config")!)).toEqual({
       mcpServers: { harness: { type: "http", url: "http://h/mcp/t", headers: { authorization: "Bearer x" }, alwaysLoad: true } },
     });
@@ -201,6 +202,14 @@ describe("cleanClaudeEnv", () => {
 });
 
 describe("StreamJsonParser", () => {
+  test("keeps a summarized thinking block and drops empty and redacted ones", () => {
+    const p = new StreamJsonParser();
+    const events = p
+      .handle({ type: "assistant", message: { content: [{ type: "thinking", thinking: "Checking the API shape" }, { type: "thinking", thinking: "" }, { type: "redacted_thinking", data: "xx" }] } })
+      .filter((e) => e.type === "thinking");
+    expect(events).toEqual([{ type: "thinking", text: "Checking the API shape" }]);
+  });
+
   test("maps every message type", () => {
     const p = new StreamJsonParser();
     const all = [

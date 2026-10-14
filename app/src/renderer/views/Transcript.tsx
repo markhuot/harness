@@ -1,7 +1,7 @@
 import { memo, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Attachment, Subagent, ToolResultContent, TranscriptEntry } from "@harness/shared";
 import { useStore } from "../state/store";
-import { formatMaybeJson, groupTranscript, isTask, itemRun, liveDelta, runHeader, splitRunSections, shortToolName, SUBAGENT_STATUS_LABEL, subagentById, subagentOpenLabel, subagentsOf, subagentTitle, toolElapsed, toolIcon, toolPreview, transcriptKey } from "@harness/shared/state";
+import { formatMaybeJson, groupTranscript, isTask, itemRun, liveDelta, runHeader, splitRunSections, shortToolName, SUBAGENT_STATUS_LABEL, subagentById, subagentOpenLabel, subagentsOf, subagentTitle, toolElapsed, toolIcon, toolLabel, transcriptKey } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import { Markdown } from "../components/Markdown";
 import { PermissionStatusRow } from "../components/PermissionLog";
@@ -262,7 +262,7 @@ const ToolRow = memo(function ToolRow({
 }) {
   const [open, setOpen] = useState(false);
   const name = shortToolName(call?.content.name ?? result?.content.name ?? "tool");
-  const preview = call ? toolPreview(name, call.content.input) : "";
+  const { label, detail } = call ? toolLabel(name, call.content.input) : { label: "", detail: "" };
   const isError = result?.content.isError;
   const now = useNow(!result && !!call);
   const elapsed = toolElapsed(call, result, now);
@@ -272,7 +272,10 @@ const ToolRow = memo(function ToolRow({
         <Icon name={open ? "chevronDown" : "chevronRight"} size={12} />
         <Icon name={toolIcon(name)} size={12} />
         <span className="t-tool-name">{name}</span>
-        <span className="t-tool-preview truncate">{preview}</span>
+        <span className="t-tool-preview truncate">
+          <span className="t-tool-label">{label}</span>
+          {detail && <span className="t-tool-detail"> {detail}</span>}
+        </span>
         {elapsed && <span className="t-tool-elapsed">{elapsed}</span>}
         {!result ? <span className="spinner" /> : isError ? <Icon name="x" size={12} className="t-bad" /> : <Icon name="check" size={12} className="t-ok" />}
       </button>

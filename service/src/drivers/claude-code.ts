@@ -349,6 +349,9 @@ export function buildClaudeArgs(
     args.push("--permission-prompt-tool", PERMISSION_PROMPT_TOOL);
   }
   if (req.systemPrompt) args.push("--append-system-prompt", req.systemPrompt);
+  // The CLI asks the API to hide thinking text unless told otherwise, so every block would
+  // arrive empty. Summarized gives the transcript a readable summary of each one.
+  args.push("--thinking-display", "summarized");
   // A resumed conversation continues under whatever --model this run asks for.
   if (req.model) args.push("--model", req.model);
   if (resumeSessionId) args.push("--resume", resumeSessionId);

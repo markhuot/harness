@@ -19,7 +19,7 @@ struct TranscriptToolRow: View {
     var body: some View {
         let name = TranscriptLogic.toolName(call: call, result: result)
         let input: JSONValue? = if case let .toolCall(_, _, input)? = call?.content { input } else { nil }
-        let preview = input.map { Format.toolPreview(name, input: $0) } ?? ""
+        let label = input.map { Format.toolLabel(name, input: $0) } ?? Format.ToolLabel(label: "", detail: "")
         let state = TranscriptLogic.toolState(result: result)
         VStack(alignment: .leading, spacing: 0) {
             Button {
@@ -29,7 +29,8 @@ struct TranscriptToolRow: View {
                     Icon(open ? "chevronDown" : "chevronRight", size: 12).foregroundStyle(c.text3)
                     Icon(Format.toolIcon(name).rawValue, size: 13).foregroundStyle(c.text2)
                     Text(name).font(.mono(13, weight: .semibold)).foregroundStyle(c.text)
-                    Text(preview).font(.mono(12.5)).foregroundStyle(c.text3).lineLimit(1)
+                    (Text(label.label) + Text(label.detail.isEmpty ? "" : " " + label.detail).foregroundColor(c.text3.opacity(0.6)))
+                        .font(.mono(12.5)).foregroundStyle(c.text3).lineLimit(1)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     ToolElapsed(call: call, result: result)
                     switch state {

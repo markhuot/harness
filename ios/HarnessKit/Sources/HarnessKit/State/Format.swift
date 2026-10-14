@@ -295,6 +295,46 @@ public enum Format {
         }
     }
 
+    static let fileTools: Set<String> = ["Read", "Edit", "MultiEdit", "Write", "NotebookEdit"]
+
+    public struct ToolLabel: Codable, Sendable, Equatable {
+        public let label: String
+        public let detail: String
+
+        public init(label: String, detail: String) {
+            self.label = label
+            self.detail = detail
+        }
+    }
+
+    /// Label for a transcript tool row (see `toolLabel` in shared/src/state/format.ts): a call's
+    /// `description` with the raw preview as detail, a file tool's name plus line range, else the preview.
+    public static func toolLabel(_ name: String, input: JSONValue?) -> ToolLabel {
+        let preview = toolPreview(name, input: input)
+        if case let .object(o)? = input {
+            if let d = o["description"]?.stringValue {
+                let first = d.trimmingCharacters(in: .whitespacesAndNewlines).split(separator: "\n", maxSplits: 1, omittingEmptySubsequences: false).first
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) } ?? ""
+                if !first.isEmpty { return ToolLabel(label: first, detail: first == preview ? "" : preview) }
+            }
+            if fileTools.contains(name), let path = o["file_path"]?.stringValue, !path.isEmpty,
+               let base = path.split(separator: "/").last.map(String.init) {
+                func line(_ key: String) -> Int? {
+                    guard let n = o[key]?.numberValue, n.rounded() == n, n > 0, n < 1e15 else { return nil }
+                    return Int(n)
+                }
+                var range = ""
+                if let offset = line("offset") {
+                    range = ":\(offset)–" + (line("limit").map { String(offset + $0 - 1) } ?? "")
+                } else if let limit = line("limit") {
+                    range = ":1–\(limit)"
+                }
+                return ToolLabel(label: base + range, detail: path)
+            }
+        }
+        return ToolLabel(label: preview, detail: "")
+    }
+
     public enum ToolIcon: String, Codable, Sendable, Equatable {
         case terminal, globe, tool
     }

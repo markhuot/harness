@@ -1608,6 +1608,9 @@ html[data-input="keyboard"] .card.cursor:not(:focus) {
   font-size: 11px;
   color: var(--text-3);
 }
+.t-tool-detail {
+  opacity: 0.6;
+}
 .t-tool-elapsed {
   flex: none;
   font-family: var(--mono);

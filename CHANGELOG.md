@@ -9,6 +9,11 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- The Transcript tab on Mac and iPhone/iPad labels a tool call by its `description` when the agent wrote one (Bash, Agent), with the raw command faint after it so you still see what ran. Read, Edit and Write rows show the file name and line range, like `Format.swift:100–175`, instead of the full path. Calls with no description look as before.
+- Claude Code runs now show a summary of the agent's thinking in the Transcript. Before, the CLI hid the text and Harness dropped the empty blocks. Redacted thinking stays hidden.
+
 ### Fixed
 
 - A Claude Code run now stays open while a background sub-agent works in two cases where it used to end early and send the ticket to review with no work done: the agent called `block` and then `unblock` in the same turn (or a finishing call failed), or it resumed an earlier sub-agent with `SendMessage`.
