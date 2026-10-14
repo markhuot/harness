@@ -54,6 +54,11 @@ const DEFAULT_EXIT_GRACE_MS = 15_000;
  * still running (a dev server started to check the UI never finishes on its own).
  */
 const FINISHING_TOOLS = new Set(["submit_for_review", "block", "review_decision", "dispatch_ticket", "decline_work"]);
+/**
+ * Harness tools that take a finishing tool back: `unblock` after a `block` in the same turn, or
+ * `resume_work` after a submit. The turn goes on, so its background tasks keep it open again.
+ */
+const UNFINISHING_TOOLS = new Set(["unblock", "resume_work"]);
 
 function formatWait(ms: number): string {
   return ms >= 60_000 ? `${Math.round(ms / 60_000)} min` : `${Math.max(1, Math.round(ms / 1000))}s`;
@@ -533,6 +538,12 @@ export class StreamJsonParser {
   private tasks = new Map<string, string>();
   /** Tool call id → the CLI task running it (any task type) */
   private taskCalls = new Map<string, string>();
+  /**
+   * CLI tasks that task_started said run in the background: their call's result never finishes
+   * them, only their task_notification does. That covers results no pattern knows, such as
+   * SendMessage's `{"success":true,"message":"Resuming agent …"}` for an agent it resumes.
+   */
+  private backgrounded = new Set<string>();
   /** CLI task id → the tool call it runs (any task type; task_updated names only the task) */
   private callOfTask = new Map<string, string>();
   /** Background tasks (Bash, Monitor) reported so far (their tool call ids) */
@@ -645,6 +656,7 @@ export class StreamJsonParser {
         }
         if (msg.subtype === "task_started" && typeof msg.task_id === "string") {
           this.runningTasks.set(msg.task_id, str(msg.description) ?? msg.task_id);
+          if (msg.is_backgrounded === true) this.backgrounded.add(msg.task_id);
           if (typeof msg.tool_use_id === "string") {
             this.taskCalls.set(msg.tool_use_id, msg.task_id);
             this.callOfTask.set(msg.task_id, msg.tool_use_id);
@@ -779,16 +791,20 @@ export class StreamJsonParser {
           events.push({ type: "tool_result", callId, name, result: { content, ...(block.is_error ? { isError: true } : {}) }, ...from });
           const text = content.map((c) => (c.type === "text" ? c.text : "")).join("\n");
           // A long foreground call is a task too; its result finishes it unless the call went
-          // to the background (run_in_background, a Bash timeout, an async agent).
+          // to the background (run_in_background, a Bash timeout, an async or resumed agent).
           const task = this.taskCalls.get(callId);
-          if (task && !subagentId && !ASYNC_LAUNCH.test(text) && !IN_BACKGROUND.test(text)) this.runningTasks.delete(task);
+          const inBackground = (task !== undefined && this.backgrounded.has(task)) || ASYNC_LAUNCH.test(text) || IN_BACKGROUND.test(text);
+          if (task && !subagentId && !inBackground) this.runningTasks.delete(task);
+          if (!subagentId && !block.is_error && UNFINISHING_TOOLS.has(name)) this.finished = false;
+          // A finishing call that failed (refused, invalid input) didn't finish anything.
+          if (!subagentId && block.is_error && FINISHING_TOOLS.has(name)) this.finished = false;
           const path = OUTPUT_PATH.exec(text)?.[1];
           if (path) this.tasksDir ??= dirname(path);
           if (!subagentId && !block.is_error && TASK_TOOLS[name] && IN_BACKGROUND.test(text)) {
             const monitorTask = MONITOR_TASK.exec(text)?.[1] ?? task;
             this.reportTask(callId, events, path ?? (TASK_TOOLS[name] === "monitor" && monitorTask ? this.outputPathFor(monitorTask) : undefined));
           }
-          if (this.subagents.has(callId) && !ASYNC_LAUNCH.test(text)) {
+          if (this.subagents.has(callId) && !inBackground) {
             events.push({ type: "subagent", subagent: { id: callId, status: block.is_error ? "failed" : "succeeded", result: text } });
           }
           if (block.is_error) {

@@ -484,6 +484,66 @@ describe("StreamJsonParser background tasks", () => {
     expect(p.finished).toBe(true);
   });
 
+  // HARNESS-505 (MEDL-25): the agent blocked by mistake, unblocked in the same turn and ended it to
+  // wait for its Explore agent; the run still counted as finished, so stdin closed and the ticket
+  // went to review with the agent still waiting.
+  test("unblock, resume_work or a failed finishing call takes the finish back", () => {
+    const p = new StreamJsonParser();
+    p.handle(init());
+    const call = (id: string, name: string) => p.handle({ type: "assistant", message: { content: [{ type: "tool_use", id, name: `mcp__harness__${name}`, input: {} }] } });
+    call("b", "block");
+    p.handle(toolResult("b", "Ticket moved to blocked"));
+    expect(p.finished).toBe(true);
+    call("u", "unblock");
+    p.handle(toolResult("u", "Ticket moved to in progress."));
+    expect(p.finished).toBe(false);
+    call("s", "submit_for_review");
+    p.handle(toolResult("s", "Moved to review"));
+    call("r", "resume_work");
+    p.handle(toolResult("r", "Ticket moved to in progress."));
+    expect(p.finished).toBe(false);
+    call("s2", "submit_for_review");
+    p.handle({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "s2", is_error: true, content: "spec_is_up_to_date must be true" }] } });
+    expect(p.finished).toBe(false);
+    // A refused unblock leaves the block in place.
+    call("b2", "block");
+    p.handle(toolResult("b2", "Ticket moved to blocked"));
+    call("u2", "unblock");
+    p.handle({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "u2", is_error: true, content: "Refused: not blocked" }] } });
+    expect(p.finished).toBe(true);
+  });
+
+  // HARNESS-505 (HARNESS-469): SendMessage resumed a finished agent; the CLI started its task under
+  // the SendMessage call (claude 2.1.299), whose JSON result ended the task, so stdin closed.
+  test("an agent resumed by SendMessage keeps running past SendMessage's result", () => {
+    const p = new StreamJsonParser();
+    p.handle(init());
+    p.handle({ type: "assistant", message: { content: [{ type: "tool_use", id: "a1", name: "Agent", input: { description: "Cost report", prompt: "p" } }] } });
+    p.handle({ ...taskStarted("ta", "a1", "Cost report", "local_agent"), is_backgrounded: true });
+    p.handle(toolResult("a1", "Async agent launched successfully. agentId: ta"));
+    p.handle({ type: "system", subtype: "task_updated", task_id: "ta", patch: { status: "completed" } });
+    p.handle(taskDone("ta", "a1"));
+    expect(p.runningTasks.size).toBe(0);
+    p.handle({ type: "assistant", message: { content: [{ type: "tool_use", id: "m1", name: "SendMessage", input: { to: "ta", message: "go on" } }] } });
+    p.handle({ ...taskStarted("ta", "m1", "Cost report", "local_agent"), is_backgrounded: true });
+    const events = p.handle(toolResult("m1", '{"success":true,"message":"Resuming agent ta","resumedAgentId":"ta"}'));
+    expect([...p.runningTasks.values()]).toEqual(["Cost report"]);
+    // SendMessage's result isn't the resumed agent's outcome.
+    expect(events.filter((e) => e.type === "subagent")).toEqual([]);
+    const done = p.handle(taskDone("ta", "m1"));
+    expect(p.runningTasks.size).toBe(0);
+    expect(done).toContainEqual({ type: "subagent", subagent: { id: "m1", status: "succeeded" } });
+  });
+
+  test("a foreground agent's task ends with its result", () => {
+    const p = new StreamJsonParser();
+    p.handle(init());
+    p.handle({ type: "assistant", message: { content: [{ type: "tool_use", id: "a1", name: "Agent", input: { description: "Find", prompt: "p" } }] } });
+    p.handle({ ...taskStarted("ta", "a1", "Find", "local_agent"), is_backgrounded: false });
+    p.handle(toolResult("a1", "Found it in src/app.ts:12"));
+    expect(p.runningTasks.size).toBe(0);
+  });
+
   test("a second turn in the same process is charged only its own cost", () => {
     const p = new StreamJsonParser({ sessionId: "sess-1", costUsd: 1 }, { requested: "auto", mode: "auto" });
     const first = [{ ...init(), permissionMode: "default" }, success({ total_cost_usd: 1.5 })].flatMap((m) => p.handle(m));
@@ -807,6 +867,32 @@ describe("ClaudeCodeDriver.run (fake binary)", () => {
     expect(error).toBeNull();
     expect(s.marks()).toEqual([{ label: "after result", stdinClosed: true }]);
     expect(events.some((e) => e.type === "status")).toBe(false);
+  });
+
+  test("a turn that blocked and then unblocked keeps the CLI alive for its background agent", async () => {
+    const tool = (id: string, name: string) => ({ type: "assistant", message: { content: [{ type: "tool_use", id, name: `mcp__harness__${name}`, input: {} }] } });
+    const s = setup({
+      script: [
+        init(),
+        { type: "assistant", message: { content: [{ type: "tool_use", id: "a1", name: "Agent", input: { description: "Find flow", prompt: "p" } }] } },
+        { ...taskStarted("ta", "a1", "Find flow", "local_agent"), is_backgrounded: true },
+        toolResult("a1", "Async agent launched successfully. agentId: ta"),
+        tool("b", "block"),
+        toolResult("b", "Ticket moved to blocked"),
+        tool("u", "unblock"),
+        toolResult("u", "Ticket moved to in progress."),
+        success({ result: "The Explore agent is still running." }),
+        { __sleep: 200 },
+        { __mark: "after first turn" },
+        taskDone("ta", "a1"),
+        init(),
+        tool("s", "submit_for_review"),
+        success({ result: "Submitted." }),
+      ],
+    });
+    const { error } = await collect(s.driver.run(request()));
+    expect(error).toBeNull();
+    expect(s.marks()).toEqual([{ label: "after first turn", stdinClosed: false }]);
   });
 
   test("an error result ends the turn even with a background task running", async () => {

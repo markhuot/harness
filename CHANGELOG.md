@@ -9,6 +9,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- A Claude Code run now stays open while a background sub-agent works in two cases where it used to end early and send the ticket to review with no work done: the agent called `block` and then `unblock` in the same turn (or a finishing call failed), or it resumed an earlier sub-agent with `SendMessage`.
+
 ### Changed
 
 - Agents no longer pass `include_transcript: true` to `get_ticket` and `get_ticket_agent`: the run instructions and tool descriptions now show it as a number of entries (1-50), and a true/false value gets an error that says to send a number.

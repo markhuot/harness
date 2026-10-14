@@ -1237,12 +1237,18 @@ Code's own prompt asks for bare `file_path:line_number` references; the section 
   `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0`), including one Bash moved to the background after
   its 120 s timeout. With stdin open, the task's completion starts another turn instead. So at
   each `result` the driver closes stdin unless the agent's own tasks are still running
-  (`task_started` → `task_notification` / terminal `task_updated`; a task whose tool result
-  isn't a "running in background" / "moved to the background" / "Monitor started" / "Async
-  agent launched" notice ends with that result). It also closes stdin when the turn called a
-  finishing tool (`submit_for_review`, `block`, `review_decision`, `dispatch_ticket`,
-  `decline_work`), so a dev server left running doesn't hold the run open, and when the result
-  is an error. A wait posts a status line and has no time limit (a monitor or an import can
+  (`task_started` → `task_notification` / terminal `task_updated`; a task whose `task_started`
+  doesn't say `is_backgrounded: true` and whose tool result isn't a "running in background" /
+  "moved to the background" / "Monitor started" / "Async agent launched" notice ends with that
+  result). `is_backgrounded` covers an agent that `SendMessage` resumes: claude 2.1.299 starts
+  its task again under the SendMessage call, whose result is JSON (`"Resuming agent …"`), and
+  before HARNESS-505 that result ended the task and the run with it. It also closes stdin when
+  the turn called a finishing tool (`submit_for_review`, `block`, `review_decision`,
+  `dispatch_ticket`, `decline_work`), so a dev server left running doesn't hold the run open,
+  and when the result is an error. A finishing call that errors doesn't count, and a later
+  `unblock` or `resume_work` in the same turn takes it back (MEDL-25 blocked by mistake,
+  unblocked, and ended its turn to wait for an Explore agent; the run was closed and the ticket
+  auto-submitted). A wait posts a status line and has no time limit (a monitor or an import can
   run for days; `backgroundWaitMs` sets one, counted from the latest turn's end, for tests). The
   background Bash commands and Monitors it waits on are listed on the ticket's Agents & tasks tab
   with their output ("Sub-agents" → "Background tasks"). The
