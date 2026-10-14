@@ -1030,7 +1030,8 @@ What Settings, Project settings, the watcher form and Prompts share (HARNESS-144
   state and the serialized writes: PUT `/tickets/:key/file` or `/projects/:id/file`, last write
   wins). `SettingsRules.saveOnBlur` reads the setting; an older service reads as off. All of these
   have tests.
-- **The editor is CodeMirror 6 in a WKWebView** (`editor/` at the repo root, HARNESS-448). The
+- **The editor is `@pierre/diffs/edit` in a WKWebView** (`editor/` at the repo root; it replaced
+  CodeMirror, HARNESS-484, so code is colored by the same Shiki pipeline as the Changes tab). The
   "Bundle editor" pre-build phase in `project.yml` runs `bun editor/scripts/build.ts --out …/editor.js`
   into the app's resources beside `Resources/editor.html`, which loads it and calls
   `HarnessEditor.mount(window, post)`. `post` stringifies each event to the `editor` message
@@ -1039,13 +1040,19 @@ What Settings, Project settings, the watcher form and Prompts share (HARNESS-144
   `ready`, and calls `onReady` each time, so a `webViewWebContentProcessDidTerminate` reload
   reopens the editor on the unsaved text (`open` carries `saved`, what's on disk, so it comes back
   dirty). `EditorWebView` forwards Cmd+S from a hardware keyboard (`UIKeyCommand`); the page has
-  autocorrect, capitalization and spell check off. The page scrolls (CSS in editor.html makes
-  CodeMirror's scroller overflow visible), so UIKit sees the web view's own scroll view: a sheet
+  autocorrect, capitalization and spell check off. The page scrolls (the editor's virtualizer reads
+  the page's own scroll, `scroller: "page"`), so UIKit sees the web view's own scroll view: a sheet
   drags down from the top of the file, and the keyboard insets it natively. The theme goes in as
-  `{appearance, tokens}` (`FileEditorTheme`, the same tokens plugin tabs get) and a theme change
-  sends `theme` without reloading.
-- **`FileEditorSession`** owns the loader, the model and two hosts, the file editor and the merge
-  view, so switching tabs never drops edits. Saving: Save in the file bar, Cmd+S, and Save on blur
+  `{appearance, tokens, syntaxTheme}` (`FileEditorTheme`: the tokens plugin tabs get color the
+  chrome, `syntaxTheme` is the Shiki theme the code blocks use) and a theme change sends `theme`
+  without reloading the page (the editor redraws). An IIFE can't split code, so the bundle lists
+  its grammars (`BUNDLED_LANGUAGES` in `editor/src/language.ts`) and the app themes' Shiki themes,
+  and `editor/scripts/build.ts` swaps every other Shiki grammar and theme, and the WASM regex
+  engine (the JavaScript one is used), for an empty module: about 4 MB, against 10 MB with them
+  all. A language outside the list shows as plain text. A file over 10,000 lines opens as plain
+  text too.
+- **`FileEditorSession`** owns the loader, the model and two hosts, the file editor and the
+  side-by-side diff, so switching tabs never drops edits. Saving: Save in the file bar, Cmd+S, and Save on blur
   (the editor losing focus, the app backgrounding, the screen leaving). With the setting off, a
   dirty file's back button asks (Save / Discard / Keep editing) and swipe-back and sheet
   swipe-down are disabled; a pop that gets past it saves anyway, since edits are never dropped
@@ -1147,8 +1154,8 @@ The shape is HarnessKit's `DebugState` (`Shell/DebugState.swift`, pinned by `Deb
 - `router` is the main window's `Router`: the selected tab's stack (one `kind:detail` string per screen),
   `sheet`/`cover`, the ticket sheet's state (`presented`, `docked`, `gone`) and every ticket sheet,
   most recently used first. `editor` is the file editor on screen (absent with none): the text of each
-  line the page marked (`.cm-revealed-line`), the selection, the dirty flag, the page's scroll offset and
-  the line count, read from the page through `window.harnessEditor.probe()` (editor/src/bridge.ts).
+  line the page marked (`data-selected-line` rows), the selection, the dirty flag, the page's scroll offset,
+  the line count and how many colors the drawn code carries (`colors`, 0 for plain text), read from the page through `window.harnessEditor.probe()` (editor/src/bridge.ts).
 - `settled` is the app's idea of "at rest": `busy` is empty and nothing in the state has changed for 250 ms
   (`quietMs`, from `DebugSettle`). `busy` holds `editor` (a page that hasn't said ready), `animating:<layer>:<key>`
   (a Core Animation animation in flight in any window, the keyboard's and a sheet's included; one that

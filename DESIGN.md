@@ -3116,18 +3116,20 @@ Settings, project settings, or on the board route the pane workspace.
   (the palette's file browser over one), else reuses a file pane just right of that pane, else
   appends a new one as the far-right, full-height pane (`appendAtRightEdge`, 70em wide through the
   same `fixedWidthShare` as New session and terminals, floor 360px), wherever focus is. `FileViewer.tsx` (loaded lazily) draws the file in the
-  CodeMirror editor from `editor/` (`createEditor`): its colors are the CSS variables on `<html>`, so
-  a theme change recolors it live (only light vs dark is passed down), and `startLine..endLine`
-  is highlighted and scrolled into view on open and when a link moves the pane, leaving no
-  selection. The editor is editable: Save (header button, Cmd+S) writes through
+  `@pierre/diffs` editor from `editor/` (`createEditor`, its edit mode on a `VirtualizedFile`): the
+  code is colored by the Shiki theme the Changes tab uses (`useSyntaxTheme`, language from
+  `langForPath`, so a `.tf` file is HCL in both places), the chrome takes the CSS variables on
+  `<html>`, and a theme change redraws it in place. `startLine..endLine` is highlighted and
+  scrolled into view on open and when a link moves the pane, leaving no cursor. A file over
+  10,000 lines opens as plain text (highlighting costs about 0.12 ms a line on the main thread). The editor is editable: Save (header button, Cmd+S) writes through
   `writeTicketFile` / `writeProjectFile`, and a dot in the header marks unsaved edits. With the
   `saveOnBlur` setting (Settings → General) it also saves when the editor or the window loses
   focus, and when the pane closes or another file replaces it; without it, closing registers a
   closer (`draftClose.ts`) that asks to save, then to discard, and replacing the file asks too.
   A refetch (window focus) swaps a clean editor's text silently and leaves one with edits alone,
   and a fetch sent before the last save is ignored. A truncated read is read-only. A file with
-  uncommitted changes in a repo (`git.dirty` or `git.untracked`) gets a Diff tab, the merge view
-  (`createDiffEditor`, side by side, read-only) of HEAD against the working tree (git's patch as
+  uncommitted changes in a repo (`git.dirty` or `git.untracked`) gets a Diff tab, the side-by-side
+  diff (`createDiffEditor`, a read-only `FileDiff`) of HEAD against the working tree (git's patch as
   plain text when a side is binary or too big). Contents and diff
   refetch on window focus, reconnect, the ticket's workdir or branch changing, and the refresh
   button. File panes persist with the rest of the tree, follow a ticket rename, and close when
@@ -3552,9 +3554,9 @@ the conventions, and ios/README.md the build and test commands.
   When that ticket isn't loaded, they use its key instead. A session that dispatched nothing has
   no scope, and a relative link from it plays the error haptic. `FileViewerScreen` loads `FileView` and,
   only when `git.repo && git.dirty`, `FileDiff`, and shows File and Diff tabs (the Diff tab counts
-  +added/−removed). The file is CodeMirror 6 in a WKWebView (the `editor/` bundle, built by the
-  "Bundle editor" phase), opened at and marking the linked range with no selection; the Diff tab
-  is its merge view. The file is editable: Save, Cmd+S and Save on blur (Settings → General) write
+  +added/−removed). The file is the `@pierre/diffs` editor in a WKWebView (the `editor/` bundle, built by the
+  "Bundle editor" phase), opened at and marking the linked range with no cursor; the Diff tab
+  is its side-by-side diff view. The file is editable: Save, Cmd+S and Save on blur (Settings → General) write
   it through the file write endpoints, last write wins. With Save on blur off, leaving a dirty
   file asks first. A clean editor reloads from disk when the app returns to the foreground; a
   dirty one keeps its edits. The pure parts are HarnessKit's `FileViewer`, `FileViewerRules`,

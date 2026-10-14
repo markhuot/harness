@@ -23,8 +23,12 @@ describe("planLayers", () => {
     expect(layers[0]!.reasons).toEqual(["shared/src/b.ts", "service/src/a.ts"].sort((a, b) => (a === "shared/src/b.ts" ? -1 : 1)));
   });
 
-  test("editor also reruns the app's tests, since the app bundles it", () => {
-    expect(ids(["editor/src/x.ts"])).toEqual(["bun:editor", "bun:app", "typecheck"]);
+  test("editor source reruns the app's tests and both apps' file checks, since the editor is what they show", () => {
+    expect(ids(["editor/src/x.ts"])).toEqual(["bun:editor", "bun:app", "typecheck", "app-build", "app-check:file-pane-check", expect.stringMatching(/^sim-check/)]);
+  });
+
+  test("an editor test alone needs only the editor's tests", () => {
+    expect(ids(["editor/src/x.test.ts"])).toEqual(["bun:editor", "typecheck"]);
   });
 
   test("a plugin runs its own tests; the sdk runs everything", () => {

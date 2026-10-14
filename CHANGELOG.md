@@ -11,10 +11,14 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
+- The file viewer and editor now color code with the same highlighter as the Changes tab, on the Mac and on iPhone and iPad. A `.tf` (Terraform) file, which showed as plain text, is now highlighted like it is in Changes, and so is every other language Changes colors. The Diff tab shows the same side-by-side diff the Changes tab draws. Files over 10,000 lines open as plain text so they open fast. Editing, saving, Save on blur, undo, line-ending preservation and linked-line highlighting work as before; the editor also gains Find (Cmd+F) and multiple cursors on the Mac.
+- For people working on Harness: `@pierre/diffs` is pinned to exactly 1.5.1 in the app, service, git plugin and editor, so the Mac build, the iPhone bundle and the Changes tab all load the same version of its beta editor. `bun run verify` runs the Mac file-pane check and the iPhone file chains when you change `editor/`.
+
 - On iPhone, docked ticket cards are now as wide as the board's bottom bar, inset from the screen's sides to follow the device's corner curve. The bar keeps that width while a ticket is docked instead of narrowing to match the card.
 
 ### Added
 
+- For people working on Harness: the iPhone debug state probe's `editor` now includes `colors`, the number of colors the drawn code carries, and `sim-check` checks that a Terraform file opens colored and that a linked file's code is colored.
 - For people working on Harness: `sim-check` writes `sim-check-profile.json` next to `timings.json` and prints where a run went: phases, spawns by program (AXe, simctl, ffmpeg), fixed sleeps by source line, poll iterations, waits that gave up, and board resets, per chain and check, then how the run differs from the last one. Counts stay steady when the Mac is busy, so they rank the costs better than seconds do.
 - For people working on Harness: `bun run verify` now also runs the iPhone snapshot tests (a real app build) when you change HarnessKit sources or `ios/Tools/build.ts`, `build-cache.ts` or `snapshots.ts`; HarnessKit tests alone still run only `swift test`.
 - For people working on Harness: a test checks that the simulator build sets `SIM_CHECK` and the device build doesn't.

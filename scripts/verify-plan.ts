@@ -109,7 +109,13 @@ export const RULES: Rule[] = [
   { name: "shared package", match: /^shared\//, layers: () => [bunAll, typecheck] },
   { name: "repo-wide config and scripts", match: /^(package\.json|bun\.lock|bunfig\.toml|tsconfig[^/]*\.json|scripts\/)/, layers: () => [bunAll, typecheck] },
   { name: "service", match: /^service\//, layers: () => [bunIn("service"), typecheck] },
-  { name: "editor (also bundled into the app)", match: /^editor\//, layers: () => [bunIn("editor"), bunIn("app"), typecheck] },
+  // The editor is the Mac file pane and the iPhone's web page, and its tests can't draw a file (that needs a
+  // real layout engine), so both apps' file checks run too.
+  {
+    name: "editor (the Mac file pane and the iPhone's web page)",
+    match: /^editor\//,
+    layers: (f) => (isTest(f) ? [bunIn("editor"), typecheck] : [bunIn("editor"), bunIn("app"), typecheck, appBuild, appCheck("file-pane-check"), simCheck(["--only=file-link,save-on-blur,file-edit"], "--only=file-link,save-on-blur,file-edit")]),
+  },
   { name: "plugin sdk (every plugin builds on it)", match: /^plugins\/sdk\//, layers: () => [bunAll, typecheck] },
   { name: "plugin", match: /^plugins\/[^/]+\//, layers: (f) => [bunIn(f.split("/").slice(0, 2).join("/")), typecheck] },
   { name: "release scripts", match: /^release\//, layers: () => [bunIn("release"), typecheck] },
