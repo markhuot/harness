@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261014.2127](https://github.com/markhuot/harness/releases/tag/app-20261014.2127) - 2026-10-14
+
 ### Fixed
 
 - A Claude Code run no longer ends while its agent still has to hear about a background agent or command that finished during its last turn. Before, the run closed at that turn's end; the agent still got the news and often started more work (a verify agent, say), which was stopped 15 seconds later and the ticket submitted with the agent mid-task. The Transcript now shows "Waiting for the agent to hear that a background task finished" instead.
