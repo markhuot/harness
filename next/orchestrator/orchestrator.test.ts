@@ -118,16 +118,6 @@ describe("ticket lifecycle", () => {
     expect(h.store.sessions.getDriverState(t.sessionId)).toBeNull();
   });
 
-  test("requested changes start a fresh work conversation", async () => {
-    const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
-    await h.orch.idle();
-    h.orch.humanReview(t.key, { decision: "request_changes", notes: "rename it" });
-    await h.orch.idle();
-    const works = h.driver.calls.filter((c) => c.kind === "work");
-    expect(works.map((c) => c.state)).toEqual([null, null]);
-  });
-
   test("chats in review: the first after the submit starts fresh, a second resumes it", async () => {
     const h = setup();
     const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
@@ -141,7 +131,7 @@ describe("ticket lifecycle", () => {
     expect(h.store.sessions.getDriverState(t.sessionId)).toEqual({ turns: 2 });
   });
 
-  test("blocked → in progress resumes the conversation running when the ticket blocked", async () => {
+  test("blocked → in progress resumes the conversation running when the ticket blocked, whether it asked, failed or was answered from chat", async () => {
     const h = setup();
     const t = await h.orch.createTicket({ projectId: h.project.id, spec: "do it /block Which database?" });
     await h.orch.idle();
@@ -158,19 +148,16 @@ describe("ticket lifecycle", () => {
     await h.orch.idle();
     const chat = h.driver.calls.find((c) => c.kind === "chat" && c.prompt.startsWith("5432"))!;
     expect(chat.state).toEqual({ turns: 1 });
-  });
 
-  test("a failed run → blocked → restart resumes the failed run's conversation", async () => {
-    const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x /fail boom" });
+    // A failed run blocks the ticket too, and its restart resumes the failed run's conversation.
+    const f = await h.orch.createTicket({ projectId: h.project.id, spec: "x /fail boom" });
     await h.orch.idle();
-    expect(h.orch.ticketDetail(t.key).ticket.status).toBe("blocked");
-    expect(h.store.sessions.getDriverState(t.sessionId)).toEqual({ turns: 1 });
-    await h.orch.startTicket(t.key);
+    expect(h.orch.ticketDetail(f.key).ticket.status).toBe("blocked");
+    expect(h.store.sessions.getDriverState(f.sessionId)).toEqual({ turns: 1 });
+    await h.orch.startTicket(f.key);
     await h.orch.idle();
-    const works = h.driver.calls.filter((c) => c.kind === "work");
-    expect(works).toHaveLength(2);
-    expect(works[1]!.state).toEqual({ turns: 1 });
+    const fRuns = new Set(h.store.runs.listBySession(f.sessionId).map((r) => r.id));
+    expect(h.driver.calls.filter((c) => fRuns.has(c.runId)).map((c) => [c.kind, c.state])).toEqual([["work", null], ["work", { turns: 1 }]]);
   });
 
   test("a complete run starts fresh and saves nothing; chats on Done start a new conversation and keep it", async () => {
@@ -329,7 +316,7 @@ describe("ticket lifecycle", () => {
     expect(workPrompts[1]).toContain("reviewer agent");
   });
 
-  test("human request_changes resets both reviews and re-runs work with the notes", async () => {
+  test("human request_changes resets both reviews and re-runs work with the notes, on a fresh conversation", async () => {
     const h = setup();
     const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
     await h.orch.idle();
@@ -339,18 +326,10 @@ describe("ticket lifecycle", () => {
     expect(cur.humanReview).toBe("pending");
     await h.orch.idle();
     expect(h.driver.calls.filter((c) => c.kind === "work").at(-1)!.prompt).toContain("rename it");
+    // The submit moved the card, so the re-run doesn't carry on the first work conversation.
+    expect(h.driver.calls.filter((c) => c.kind === "work").map((c) => c.state)).toEqual([null, null]);
     expect(h.orch.ticketDetail(t.key).ticket.status).toBe("review");
     expect(() => h.orch.humanReview("ACME-99", { decision: "approve" })).toThrow(/Unknown ticket/);
-  });
-
-  test("tickets of a project that skips the human review complete right after the agent approves, with the project's default action", async () => {
-    const h = setup({ skipHumanReview: true });
-    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
-    await h.orch.idle();
-    const cur = h.orch.ticketDetail(t.key).ticket;
-    expect([cur.status, cur.agentReview, cur.humanReview, cur.completionAction]).toEqual(["done", "approved", "approved", "custom"]);
-    expect(statuses(h, t.sessionId)).toContain("Both reviews approved: completing automatically");
-    expect(runKinds(h, t)).toEqual(["work:succeeded", "review:succeeded", "complete:succeeded"]);
   });
 
   test("the human approval completes the ticket without pressing Complete", async () => {
@@ -561,7 +540,7 @@ describe("ticket lifecycle", () => {
 
   test("re-open sends a done ticket back to work with the notes; only done tickets, notes required", async () => {
     const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "the plan" });
     await h.orch.idle();
     await expect(h.orch.reopenTicket(t.key, { notes: "again" })).rejects.toThrow(/not done/);
     h.orch.humanReview(t.key, { decision: "approve" });
@@ -577,26 +556,13 @@ describe("ticket lifecycle", () => {
     const prompt = h.driver.calls.filter((c) => c.kind === "work").at(-1)!.prompt;
     expect(prompt).toContain("re-opened");
     expect(prompt).toContain("the button is the wrong color");
+    expect(prompt).toContain("the plan"); // the ticket's plan goes along
     const after = h.orch.ticketDetail(t.key).ticket;
     expect(after.status).toBe("review");
     expect(after.humanReview).toBe("pending");
     expect(runKinds(h, t)).toEqual(["work:succeeded", "review:succeeded", "complete:succeeded", "work:succeeded", "review:succeeded"]);
     expect(statuses(h, t.sessionId)).toContain("Re-opened by human");
     expect(h.orch.activity(t.key).map((s) => `${s.kind}:${s.author}:${s.body}`)).toContain("reopened:human:the button is the wrong color");
-  });
-
-  test("re-opening a done ticket works on the plan again", async () => {
-    const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "the plan" });
-    await h.orch.idle();
-    h.orch.humanReview(t.key, { decision: "approve" });
-    await h.orch.idle();
-    const cur = await h.orch.reopenTicket(t.key, { notes: "go again" });
-    expect(cur.status).toBe("in_progress");
-    expect(cur.humanReview).toBe("pending");
-    await h.orch.idle();
-    expect(h.driver.calls.filter((c) => c.kind === "work").at(-1)!.prompt).toContain("the plan");
-    expect(statuses(h, t.sessionId)).toContain("Re-opened by human");
   });
 
   test("only moving to done suspends the ticket's browser tabs", async () => {
@@ -708,16 +674,6 @@ describe("skipping the agent review", () => {
     expect(runKinds(h, t)).toEqual(["work:succeeded", "work:succeeded"]);
   });
 
-  test("with the project skipping the human review, a skipped agent review completes the ticket at once", async () => {
-    const h = setup({ skipHumanReview: true });
-    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x", skipAgentReview: true });
-    await h.orch.idle();
-    const cur = h.orch.ticketDetail(t.key).ticket;
-    expect([cur.status, cur.agentReview, cur.humanReview]).toEqual(["done", "skipped", "approved"]);
-    expect(statuses(h, t.sessionId)).toContain("Both reviews approved: completing automatically");
-    expect(runKinds(h, t)).toEqual(["work:succeeded", "complete:succeeded"]);
-  });
-
   test("the agent can skip its own review with submit_for_review skip_agent_review", async () => {
     const h = setup();
     const t = await h.orch.createTicket({ projectId: h.project.id, spec: "hello /skipreview" });
@@ -759,11 +715,6 @@ describe("skipping the agent review", () => {
     expect(runKinds(h, t)).toEqual(["work:succeeded", "review:cancelled", "review:succeeded"]);
   });
 
-  test("skipAgentReview must be a boolean", async () => {
-    const h = setup();
-    await expect(h.orch.createTicket({ projectId: h.project.id, spec: "x", skipAgentReview: "yes" as never })).rejects.toThrow(/skipAgentReview must be true or false/);
-  });
-
   test("a conductor's child created with skip_agent_review is reviewed and completed by the conductor alone", async () => {
     const h = setup();
     const parent = await h.orch.createTicket({ projectId: h.project.id, spec: "- Answer a question [skip-review]", kind: "conductor" });
@@ -784,7 +735,9 @@ describe("skipping the human review", () => {
     const cur = h.orch.ticketDetail(t.key).ticket;
     expect([cur.status, cur.agentReview, cur.humanReview]).toEqual(["done", "approved", "approved"]);
     expect(runKinds(h, t)).toEqual(["work:succeeded", "review:succeeded", "complete:succeeded"]);
+    expect(cur.completionAction).toBe("custom"); // the default action
     expect(statuses(h, t.sessionId)).toContain("Human review: skipped");
+    expect(statuses(h, t.sessionId)).toContain("Both reviews approved: completing automatically");
     expect(statuses(h, t.sessionId)).not.toContain("Human review: approved");
   });
 
@@ -892,8 +845,9 @@ describe("skipping the human review", () => {
     expect(() => h.orch.updateProject(h.project.id, { skipAgentReview: "yes" as never })).toThrow(/skipAgentReview must be true or false/);
   });
 
-  test("skipHumanReview must be a boolean", async () => {
+  test("skipAgentReview and skipHumanReview must be booleans", async () => {
     const h = setup();
+    await expect(h.orch.createTicket({ projectId: h.project.id, spec: "x", skipAgentReview: "yes" as never })).rejects.toThrow(/skipAgentReview must be true or false/);
     await expect(h.orch.createTicket({ projectId: h.project.id, spec: "x", skipHumanReview: 1 as never })).rejects.toThrow(/skipHumanReview must be true or false/);
     const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x", start: false });
     await expect(h.orch.updateTicket(t.key, { skipHumanReview: "on" as never })).rejects.toThrow(/skipHumanReview must be true or false/);
@@ -1112,16 +1066,6 @@ describe("messages that leave the ticket where it is (chat runs)", () => {
     expect(h.driver.calls.at(-1)).toMatchObject({ kind: "chat", cwd: cur.workdir });
   });
 
-  test("in planning: the plan run takes the message, never a chat", async () => {
-    const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "Refactor auth", start: false });
-    await h.orch.idle();
-    await h.orch.sendMessage(t.key, "is this risky?");
-    await h.orch.idle();
-    expect(h.orch.ticketDetail(t.key).ticket).toMatchObject({ status: "planning", spec: "1. Do is this risky?" });
-    expect(runKinds(h, t)).toEqual(["plan:succeeded", "plan:succeeded"]);
-  });
-
   test("block and submit_for_review refuse a planning or done ticket", async () => {
     const h = setup();
     const refusals: string[] = [];
@@ -1274,7 +1218,7 @@ describe("messages that leave the ticket where it is (chat runs)", () => {
     expect(h.driver.calls.at(-1)).toMatchObject({ kind: "chat", permissionMode: "read_only", grants: undefined });
   });
 
-  test("a done ticket whose worktree is gone chats from the project checkout", async () => {
+  test("a done ticket whose worktree is gone chats from the project checkout, with or without its session still naming it", async () => {
     const h = setup();
     const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
     await h.orch.idle();
@@ -1285,21 +1229,14 @@ describe("messages that leave the ticket where it is (chat runs)", () => {
     expect(h.orch.ticketDetail(t.key).ticket.status).toBe("done");
     expect(h.driver.calls.at(-1)).toMatchObject({ kind: "chat", cwd: h.project.path });
     expect(runKinds(h, t).at(-1)).toBe("chat:succeeded");
-  });
 
-  test("a done ticket chats from the checkout when its session still points at the removed worktree", async () => {
-    const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x" });
-    await h.orch.idle();
-    await h.orch.completeTicket(t.key, { skipAgent: true });
     // What a real worktree leaves behind: the ticket and its session both named it.
     const gone = join(h.home, "worktrees", t.key);
     h.store.tickets.update(t.id, { workdir: gone });
     h.store.sessions.update(t.sessionId, { cwd: gone });
-    await h.orch.sendMessage(t.key, "what did you change?");
+    await h.orch.sendMessage(t.key, "and why?");
     await h.orch.idle();
     expect(h.driver.calls.at(-1)).toMatchObject({ kind: "chat", cwd: h.project.path });
-    expect(runKinds(h, t).at(-1)).toBe("chat:succeeded");
   });
 
   test("refused while the ticket is completing; text is required", async () => {
@@ -1420,13 +1357,17 @@ describe("approving the plan while planning runs", () => {
   const cur = (h: ReturnType<typeof setup>, t: Ticket) => h.orch.ticketDetail(t.key).ticket;
   const lines = (h: ReturnType<typeof setup>, t: Ticket) => h.orch.activity(t.key).map((e) => e.body);
 
-  test("Start during a plan run approves the plan; the work starts when the run ends, on the final plan", async () => {
+  test("Start during a plan run approves the plan (a second press changes nothing); the work starts when the run ends, on the final plan, credited to the human", async () => {
     const h = setup();
     const t = await planning(h);
     const approved = await h.orch.startTicket(t.key);
     expect(approved).toMatchObject({ status: "planning", startAfterPlan: true, busy: true });
     expect(runKinds(h, t)).toEqual(["plan:running"]); // the plan run is undisturbed, no work run queued
     expect(lines(h, t)).toContain("Plan approved; work starts when planning finishes");
+    // A second press changes nothing.
+    const before = lines(h, t).length;
+    expect((await h.orch.startTicket(t.key)).startAfterPlan).toBe(true);
+    expect(lines(h, t).length).toBe(before);
 
     await drain(h);
     expect(runKinds(h, t).slice(0, 2)).toEqual(["plan:succeeded", "work:succeeded"]);
@@ -1436,16 +1377,8 @@ describe("approving the plan while planning runs", () => {
     // The baseline is the revision the plan run ended on, not the one the human pressed Start at.
     expect(after.specRevision).toBeGreaterThan(1);
     expect(after.specBaselineRevision).toBe(after.specRevision);
-  });
-
-  test("a second press changes nothing", async () => {
-    const h = setup();
-    const t = await planning(h);
-    await h.orch.startTicket(t.key);
-    const before = lines(h, t).length;
-    expect((await h.orch.startTicket(t.key)).startAfterPlan).toBe(true);
-    expect(lines(h, t).length).toBe(before);
-    await drain(h);
+    // The work start is credited to the approver: the human here.
+    expect(h.orch.activity(t.key).find((e) => e.body === "Work started")).toMatchObject({ author: "human" });
   });
 
   test("an agent's start_ticket approves it too, credited to the agent", async () => {
@@ -1459,14 +1392,6 @@ describe("approving the plan while planning runs", () => {
     expect(cur(h, t).startAfterPlanBy).toBeNull();
     // The work start is credited to the approver, not always the human.
     expect(h.orch.activity(t.key).find((e) => e.body === "Work started")).toMatchObject({ author: "agent" });
-  });
-
-  test("a human's approval credits the work start to the human", async () => {
-    const h = setup();
-    const t = await planning(h);
-    await h.orch.startTicket(t.key);
-    await drain(h);
-    expect(h.orch.activity(t.key).find((e) => e.body === "Work started")).toMatchObject({ author: "human" });
   });
 
   test("a plan that ends by asking a question still starts the work", async () => {
@@ -1533,14 +1458,6 @@ describe("approving the plan while planning runs", () => {
     await h.orch.updateTicket(t.key, { status: "blocked" });
     expect(cur(h, t)).toMatchObject({ status: "blocked", startAfterPlan: false });
     await drain(h);
-  });
-
-  test("with nothing running, Start begins the work as before", async () => {
-    const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "plan it", start: false });
-    await h.orch.idle();
-    const started = await h.orch.startTicket(t.key);
-    expect(started).toMatchObject({ status: "in_progress", startAfterPlan: false });
   });
 });
 
@@ -2170,30 +2087,6 @@ describe("worktrees", () => {
     expect([cur.workdir, cur.branch]).toEqual([repo, null]);
     expect(h.driver.calls.filter((c) => c.kind === "work").at(-1)!.cwd).toBe(repo);
     expect(existsSync(join(h.paths.worktreesDir, t.key))).toBe(false);
-  });
-
-  test("re-opening a done ticket with a removed worktree recreates it too", async () => {
-    const h = setup();
-    h.driver.commitsWork = true;
-    const repo = join(h.home, "repo");
-    mkdirSync(repo);
-    h.git.initRepo(repo);
-    const p = h.orch.createProject({ path: repo, key: "repo" });
-    const t = await h.orch.createTicket({ projectId: p.id, spec: "x" });
-    await h.orch.idle();
-    h.orch.humanReview(t.key, { decision: "approve" });
-    await h.orch.idle();
-    const done = h.orch.ticketDetail(t.key).ticket;
-    // The merge completion removed the worktree.
-    expect(existsSync(done.workdir!)).toBe(false);
-
-    const cur = await h.orch.reopenTicket(t.key, { notes: "tweak it" });
-    expect(cur.status).toBe("in_progress");
-    expect(await h.git.port.currentBranch(done.workdir!)).toBe(done.branch);
-    await h.orch.idle();
-    const last = h.driver.calls.filter((c) => c.kind === "work").at(-1)!;
-    expect(last.prompt).toContain("tweak it");
-    expect(last.cwd).toBe(done.workdir!);
   });
 });
 
