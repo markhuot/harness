@@ -118,6 +118,16 @@ final class ScreenSnapshotTests: XCTestCase {
         try await snapshot("dock-ghost-peak") { ghost(phase: 0.5) }
     }
 
+    /// A quarter turn puts the rim light at a different spot from rest.
+    func testDockGhostQuarter() async throws {
+        try await snapshot("dock-ghost-quarter") { ghost(phase: 0.25) }
+    }
+
+    /// The end of the loop must draw exactly what rest does, or the pulse jumps when it wraps.
+    func testDockGhostLoopSeam() async throws {
+        try await snapshot("dock-ghost-rest") { ghost(phase: 1) }
+    }
+
     func testDockGhostReduceMotion() async throws {
         try await snapshot("dock-ghost-reduce-motion") {
             ghost(phase: 0.5, reduceMotion: true)

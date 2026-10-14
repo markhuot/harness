@@ -141,18 +141,20 @@ struct DockGhostCard: View {
                 .blur(radius: 10 + 6 * wave)
                 .padding(.horizontal, 6)
         }
-        // A light that flows along the rim, left to right once per pulse.
+        // A light that circles the rim once per pulse. The gradient is angular and fades to clear at
+        // both ends, so a full turn (phase 1) draws exactly what rest (phase 0) does: no jump at the loop.
         .overlay {
             if !reduceMotion {
                 Capsule()
                     .strokeBorder(
-                        LinearGradient(
+                        AngularGradient(
                             stops: [
-                                .init(color: .clear, location: max(0, phase - 0.3)),
-                                .init(color: c.accent.opacity(0.7), location: phase),
-                                .init(color: .clear, location: min(1, phase + 0.3)),
+                                .init(color: .clear, location: 0),
+                                .init(color: c.accent.opacity(0.7), location: 0.5),
+                                .init(color: .clear, location: 1),
                             ],
-                            startPoint: .leading, endPoint: .trailing),
+                            center: .center,
+                            angle: .degrees(360 * phase)),
                         lineWidth: 1.5)
             }
         }
