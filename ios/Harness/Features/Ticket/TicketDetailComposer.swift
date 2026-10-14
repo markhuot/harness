@@ -31,6 +31,10 @@ struct TicketDetailComposer: View {
     @Environment(BoardStore.self) private var store
     @Environment(Actions.self) private var actions
     @Environment(\.palette) private var c
+    @Environment(Router.self) private var router
+    @Environment(\.inTicketSheet) private var inTicketSheet
+    @Environment(\.inTicketPanel) private var inTicketPanel
+    @Environment(DockedSheetInset.self) private var dockInset: DockedSheetInset?
     @State private var sending = false
     @State private var focused = false
 
@@ -85,7 +89,9 @@ struct TicketDetailComposer: View {
         // At rest, concentric with the phone's corners (the one-line field is 44 tall, its ends
         // round at 22); over the keyboard while writing. A multi-line draft makes it taller, but its
         // bottom row still sits where a one-line field would, so 44 holds.
-        .concentricBottomPadding(barHeight: 44, raised: focused, horizontal: 12, bottom: 8)
+        .concentricBottomPadding(barHeight: 44, raised: focused, horizontal: 12, bottom: 8,
+                                 above: inTicketSheet && !inTicketPanel ? TicketDock.composerGap(cards: router.waitingSheets.count, inset: dockInset) : nil)
+        .animation(.snappy, value: router.waitingSheets.isEmpty)
         .animation(.snappy, value: focused)
         // Another device's edit (or its send) shows here, unless this one is being typed in.
         .onChange(of: ticket.messageDraft.optional, initial: true) { _, saved in draft.sync(saved) }

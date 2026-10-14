@@ -234,26 +234,26 @@ struct RouterSheetTests {
         #expect(r.dockedSheets.map(\.id) == [b, a])
     }
 
-    @Test func swipingWalksTheWholeDockInOrder() {
+    @Test func waitingSheetsAreTheCardsTheDockDraws() {
         let r = sheeted()
+        #expect(r.waitingSheets.isEmpty)
         for k in ["A-1", "B-1", "C-1"] { r.openTicket(key: k, tab: nil) }
+        // Presented: the top is the sheet itself, the rest wait.
+        #expect(r.ticketSheetState == .presented)
+        #expect(r.waitingSheets.map(\.title) == ["B-1", "A-1"])
+        // Docked: every ticket is a card, the top included.
         r.dockSheet()
-        #expect(r.dockedSheets.map(\.title) == ["C-1", "B-1", "A-1"])
-        r.activateAdjacentSheet(.next)
-        #expect(r.dock?.title == "B-1")
-        r.activateAdjacentSheet(.next)
-        #expect(r.dock?.title == "A-1")
-        r.activateAdjacentSheet(.next)
-        #expect(r.dock?.title == "C-1")
-        r.activateAdjacentSheet(.previous)
-        #expect(r.dock?.title == "A-1" && r.ticketSheetState == .docked)
-        r.activateAdjacentSheet(.next)
-        #expect(r.dockedSheets.map(\.title) == ["C-1", "B-1", "A-1"])
-        // One sheet: nothing to swipe to.
-        let one = sheeted()
-        one.push(t("A-1"))
-        one.activateAdjacentSheet(.next)
-        #expect(one.ticketSheet?.title == "A-1")
+        #expect(r.waitingSheets.map(\.title) == ["C-1", "B-1", "A-1"])
+        // Switching while presented swaps who waits, and never empties the list.
+        r.restoreDock()
+        r.activateSheet(id: r.dockedSheets[2].id)
+        #expect(r.ticketSheet?.title == "A-1" && r.waitingSheets.map(\.title) == ["C-1", "B-1"])
+        // A lone presented ticket has nothing waiting; closed, nothing.
+        r.closeSheet(id: r.dockedSheets[2].id)
+        r.closeSheet(id: r.dockedSheets[1].id)
+        #expect(r.waitingSheets.isEmpty)
+        r.dismissSheet()
+        #expect(r.waitingSheets.isEmpty)
     }
 
     @Test func liveShownAndOverflowSheetsSplitTheDock() {
@@ -583,21 +583,18 @@ struct RouterSheetTests {
         #expect(r.ticketSheet?.revealed == nil)
     }
 
-    @Test func swipingStepsThroughFilesAndTicketsTogether() {
+    @Test func filesAndTicketsWaitInTheSameDock() {
         let r = sheeted()
         r.push(t("A-1"))
         r.push(.file(file("a.ts")))
         r.push(t("B-1"))
         #expect(r.dockedSheets.map(\.title) == ["B-1", "a.ts", "A-1"])
         r.dockSheet()
-        r.activateAdjacentSheet(.next)
+        r.activateSheet(id: r.dockedSheets[1].id)
         #expect(r.dock?.file?.path == "a.ts" && r.ticketSheetState == .docked)
-        r.activateAdjacentSheet(.next)
-        #expect(r.dock?.title == "A-1")
-        r.activateAdjacentSheet(.previous)
-        #expect(r.dock?.title == "a.ts")
+        #expect(r.waitingSheets.count == 3)
         r.activateSheet(id: r.dockedSheets.last!.id)
-        #expect(r.dock?.title == "B-1")
+        #expect(r.dock?.title == "A-1")
     }
 
     @Test func closingAFileCardKeepsTheOthersAndDocksTheNext() {

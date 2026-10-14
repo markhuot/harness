@@ -298,8 +298,6 @@ private struct BoardBottomBar<NewSession: View>: View {
 
     @Environment(\.palette) private var c
     @Environment(Router.self) private var router
-    @Environment(DockedSheetInset.self) private var dockInset: DockedSheetInset?
-
     /// The field capsule's height, the bar's row
     private let fieldHeight: CGFloat = DockMetrics.barHeight
 
@@ -315,8 +313,8 @@ private struct BoardBottomBar<NewSession: View>: View {
         // Concentric with the phone's corners, like Calendar's bar. Over the docked cards, which
         // share its sides, the same gap above them on every phone.
         .concentricBottomPadding(barHeight: fieldHeight, raised: false, horizontal: DockMetrics.fallbackSides, bottom: 4,
-                                 above: router.showsDock && dockInset?.top != nil ? TicketDock.barGap : nil)
-        .animation(.snappy, value: router.showsDock)
+                                 above: !router.waitingSheets.isEmpty ? TicketDock.barGap : nil)
+        .animation(.snappy, value: router.waitingSheets.isEmpty)
     }
 
     private var field: some View {

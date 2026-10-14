@@ -261,7 +261,7 @@ extension Animation {
 /// around the top sheet's TicketSheetContent (the iPhone sheet's content), with every live sheet
 /// (`Router.liveSheets`) mounted behind it, hidden, so switching is instant and keeps each one's
 /// place. The other docked tickets wait as a stack of cards in the board's bottom-right corner
-/// (DockedCardStack), left of the panel while it's open and following its resize; while docked the
+/// (DockedCardsContainer), left of the panel while it's open and following its resize; while docked the
 /// panel stays mounted off the edge and every ticket is a card. Pickers, the watcher form and
 /// covers come up from the root (SceneChrome), which presents nothing else here. Pop-out hands the
 /// top ticket to its own window (`Router.popOutSheet()`) where the device has windows.
@@ -278,7 +278,7 @@ struct TicketPanelHost: View {
         let sheet = router.ticketSheet ?? router.dock
         let docked = router.ticketSheetState == .docked
         // Docked, every ticket is a card; open, the ones behind the panel's.
-        let waiting = docked ? router.dockedSheets : Array(router.dockedSheets.dropFirst())
+        let waiting = router.waitingSheets
         GeometryReader { geo in
             let besidePanel = sheet != nil && !docked ? panelWidth : 0
             // The board's column only: the sidebar (left of `contentLeading`) stays clear.
@@ -319,7 +319,7 @@ struct TicketPanelHost: View {
                 let ghost = sheet != nil && !docked && hold.armed ? DockMetrics.cardMode(width: board.width) : nil
                 if !waiting.isEmpty {
                     let shift: CGFloat = if case .cards? = ghost { DockedCardMetrics.height + DockedCardMetrics.spacing } else { 0 }
-                    DockedCardStack(sheets: waiting, available: board)
+                    DockedCardsContainer(sheets: waiting, layout: .pad(available: board))
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                         .padding(.trailing, besidePanel)
                         .offset(y: -shift)
@@ -329,14 +329,14 @@ struct TicketPanelHost: View {
                 if let sheet, let ghost, let width = Self.ghostWidth(ghost) {
                     DockGhostCard(title: sheet.title, armed: true)
                         .frame(width: width)
-                        .padding(DockedCardStack.margin)
+                        .padding(DockedCardsLayout.margin)
                         .padding(.trailing, besidePanel)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                         .transition(.opacity)
                 }
             }
-            .onChange(of: DockedCardStack.height(count: waiting.count, available: board), initial: true) { _, h in
-                dockInset?.cards = h > 0 ? h + DockedCardStack.margin * 2 : 0
+            .onChange(of: DockedCardsLayout.pad(available: board).stackHeight(count: waiting.count), initial: true) { _, h in
+                dockInset?.cards = h > 0 ? h + DockedCardsLayout.margin * 2 : 0
             }
         }
         .animation(.ticketPanel, value: router.ticketSheetState)

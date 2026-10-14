@@ -42,7 +42,7 @@ import Observation
 ///   keeps the dock.
 /// - Opening a ticket (outside the sheet, or a link while docked or gone) or New session brings
 ///   forward the sheet that already shows it, else adds a new sheet on top, and presents it.
-///   Nothing is dropped: `activateSheet(id:)` and `activateAdjacentSheet(_:)` switch between them.
+///   Nothing is dropped: `activateSheet(id:)` switches between them.
 ///   Only the first `liveSheetCount` are mounted (`liveSheets`); the rest are parked, drawn as a
 ///   row from the board's `Ticket` until opened again at their saved path.
 /// - Closing (`dismissSheet()`, `closeSheet(id:)`, `popOutSheet()` into a window) takes one sheet
@@ -55,9 +55,6 @@ import Observation
 public final class Router {
     public enum Scope: Sendable { case main, ticket }
     public enum TicketSheetState: Sendable { case presented, docked, gone }
-    /// A swipe along the dock bar: `.next` sends the top to the back, `.previous` brings the last
-    /// one to the top, so repeated swipes walk the whole dock like Safari's tab bar.
-    public enum DockStep: Sendable { case next, previous }
 
     /// Docked sheets with their stacks mounted (instant to switch to); the rest are parked.
     public static let liveSheetCount = 5
@@ -283,6 +280,13 @@ public final class Router {
     /// The dock bar is on screen, for the sections to keep clear of it.
     public var showsDock: Bool { dock != nil }
 
+    /// The sheets that wait as cards in the dock, most recently used first: every sheet while docked,
+    /// the ones behind the presented top while a ticket is up (the top is the sheet itself, not a
+    /// card). The one dock draws the same list over the board, the sheet and the iPad's panel.
+    public var waitingSheets: [TicketSheet] {
+        ticketSheetState == .presented ? Array(sheets.dropFirst()) : sheets
+    }
+
     public var ticketSheetState: TicketSheetState {
         sheets.isEmpty ? .gone : ticketSheetDocked ? .docked : .presented
     }
@@ -326,17 +330,6 @@ public final class Router {
         guard let i = sheets.firstIndex(where: { $0.id == id }), i > 0 else { return }
         var list = sheets
         list.insert(list.remove(at: i), at: 0)
-        sheets = list
-    }
-
-    /// The next or previous docked sheet becomes the top (a swipe along the dock bar).
-    public func activateAdjacentSheet(_ step: DockStep) {
-        guard sheets.count > 1 else { return }
-        var list = sheets
-        switch step {
-        case .next: list.append(list.removeFirst())
-        case .previous: list.insert(list.removeLast(), at: 0)
-        }
         sheets = list
     }
 

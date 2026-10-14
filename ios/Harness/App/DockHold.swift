@@ -212,51 +212,21 @@ final class DockHoldRecognizer: UIGestureRecognizer {
     override func reset() { tracked = nil }
 }
 
-/// Installs the hold gesture and the ghost dock card on the ticket sheet's container view.
+/// Installs the hold gesture on the ticket sheet's container view. The ghost dock card is not drawn
+/// here: it is the dock's incoming bottom slot (DockedCardsContainer), which sits above the sheet.
 struct DockHoldHost: UIViewRepresentable {
     let hold: DockHold
-    /// The ticket on top, named on the ghost.
-    let title: String
-    let palette: Palette
     /// The system's dismissal ended after an armed release with the ticket still up (the system
     /// cancelled it, an upward flick say): dock anyway, so the ghost's label is never wrong.
     let dockAnyway: () -> Void
 
     func makeUIView(context: Context) -> Probe { Probe(hold: hold) }
 
-    func updateUIView(_ view: Probe, context: Context) {
-        view.dockAnyway = dockAnyway
-        view.lastGhost = AnyView(ghost)
-        view.ghost?.rootView = view.lastGhost
-    }
-
-    var ghost: some View {
-        GhostLayer(hold: hold, title: title).modifier(ConcentricScreenReader()).environment(\.palette, palette)
-    }
-
-    private struct GhostLayer: View {
-        let hold: DockHold
-        let title: String
-
-        @Environment(\.concentricScreen) private var screen
-
-        var body: some View {
-            VStack {
-                Spacer()
-                DockGhostCard(title: title, armed: hold.armed)
-                    .padding(.horizontal, DockMetrics.phoneSides(screen: screen))
-                    .padding(.bottom, DockMetrics.phoneBottomGap)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .allowsHitTesting(false)
-        }
-    }
+    func updateUIView(_ view: Probe, context: Context) { view.dockAnyway = dockAnyway }
 
     final class Probe: UIView {
         let hold: DockHold
         var dockAnyway: () -> Void = {}
-        var ghost: UIHostingController<AnyView>?
-        var lastGhost = AnyView(EmptyView())
         private let recognizer = DockHoldRecognizer()
         /// Where the sheet's top edge rests, the highest it has been at a touch-down.
         private var restTop: CGFloat = .infinity
@@ -277,23 +247,10 @@ struct DockHoldHost: UIViewRepresentable {
         override func didMoveToWindow() {
             super.didMoveToWindow()
             recognizer.view?.removeGestureRecognizer(recognizer)
-            ghost?.view.removeFromSuperview()
-            ghost = nil
             guard window != nil, let presented = presentedController,
                   let container = presented.presentationController?.containerView else { return }
             self.container = container
             container.addGestureRecognizer(recognizer)
-            let host = UIHostingController(rootView: AnyView(EmptyView()))
-            host.view.backgroundColor = .clear
-            host.view.isUserInteractionEnabled = false
-            host.view.frame = container.bounds
-            host.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-            // A plain subview, not a child view controller: the container isn't the presented
-            // controller's view, and UIKit rejects the pairing.
-            container.addSubview(host.view)
-            ghost = host
-            // Whatever the hosting representable last said, so the ghost is never empty.
-            host.rootView = lastGhost
             restTop = .infinity
         }
 
@@ -327,7 +284,6 @@ struct DockHoldHost: UIViewRepresentable {
 
         private func began() {
             if let top { restTop = min(restTop, top) }
-            container?.bringSubviewToFront(ghost?.view ?? UIView())
             hold.touchDown { [weak self] in self?.reading() }
         }
 

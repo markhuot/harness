@@ -141,4 +141,17 @@ final class ScreenSnapshotTests: XCTestCase {
             return router
         }) { RootView() }
     }
+
+    /// A ticket open over the board with two others docked: the dock draws over the sheet, and the
+    /// composer sits above it. The iPad's cards sit beside its panel, not over it (the panel's own tests).
+    func testDockOverPresentedTicket() async throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .phone, "the phone's dock window")
+        try await snapshot("dock-over-ticket", router: {
+            let router = Router()
+            router.openTicket(key: "HAR-7", tab: .spec)
+            router.openTicket(key: "HAR-3", tab: .activity)
+            router.openTicket(key: "HAR-5", tab: nil)
+            return router
+        }) { RootView() }
+    }
 }

@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+@testable import Harness
 
 /// Renders a SwiftUI view in a real window at a fixed size and appearance, and returns the pixels.
 ///
@@ -40,7 +41,11 @@ enum SnapshotRenderer {
         window.overrideUserInterfaceStyle = appearance.style
         window.rootViewController = root
         window.isHidden = false
-        defer { window.isHidden = true; window.rootViewController = nil }
+        defer {
+            window.isHidden = true
+            window.rootViewController = nil
+            dockWindows(in: scene).forEach { $0.isHidden = true; $0.rootViewController = nil }
+        }
 
         // A sheet or a push starts a few frames after the first draw, so a single repeat doesn't
         // mean settled: wait for `stableFrames` identical captures in a row, after at least `minFrames`.
@@ -49,7 +54,14 @@ enum SnapshotRenderer {
         for frame in 0..<maxFrames {
             try await Task.sleep(for: .milliseconds(40))
             window.layoutIfNeeded()
-            let image = capture(window, size: size)
+            // The phone's dock is a window of its own above the screen (RootView makes it): drawn over it.
+            let docks = dockWindows(in: scene)
+            docks.forEach {
+                $0.overrideUserInterfaceStyle = appearance.style
+                $0.rootViewController?.overrideUserInterfaceStyle = appearance.style
+                $0.layoutIfNeeded()
+            }
+            let image = capture([window] + docks, size: size)
             let png = image.pngData()
             stable = png != nil && png == previous ? stable + 1 : 0
             previous = png
@@ -58,13 +70,44 @@ enum SnapshotRenderer {
         throw Unsettled()
     }
 
-    private static func capture(_ window: UIWindow, size: CGSize) -> UIImage {
-        let format = UIGraphicsImageRendererFormat()
-        format.scale = scale
-        format.opaque = true
-        format.preferredRange = .standard
-        return UIGraphicsImageRenderer(size: size, format: format).image { _ in
-            window.drawHierarchy(in: CGRect(origin: .zero, size: size), afterScreenUpdates: true)
+    private static func dockWindows(in scene: UIWindowScene?) -> [UIWindow] {
+        (scene?.windows ?? []).filter { $0 is DockWindow }
+    }
+
+    /// `windows` drawn in order, the first as the base. A transparent window drawn straight over it
+    /// blacks the base out, and drawn alone it has nothing behind its glass, so each later window is
+    /// drawn over a picture of what is below it, put inside the window for the capture.
+    private static func capture(_ windows: [UIWindow], size: CGSize) -> UIImage {
+        func render(_ window: UIWindow, below: UIImage?) -> UIImage {
+            let backdrop = below.map { UIImageView(image: $0) }
+            if let backdrop {
+                backdrop.frame = CGRect(origin: .zero, size: size)
+                window.insertSubview(backdrop, at: 0)
+            }
+            defer { backdrop?.removeFromSuperview() }
+            let format = UIGraphicsImageRendererFormat()
+            format.scale = scale
+            format.opaque = true
+            format.preferredRange = .standard
+            return UIGraphicsImageRenderer(size: size, format: format).image { _ in
+                window.drawHierarchy(in: CGRect(origin: .zero, size: size), afterScreenUpdates: true)
+            }
+        }
+        return windows.dropFirst().reduce(render(windows[0], below: nil)) { base, window in
+            // Only where the cards are: the rest of the screen stays the base's own pixels.
+            guard let dock = window as? DockWindow, dock.hit.fullScreen || !dock.hit.rects.isEmpty else { return base }
+            let over = render(window, below: base)
+            let clip = dock.hit.fullScreen ? CGRect(origin: .zero, size: size)
+                : dock.hit.rects.dropFirst().reduce(dock.hit.rects[0]) { $0.union($1) }.insetBy(dx: -40, dy: -40)
+            let format = UIGraphicsImageRendererFormat()
+            format.scale = scale
+            format.opaque = true
+            format.preferredRange = .standard
+            return UIGraphicsImageRenderer(size: size, format: format).image { context in
+                base.draw(at: .zero)
+                context.cgContext.clip(to: clip)
+                over.draw(at: .zero)
+            }
         }
     }
 }

@@ -176,8 +176,9 @@ struct TicketDetailHero: View {
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
-        // In the ticket sheet or panel, a long press lists the other docked tickets to switch to.
-        .dockedTicketsMenu(router, inSheet: inTicketSheet)
+        // In the iPad's panel, a long press lists the other docked tickets to switch to (the iPhone's
+        // dock is over the ticket, so its cards are how you switch).
+        .dockedTicketsMenu(router, inSheet: inTicketPanel)
         .padding(.leading, hasBack ? 0 : -14)
         .padding(.trailing, -14)
         .padding(.top, -10)

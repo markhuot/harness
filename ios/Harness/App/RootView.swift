@@ -11,6 +11,11 @@ struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var scene: UIWindowScene?
     @State private var dockInset = DockedSheetInset()
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    /// The hold-to-dock gesture's state, shared by the ticket sheet (SceneChrome) and the dock window.
+    @State private var hold = DockHold()
+    /// The phone's dock, in a window of its own above the board and the ticket sheet.
+    @State private var dockWindow = DockWindowController()
 
     #if DEBUG
     /// `-debugScreen highlight` (or `pickers`) on the launch command line opens a debug screen directly
@@ -23,6 +28,7 @@ struct RootView: View {
         content
             .sceneChrome(router)
             .modifier(ConcentricScreenReader())
+            .environment(hold)
             .environment(dockInset)
             // The board's cards or the open ticket, for the Mac's notifications (Notifications.swift).
             .reportsPresence(router)
@@ -31,7 +37,10 @@ struct RootView: View {
             .background(SceneReader { s in
                 scene = s
                 WindowDirectory.shared.mainActive(router, scene: s)
+                syncDockWindow()
             })
+            .onChange(of: sizeClass, initial: true) { syncDockWindow() }
+            .onDisappear { dockWindow.tearDown() }
             .onAppear {
                 WindowDirectory.shared.mainActive(router, scene: scene)
                 #if SIM_CHECK
@@ -54,6 +63,14 @@ struct RootView: View {
                 let open = Set(new.flatMap(\.ticketKeys))
                 for key in old.flatMap(\.ticketKeys) where !open.contains(key) { TicketViewMemory.shared.forget(key: key) }
             }
+    }
+
+    /// The dock window exists at compact width only: the iPad's regular-width panel draws its own stack.
+    private func syncDockWindow() {
+        guard let scene, sizeClass != .regular else { dockWindow.tearDown(); return }
+        dockWindow.show(in: scene) { hit, state, probe in
+            DockWindowRoot(router: router, app: app, hold: hold, inset: dockInset, hit: hit, state: state, dialogProbe: probe)
+        }
     }
 
     @ViewBuilder private var content: some View {
@@ -108,8 +125,10 @@ private struct SceneChrome: ViewModifier {
     @State private var targets = ShortcutTargets()
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.supportsMultipleWindows) private var multipleWindows
-    /// The hold-to-dock gesture on the ticket sheet (DockHold).
-    @State private var hold = DockHold()
+    /// The hold-to-dock gesture on the ticket sheet (DockHold): RootView's, so its dock window shares it.
+    @Environment(DockHold.self) private var injectedHold: DockHold?
+    @State private var ownHold = DockHold()
+    private var hold: DockHold { injectedHold ?? ownHold }
 
     /// What the bar colors depend on: both appearances' text (BarAppearance).
     private var barColorKey: String {
@@ -168,7 +187,7 @@ private struct SceneChrome: ViewModifier {
     /// presents `sheet` and the cover over itself), else `sheet`. The sheet is a plain system sheet,
     /// a view of the Router's state, and it is one whichever tickets it holds: adding or switching
     /// tickets swaps its content without presenting it again, and a docked ticket is a card in the
-    /// window instead (DockedCardsOverlay). When the system takes the sheet down (a swipe away, the
+    /// window instead (the dock, DockWindow). When the system takes the sheet down (a swipe away, the
     /// escape gesture, UIKit dismissing it) the ticket closes (`sheetDismissedBySystem`), with one
     /// exception: the release of an armed hold-to-dock docks it (DockHold). Programmatic dismissals
     /// never call this setter. A window widening to regular width takes the system sheet down
@@ -221,8 +240,7 @@ struct MainTabs: View {
             } else {
                 // ⌃⌘S, as the desktop toggles its sidebar: the Projects sheet here.
                 SectionStack()
-                    // The docked tickets, as cards.
-                    .overlay { DockedCardsOverlay() }
+                    // The docked tickets are cards in the dock window (DockWindow), above this.
                     .hiddenShortcuts {
                         Button("Toggle Sidebar") {
                             if router.sheet == .projects { router.sheet = nil } else { router.present(.projects) }

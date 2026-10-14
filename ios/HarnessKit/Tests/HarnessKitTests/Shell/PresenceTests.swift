@@ -71,7 +71,7 @@ struct PresenceTests {
         #expect(shown(r) == ["A-3"])
         r.dockSheet()
         #expect(shown(r) == board + ["A-3"])
-        r.activateAdjacentSheet(.next)
+        r.activateSheet(id: r.dockedSheets[1].id)
         #expect(shown(r) == board + ["A-2"])
         r.sheetIsBesideBoard = true
         r.restoreDock()

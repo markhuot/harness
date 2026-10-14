@@ -42,4 +42,17 @@ struct DockLabelsTests {
         #expect(DockLabels.menuLine(ref: "WEB-2", title: "Fix the footer") == "WEB-2 · Fix the footer")
         #expect(DockLabels.menuLine(ref: "New session", title: nil) == "New session")
     }
+
+    @Test func theDockHidesUnderAnythingOverTheTicket() {
+        func shown(_ count: Int = 2, sheet: Bool = false, cover: Bool = false, keyboard: Bool = false, dialog: Bool = false) -> Bool {
+            DockCards.isShown(count: count, sheetUp: sheet, coverUp: cover, keyboardUp: keyboard, dialogUp: dialog)
+        }
+        #expect(shown())
+        #expect(!shown(0))
+        #expect(!shown(sheet: true))
+        #expect(!shown(cover: true))
+        #expect(!shown(keyboard: true))
+        #expect(!shown(dialog: true))
+        #expect(!shown(1, keyboard: true, dialog: true))
+    }
 }
