@@ -154,6 +154,7 @@ struct PaletteScreen: View {
                     Section {
                         ForEach(fileRows) { f in
                             Button { open(f) } label: { fileLabel(f) }
+                                .accessibilityIdentifier("palette-file-\(f.path)")
                                 .listRowBackground(c.bg)
                         }
                     } header: {
@@ -172,6 +173,7 @@ struct PaletteScreen: View {
             } else {
                 ForEach(rows) { row in
                     Button { run(row) } label: { label(row) }
+                        .accessibilityIdentifier(rowIdentifier(row))
                         .listRowBackground(c.bg)
                 }
                 if rows.isEmpty {
@@ -182,6 +184,14 @@ struct PaletteScreen: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .scrollDismissesKeyboard(.interactively)
+    }
+
+    /// A row's identifier: the command's id or the ticket's key, so a UI test taps it without matching its label.
+    private func rowIdentifier(_ row: PaletteRow) -> String {
+        switch row.content {
+        case let .command(cmd): "palette-command-\(cmd.id)"
+        case let .ticket(t): "palette-ticket-\(t.key)"
+        }
     }
 
     @ViewBuilder private func label(_ row: PaletteRow) -> some View {

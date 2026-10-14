@@ -98,16 +98,17 @@ struct TicketContextGauge: View {
             Button { info = .misses } label: {
                 Label(row, systemImage: "info.circle")
             }
+            .accessibilityIdentifier("ticket-context-misses-row")
             Button { router.push(.driver(id: "claude-code")) } label: {
                 Label("Claude Code settings…", systemImage: "gearshape")
             }
             Divider()
         }
         if menu.compact.isShown {
-            action("Compact", "arrow.down.right.and.arrow.up.left", menu.compact) { run(.compact) }
+            action("compact", "Compact", "arrow.down.right.and.arrow.up.left", menu.compact) { run(.compact) }
         }
         if menu.newSession.isShown {
-            action("New session", "arrow.counterclockwise", menu.newSession) {
+            action("new-session", "New session", "arrow.counterclockwise", menu.newSession) {
                 confirm = Confirmation(
                     title: "Start a new session?",
                     message: "The conversation is discarded. The next run starts fresh from the spec, Activity and branch.",
@@ -118,14 +119,16 @@ struct TicketContextGauge: View {
         Button { limitSheet = true } label: {
             Label("Limit…", systemImage: "gauge.with.dots.needle.33percent")
         }
+        .accessibilityIdentifier("ticket-context-limit")
         Divider()
         Button { info = .gauge } label: {
             Label("About this gauge", systemImage: "info.circle")
         }
+        .accessibilityIdentifier("ticket-context-about")
     }
 
     /// A menu item, with the reason under it when it's greyed.
-    @ViewBuilder private func action(_ title: String, _ icon: String, _ availability: ContextGauge.Availability, _ perform: @escaping () -> Void) -> some View {
+    @ViewBuilder private func action(_ id: String, _ title: String, _ icon: String, _ availability: ContextGauge.Availability, _ perform: @escaping () -> Void) -> some View {
         if case let .disabled(reason) = availability {
             Button(action: perform) {
                 Text(title)
@@ -133,8 +136,10 @@ struct TicketContextGauge: View {
                 Image(systemName: icon)
             }
             .disabled(true)
+            .accessibilityIdentifier("ticket-context-\(id)")
         } else {
             Button(title, systemImage: icon, action: perform)
+                .accessibilityIdentifier("ticket-context-\(id)")
         }
     }
 
@@ -249,7 +254,22 @@ struct ContextLimitSheet: View {
     private var parsed: Int? { SettingsRules.contextGaugeLimit(text) }
 
     var body: some View {
-        NavigationStack {
+        // Its own header rather than toolbar items: AXe doesn't see a sheet's toolbar.
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                HButton("Cancel", variant: .ghost, fullWidth: false, haptic: nil) { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+                    .accessibilityIdentifier("context-limit-cancel")
+                Text("Context limit")
+                    .font(.scaled(size: 16, weight: .semibold))
+                    .foregroundStyle(c.text)
+                    .frame(maxWidth: .infinity)
+                    .accessibilityAddTraits(.isHeader)
+                HButton("Save", variant: .ghost, fullWidth: false, haptic: nil, action: save)
+                    .disabled(parsed == nil)
+                    .accessibilityIdentifier("context-limit-save")
+            }
+            .padding(14)
             Form {
                 Section {
                     TextField("Tokens", text: $text)
@@ -262,14 +282,6 @@ struct ContextLimitSheet: View {
                         .accessibilityIdentifier("context-limit-field")
                 } footer: {
                     Text("How many tokens the gauge counts up to: \(ContextGauge.tokens(ContextGaugeLimits.min))–\(ContextGauge.tokens(ContextGaugeLimits.max)). It's the same limit as in Settings, for every ticket.")
-                }
-            }
-            .navigationTitle("Context limit")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save", action: save).disabled(parsed == nil).accessibilityIdentifier("context-limit-save")
                 }
             }
         }

@@ -75,6 +75,8 @@ export function axeFor(udid: string, developerDir: string) {
     /** Every element on screen, flattened: its label, value and accessibilityIdentifier. */
     nodes: async (): Promise<AXElement[]> => flattenTree(await run("describe-ui")),
     tap: (label: string) => run("tap", "--label", label),
+    /** A tap on the element with this accessibilityIdentifier: stable where a label carries live numbers. */
+    tapId: (id: string) => run("tap", "--id", id),
     /** Types into the focused field. */
     type: (text: string) => run("type", text),
     /** A key chord: modifiers and key are HID codes (⌘ is 227, K is 14, P is 19). */

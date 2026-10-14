@@ -44,12 +44,51 @@ try {
   };
   /** The first element whose label passes `match`. */
   const find = (els: AXElement[], match: (label: string) => boolean) => els.find((e) => !!e.label && match(e.label));
-  /** Taps the element whose label passes `match` (a tap is by exact label, and a label often carries live numbers). */
-  const tapWhere = async (match: (label: string) => boolean) => {
-    const e = find(await axe.nodes(), match);
-    if (!e) throw new Error("nothing on screen to tap");
-    await axe.tap(e.label!);
+  const sameFrame = (a: AXElement | undefined, b: AXElement | undefined) => !!a?.frame && !!b?.frame && JSON.stringify(a.frame) === JSON.stringify(b.frame);
+  /**
+   * The element `pick` finds, once two reads in a row put it in the same place: a sheet, popover or alert
+   * that is still animating in swallows a tap, and its frame is how the tree says so.
+   */
+  const settled = async (pick: (els: AXElement[]) => AXElement | undefined, what: string, ms = 8000) => {
+    const end = Date.now() + ms;
+    let prev: AXElement | undefined;
+    for (;;) {
+      const els = await axe.nodes();
+      const e = pick(els);
+      if (sameFrame(e, prev)) return e!;
+      if (Date.now() > end) throw new Error(`${what} never settled on screen; ${e ? "it kept moving" : "it isn't in the tree"}; ${els.map((x) => x.id ?? x.label).filter(Boolean).slice(0, 40).join(" | ")}`);
+      prev = e;
+    }
   };
+  /** The tree once nothing in it moves between two reads: a scroll's momentum is over. */
+  const quiet = async (ms = 8000) => {
+    const end = Date.now() + ms;
+    const sig = (els: AXElement[]) => JSON.stringify(els.map((e) => e.frame));
+    let els = await axe.nodes();
+    for (let prev = ""; sig(els) !== prev && Date.now() < end; ) {
+      prev = sig(els);
+      els = await axe.nodes();
+    }
+    return els;
+  };
+  /** Taps the element with this accessibilityIdentifier once it has settled. */
+  const tapId = async (id: string) => {
+    await settled((els) => els.find((e) => e.id === id), id);
+    await axe.tapId(id);
+  };
+  /** Taps the element whose label passes `match`, by its identifier when it has one (a label often carries live numbers), else by its exact label. */
+  const tapWhere = async (match: (label: string) => boolean) => {
+    const e = await settled((els) => find(els, match), "the element to tap");
+    await (e.id ? axe.tapId(e.id) : axe.tap(e.label!));
+  };
+  /** Closes the topmost popover: UIKit draws a full-screen dismiss region under each, the last in the tree is the top one, and a tap near its bottom edge is outside the popover. */
+  const dismissPopover = async () => {
+    const region = await settled((els) => els.filter((e) => e.id === "PopoverDismissRegion").at(-1), "a popover's dismiss region");
+    const f = region.frame!;
+    await axe.tapAt(f.x + f.width / 2, f.y + f.height * 0.9);
+  };
+  /** Taps the element labelled exactly `label` once it has settled (an alert's or a menu's button has no identifier). */
+  const tapLabel = (label: string) => tapWhere((l) => l === label);
   // The app's debug state (a SIM_CHECK build writes it into its container): the editor is a web view the tree can't see into.
   let container = "";
   const probe = (): DebugState | null => {
@@ -98,9 +137,9 @@ try {
     const open = (e: AXElement[]) => has(e, /Where things live/) && e.some((x) => x.id === "agent-notes");
     expect("agent notes header", has(els, /^Agent notes/), seen(els));
     expect("agent notes start collapsed", !open(els));
-    await axe.tap("Agent notes");
+    await tapId("agent-notes-toggle");
     expect("a tap opens the notes", open(await untilTree(() => axe.nodes(), open)));
-    await axe.tap("Agent notes");
+    await tapId("agent-notes-toggle");
     expect("a second tap closes them", !open(await untilTree(() => axe.nodes(), (e) => !open(e))));
   });
   await w.screen("blocked ticket", async (expect) => {
@@ -114,22 +153,23 @@ try {
   await w.screen("settings", async (expect) => {
     const els = await visit("harness://settings");
     expect("appearance section with a theme choice", has(els, "Appearance") && has(els, "Light theme"), seen(els));
-    // sim-check save-on-blur: scroll to the General switch (swipe from the headings; the theme strips swallow a swipe) and press it.
-    const row = (e: AXElement[]) => e.filter((x) => x.label === "Save on blur").sort((a, b) => (b.frame?.x ?? 0) - (a.frame?.x ?? 0))[0];
-    let sw = row(els);
-    for (let i = 0; i < 40 && !(sw?.frame && sw.frame.y > 140 && sw.frame.y < 560); i++) {
-      await axe.swipe(200, 520, 200, 170);
-      await Bun.sleep(350);
-      sw = row(await axe.nodes());
+    // sim-check save-on-blur: scroll to the General switch and press it.
+    const sw = (e: AXElement[]) => e.find((x) => x.id === "settings-save-on-blur");
+    const root = (await axe.nodes())[0]!.frame!;
+    const inView = (e: AXElement[]) => !!sw(e)?.frame && sw(e)!.frame!.y > root.height * 0.2 && sw(e)!.frame!.y < root.height * 0.7;
+    let cur = els;
+    // A swipe from the lower middle of the screen: the theme strips above it swallow a swipe that starts on them.
+    for (let i = 0; i < 40 && !inView(cur); i++) {
+      await axe.swipe(root.width / 2, root.height * 0.7, root.width / 2, root.height * 0.2);
+      cur = await quiet();
     }
-    expect("a Save on blur switch", !!sw?.frame, seen(els));
-    if (sw?.frame) {
-      await Bun.sleep(1200); // the scroll's momentum has to be over before a press lands where the switch was
-      sw = row(await axe.nodes())!;
-      const before = sw.value;
-      await axe.press(sw.frame!.x + sw.frame!.width - 28, sw.frame!.y + sw.frame!.height / 2);
-      const after = await untilTree(() => axe.nodes(), (e) => row(e)?.value !== before);
-      expect("the press flips the switch", row(after)?.value !== before, `still ${before}`);
+    expect("a Save on blur switch", !!sw(cur)?.frame, seen(els));
+    if (sw(cur)?.frame) {
+      const el = await settled(sw, "the Save on blur switch");
+      const before = el.value;
+      await axe.press(el.frame!.x + el.frame!.width / 2, el.frame!.y + el.frame!.height / 2); // a Toggle ignores the instant tap `tapId` sends
+      const after = await untilTree(() => axe.nodes(), (e) => sw(e)?.value !== before);
+      expect("the press flips the switch", sw(after)?.value !== before, `still ${before}`);
     }
   });
 
@@ -141,7 +181,7 @@ try {
       const e = await untilTree(() => axe.nodes(), (x) => rows(x).agents === agents && rows(x).tasks === tasks, 5000);
       return rows(e);
     };
-    const chip = (name: string) => tapWhere((l) => l.startsWith(`${name}, `));
+    const chip = (name: string) => tapId(`agents-filter-${name.toLowerCase()}`);
     els = await untilTree(() => axe.nodes(), (e) => rows(e).tasks > 0);
     expect("every row: the task and two sub-agents", rows(els).agents === 2 && rows(els).tasks === 1, seen(els));
     await chip("Tasks");
@@ -149,8 +189,7 @@ try {
     await chip("Tasks");
     expect("Agents on and Tasks off leaves only the sub-agents", JSON.stringify(await shows(2, 0)()) === '{"agents":2,"tasks":0}', seen(await axe.nodes()));
     await tapWhere((l) => /^Sub-task \d+, /.test(l));
-    await untilTree(() => axe.nodes(), (e) => has(e, "Back to Agents & tasks"));
-    await axe.tap("Back to Agents & tasks");
+    await tapId("agents-back");
     expect("the filter survives opening a row and coming back", JSON.stringify(await shows(2, 0)()) === '{"agents":2,"tasks":0}', seen(await axe.nodes()));
     await chip("Agents");
     expect("neither pressed shows every row again", JSON.stringify(await shows(2, 1)()) === '{"agents":2,"tasks":1}', seen(await axe.nodes()));
@@ -200,13 +239,11 @@ try {
   });
 
   // sim-check context-gauge: where the gauge sits and how big its tap target is, its menu and the About popover.
-  /** Taps below the content until `gone` holds: the About popover sits over the menu, and a tap outside closes only the top one. */
+  /** Dismisses the menu and whatever popover sits over it: each tap on the popover scrim closes the top one. */
   const closeMenu = async (gone: (e: AXElement[]) => boolean) => {
-    const root = (await axe.nodes())[0]!.frame!;
-    for (let i = 0; i < 3; i++) {
-      await axe.tapAt(root.width * 0.5, root.height * 0.9);
-      await Bun.sleep(500);
-      if (gone(await axe.nodes())) break;
+    for (let i = 0; i < 3 && !gone(await axe.nodes()); i++) {
+      await dismissPopover();
+      await untilTree(() => axe.nodes(), gone, 3000);
     }
   };
   const gaugeGone = (e: AXElement[]) => !has(e, "Limit…") && !has(e, /^(How much conversation the next run|A cache miss is a model call)/);
@@ -221,10 +258,10 @@ try {
     if (!g || !k || !t) return;
     expect("the gauge sits in the meta row below the title, beside the key", g.y + g.height / 2 > t.y + t.height && Math.abs(g.y + g.height / 2 - (k.y + k.height / 2)) <= 12 && g.x >= k.x, `gauge ${JSON.stringify(g)} key ${JSON.stringify(k)}`);
     expect("the tap target is at least 44 pt tall", g.height >= 43, `${g.height} pt`);
-    await axe.tap(gauge!.label!);
+    await tapId("ticket-context-gauge");
     els = await untilTree(() => axe.nodes(), (e) => has(e, "Limit…"), 5000);
     expect("the menu lists Limit…", has(els, "Limit…"), seen(els));
-    await axe.tap("About this gauge");
+    await tapId("ticket-context-about");
     els = await untilTree(() => axe.nodes(), (e) => has(e, /^How much conversation the next run/), 5000);
     expect("About this gauge explains it", has(els, /^How much conversation the next run/), seen(els));
     await closeMenu(gaugeGone);
@@ -232,37 +269,30 @@ try {
   await w.screen("context gauge limit", async (expect) => {
     await visit(`harness://ticket/${world.gauge.key}?tab=spec`);
     await untilTree(() => axe.nodes(), (e) => has(e, /^Context 82k/));
-    await tapWhere((l) => l.startsWith("Context 82k"));
+    await tapId("ticket-context-gauge");
     await untilTree(() => axe.nodes(), (e) => has(e, "New session"), 5000);
-    await axe.tap("New session");
+    await tapId("ticket-context-new-session");
     let els = await untilTree(() => axe.nodes(), (e) => has(e, "Start a new session?"), 5000);
     expect("New session asks first", has(els, "Start a new session?"), seen(els));
-    for (let i = 0; i < 4 && has(await axe.nodes(), "Start a new session?"); i++) { // a tap while the alert animates in is swallowed
-      await axe.tap("Cancel");
-      await Bun.sleep(700);
-    }
-    expect("Cancel closes the confirmation", !has(await axe.nodes(), "Start a new session?"));
-    await tapWhere((l) => l.startsWith("Context 82k"));
+    await tapLabel("Cancel");
+    els = await untilTree(() => axe.nodes(), (e) => !has(e, "Start a new session?"), 5000);
+    expect("Cancel closes the confirmation", !has(els, "Start a new session?"));
+    await tapId("ticket-context-gauge");
     await untilTree(() => axe.nodes(), (e) => has(e, "Limit…"), 5000);
-    await axe.tap("Limit…");
+    await tapId("ticket-context-limit");
     els = await untilTree(() => axe.nodes(), (e) => has(e, /^How many tokens the gauge counts up to/), 5000);
     expect("Limit… opens the limit sheet", has(els, /^How many tokens the gauge counts up to/), seen(els));
-    // The sheet's Cancel isn't in the tree: it sits at the leading edge, 86 pt above the field's centre.
-    const sheetUp = (e: AXElement[]) => has(e, /^How many tokens the gauge counts up to/);
-    for (let i = 0; i < 4 && sheetUp(els); i++) { // the first taps after a presentation are swallowed
-      const field = els.find((e) => e.id === "context-limit-field")?.frame;
-      if (field) await axe.tapAt(61, field.y + field.height / 2 - 86);
-      els = await untilTree(() => axe.nodes(), (e) => !sheetUp(e), 2500);
-    }
+    await tapId("context-limit-cancel");
+    els = await untilTree(() => axe.nodes(), (e) => !has(e, /^How many tokens the gauge counts up to/), 5000);
     expect("Cancel closes the sheet", !has(els, /^How many tokens the gauge counts up to/), seen(els));
   });
   await w.screen("context gauge states", async (expect) => {
     let els = await visit(`harness://ticket/${world.gaugeMiss.key}?tab=spec`);
     els = await untilTree(() => axe.nodes(), (e) => has(e, /^Context 100k/));
     expect("the gauge counts the misses", has(els, /^Context 100k/), seen(els));
-    await tapWhere((l) => l.startsWith("Context 100k"));
+    await tapId("ticket-context-gauge");
     await untilTree(() => axe.nodes(), (e) => has(e, "Limit…"), 5000);
-    await tapWhere((l) => l.startsWith("3 cache misses"));
+    await tapId("ticket-context-misses-row");
     els = await untilTree(() => axe.nodes(), (e) => has(e, /^A cache miss is a model call/), 5000);
     expect("the misses row explains a cache miss", has(els, /^A cache miss is a model call/), seen(els));
     await closeMenu(gaugeGone);
@@ -277,34 +307,31 @@ try {
   await w.screen("command palette", async (expect) => {
     previous = await openLink(slot.udid, axe, "harness://board", previous);
     const listed = (e: AXElement[]) => has(e, "Go to Inbox, Go to");
-    /** Taps the board's field until the palette lists its commands: a tap during the sheet's dismissal is swallowed. */
+    /** Taps the board's field (once the board under the last sheet has stopped moving) and waits for the palette's commands. */
     const openPalette = async () => {
-      let e: AXElement[] = [];
-      for (let i = 0; i < 4 && !listed(e); i++) {
-        await axe.tap("Command palette");
-        e = await untilTree(() => axe.nodes(), listed, 3000);
-      }
-      return e;
+      await tapId("palette-field");
+      return untilTree(() => axe.nodes(), listed);
     };
+    /** The palette is gone and the board has stopped moving, so the next tap lands. */
     const closed = async () => {
       await untilTree(() => axe.nodes(), (e) => !listed(e));
-      await Bun.sleep(800); // the sheet's dismissal animation
+      await quiet();
     };
     let els = await openPalette();
     expect("the palette lists commands", has(els, "Go to Inbox, Go to") && has(els, "Open Settings, Go to"), seen(els));
     // sim-check palette: running Show child tickets closes the palette and flips its label.
-    await axe.tap("Show child tickets, General");
+    await tapLabel("Show child tickets, General");
     await closed();
     await openPalette();
     const flipped = await untilTree(() => axe.nodes(), (e) => has(e, /^Hide child tickets/));
     expect("Show child tickets flips to Hide child tickets", has(flipped, /^Hide child tickets/), seen(flipped));
-    await axe.tap("Hide child tickets, General"); // back to the default
+    await tapLabel("Hide child tickets, General"); // back to the default
     await closed();
     // A leading > shows only commands: the ticket matching the query isn't listed.
     await openPalette();
     await axe.type(">hello");
-    await Bun.sleep(1500); // past the search's pause
-    const commands = await axe.nodes();
+    // The ticket search runs after a pause: wait for it to settle before asserting nothing was listed.
+    const commands = await quiet();
     expect("a > query lists no ticket", !has(commands, new RegExp(`^${seeded.review.key} `)), seen(commands));
   });
   // sim-check palette: ⌘K over a ticket lists its actions; Copy ticket key copies it.
@@ -313,9 +340,10 @@ try {
     await axe.keyCombo(227, 14);
     const els = await untilTree(() => axe.nodes(), (e) => has(e, /^Copy ticket key/));
     expect("the ticket's commands", has(els, /^Copy ticket key/), seen(els));
-    await axe.tap("Copy ticket key, Ticket");
-    await Bun.sleep(500);
-    const copied = Bun.spawnSync(["xcrun", "simctl", "pbpaste", slot.udid], { env: process.env }).stdout.toString().trim();
+    await tapLabel("Copy ticket key, Ticket");
+    const pasteboard = () => Bun.spawnSync(["xcrun", "simctl", "pbpaste", slot.udid], { env: process.env }).stdout.toString().trim();
+    await untilTree(() => axe.nodes(), (e) => !has(e, /^Copy ticket key/)); // the command ran and the palette closed
+    const copied = pasteboard();
     expect("Copy ticket key copies the key", copied === seeded.review.key, `copied "${copied}"`);
   });
   // sim-check usage: the sidebar's plan-usage gauges, read from the proxy's fixture. Last, since it relaunches the app.
@@ -328,23 +356,16 @@ try {
     let els = await showSidebar();
     expect("a gauge for each window", has(els, /^Claude Code 5-hour/) && has(els, /^Claude Code Weekly/), seen(els));
     const info = /^How much of your plan's usage limits/;
-    for (let i = 0; i < 4 && !has(els, info); i++) { // the first tap after the sidebar draws is swallowed
-      await axe.tap("About plan usage");
-      els = await untilTree(() => axe.nodes(), (e) => has(e, info), 2500);
-    }
+    await tapId("plan-usage-info");
+    els = await untilTree(() => axe.nodes(), (e) => has(e, info), 5000);
     expect("the info popover explains the gauges", has(els, info), seen(els));
-    // A tap outside closes it; start low on the sheet, since one on the backdrop above it closes the sidebar itself.
-    for (const y of [400, 800, 400, 800, 60]) {
-      if (!has(await axe.nodes(), info)) break;
-      await axe.tapAt(200, y);
-      await Bun.sleep(800);
-    }
-    if (!has(await axe.nodes(), "PLAN USAGE")) await showSidebar(); // a tap on the wrong layer closed the sidebar itself
+    await dismissPopover();
+    els = await untilTree(() => axe.nodes(), (e) => !has(e, info) && has(e, "PLAN USAGE"), 5000);
     const choose = async (item: string) => {
-      await axe.tap("Plan usage options");
+      await tapId("plan-usage-options");
       await untilTree(() => axe.nodes(), (e) => has(e, item), 5000);
-      await axe.tap(item);
-      await Bun.sleep(600);
+      await tapLabel(item);
+      await untilTree(() => axe.nodes(), (e) => !has(e, item), 5000); // the menu has closed
     };
     await choose("Projected at reset");
     els = await untilTree(() => axe.nodes(), (e) => has(e, /^Claude Code Weekly: on pace for 56% · 45% used, resets/));

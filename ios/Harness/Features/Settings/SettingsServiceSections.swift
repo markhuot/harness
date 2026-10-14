@@ -98,6 +98,7 @@ struct SettingsGeneralSection: View {
                 .labelsHidden()
                 .tint(c.accent)
                 .accessibilityLabel("Save on blur")
+                .accessibilityIdentifier("settings-save-on-blur")
             }
             SettingsRow(label: "Base branch", hint: "Completed tickets merge into it and new ticket branches start from it. Projects and tickets can override it.") {
                 DraftField(value: settings.baseBranch ?? Branches.defaultBaseBranch, prompt: Branches.defaultBaseBranch, mono: true) { v in

@@ -46,6 +46,8 @@ struct PlanUsageSection: View {
                     }
                 }
             }
+            // .contain keeps the children's own identifiers: a bare identifier on a container overwrites theirs.
+            .accessibilityElement(children: .contain)
             .accessibilityIdentifier("planUsage")
         }
     }
@@ -69,6 +71,7 @@ struct PlanUsageSection: View {
                 Image(systemName: "info.circle").font(.system(size: 14)).foregroundStyle(c.text3).frame(width: 28, height: 28)
             }
             .accessibilityLabel("About plan usage")
+            .accessibilityIdentifier("plan-usage-info")
             .popover(isPresented: $showingInfo) {
                 VStack(alignment: .leading, spacing: 10) {
                     Text(PlanUsage.infoText)
@@ -77,6 +80,7 @@ struct PlanUsageSection: View {
                 .font(.scaled(size: 14))
                 .padding(16)
                 .frame(maxWidth: 320, alignment: .leading)
+                .accessibilityIdentifier("plan-usage-info-popover")
                 .presentationCompactAdaptation(.popover)
             }
             Spacer()
@@ -103,6 +107,7 @@ struct PlanUsageSection: View {
                 .contentShape(.rect)
             }
             .accessibilityLabel("Plan usage options")
+            .accessibilityIdentifier("plan-usage-options")
         }
         .padding(.horizontal, 4)
     }

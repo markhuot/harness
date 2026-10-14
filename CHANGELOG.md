@@ -26,6 +26,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
+- On iPhone, the Plan usage section's info button, its options menu and its rows now keep their own accessibility identifiers (the section's identifier used to overwrite all of them), and the Context limit sheet's Cancel and Save sit in the sheet, where assistive tools and UI tests can find them.
+- For people working on Harness: the iPhone walkthrough taps by accessibility identifier and waits for the screen to stop moving instead of sleeping or retrying swallowed taps, so it fails less often for reasons unrelated to the app.
 - The dock ghost card's purple glow no longer stutters around the card while it pulses; the glow and tint now fade smoothly in place instead of re-drawing in steps.
 
 ## [app-20261014.1831](https://github.com/markhuot/harness/releases/tag/app-20261014.1831) - 2026-10-14

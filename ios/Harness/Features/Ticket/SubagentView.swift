@@ -63,6 +63,7 @@ struct SubagentView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Back to \(Tabs.tabLabel[.agents] ?? "Agents & tasks")")
+                .accessibilityIdentifier("agents-back")
                 ForEach(path.dropLast()) { p in
                     Button {
                         openTab?(Tabs.subagentTabRoute(p.id))

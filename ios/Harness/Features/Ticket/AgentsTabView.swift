@@ -119,6 +119,7 @@ private struct AgentsFilterChip: View {
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(label), \(count)")
+        .accessibilityIdentifier("agents-filter-\(label.lowercased())")
         .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
     }
@@ -225,6 +226,7 @@ private struct AgentsRow: View {
         .overlay(alignment: .top) { if !first { Rectangle().fill(c.border).frame(height: 1 / 3) } }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(AgentsLogic.rowLabel(a))
+        .accessibilityIdentifier("agents-row-\(a.id)")
         .accessibilityAddTraits(.isButton)
         .accessibilityAction { onOpen() }
     }

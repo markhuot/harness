@@ -225,7 +225,13 @@ export async function openLink(udid: string, axe: Axe, link: string, previous: {
     const state = screenState(l);
     return (state === "app" || state === "board") && (before === null || screenKey(l) !== before);
   });
-  await Bun.sleep(400); // the push or sheet animation finishes drawing
+  // The push or sheet animation is over once two reads of the tree put every element in the same place.
+  let moving = "";
+  for (let i = 0; i < 20; i++) {
+    const frames = JSON.stringify((await axe.nodes()).map((e) => e.frame));
+    if (frames === moving) break;
+    moving = frames;
+  }
   return { url: link, key: screenKey(labels) };
 }
 
