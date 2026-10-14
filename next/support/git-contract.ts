@@ -300,6 +300,9 @@ export function fileGitContract(label: string, make: () => FileGitFixture) {
       expect(await codes("dist/out.js")).toEqual(["!!"]);
       expect(await codes("never.txt")).toEqual([]);
       expect(await f.git.status(join(root, "fresh"), "new.txt")).toEqual(["??"]);
+      // Adding a folder adds what's in it.
+      await f.stage(root, "fresh");
+      expect(await codes("fresh/new.txt")).toEqual(["A "]);
     });
 
     test("hasHead and headFile: nothing before the first commit; HEAD's bytes after, relative to a folder, null over the cap", async () => {

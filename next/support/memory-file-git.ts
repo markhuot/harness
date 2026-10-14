@@ -302,18 +302,29 @@ export function createMemoryFileGit(host: FileModelHost) {
 
   return {
     port,
-    /** `git add` of `paths` (relative to `dir`; every file under `dir` that isn't ignored when none): the index takes what's on disk, a missing file leaves it. */
+    /**
+     * `git add` of `paths` relative to `dir` (`.` when none): the index takes what's on disk, and a
+     * file gone from disk leaves it. A folder adds everything in it that isn't ignored.
+     */
     stage(dir: string, paths: string[]) {
       const co = host.checkoutOf(dir);
       if (!co) throw new Error(`fatal: not a git repository: ${dir}`);
       const index = new Map(indexOf(co));
-      const prefix = repoPath(co, resolve(dir));
-      let targets = paths.map((p) => repoPath(co, resolve(dir, p)));
-      if (!targets.length) {
+      const targets: string[] = [];
+      for (const p of paths.length ? paths : ["."]) {
+        const abs = resolve(dir, p);
+        const at = repoPath(co, abs);
+        let isDir = false;
+        try {
+          isDir = statSync(abs).isDirectory();
+        } catch {}
+        if (!isDir) {
+          targets.push(at);
+          continue;
+        }
         const plain: string[] = [];
-        walk(co.root, prefix, index, plain, []);
-        const tracked = [...index.keys()].filter((p) => !prefix || p.startsWith(`${prefix}/`));
-        targets = [...tracked, ...plain];
+        walk(co.root, at, index, plain, []);
+        targets.push(...[...index.keys()].filter((k) => !at || k.startsWith(`${at}/`)), ...plain);
       }
       for (const p of targets) {
         const bytes = readDisk(join(co.root, p));
