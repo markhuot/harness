@@ -9,6 +9,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- A new in-process test suite under `next/` with `bun run test:next`: the whole service (orchestrator, HTTP routes, MCP and websocket) runs inside one bun process with no daemon, ports or Chrome. For people working on Harness, it starts with the ticket run path and will grow to replace the per-file test processes.
+
 ### Fixed
 
 - The dock ghost card's purple glow no longer stutters around the card while it pulses; the glow and tint now fade smoothly in place instead of re-drawing in steps.

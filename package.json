@@ -7,6 +7,7 @@
     "test": "bun scripts/test.ts",
     "service": "bun run service/src/daemon.ts",
     "app": "bun run --cwd app dev",
+    "test:next": "bun test ./next",
     "typecheck": "bun scripts/typecheck.ts",
     "verify": "bun scripts/verify.ts",
     "nightly": "bun scripts/nightly.ts",

@@ -1,0 +1,61 @@
+import { mkdirSync } from "node:fs";
+import { join } from "node:path";
+import type { ServerWebSocket } from "bun";
+import type { HarnessEvent } from "@harness/shared";
+import { createHttpHandler } from "../../service/src/api/http";
+import { handleMcpRequest } from "../../service/src/api/mcp";
+import type { WsData } from "../../service/src/api/ws";
+import { makeOrchestrator } from "../../service/src/testing/fakes";
+import { toolsForRun } from "../../service/src/tools";
+
+type Options = Parameters<typeof makeOrchestrator>[0];
+
+const TOKEN = "test-token";
+
+/**
+ * The whole service for one test, in this process: an orchestrator on an in-memory store, the HTTP
+ * handler called as a function (no Bun.serve), the websocket handler driven with a fake socket, and
+ * the MCP handler. Everything it owns is created here, so nothing leaks to the next test.
+ */
+export function createService(opts: Options = {}) {
+  const h = makeOrchestrator({ tools: toolsForRun, ...opts });
+  const http = createHttpHandler({
+    orchestrator: h.orch,
+    bus: h.bus,
+    browser: h.browser,
+    tokens: { get: () => TOKEN, rotate: () => TOKEN },
+    mcp: handleMcpRequest,
+  });
+  // The only parts of Bun's Server the handler reads: the peer address and the upgrade.
+  const server = { requestIP: () => ({ address: "127.0.0.1", family: "IPv4", port: 1 }), upgrade: () => false } as never;
+
+  async function request(method: string, path: string, body?: unknown, token: string | null = TOKEN) {
+    const res = await http.fetch(
+      new Request(`http://service.test${path}`, {
+        method,
+        headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), ...(body === undefined ? {} : { "content-type": "application/json" }) },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      }),
+      server,
+    );
+    const json = res ? await res.json() : undefined;
+    return { status: res?.status ?? 0, data: json?.data, error: json?.error as string | undefined };
+  }
+
+  /** A websocket client: what the service sent it, as parsed messages. */
+  function connect() {
+    const sent: any[] = [];
+    const data: WsData = { id: "ws-1", subs: new Map(), off: null };
+    const ws = { data, send: (m: string) => sent.push(JSON.parse(m)), close() {} } as unknown as ServerWebSocket<WsData>;
+    http.websocket.open!(ws);
+    return { sent, events: () => sent.filter((m) => m.type === "event").map((m) => m.event as HarnessEvent), send: (msg: unknown) => http.websocket.message!(ws, JSON.stringify(msg)), close: () => http.websocket.close?.(ws, 1000, "") };
+  }
+
+  function projectDir(name: string) {
+    const dir = join(h.home, "work", name);
+    mkdirSync(dir, { recursive: true });
+    return dir;
+  }
+
+  return { ...h, http, request, connect, projectDir, token: TOKEN };
+}
