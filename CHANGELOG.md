@@ -11,6 +11,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
+- On iPhone and iPad, the board's bottom-bar search field is now the command palette, like the Mac's ⌘K. Tap it (or press ⌘K or ⌘F) to find tickets as you type, or run a command: New Session, Go to a project, Inbox or Settings, Show or Hide child tickets, and Open file…. The filter menu is gone from the field, since "Show child tickets" is now a palette command, and the board no longer filters its columns while you search (that stays on the Mac). Start a query with `>` to see only commands, `#` for only tickets or `@` for only files, as on the Mac.
+- With a ticket open, the palette also lists that ticket's actions (Start work, Approve and merge or open PR or clean up, Request changes, Re-run agent review, Cancel run, Move to done, Re-open, Delete, Copy ticket key and, for a ticket linked to Jira or another tracker, Open in source tracker), and ⌘K opens it from over the ticket too.
+- On the Mac, the command palette has a "Show child tickets" / "Hide child tickets" command that matches the board's options menu.
+- For people working on Harness: the Mac palette's rule that a leading `>` searches only commands (no tickets, no files) is now covered by tests, on the Mac and in the new iPhone palette.
 - The file viewer and editor now color code with the same highlighter as the Changes tab, on the Mac and on iPhone and iPad. A `.tf` (Terraform) file, which showed as plain text, is now highlighted like it is in Changes, and so is every other language Changes colors. The Diff tab shows the same side-by-side diff the Changes tab draws. Files over 10,000 lines open as plain text so they open fast. Editing, saving, Save on blur, undo, line-ending preservation and linked-line highlighting work as before.
 - For people working on Harness: `@pierre/diffs` is pinned to exactly 1.5.1 in the app, service, git plugin and editor, so the Mac build, the iPhone bundle and the Changes tab all load the same version of its beta editor. `bun run verify` runs the Mac file-pane check and the iPhone file chains when you change `editor/`.
 
@@ -18,6 +22,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Added
 
+- On iPhone and iPad, "Open file…" (⌘P with a keyboard) searches the open ticket's worktree, or the board's project, and opens a file in the viewer, at the lines if you type them (`src/app.ts:12-20`, `src/app.ts#L12`). Files you opened recently show first.
 - For people working on Harness: the iPhone debug state probe's `editor` now includes `colors`, the number of colors the drawn code carries, and `sim-check` checks that a Terraform file opens colored and that a linked file's code is colored.
 - For people working on Harness: `sim-check` writes `sim-check-profile.json` next to `timings.json` and prints where a run went: phases, spawns by program (AXe, simctl, ffmpeg), fixed sleeps by source line, poll iterations, waits that gave up, and board resets, per chain and check, then how the run differs from the last one. Counts stay steady when the Mac is busy, so they rank the costs better than seconds do.
 - For people working on Harness: `bun run verify` now also runs the iPhone snapshot tests (a real app build) when you change HarnessKit sources or `ios/Tools/build.ts`, `build-cache.ts` or `snapshots.ts`; HarnessKit tests alone still run only `swift test`.

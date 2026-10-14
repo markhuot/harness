@@ -393,17 +393,23 @@ feature needs something new here, add to it without changing what's there.
 
 `MainTabs` branches on `horizontalSizeClass`, never on the device idiom. At compact width each section's root has `SidebarToolbarItem` (the Projects sheet); the board
 hides its navigation bar and draws its own glass bottom bar (`BoardBottomBar`, a `safeAreaInset`
-rather than toolbar items, since the system search field can't hold a button): Projects, our own
-search field (placeholder: the project's name or "All projects") with Filter at its trailing
-end, New session, which an X replaces while the field is focused. At regular width it's `DesktopShell`: a
+rather than toolbar items): Projects, the command palette field ("Search or run a command"; a
+button that presents the palette sheet, `SheetRoute.palette`), New session. The palette
+(`Features/Palette/PaletteScreen`, rules in HarnessKit `Palette`/`PaletteRows`) is the Mac's ⌘K:
+plain text finds tickets (the board loader's search, so one request) and commands, `>` limits it
+to commands (and "Go to" rows, never tickets or files), `#` to tickets, `@` (⌘P, "Open file…") to
+the focused ticket's, else the board's project's, files, opened in the file viewer. With a ticket
+sheet open it lists that ticket's actions (`TicketActions.set`, run by a `TicketActionRunner` the
+palette owns), Copy ticket key and Open in source tracker. "Show/Hide child tickets" lives here;
+the board no longer filters by a search (that's the Mac's). At regular width it's `DesktopShell`: a
 `NavigationSplitView` (`.balanced`, so the sidebar sits beside the section in portrait too) with
 `ProjectsSidebar(column: true)` in the sidebar column and the selected section's stack in the
 detail, so the gear's `router.push(.project(id:))` lands there. The column's visibility is the
 `sidebarHidden` pref (remembered across launches); the system toggle hides and shows it. The
 detail gets `\.desktopShell`: `SidebarToolbarItem` draws nothing, and BoardScreen puts its
-search in the navigation bar (`.searchable(placement: .toolbar)`) and Filter and New session
-in the top bar's trailing group, with no bottom bar. ⌘F focuses the search field at either
-width.
+a Command palette button and New session in the top bar's trailing group, with no bottom bar.
+⌘F and ⌘K open the palette at either width (⌘K and ⌘P are also registered in the ticket sheet
+host, where the window's chords don't fire).
 
 **Keyboard shortcuts** (App/KeyCommands.swift, whose header has the reasons) follow the desktop's
 ⌘ chords (keys.ts) at either width. iOS keeps the first registration of a chord, so the
@@ -588,7 +594,7 @@ Split View or a small Stage Manager window gets the phone's:
   five fit an 11-inch iPad in landscape, and anything narrower keeps the minimum and scrolls
   sideways without paging. The board starts at Planning (no landing column). Which columns are
   on screen comes from `onScrollVisibilityChange` (all of them when they fit) and drives Done's
-  autofill (`shouldAutofillDone`) and the jump to search results (`columnWithResults(_:visible:)`).
+  autofill (`shouldAutofillDone`).
 
 Neither layout moves cards between columns: only agents move tickets, so a card has no drop
 target, no Move to … in its menu and no VoiceOver move actions. Touch and hold lifts the ticket's
@@ -1215,11 +1221,11 @@ native-pattern difference, not a missing feature.
 | Scan QR (permission, Open Settings, recheck on return, dedupe, haptics) | screens/Scan | Features/Connect/ScanScreen | done |
 | Connection banner (re-pair on 401, reconnecting + load error) | screens/ConnectionBanner | UI/ConnectionBanner | done |
 | Board: columns as pages, status chips "Status, n", landing column, swipe haptic | screens/Board, lib/boardColumns | Features/Board/BoardScreen, BoardColumnView, HarnessKit BoardScreenRules | done (iPad at regular width: all five columns side by side, as on the Mac) |
-| Board (phone: no header); bottom bar: Projects, search field (project name as placeholder) with Filter (Show child tickets) inside, + New session (iPad: search in the navigation bar, Filter and New session top trailing; ⌘F, and ⌘N with the window shortcuts) | screens/Board, ui/header | BoardScreen | done (differs) |
+| Board (phone: no header); bottom bar: Projects, command palette field, + New session (iPad: palette button and New session top trailing; ⌘F, ⌘K, and ⌘N with the window shortcuts) | screens/Board, ui/header | BoardScreen | done (differs) |
 | Done paging, autofill, "Couldn't load older tickets. Retry", empty states, pull to refresh | screens/Board, lib/boardLoader | BoardColumnView, State/BoardLoader | done |
 | Cards: badges, review marks, blocked/approval lines, rollups, dep chips, driver/model names, dimmed children, drafts | screens/TicketCard | BoardTicketCard, UI/Badges (ModelBadge) | done |
 | Card menu (titled "KEY · title"): the ticket's own actions (Start work, Approve submenu, Request changes, Re-open, the More items), open parent, copy key, discard draft; VoiceOver actions | screens/TicketCard | BoardTicketCard, BoardScreenRules | done |
-| Search: the board's always-visible field, status line, Retry, jump to results | app/(tabs)/search, screens/Board | BoardScreen | done |
+| Command palette: commands, tickets, ticket actions, Open file…, `>` `#` `@` prefixes, Show/Hide child tickets | views/CommandPalette | Features/Palette/PaletteScreen, HarnessKit Palette, PaletteRows | done (the board's column filtering is Mac-only) |
 | Projects sheet (the sidebar, its header button badged with triaging or busy sessions): Inbox row (same badge), All projects, project group rows (HARNESS-269: `folder` icon and open count, alphabetical, under All projects), rows, settings gear, Add project, Settings at the bottom; on iPad a split view's sidebar column, hidden and shown by its toggle | screens/Projects | Features/Board/ProjectsSheet (ProjectsSidebar), ProjectsAdd, App/RootView DesktopShell, HarnessKit SidebarRow | done |
 | Ticket screen: load, renamed key, not found, draft → New session, Remote ID list | screens/TicketDetail | Features/Ticket/TicketDetailScreen | done |
 | Hero More (…): Move to done, Cancel run, Delete (no header menu, title at the top of the sheet) | screens/TicketDetail | TicketDetailScreen | done |
