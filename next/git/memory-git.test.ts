@@ -23,9 +23,21 @@ gitPortContract("in memory", () => {
     async plainDir() {
       return fresh("plain");
     },
-    commit: (dir) => mem.commitAt(dir),
-    async dirty(dir) {
-      mem.makeDirty(dir);
+    commit: (dir, file) => mem.commitAt(dir, file),
+    async dirty(dir, file) {
+      mem.makeDirty(dir, file);
+    },
+    async commitOnBranch(repo, branch) {
+      mem.commitOnBranch(repo, branch);
+    },
+    async addWorktree(repo, path, branch, create) {
+      mem.addWorktree(repo, path, branch, create);
+    },
+    async removeWorktree(_repo, path) {
+      mem.removeWorktree(path);
+    },
+    async deleteBranch(repo, branch) {
+      mem.deleteBranch(repo, branch);
     },
     async branch(repo, name) {
       mem.createBranch(repo, name);

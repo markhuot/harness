@@ -9,6 +9,8 @@ import type { WorkGit } from "../../service/src/testing/fakes";
 interface Commit {
   parents: string[];
   at: number;
+  /** The files it changed, so a switch can tell which local changes it would overwrite. */
+  files?: string[];
 }
 
 interface Repo {
@@ -16,7 +18,7 @@ interface Repo {
   commits: Map<string, Commit>;
   branches: Map<string, string>;
   /** Checkout path -> branch (null: detached at `detached`). The root is the first entry. */
-  worktrees: Map<string, { branch: string | null; detached?: string; dirty: boolean }>;
+  worktrees: Map<string, { branch: string | null; detached?: string; dirty: boolean; dirtyFiles?: Set<string> }>;
 }
 
 /**
@@ -35,9 +37,9 @@ export function createMemoryGit() {
   const repoOf = (path: string) => repos.find((r) => r.worktrees.has(norm(path)));
   const sha = () => (++counter).toString(16).padStart(40, "0");
 
-  function commit(repo: Repo, parents: string[]): string {
+  function commit(repo: Repo, parents: string[], files?: string[]): string {
     const id = sha();
-    repo.commits.set(id, { parents, at: ++clock });
+    repo.commits.set(id, { parents, at: ++clock, files });
     return id;
   }
   function reachable(repo: Repo, from: string): Set<string> {
@@ -157,6 +159,16 @@ export function createMemoryGit() {
       if (!created) {
         const other = holder(repo, branch, workdir);
         if (other) throw new Error(`git switch ${branch} failed: '${branch}' is already used by worktree at '${other.path}'`);
+        // Like git: local changes to a file the two commits disagree on would be overwritten, so it refuses.
+        const head = headOf(repo, workdir);
+        const target = repo.branches.get(branch)!;
+        if (head && w.dirtyFiles?.size) {
+          const a = reachable(repo, head);
+          const b = reachable(repo, target);
+          const differ = new Set([...a, ...b].filter((c) => a.has(c) !== b.has(c)).flatMap((c) => repo.commits.get(c)?.files ?? []));
+          const lost = [...w.dirtyFiles].filter((f) => differ.has(f));
+          if (lost.length) throw new Error(`git switch ${branch} failed: error: Your local changes to the following files would be overwritten by checkout:\n\t${lost.join("\n\t")}`);
+        }
       } else {
         const head = headOf(repo, workdir);
         if (!head) throw new Error(`git switch -c ${branch} failed: nothing to branch from`);
@@ -238,11 +250,50 @@ export function createMemoryGit() {
     port,
     work,
     initRepo,
-    /** A commit on whatever is checked out at `dir` (the test's stand-in for `git commit`). */
-    commitAt: (dir: string) => work.commitWork(dir, ""),
-    /** Leave uncommitted changes in the checkout at `dir`. */
-    makeDirty(dir: string) {
-      requireRepo(dir).worktrees.get(norm(dir))!.dirty = true;
+    /** A commit on whatever is checked out at `dir` (the test's stand-in for `git commit`), changing `file` when given. */
+    async commitAt(dir: string, file?: string) {
+      const repo = requireRepo(dir);
+      const w = repo.worktrees.get(norm(dir))!;
+      const head = headOf(repo, dir);
+      if (!head) return;
+      const id = commit(repo, [head], file ? [file] : undefined);
+      if (w.branch) repo.branches.set(w.branch, id);
+      else w.detached = id;
+    },
+    /** Leave uncommitted changes in the checkout at `dir` (to `file`, by default dirty.txt). */
+    makeDirty(dir: string, file = "dirty.txt") {
+      const w = requireRepo(dir).worktrees.get(norm(dir))!;
+      w.dirty = true;
+      (w.dirtyFiles ??= new Set()).add(file);
+    },
+    /** A commit on `branch` without touching any checkout (git commit-tree plus update-ref). */
+    commitOnBranch(repo: string, branch: string) {
+      const r = requireRepo(repo);
+      r.branches.set(branch, commit(r, [r.branches.get(branch)!]));
+    },
+    /** A worktree made outside harness (`git worktree add`), on `branch`; `create` makes the branch at the repo's HEAD. */
+    addWorktree(repo: string, path: string, branch: string, create = false) {
+      const r = requireRepo(repo);
+      if (create) {
+        if (r.branches.has(branch)) throw new Error(`fatal: a branch named '${branch}' already exists`);
+        r.branches.set(branch, headOf(r, repo)!);
+      } else if (!r.branches.has(branch)) throw new Error(`fatal: invalid reference: ${branch}`);
+      else if (holder(r, branch)) throw new Error(`fatal: '${branch}' is already used by worktree`);
+      mkdirSync(path, { recursive: true });
+      r.worktrees.set(norm(path), { branch, dirty: false });
+    },
+    /** `git worktree remove --force`: the checkout and its directory go; the branch stays. */
+    removeWorktree(path: string) {
+      const r = requireRepo(path);
+      if (norm(path) === r.root) throw new Error("fatal: the main worktree can't be removed");
+      r.worktrees.delete(norm(path));
+      rmSync(path, { recursive: true, force: true });
+    },
+    /** `git branch -D`: refused while a worktree has it checked out. */
+    deleteBranch(repo: string, branch: string) {
+      const r = requireRepo(repo);
+      if (holder(r, branch)) throw new Error(`error: cannot delete branch '${branch}' used by worktree`);
+      r.branches.delete(branch);
     },
     /** A branch at the tip of `from`, not checked out anywhere. */
     createBranch(repo: string, name: string, from = "main") {

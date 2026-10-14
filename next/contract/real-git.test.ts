@@ -50,14 +50,29 @@ gitPortContract("real git", () => ({
     mkdirSync(dir);
     return dir;
   },
-  async commit(dir) {
-    appendFileSync(join(dir, `work-${++tick}.txt`), "x\n");
+  async commit(dir, file) {
+    appendFileSync(join(dir, file ?? `work-${++tick}.txt`), "committed\n");
     await run(["add", "-A"], dir);
     stamp();
     await run(["commit", "-q", "-m", "work"], dir);
   },
-  async dirty(dir) {
-    appendFileSync(join(dir, "dirty.txt"), "x\n");
+  async dirty(dir, file = "dirty.txt") {
+    appendFileSync(join(dir, file), "dirty\n");
+  },
+  async commitOnBranch(repo, branch) {
+    const tree = (await git(["rev-parse", `${branch}^{tree}`], repo)).stdout;
+    stamp();
+    const sha = (await git(["commit-tree", tree, "-p", branch, "-m", `on ${branch}`], repo)).stdout;
+    await run(["update-ref", `refs/heads/${branch}`, sha], repo);
+  },
+  async addWorktree(repo, path, branch, create) {
+    await run(create ? ["worktree", "add", "-q", "-b", branch, path] : ["worktree", "add", "-q", path, branch], repo);
+  },
+  async removeWorktree(repo, path) {
+    await run(["worktree", "remove", "--force", path], repo);
+  },
+  async deleteBranch(repo, branch) {
+    await run(["branch", "-D", branch], repo);
   },
   async branch(repo, name) {
     await run(["branch", name, "main"], repo);

@@ -8,10 +8,18 @@ export interface GitFixture {
   repo(): Promise<{ repo: string; worktrees: string }>;
   /** An existing directory that isn't a repository. */
   plainDir(): Promise<string>;
-  /** A commit on whatever is checked out at `dir`. */
-  commit(dir: string): Promise<void>;
-  /** Uncommitted changes in the checkout at `dir`. */
-  dirty(dir: string): Promise<void>;
+  /** A commit on whatever is checked out at `dir`, adding `file` when given. */
+  commit(dir: string, file?: string): Promise<void>;
+  /** Uncommitted changes in the checkout at `dir` (a new `file`, by default dirty.txt). */
+  dirty(dir: string, file?: string): Promise<void>;
+  /** A commit on `branch` that leaves every checkout alone. */
+  commitOnBranch(repo: string, branch: string): Promise<void>;
+  /** `git worktree add` from outside harness: `path` on `branch`, created at HEAD when `create`. */
+  addWorktree(repo: string, path: string, branch: string, create?: boolean): Promise<void>;
+  /** `git worktree remove --force`. */
+  removeWorktree(repo: string, path: string): Promise<void>;
+  /** `git branch -D`. */
+  deleteBranch(repo: string, branch: string): Promise<void>;
   /** A branch at the tip of main, checked out nowhere. */
   branch(repo: string, name: string): Promise<void>;
   /** Merge `branch` into the branch checked out at `repo`. */
@@ -112,6 +120,64 @@ export function gitPortContract(label: string, make: () => GitFixture) {
       expect(await f.port.isMerged(repo, "harness/web-1", "main")).toBe(true);
       expect(await f.port.aheadCount(repo, "nope", "main")).toBe(0);
       expect(await f.port.isMerged(repo, "nope", "main")).toBe(false);
+    });
+
+    test("commitOnBranch moves a branch nobody has checked out, and leaves the checkout where it was", async () => {
+      const f = make();
+      const { repo } = await f.repo();
+      const head = await f.port.headCommit(repo);
+      await f.branch(repo, "topic");
+      await f.commitOnBranch(repo, "topic");
+      expect(await f.port.resolveCommit(repo, "topic")).not.toBe(head);
+      expect(await f.port.headCommit(repo)).toBe(head);
+      expect(await f.port.aheadCount(repo, "topic", "main")).toBe(1);
+      expect(await f.port.hasChangesToLand(repo, "main", "main")).toBe(false);
+    });
+
+    test("a worktree added outside harness holds its branch until it's removed; then the branch can go", async () => {
+      const f = make();
+      const { repo, worktrees } = await f.repo();
+      const herdr = `${worktrees}/herdr`;
+      await f.addWorktree(repo, herdr, "medl", true);
+      expect(await f.port.currentBranch(herdr)).toBe("medl");
+      expect(await f.port.headCommit(herdr)).toBe(await f.port.headCommit(repo));
+      const held = await f.port.checkedOutElsewhere(repo, "medl");
+      expect(held?.branch).toBe("medl");
+      expect(held?.path.endsWith("/herdr")).toBe(true);
+      expect(await f.port.checkedOutElsewhere(repo, "medl", held!.path)).toBeNull();
+      await expect(f.port.ensureWorktree({ repo, worktreesDir: worktrees, key: "WEB-1", branch: "medl", base: "main" })).rejects.toThrow(/branch medl is already checked out in the worktree at .*herdr/);
+      await expect(f.deleteBranch(repo, "medl")).rejects.toThrow();
+      await f.removeWorktree(repo, herdr);
+      expect(await f.port.isRepo(herdr)).toBe(false);
+      expect(await f.port.checkedOutElsewhere(repo, "medl")).toBeNull();
+      expect(await f.port.branchExists(repo, "medl")).toBe(true);
+      // An existing branch goes into a worktree as is.
+      await f.commitOnBranch(repo, "medl");
+      const elsewhere = `${worktrees}/elsewhere`;
+      await f.addWorktree(repo, elsewhere, "medl");
+      expect(await f.port.headCommit(elsewhere)).toBe(await f.port.resolveCommit(repo, "medl"));
+      await f.removeWorktree(repo, elsewhere);
+      await f.deleteBranch(repo, "medl");
+      expect(await f.port.branchExists(repo, "medl")).toBe(false);
+      expect(await f.port.resolveCommit(repo, "medl")).toBeNull();
+    });
+
+    test("switchBranch refuses when local changes would be overwritten, and carries the others along", async () => {
+      const f = make();
+      const { repo, worktrees } = await f.repo();
+      const { workdir } = await f.port.ensureWorktree({ repo, worktreesDir: worktrees, key: "WEB-1", base: "main" });
+      const { workdir: second } = await f.port.ensureWorktree({ repo, worktreesDir: worktrees, key: "WEB-2", base: "main" });
+      // main moves on with f.txt, and other starts there.
+      await f.commit(repo, "f.txt");
+      await f.branch(repo, "other");
+      await f.dirty(workdir, "f.txt");
+      await expect(f.port.switchBranch(workdir, "other")).rejects.toThrow(/git switch other failed/);
+      expect(await f.port.currentBranch(workdir)).toBe("harness/web-1");
+      // A change to a file the switch doesn't touch doesn't stand in the way.
+      await f.dirty(second, "g.txt");
+      expect(await f.port.switchBranch(second, "other")).toEqual({ created: false });
+      expect(await f.port.currentBranch(second)).toBe("other");
+      expect(await f.port.hasChangesToLand(second, "other", "main")).toBe(true);
     });
 
     test("listBranches: newest first, where each is checked out, substring before fuzzy", async () => {
