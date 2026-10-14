@@ -1455,10 +1455,17 @@ async function barClearsDock(udid: string, dockTop?: number) {
       return tops.length ? Math.min(...tops) : null;
     }, 5000);
   }
-  const bar = await findElement(udid, (x) => x === "New session");
-  if (!bar) throw new Error("no New session button on the board");
-  const gap = dockTop - (bar.frame.y + bar.frame.height);
-  if (Math.abs(gap - 11) > 3) throw new Error(`the bar sits ${Math.round(gap)}pt above the dock (top ${Math.round(dockTop)}), not 11`);
+  // The bar glides to its place as the stack grows or shrinks: it has to settle at the gap, not just pass through it.
+  let gap = NaN;
+  const deadline = Date.now() + 3000;
+  do {
+    const bar = await findElement(udid, (x) => x === "New session");
+    if (!bar) throw new Error("no New session button on the board");
+    gap = dockTop - (bar.frame.y + bar.frame.height);
+    if (Math.abs(gap - 11) <= 3) return;
+    await sleep(250);
+  } while (Date.now() < deadline);
+  throw new Error(`the bar sits ${Math.round(gap)}pt above the dock (top ${Math.round(dockTop)}), not 11`);
 }
 
 /** Swipes the docked ticket sheet down once: it closes the ticket on top. */
@@ -1985,6 +1992,7 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
       await say("the dock");
       throw e;
     });
+    await barClearsDock(udid); // three cards: two and "1 more…"
     await shot(udid, "dock-more-light");
     await tapWhere(udid, "1 more docked tickets");
     const listed = await until("the list of all three", async () => {

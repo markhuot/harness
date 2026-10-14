@@ -156,6 +156,9 @@ extension EnvironmentValues {
 /// than a preference; the bar lines up with the dock while `Router.showsDock`.
 @Observable final class DockedSheetInset {
     var top: CGFloat?
+    /// The top edge of the whole collapsed card stack in the window (the topmost card or "N more…"),
+    /// which the sections' clearance and the board's bar sit above. Nil until measured.
+    var stackTop: CGFloat?
     /// The iPad: how much of the board's bottom the docked card stack takes (DockedCardStack); 0
     /// without one.
     var cards: CGFloat = 0
@@ -174,7 +177,6 @@ private struct DockClearance: ViewModifier {
     @Environment(\.concentricScreen) private var screen
     @Environment(\.desktopShell) private var desktop
     @Environment(DockedSheetInset.self) private var dockInset: DockedSheetInset?
-    @State private var keyboard = false
 
     func body(content: Content) -> some View {
         content
@@ -182,14 +184,12 @@ private struct DockClearance: ViewModifier {
             // scroll content backs off, so the last items still scroll clear of them.
             .contentMargins(.bottom, desktop ? (dockInset?.cards ?? 0) : 0, for: .scrollContent)
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                if !desktop && router.showsDock && !keyboard {
-                    // The docked sheet, and the cards stacked above it.
-                    Color.clear.frame(height: TicketDock.clearance(screen: screen, dockTop: dockInset?.top)
-                        + DockedCardsOverlay.height(count: router.dockedSheets.count))
+                if !desktop && router.showsDock {
+                    // The whole card stack, up to its measured top edge. Keyboard or not: the
+                    // cards stay where they are, behind it.
+                    Color.clear.frame(height: TicketDock.clearance(screen: screen, stackTop: dockInset?.stackTop, count: router.dockedSheets.count))
                 }
             }
-            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in keyboard = true }
-            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in keyboard = false }
     }
 }
 
@@ -210,10 +210,9 @@ extension View {
     /// board's bottom bar rather than over it: everything below the bottom card's top edge, less
     /// the home indicator's inset the section already keeps clear. The bar keeps `barGap` above
     /// that (BoardScreen). Before the card is measured, one card plus its gap.
-    static func clearance(screen: ConcentricBar.Screen?, dockTop: CGFloat?) -> CGFloat {
-        let homeIndicator = screen?.homeIndicator ?? 0
-        guard let screen, let dockTop else { return max(0, height + DockMetrics.phoneBottomGap - homeIndicator + 19) }
-        return max(0, screen.height - dockTop - homeIndicator)
+    static func clearance(screen: ConcentricBar.Screen?, stackTop: CGFloat?, count: Int) -> CGFloat {
+        DockMetrics.clearance(screenHeight: screen?.height, stackTop: stackTop, homeIndicator: screen?.homeIndicator ?? 0,
+                              rows: DockCards.rows(count: count, maxVisible: DockCards.phoneVisible))
     }
 
     /// The next or previous docked ticket on top: a swipe along the card or VoiceOver's actions.
@@ -241,13 +240,6 @@ struct DockedCardsOverlay: View {
     @State private var expanded = false
     @AccessibilityFocusState private var focused: Bool
 
-    /// The rows above the bottom card for `count` docked tickets, with their gaps: what the
-    /// sections give up on top of the bottom card's clearance.
-    static func height(count: Int) -> CGFloat {
-        let above = max(0, DockCards.rows(count: count, maxVisible: DockCards.phoneVisible) - 1)
-        return above > 0 ? CGFloat(above) * (DockedCardMetrics.height + DockedCardMetrics.spacing) : 0
-    }
-
     var body: some View {
         GeometryReader { geo in
             let docked = router.ticketSheetState == .docked
@@ -266,10 +258,16 @@ struct DockedCardsOverlay: View {
                     VStack(spacing: DockedCardMetrics.spacing) {
                         if expanded {
                             DockedCardList(sheets: others, total: router.dockedSheets.count, open: open, close: { closeCard($0) }, collapse: { expanded = false })
-                        } else {
+                        } else if !others.isEmpty {
+                            // Not an empty stack for one card: it would still cost the VStack's gap.
                             stack(others)
                         }
                         primary(top)
+                    }
+                    // Measured before the padding: the stack's own top edge. Not while the list is
+                    // open, which rises over the board rather than asking it to make room.
+                    .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { minY in
+                        if !expanded { dockInset.stackTop = minY }
                     }
                     .padding(.horizontal, DockMetrics.phoneSides(screen: screen))
                     .padding(.bottom, DockMetrics.phoneBottomGap)

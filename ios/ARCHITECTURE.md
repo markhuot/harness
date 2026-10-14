@@ -519,8 +519,8 @@ Docked, the top ticket is a card in the main window, an overlay on the compact s
 (`DockedCardsOverlay`), over the board: `DockedCard` 52pt tall, 8pt from the home indicator and in from the sides as far as the board's bottom bar (its concentric inset, `DockMetrics.phoneSides(screen:)`), with the other docked tickets stacked above it, up to two cards in all, then "N more…" on
 top. It is an overlay rather than a second, docked sheet, which would pop in after the dismissal and
 bring back the glass rim and shadow that led the other cards out of the sheet. The overlay publishes
-where its bottom card sits (`DockedSheetInset`), `DockClearance` adds its rows to the board's bottom
-clearance, and the bottom bar rides above the stack at its own inset; the keyboard doesn't lift it. "N more…" expands
+where its bottom card and the top of the whole collapsed stack sit (`DockedSheetInset.top`, `.stackTop`), `DockClearance` gives the board's bottom
+clearance down to that measured top (`DockMetrics.clearance`, with or without a keyboard), and the bottom bar rides above the stack at its own inset; the keyboard doesn't lift it. "N more…" expands
 every ticket but the top into the `DockedCardList` over the board, on the backdrop; a tap on the
 backdrop collapses it. A tap on the card opens the sheet (hiding the card in the same transaction),
 a horizontal swipe along it (a high-priority SwiftUI drag, or the card's button would keep any drag

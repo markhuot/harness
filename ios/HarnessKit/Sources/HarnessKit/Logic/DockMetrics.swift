@@ -57,6 +57,17 @@ public enum DockMetrics {
         rows > 0 ? CGFloat(rows) * height + CGFloat(rows - 1) * spacing : 0
     }
 
+    /// What a phone section gives up at its bottom so the whole card stack sits under the board's bar:
+    /// everything below the stack's measured top edge, less the home indicator's inset the section
+    /// already keeps clear. Before the stack is measured, `rows` cards, their gaps and the bottom gap.
+    /// It never depends on the keyboard: the cards stay put behind it.
+    public static func clearance(screenHeight: CGFloat?, stackTop: CGFloat?, homeIndicator: CGFloat, rows: Int) -> CGFloat {
+        guard let screenHeight, let stackTop else {
+            return max(0, stackHeight(rows: max(1, rows)) + phoneBottomGap - homeIndicator + 19)
+        }
+        return max(0, screenHeight - stackTop - homeIndicator)
+    }
+
     /// The overflow card's label: "N more docked tickets" beside the shown cards, "N docked tickets"
     /// when it stands for all of them.
     public static func moreLabel(count: Int, all: Bool) -> String {

@@ -11,11 +11,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
+- On iPhone, the board's bottom bar now sits above the whole stack of docked ticket cards, measured from the stack's real top edge, instead of being covered by a lone card or tucked under the top card of two. It no longer depends on whether the keyboard is up.
 - A file link written inside bold or italic text (`**[DockHold.swift:76](harness://file/…)**`) now shows as a link on the Mac and iPhone, instead of its literal brackets and URL.
 
 ### Changed
 
-- For people working on Harness: the iPhone dock check now measures the gap between the board's bottom bar and the docked cards (one card, two cards, after a relaunch, after the palette closes), so a bar that sits too low fails the check instead of only a bar that runs under the cards.
+- For people working on Harness: the iPhone dock check now waits for the board's bottom bar to settle and measures its gap above the docked cards (one card, two cards, three with "N more…", after a relaunch, after the palette closes), and a HarnessKit test covers the clearance for 1, 2 and 3 rows, so a bar that sits too low fails the check instead of only a bar that runs under the cards.
 
 ## [app-20261014.0849](https://github.com/markhuot/harness/releases/tag/app-20261014.0849) - 2026-10-14
 
