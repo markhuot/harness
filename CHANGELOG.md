@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261014.1450](https://github.com/markhuot/harness/releases/tag/app-20261014.1450) - 2026-10-14
+
 ### Added
 
 - On iPhone, docked tickets now show as cards at the bottom of the screen while a ticket or file sheet is open, not only over the board. The message box (or the sheet's bottom) sits above them with the same gap the board's bottom bar keeps. Tapping a card swaps the sheet to that ticket and only the cards that change move; the dock never slides out and back, whether you open a sheet from the board, dock one, or switch tickets. It steps aside while the keyboard, the palette or any sheet, popover, picker, image viewer or dialog is up over the ticket (not only the ones the app knows by name), and an open "N more…" list closes when it does. VoiceOver stays inside an open list.
