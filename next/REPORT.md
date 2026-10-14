@@ -14,7 +14,7 @@ Names generated at runtime (loops, helpers, `test.each`) appear as their templat
 
 ## Progress
 
-6176 rows: 4359 open, 426 new, 0 walkthrough, 61 accepted loss, 1330 kept.
+6177 rows: 3933 open, 850 new, 0 walkthrough, 64 accepted loss, 1330 kept.
 
 | Area | Rows | Open | New | Walkthrough | Loss | Kept | Deletable |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | :---: |
@@ -33,13 +33,13 @@ Names generated at runtime (loops, helpers, `test.each`) appear as their templat
 | plugins/git | 15 | 15 | 0 | 0 | 0 | 0 |  |
 | plugins/sdk | 20 | 20 | 0 | 0 | 0 | 0 |  |
 | release | 34 | 34 | 0 | 0 | 0 | 0 |  |
-| scripts | 71 | 71 | 0 | 0 | 0 | 0 |  |
+| scripts | 72 | 72 | 0 | 0 | 0 | 0 |  |
 | service/src | 129 | 129 | 0 | 0 | 0 | 0 |  |
 | service/src/api | 114 | 114 | 0 | 0 | 0 | 0 |  |
 | service/src/browser | 173 | 173 | 0 | 0 | 0 | 0 |  |
 | service/src/drivers | 251 | 251 | 0 | 0 | 0 | 0 |  |
 | service/src/notifications | 43 | 43 | 0 | 0 | 0 | 0 |  |
-| service/src/orchestrator | 853 | 427 | 426 | 0 | 0 | 0 |  |
+| service/src/orchestrator | 853 | 0 | 850 | 0 | 3 | 0 | yes |
 | service/src/permissions | 38 | 38 | 0 | 0 | 0 | 0 |  |
 | service/src/plugins | 12 | 12 | 0 | 0 | 0 | 0 |  |
 | service/src/store | 81 | 81 | 0 | 0 | 0 | 0 |  |
@@ -138,6 +138,24 @@ Signed off by the human. They stay listed here so each can be brought back at th
 - keyboardChecksWithSoftwareKeyboard › New session's prompt grows with every line typed (ios/Tools/sim-check.ts)
 - keyboardChecksWithSoftwareKeyboard › a tap at the bottom of New session's prompt row focuses it (ios/Tools/sim-check.ts)
 - keyboardChecksWithSoftwareKeyboard › the sheet's background runs behind the keyboard's rounded corners (ios/Tools/sim-check.ts)
+
+### pipes and $VAR expansion are the shell's job; the ported fake-spawn test pins that a command line reaches `[shell, -lc, line]` whole, with the watcher env
+
+1 rows:
+
+- WatcherRunner with Bun.spawn › a shell command line gets pipes, variables and the watcher env (service/src/orchestrator/watchers.test.ts)
+
+### the chunking is ours and the ported fake-spawn test 'pretty JSON without a trailing newline' covers it; a real shell loop only added the OS printing text
+
+1 rows:
+
+- WatcherRunner with Bun.spawn › a looping shell command printing pretty JSON without a newline gives one item per response (service/src/orchestrator/watchers.test.ts)
+
+### Bun.spawn throwing ENOENT is the OS; our catch is covered by the ported 'spawn that throws' tests
+
+1 rows:
+
+- WatcherRunner with Bun.spawn › a missing executable is reported, not thrown (service/src/orchestrator/watchers.test.ts)
 
 ## Rows
 
@@ -4593,7 +4611,7 @@ Signed off by the human. They stay listed here so each can be brought back at th
 - parseArgs and the CLI › a green run is silent on stdout and exits 4 (nothing to report)
 - the example watcher › runs the nightly script daily from a checkout that has it, and tells triage to decline green runs
 
-#### scripts/report.test.ts: 17 rows, mostly open
+#### scripts/report.test.ts: 18 rows, mostly open
 
 - extractors › bun tests carry their describe path, and a name on the next line is found
 - extractors › test.each keeps the name after its table; template names stay as templates
@@ -4612,6 +4630,7 @@ Signed off by the human. They stay listed here so each can be brought back at th
 - report › the committed report is current: regenerate it with `bun scripts/report.ts` after adding or moving a test
 - ported tests › a moved file's tests are still rows under their old path, marked new with where they went
 - ported tests › every port points at a file that exists, so a rename can't silently drop rows
+- ported tests › a dropped test stays a loss row with its reason, though its file is gone
 
 #### scripts/run-layer.test.ts: 6 rows, mostly open
 
@@ -5520,481 +5539,6 @@ Signed off by the human. They stay listed here so each can be brought back at th
 
 ### service/src/orchestrator
 
-#### service/src/orchestrator/board-ops.test.ts: 16 rows, mostly open
-
-- listTickets (board) › default scope: conductor → children, task → its project, triage → every project
-- listTickets (board) › project_key picks another project (case-insensitive), and implies project scope for a conductor
-- listTickets (board) › status filter narrows; done tickets come newest-completed first and last on the board
-- listTickets (board) › limit caps the page but total counts every match
-- listTickets (board) › invalid combinations and unknown projects/statuses are errors
-- getTicket (board) › reads a ticket in another project with parent, children, driver and activity — from a triage run too
-- getTicket (board) › old keys resolve after a project rename; unknown keys throw
-- getTicket (board) › include_transcript returns the last N text/status/error entries, oldest first, clipped
-- getTicket (board) › include_agents lists sub-agents and tasks oldest first, results clipped; only when asked
-- getTicket (board) › getTicketAgent: a sub-agent's own transcript tail, a task's output tail, and unknown ids
-- searchTickets (board) › pages with nextCursor, scopes to project_key, and snippets the matching text
-- board tools over the real orchestrator › list_tickets notes when results were capped; search_tickets returns compact hits
-- board tools over the real orchestrator › get_ticket exposes the spec and its revision, driver and transcript only when asked
-- listInbox (board) › newest first, with source, status, outcome and the watcher prompt; output only on request
-- listInbox (board) › filters by status and by source (case-insensitive), and limit keeps the total
-- listInbox (board) › key picks one item (case-insensitive), and get_ticket on an Inbox key points at list_inbox
-
-#### service/src/orchestrator/board-write.test.ts: 46 rows, mostly open
-
-- create_ticket › work run: a top-level ticket in planning with a plan run, on the project's driver
-- create_ticket › work run: start true begins work; project_key and conductor pick another project and kind
-- create_ticket › conductor run: a child that auto-starts, on the conductor's driver and model
-- create_ticket › use_worktree: a conductor's children follow the project unless the conductor opts out
-- create_ticket › validation errors from the shared create path reach the model
-- guard rails › skip_agent_review: agents set it on create and update, but not mid-review
-- guard rails › skip_human_review: agents may skip both reviews when asked, in one call or across two, but not mid-review
-- guard rails › a plan run's update_ticket edits its own ticket, every field, looser permission mode included
-- guard rails › end to end: a planning agent applies the brief's settings to its ticket before the human presses Start
-- guard rails › a plan run's update_ticket can't reach another ticket, and a work run still can't edit its own
-- guard rails › plan, review, complete and triage runs can't change the board, even calling ops directly
-- guard rails › no tool acts on the caller's own ticket
-- guard rails › a conductor can't target itself either, and review/complete only reach the caller's own children
-- guard rails › done is only reachable from planning; review can't be entered or left by a move
-- guard rails › a message to a ticket in review leaves it in review, from any agent: its reviewers decide
-- guard rails › a pending tool approval can't be answered, moved past, restarted or cancelled by another agent
-- guard rails › permission modes can be tightened, never loosened (including through inherit)
-- permission modes across tickets › a read_only work run's new ticket runs read_only, even when started straight away
-- permission modes across tickets › an ask conductor in an auto project gets ask children; equal strictness keeps inheriting
-- permission modes across tickets › a stricter agent can't drive a looser ticket: message, start, reopen or move it into a run
-- permission modes across tickets › a stricter agent can't edit a looser ticket, except to tighten its mode
-- permission modes across tickets › create_ticket with depends_on from a strict caller: the new ticket is never looser
-- permission modes across tickets › an ask conductor still steers its ask children
-- update, move, start, cancel, reopen › update_ticket edits another ticket's card through the shared validation
-- update, move, start, cancel, reopen › move_ticket and PATCH refuse in_progress: Start is the only way to begin work
-- update, move, start, cancel, reopen › move_ticket reorders by 0-based slot within the column, and needs a change
-- update, move, start, cancel, reopen › start_ticket and message_ticket work on any other ticket, not only a conductor's children
-- update, move, start, cancel, reopen › cancel_ticket aborts another ticket's run; reopen_ticket needs a done ticket and notes
-- pull requests (pull_request_urls, titles) › update_ticket sets the whole list in order, drops duplicates, and [] clears it
-- pull requests (pull_request_urls, titles) › a work run edits its own ticket's pull requests alone; another field on its own ticket is still refused
-- pull requests (pull_request_urls, titles) › a work run names its own ticket by an earlier key (after a project rename) and edits its pull requests
-- pull requests (pull_request_urls, titles) › each added link's title is fetched in the background; a lookup that can't run leaves its link unchecked
-- pull requests (pull_request_urls, titles) › gh answering without a title stamps the link as checked, so the start backfill doesn't retry it
-- pull requests (pull_request_urls, titles) › a failed lookup on refresh keeps the title already stored
-- pull requests (pull_request_urls, titles) › a title write bumps updated_at, so a board snapshot taken before it can't replace the titled copy
-- pull requests (pull_request_urls, titles) › title lookups run four at a time across tickets
-- pull requests (pull_request_urls, titles) › repeated refreshes while one is running start a single batch
-- pull requests (pull_request_urls, titles) › a title that arrives after its link was removed doesn't bring the link back
-- pull requests (pull_request_urls, titles) › refresh fetches every title again
-- pull requests (pull_request_urls, titles) › on start, a link whose title was never checked is fetched once
-- remote IDs (remote_id / remote_url) › create_ticket links the new ticket, a top-level one or a conductor's child, to a manual remote ID
-- remote IDs (remote_id / remote_url) › create_ticket refuses a bad remote ID or link before creating anything
-- remote IDs (remote_id / remote_url) › update_ticket links, re-links, changes or clears the link, and unlinks
-- remote IDs (remote_id / remote_url) › update_ticket keeps a watcher's link source when only the URL changes
-- remote IDs (remote_id / remote_url) › a stricter agent can't relink a looser ticket
-- end to end › a work agent creates, edits and moves another ticket through the tool layer
-
-#### service/src/orchestrator/branches.test.ts: 17 rows, mostly open
-
-- base branch settings › defaults to main; settings, projects and tickets refuse names git would refuse
-- base branch settings › ticket beats project beats settings; the stored setting survives a reload
-- base branch settings › a repo without the default branch falls back to its checked-out branch; an explicit base doesn't
-- completion after a restart (nothing cached about the repo's branches) › ${how}: the complete run's prompt names the fallback base, same as its system prompt
-- completion after a restart (nothing cached about the repo's branches) › while the complete run is being prepared the ticket counts as completing
-- the ticket's worktree branch › a new harness branch starts from the base branch, not the main checkout's HEAD
-- the ticket's worktree branch › an existing branch is checked out as is; a new name is created from the base branch
-- the ticket's worktree branch › a branch checked out in another worktree blocks the ticket, naming the branch and the path
-- the ticket's worktree branch › branch needs a worktree; it can't be changed from outside once the worktree exists
-- the ticket's worktree branch › create_ticket passes branch and base_branch through for a child
-- update_branch › a branch checked out in another worktree re-points the ticket there; nothing is deleted
-- update_branch › once that worktree is gone, starting again puts the leftover harness worktree on the ticket's branch
-- update_branch › when the ticket's branch can't go back into the leftover harness worktree, the ticket blocks saying why
-- update_branch › the commit count leaves out what the base branch already has
-- update_branch › otherwise it switches the ticket's worktree, creating the branch at HEAD when new; a dirty tree is refused
-- update_branch › base_branch alone; refused without a worktree, with nothing to change, and outside work runs
-- GET /projects/:id/branches › most recent first, filtered by substring then in-order letters, with where each is checked out
-
-#### service/src/orchestrator/completion.test.ts: 32 rows, mostly open
-
-- what a project offers › a GitHub remote gh is logged into offers pr; other hosts and no remote don't; outside git only custom
-- what a project offers › the project default must be offered; a default the project stops offering falls back to merge
-- choosing at approval › the choice made before the agent review finishes is kept and runs once the ticket is ready
-- choosing at approval › an action the ticket doesn't offer is refused before anything changes
-- choosing at approval › custom follows the approver's instructions and gets no merge steps
-- choosing at approval › every review body HarnessKit's Approve builds is accepted and stored as it says
-- choosing at approval › a new action without instructions drops the earlier action's instructions
-- merge completions that can't finish › a completion that calls block ends in Blocked with its question, never done, and the approvals reset
-- merge completions that can't finish › a completion that ends with its branch unmerged blocks with the merge reason
-- merge completions that can't finish › a branch that was merged and deleted still counts as landed
-- merge completions that can't finish › a custom completion that merges nothing isn't checked
-- pull request completions › a pr completion that records no pull request blocks instead of finishing
-- pull request completions › record_pull_request is refused outside a pr completion
-- pull request completions › record_pull_request moves a link the ticket already has to the end, and looks up every link still untitled
-- pull request completions › record_pull_request wants the hash of a commit the repo has, and stores it in full
-- tickets with nothing to land (Ticket.hasChanges) › a worktree with no commits and nothing uncommitted offers no merge or pr, and approving cleans up
-- tickets with nothing to land (Ticket.hasChanges) › a commit made by hand during review shows up once the ticket is opened, and approving merges it
-- tickets with nothing to land (Ticket.hasChanges) › an uncommitted file counts as a change; one the base branch already has doesn't
-- tickets with nothing to land (Ticket.hasChanges) › a ticket without a worktree of its own (it ran in the project checkout) can't merge or open a pr
-- cleanup completions › a ticket working on its base branch (an existing PR head) can't merge or open a PR, and cleans up by default
-- cleanup completions › a cleanup that leaves the harness worktree or branch behind blocks instead of finishing
-- cleanup completions › only the branch left behind still blocks; with both gone the ticket is done
-- cleanup completions › a ticket whose worktree holds no work (a change made outside git) cleans up to done
-- cleanup completions › a ticket with a pull request open cleans up by default: it pushes the branch and records the pushed head
-- cleanup completions › without a remote a cleanup has nothing to push to, and record_pull_request stays refused without a pull request
-- cleanup completions › re-opening a done ticket forgets the landing it chose, so a ticket with a pull request then preselects clean up
-- Approve and take no action › in review: done and approved with no completion run, the worktree and branch left alone
-- Approve and take no action › outside review it is plain Mark done
-- children land on their parent's branch › a conductor's children branch from its branch, only merge, and merge into it
-- children land on their parent's branch › a child on its parent's branch refuses pr and custom
-- children land on their parent's branch › a child with its own base branch, or under a finished parent, gets the project's choices again
-- merge locks › jobs sharing a lock never run at once; different locks and no lock do
-
-#### service/src/orchestrator/drafts.test.ts: 22 rows, mostly open
-
-- creating a draft › is a planning ticket with no run, a Draft saved line, and no autoStart whatever start says
-- creating a draft › a blank prompt is allowed only for a draft, which is then titled Untitled draft
-- creating a draft › a launched ticket reports draft false
-- creating a draft › a draft can't be a child, nor have children, nor be depended on
-- submitting a draft › start true: in progress with a work run on its spec, keeping its board position
-- submitting a draft › a draft's @-mentioned file reaches the run and is announced; the spec stays as typed
-- submitting a draft › a draft that starts with a slash command reaches the agent with the command first, as typed
-- submitting a draft › start false: stays in planning with a plan run
-- submitting a draft › start true with an open dependency: waits (autoStart on) and starts when the dependency is done
-- submitting a draft › refused for a launched ticket (409), a blank draft (400) and a missing start (400)
-- drafts never run › start, status moves, messages, reviews, completion, cancel and reopen are refused with 409
-- drafts never run › the scheduler skips a draft whose dependencies finish, even with autoStart set
-- drafts never run › enqueueRun refuses a draft's session
-- editing a draft › kind and useWorktree: applied on a draft, 409 on a launched ticket; validated
-- editing a draft › a spec change re-titles a draft until it's named, never a launched ticket
-- editing a draft › turning the worktree off clears a requested branch; a branch needs a worktree and git
-- moving a draft to another project › takes the other project's next key, keeps the old one as an alias, resets branch choices
-- moving a draft to another project › a move and a branch in one PATCH: the branch is checked against the new project
-- moving a draft to another project › refused for a launched ticket (409) and an unknown project (404); a failed PATCH doesn't move it
-- moving a draft to another project › submitting under the new key launches it there
-- agents don't see drafts › list_tickets, search_tickets and get_ticket leave drafts out; acting on one is unknown
-- agents don't see drafts › triage can't dispatch into a draft by its key
-
-#### service/src/orchestrator/file-view.test.ts: 31 rows, mostly open
-
-- resolveFile › refuses paths that leave the root, .git internals and the root itself
-- resolveFile › an absolute path inside the root becomes relative
-- readFileView › reads a gitignored file from disk and reports it ignored
-- readFileView › git state: clean, modified, staged, untracked
-- readFileView › outside a repository everything git is false
-- readFileView › binary and too-large files come back without contents
-- readFileView › missing is a 404, a folder or an escaping path a 400
-- readFileDiff › a modified file diffs against HEAD, staged and unstaged together, and parses
-- readFileDiff › an untracked file shows as added; a clean or ignored one has an empty patch
-- readFileDiff › a deleted file still diffs; one git never knew is a 404
-- readFileDiff › a root inside a repository diffs paths relative to the root
-- readFileDiff › a repository without commits diffs against the empty tree
-- readFileDiff › outside a repository is a 409
-- writeFileContents › replaces the contents, last write wins, and reports the bytes written
-- writeFileContents › keeps CRLF line endings when the editor's text came back with bare LFs
-- writeFileContents › leaves a CRLF already in the text alone, and never adds CR to an LF file
-- writeFileContents › keeps the BOM the viewer stripped
-- writeFileContents › keeps whether the file ended in a newline
-- writeFileContents › an empty file or empty text has no newline to keep
-- writeFileContents › keeps the file mode and leaves no temp file beside it
-- writeFileContents › replaces by rename: the old inode is untouched, so open readers keep a whole file
-- writeFileContents › creates a missing file in an existing folder; 404 when the folder is missing
-- writeFileContents › writes a symlinked file through to its target inside the root
-- writeFileContents › refuses paths that leave the root, .git, and folders
-- writeFileContents › refuses a body that isn't text, has a NUL, or is over the cap (nothing is written)
-- writeFileContents › refuses to overwrite a binary or too-large file
-- writeFileContents › refuses .git in any case, and a symlink into .git
-- writeFileContents › answers 409 for a file that isn't valid UTF-8 rather than writing U+FFFD
-- writeFileContents › caps the bytes that land on disk, after CRs and the BOM are added
-- writeFileContents › answers 403 for a read-only file and leaves it alone
-- writeFileContents › a created file shows up in the path index at once
-
-#### service/src/orchestrator/files.test.ts: 20 rows, mostly open
-
-- listPaths / searchPaths › a git repo lists tracked, untracked and gitignored files, plus their folders
-- listPaths / searchPaths › a plain folder is walked; node_modules is listed but not walked, VCS folders and .DS_Store left out
-- listPaths / searchPaths › the listing is reused briefly, then refreshed
-- listPaths / searchPaths › searchPaths ranks and labels files and folders
-- listPaths / searchPaths › typing into a folder the index skips lists it from disk
-- listPaths / searchPaths › typing a gitignored file's full name finds it
-- listPaths / searchPaths › browsing never leaves the folder, through .. or a symlink
-- listPaths / searchPaths › browsing doesn't list VCS internals or junk files
-- listPaths / searchPaths › ignored: node_modules is walked too, only for the file browser's search
-- listPaths / searchPaths › ignored: a plain folder's node_modules is walked and ranks after equal matches
-- listPaths / searchPaths › ignored: the browser's matches mark gitignored files and node_modules; the autocomplete's never do
-- listPaths / searchPaths › ignored: gitignored paths rank after tracked ones that match as well
-- listPaths / searchPaths › kind keeps only files or only folders, the browse fallback included
-- listPaths / searchPaths › a missing folder has no files
-- attachMentions › appends each mentioned file's contents and leaves other @words alone
-- attachMentions › no mentions of existing files leaves the prompt untouched
-- attachMentions › a folder attaches its listing
-- attachMentions › paths outside the working directory are refused, including through a symlink
-- attachMentions › binary files are skipped; big files are cut and say so
-- attachMentions › the total stays under the attachment limit
-
-#### service/src/orchestrator/generic-watcher-e2e.test.ts: 3 rows, mostly open
-
-- generic watcher, end to end › an agent sets up a curl-loop watcher after approval; its events are triaged by the watcher's prompt
-- generic watcher, end to end › routing lives in the prompt: two watchers on the same events send them to different projects
-- generic watcher, end to end › a failing command shows up as the watcher's error, with its stderr
-
-#### service/src/orchestrator/missing-worktree.test.ts: 10 rows, mostly open
-
-- a missing worktree › a review runs from the project checkout, told the branch still exists and the commit it last reviewed
-- a missing worktree › with the branch merged and deleted, the note says it's gone and the reviewed commit already landed
-- a missing worktree › a work run is told to recreate the worktree from the base when the branch is gone
-- a missing worktree › a completion is told it doesn't need the worktree back, and a cleanup with nothing left ends done
-- a missing worktree › a chat about a done ticket gets no note: its worktree was removed on purpose
-- a failed completion › stays in review with the agent review approved; approving again lands it
-- a failed completion › a conductor's child stays approved, and its conductor completes it again
-- a completion stopped by a usage limit › blocks with both reviews back to pending, restarts after the reset, and goes through review and completion again
-- a completion stopped by a usage limit › a spend limit that names no reset time blocks without a restart
-- a failed review run › adds a failed entry, and the ticket stays in review with the review pending
-
-#### service/src/orchestrator/orchestrator.test.ts: 132 rows, mostly open
-
-- ticket lifecycle › start:true runs work with the brief, auto-reviews, then Complete with instructions → done
-- ticket lifecycle › start:false plans (update_spec), then /start runs the approved plan
-- ticket lifecycle › Start starts the work fresh; review runs start fresh and never write state
-- ticket lifecycle › requested changes start a fresh work conversation
-- ticket lifecycle › chats in review: the first after the submit starts fresh, a second resumes it
-- ticket lifecycle › blocked → in progress resumes the conversation running when the ticket blocked
-- ticket lifecycle › a failed run → blocked → restart resumes the failed run's conversation
-- ticket lifecycle › a complete run starts fresh and saves nothing; chats on Done start a new conversation and keep it
-- ticket lifecycle › a reopened ticket starts its work fresh
-- ticket lifecycle › a run that outlives its phase doesn't write its conversation back
-- ticket lifecycle › block → blocked; the human's answer resumes the agent with its tools, which unblocks and submits
-- ticket lifecycle › work run that ends without submitting is auto-submitted with the last assistant text
-- ticket lifecycle › auto-submit is skipped while another human message is queued
-- ticket lifecycle › work run failure (error event or thrown) → blocked with the error
-- ticket lifecycle › agent request_changes loops back to work until the reviewer approves
-- ticket lifecycle › human request_changes resets both reviews and re-runs work with the notes
-- ticket lifecycle › tickets of a project that skips the human review complete right after the agent approves, with the project's default action
-- ticket lifecycle › the human approval completes the ticket without pressing Complete
-- ticket lifecycle › approving while the agent review runs waits for it; its approval then completes with the chosen action
-- ticket lifecycle › the agent approval completes the ticket when the human review was pre-approved
-- ticket lifecycle › a second Complete while the approval's complete run is queued is refused
-- ticket lifecycle › cancelling a running completion puts the approval back; approving again lands it
-- ticket lifecycle › cancelling a completion still queued behind another run puts the approval back too
-- ticket lifecycle › while the complete run is in flight, a message or request for changes is refused and the ticket ends done
-- ticket lifecycle › a work run that fails after its ticket was marked done leaves it done
-- ticket lifecycle › an older app's autoComplete false is ignored: approving still completes
-- ticket lifecycle › complete requires review; skipAgent marks done without a run; drag to done runs nothing
-- ticket lifecycle › complete run failure stays in review with its agent review, and says why
-- ticket lifecycle › cancel aborts the active run and drops queued runs; status unchanged
-- ticket lifecycle › rerun agent review; an older app's message with move in review reopens work
-- ticket lifecycle › re-open sends a done ticket back to work with the notes; only done tickets, notes required
-- ticket lifecycle › re-opening a done ticket works on the plan again
-- ticket lifecycle › only moving to done suspends the ticket's browser tabs
-- ticket lifecycle › external keys, duplicates and validation
-- ticket lifecycle › delete removes ticket + session and closes the browser tab
-- ticket lifecycle › events: ticket.upserted busy flips and transcript.delta streams
-- skipping the agent review › a ticket created with skipAgentReview goes to review without a review run and waits only on the human
-- skipping the agent review › changes requested by the human come back skipped again on the next submit
-- skipping the agent review › with the project skipping the human review, a skipped agent review completes the ticket at once
-- skipping the agent review › the agent can skip its own review with submit_for_review skip_agent_review
-- skipping the agent review › an agent can skip the agent review of a ticket that skips its human review, and it lands unreviewed
-- skipping the agent review › turning skipAgentReview on while the agent review runs stops it; turning it off starts one
-- skipping the agent review › skipAgentReview must be a boolean
-- skipping the agent review › a conductor's child created with skip_agent_review is reviewed and completed by the conductor alone
-- skipping the human review › a ticket created with skipHumanReview lands as soon as its agent review approves it
-- skipping the human review › the human can still send it back while the agent review runs
-- skipping the human review › with both reviews skipped the ticket lands as soon as it's submitted
-- skipping the human review › the agent can skip the human review with submit_for_review skip_human_review
-- skipping the human review › an agent can skip both reviews at submit, or the human review of a ticket that skips its agent review, and it lands
-- skipping the human review › turning skipHumanReview on while the ticket waits on the human lands it
-- skipping the human review › turning it off while the agent review runs puts the human review back to pending
-- skipping the human review › a create that leaves the review switches out takes the project's defaults, and one that sets them wins
-- skipping the human review › project review defaults: older apps' requireHumanReview maps onto skipHumanReview, and a bad value is refused
-- skipping the human review › skipHumanReview must be a boolean
-- skipping the human review › a conductor's child that skips the human review lands without the conductor's approval
-- messages that leave the ticket where it is (chat runs) › in review: the agent answers with its work tools, and the ticket keeps its status and reviews
-- messages that leave the ticket where it is (chat runs) › in review: a chat that changed the work submits again, and the reviews start over with one reviewer
-- messages that leave the ticket where it is (chat runs) › in review: resume_work moves the ticket to in progress while the chat changes it, then it ends like a work run
-- messages that leave the ticket where it is (chat runs) › resume_work keeps the chat's conversation: a block resumes it, and the next submit drops it
-- messages that leave the ticket where it is (chat runs) › resume_work from a done chat keeps the chat's conversation for the next run
-- messages that leave the ticket where it is (chat runs) › resume_work is refused on a ticket that isn't in review or done
-- messages that leave the ticket where it is (chat runs) › in done: resume_work re-opens the ticket while the chat works, then it ends like a work run
-- messages that leave the ticket where it is (chat runs) › in review: block asks the human and starts the reviews over
-- messages that leave the ticket where it is (chat runs) › in blocked: a side question leaves the ticket blocked with its question open
-- messages that leave the ticket where it is (chat runs) › in blocked: once the agent unblocks, the chat ends like a work run (auto-submit, or block on a question)
-- messages that leave the ticket where it is (chat runs) › in blocked: block replaces the question; unblock is refused on a ticket that isn't blocked
-- messages that leave the ticket where it is (chat runs) › a blocked ticket without a worktree gets one before the chat; its status doesn't change
-- messages that leave the ticket where it is (chat runs) › in planning: the plan run takes the message, never a chat
-- messages that leave the ticket where it is (chat runs) › block and submit_for_review refuse a planning or done ticket
-- messages that leave the ticket where it is (chat runs) › in done: the ticket stays done; an older app's message with move re-opens it
-- messages that leave the ticket where it is (chat runs) › a failed chat leaves the ticket where it is, unless it had unblocked the ticket
-- messages that leave the ticket where it is (chat runs) › a chat's approval card leaves the ticket in its column, and answering it resumes the chat
-- messages that leave the ticket where it is (chat runs) › a blocked ticket's chat approval keeps its question, and unblock waits for the human's answer
-- messages that leave the ticket where it is (chat runs) › runs with the ticket's permission mode and all of its grants
-- messages that leave the ticket where it is (chat runs) › a read_only ticket's chat stays read-only
-- messages that leave the ticket where it is (chat runs) › a done ticket whose worktree is gone chats from the project checkout
-- messages that leave the ticket where it is (chat runs) › a done ticket chats from the checkout when its session still points at the removed worktree
-- messages that leave the ticket where it is (chat runs) › refused while the ticket is completing; text is required
-- scheduling › dependsOn + autoStart: dependent starts when its dependency is done
-- scheduling › dependents without autoStart are not started; start:true with open deps waits
-- scheduling › Start on a planned ticket with an open dependency queues it: planning, autoStart, started once the dependency is done
-- scheduling › Start ignores dependencies that are done or deleted, and doesn't hold a blocked ticket
-- approving the plan while planning runs › Start during a plan run approves the plan; the work starts when the run ends, on the final plan
-- approving the plan while planning runs › a second press changes nothing
-- approving the plan while planning runs › an agent's start_ticket approves it too, credited to the agent
-- approving the plan while planning runs › a human's approval credits the work start to the human
-- approving the plan while planning runs › a plan that ends by asking a question still starts the work
-- approving the plan while planning runs › cancelling the plan run clears the approval and starts nothing
-- approving the plan while planning runs › a failed plan run clears the approval and says why
-- approving the plan while planning runs › a message to an approved ticket withdraws the approval; the next Start while it answers approves again
-- approving the plan while planning runs › with open dependencies the work starts once the plan run has ended and they are done
-- approving the plan while planning runs › moving the ticket out of planning drops the approval
-- approving the plan while planning runs › with nothing running, Start begins the work as before
-- concurrency › runs are serialized per session
-- concurrency › global maxConcurrentRuns limit, raised live via settings
-- conductor › creates children, is notified of their changes, approves + completes them, then submits
-- conductor › child changes while the conductor is busy coalesce into one conductor run
-- conductor › a conductor's approval doesn't auto-complete its child: complete_ticket stays the conductor's call
-- conductor › conductor auto-submits when its run ends with every child done
-- conductor › default conductor children chain via dependsOn
-- conductor › a task ticket asked for a child conducts it: work runs are notified, review + complete it, then submit
-- conductor › a task ticket with children defaults list_tickets to its children; without child it files top-level tickets
-- conductor › review_ticket and complete_ticket reject tickets that aren't the caller's children
-- triage › the watcher's prompt names the project; the output's key becomes the ticket's remote ID
-- triage › plain text with a prompt reaches the triage prompt; a prompt naming no project is declined
-- triage › identical output is triaged once per source; changed output is triaged again
-- triage › inject validates source, text and prompt
-- triage › oversized injected output is cut and flagged in the prompt
-- triage › a ticket linked to the output's key is listed for triage, and ticket_key sends it the update
-- triage › dispatch without a key uses the project's next key and makes no mirror
-- triage › dispatch can put the new ticket on an existing branch, as its base too; a bad branch name is refused
-- triage › one output with several items can dispatch each; decline is refused after a dispatch
-- triage › decline_work can retitle the Inbox item
-- triage › [big] output dispatches as conductor tickets; triage run without a decision fails
-- mcp tokens › a run-scoped token resolves only while its run is active
-- recovery › runs left queued/running by a previous process are failed on start
-- worktrees › git projects get a worktree + branch per ticket; plain dirs use the project path
-- worktrees › re-opening a done ticket whose worktree and branch were removed recreates them
-- worktrees › a chat's resume_work on a done ticket recreates its removed worktree and names it
-- worktrees › useWorktree false: a git project with worktrees on runs the ticket in the project checkout
-- worktrees › useWorktree true: a project with worktrees off still gets one for that ticket
-- worktrees › the choice is kept through planning: started later, it still runs in the project checkout
-- worktrees › re-opening a done project-checkout ticket keeps it in the project checkout
-- worktrees › re-opening a done ticket with a removed worktree recreates it too
-- @-mentioned files › the brief's and a message's mentioned files go to the agent; the transcript keeps what was typed
-- @-mentioned files › a chat question gets its files; review and complete runs don't re-attach the brief's
-- @-mentioned files › a prompt without mentions reaches the agent as typed, with no status line
-- @-mentioned files › projectFiles and ticketFiles search the project folder, and the ticket's worktree once it has one
-- agent notes › update_notes replaces the ticket's notes without an Activity entry; the next run's prompt and get_ticket carry them, list_tickets leaves them out
-- agent notes › a work run that blocks and the chat that answers it get the same system prompt; what changed is in the run context
-- agent notes › empty notes clear them
-- run usage › a run records its model and sums the driver's usage reports
-
-#### service/src/orchestrator/replan.test.ts: 15 rows, mostly open
-
-- review comments go to the Work model › a chat in review runs on Work; resume_work keeps it there, and the re-review is Opus again
-- return_to_planning › a blocked work chat hands off to a Plan run on the Plan model; Start resumes work on the Work model
-- return_to_planning › the Plan run is a new conversation even though the card left Blocked
-- return_to_planning › a work run can hand off too, and doesn't submit or block itself afterwards
-- return_to_planning › start_after_plan: work starts on the Work model when the Plan run ends, never before
-- return_to_planning › a failed Plan run clears the approval and starts nothing
-- return_to_planning › a message during the Plan run withdraws the approval
-- return_to_planning › without start_after_plan a child whose dependencies are done waits in Planning
-- return_to_planning › from Review it stops a queued review run and resets both reviews
-- return_to_planning › from Done it hands off too
-- return_to_planning › refused while the ticket's complete run is going, and for plan and review runs
-- return_to_planning › refused for a ticket already in Planning, and for an empty reason
-- return_to_planning › plan, review and complete runs don't get the tool; work, conductor and chat do
-- replanPrompt › carries the reason and the human's message, and points a started ticket's planner at its branch
-- replanPrompt › leaves out what isn't there, and says the work starts on its own when the re-plan is approved
-
-#### service/src/orchestrator/run-recovery.test.ts: 9 rows, mostly open
-
-- a crash whose end can't be recorded stays busy only until reconcileRuns can write it
-- a crash is recorded as failed right away once the retry can write
-- the session takes new runs after a crash instead of piling up `running` rows
-- a failing transcript write fails the run and closes the driver so the agent process stops
-- reconcileRuns leaves a live run and the run queued behind it alone
-- a complete run cut off by a restart puts the approval back, and approving again lands the ticket
-- an interrupted run of another kind leaves the human's approval alone
-- start() reconciles orphaned runs on a timer until stop()
-- a plan run cut off by a restart clears the approval, so the work doesn't start
-
-#### service/src/orchestrator/spec.test.ts: 20 rows, mostly open
-
-- edit_spec › applies its edits as one new revision with the note, author and run
-- edit_spec › a stale base revision fails with the current one, and the human's concurrent edit survives
-- edit_spec › a missing or ambiguous old_string, or an expected mismatch, changes nothing and names the revision
-- edit_spec › all or nothing: a later failing edit drops the earlier ones in the call
-- edit_spec › review runs can edit the spec (to record findings) but not replace it
-- update_ticket's spec › a human's PATCH between get_ticket and update_ticket refuses the stale write and keeps their text
-- which runs get the spec tools › review runs get read_spec and edit_spec; triage none; the others all three
-- update_spec images › stores local images and videos as the ticket's attachments and rewrites their src
-- update_spec images › a bad extension or bad magic bytes fails the call and stores nothing
-- update_spec images › deleting the ticket removes its attachment files
-- PATCH spec › needs baseRevision outside drafts; a stale one is a 409 with the current revision
-- submit_for_review › without spec_is_up_to_date: true it fails and the ticket stays in progress
-- review runs › round 2 gets round 1's commit and notes and is told to diff from it; round 1 isn't
-- review runs › the review prompt points at the approved baseline revision without inlining the spec's diff
-- review runs › an untouched spec says it is still the approved revision
-- messages and Activity › a message and the agent's answer stay out of Activity; the message still reaches the agent
-- messages and Activity › a message to a planning ticket gets its answer in the transcript, not Activity
-- spec revisions in Activity › each revision adds one entry with its note and number; creating the ticket adds none
-- spec revisions in Activity › an unchanged body or a stale base revision adds nothing
-- spec revisions in Activity › a multi-line note becomes one line, with the whole note in detail
-
-#### service/src/orchestrator/watcher-inbox.test.ts: 2 rows, mostly open
-
-- watcher output → Inbox › a command line's output and the watcher prompt reach one triage session (fake spawn)
-- watcher output → Inbox › a real /bin/sh -c watcher produces the triage session
-
-#### service/src/orchestrator/watchers-integration.test.ts: 2 rows, mostly open
-
-- watchers → triage › a real watcher's output is one triage item with its driver, deduped until it changes
-- watchers → triage › watcher events and the list carry the process state, live as it changes
-
-#### service/src/orchestrator/watchers.test.ts: 50 rows, mostly open
-
-- toOutput › trims, and whitespace-only output is nothing
-- toOutput › cuts at the limit and marks it truncated; exactly the limit is not truncated
-- findKeys › finds upper-case keys once each, in order
-- findKeys › is capped
-- watcherArgv › a command line runs through the login shell
-- watcherArgv › a legacy command + args is spawned directly, without a shell
-- watcherArgv › loginShell uses an absolute $SHELL and falls back otherwise
-- WatcherRunner loop mode › delivers a run's output as one chunk and re-runs after exit 0
-- WatcherRunner loop mode › exit 4 (nothing to report) restarts promptly without an error
-- WatcherRunner loop mode › failures report stderr and back off exponentially; success resets
-- WatcherRunner loop mode › backoff is capped
-- WatcherRunner loop mode › a spawn that throws is reported and retried
-- WatcherRunner loop mode › splits a long-lived stream into bursts while it is still running
-- WatcherRunner loop mode › whitespace-only bursts are skipped
-- WatcherRunner loop mode › a steady trickle is still flushed by the max burst age
-- WatcherRunner loop mode › an idle flush delivers everything, including a last line without a newline
-- WatcherRunner loop mode › pretty JSON without a trailing newline stays one item per response
-- WatcherRunner loop mode › a max-age flush while output is still streaming keeps the partial line
-- WatcherRunner loop mode › a huge burst is cut at maxOutputChars and marked truncated
-- WatcherRunner loop mode › an onOutput throw is reported and does not stop the runner
-- WatcherRunner loop mode › async onOutput rejections are caught too
-- WatcherRunner loop mode › runNow kills a blocking child and restarts at once without an error
-- WatcherRunner loop mode › runNow cancels a pending backoff
-- WatcherRunner interval mode › runs every intervalSec and skips a tick while still running
-- WatcherRunner interval mode › each run's output is one chunk, however slowly it arrives; empty runs deliver nothing
-- WatcherRunner interval mode › interval is floored by minIntervalMs
-- WatcherRunner interval mode › a failing interval run reports the error but keeps the schedule
-- WatcherRunner interval mode › runNow starts a run immediately, but not a second concurrent one
-- WatcherRunner sync › starts enabled watchers only, passes cwd/env/args
-- WatcherRunner sync › a command line without args is run through the shell
-- WatcherRunner sync › stops removed and disabled watchers
-- WatcherRunner sync › restarts on command changes, not on cosmetic ones
-- WatcherRunner sync › output is delivered with the latest watcher object (and its prompt)
-- WatcherRunner sync › runNow on a disabled watcher does a one-off run; unknown ids throw
-- WatcherRunner sync › stopAll kills everything and nothing restarts
-- WatcherRunner live state › loop: a spawned process is running; a failed exit waits out the backoff with the failure count
-- WatcherRunner live state › loop: a process that stays up clears a stale error from an earlier run
-- WatcherRunner live state › loop: a clean exit resets the failure count
-- WatcherRunner live state › a spawn failure is an error and a wait, never running
-- WatcherRunner live state › interval: running during a run, then waiting for the next tick; failures count across runs
-- WatcherRunner live state › disabling or removing stops it; a disabled watcher is stopped from the start
-- WatcherRunner live state › a restart on a command change reports the new process, not the old one's exit
-- WatcherRunner live state › a one-off run of a disabled watcher is running, then stopped again
-- WatcherRunner live state › stopAll reports every watcher stopped
-- WatcherRunner with Bun.spawn › a legacy command + args runs directly, with the watcher env and cwd
-- WatcherRunner with Bun.spawn › stopping a loop watcher stops what its shell is running too, at once
-- WatcherRunner with Bun.spawn › a shell command line gets pipes, variables and the watcher env
-- WatcherRunner with Bun.spawn › a looping shell command printing pretty JSON without a newline gives one item per response
-- WatcherRunner with Bun.spawn › a failing process reports its stderr
-- WatcherRunner with Bun.spawn › a missing executable is reported, not thrown
-
 #### service/src/orchestrator/activity-lines.test.ts: 9 rows, mostly new: next/orchestrator/activity-lines.test.ts
 
 - agents' notes show their first line › post_note, submit_for_review and an approval take any length: the first line in full, the rest in detail
@@ -6133,6 +5677,7 @@ Signed off by the human. They stay listed here so each can be brought back at th
 - permission mode resolution › create accepts a mode; invalid modes are rejected everywhere
 - permission mode resolution › the legacy claudePermissionMode setting from older clients maps onto permissionMode
 - permission mode resolution › the driver receives the resolved mode on the run request
+- native tools behind the PermissionGate (dummy /bash) › auto: classifier allow lets the command run and logs an audit entry
 - native tools behind the PermissionGate (dummy /bash) › auto: soft_deny is the agent's to work around; a run that ends stuck on it gets the card; allow_once reruns it via the grant
 - native tools behind the PermissionGate (dummy /bash) › auto: hard_deny refuses with the reason and does not block the ticket
 - native tools behind the PermissionGate (dummy /bash) › auto: a hanging classifier times out into a human approval
@@ -6146,7 +5691,6 @@ Signed off by the human. They stay listed here so each can be brought back at th
 - claude-code prompt-tool calls in an auto-mode ticket go to the classifier first › hard_deny: refused with the reason, no card
 - claude-code prompt-tool calls in an auto-mode ticket go to the classifier first › no classifier: a human is asked, as before
 - claude-code prompt-tool calls in an auto-mode ticket go to the classifier first › an ask-mode ticket still sends prompt-tool calls straight to a human
-- auto: classifier allow runs the command and logs an audit entry (new: next/contract/native-bash.test.ts)
 
 #### service/src/orchestrator/prompt-annotations.test.ts: 7 rows, mostly new: next/orchestrator/prompt-annotations.test.ts
 
@@ -6387,7 +5931,7 @@ Signed off by the human. They stay listed here so each can be brought back at th
 - config tools behind human approval › prompt is passed straight through to the orchestrator on create and update
 - config tools behind human approval › prompt round-trips through storage and list_watchers
 - config tools behind human approval › watcher models and the watcher defaults go through the tools, merged per driver
-- config tools behind human approval › a watcher created through the tools runs and its output reaches the Inbox (new: next/contract/watcher-config.test.ts)
+- a watcher created through the tools › runs through the login shell, and its output and prompt reach triage
 
 #### service/src/orchestrator/context-gauge.test.ts: 22 rows, mostly new: next/orchestrator/context-gauge.test.ts
 
@@ -6507,6 +6051,481 @@ Signed off by the human. They stay listed here so each can be brought back at th
 - readTaskOutput › cleanEnd and stripAnsi
 - readTaskOutput › confineOutputPath refuses paths outside the CLI's temp folders, symlinks included
 - migration 22 keeps existing sub-agents as agents
+
+#### service/src/orchestrator/board-ops.test.ts: 16 rows, mostly new: next/orchestrator/board-ops.test.ts
+
+- listTickets (board) › default scope: conductor → children, task → its project, triage → every project
+- listTickets (board) › project_key picks another project (case-insensitive), and implies project scope for a conductor
+- listTickets (board) › status filter narrows; done tickets come newest-completed first and last on the board
+- listTickets (board) › limit caps the page but total counts every match
+- listTickets (board) › invalid combinations and unknown projects/statuses are errors
+- getTicket (board) › reads a ticket in another project with parent, children, driver and activity — from a triage run too
+- getTicket (board) › old keys resolve after a project rename; unknown keys throw
+- getTicket (board) › include_transcript returns the last N text/status/error entries, oldest first, clipped
+- getTicket (board) › include_agents lists sub-agents and tasks oldest first, results clipped; only when asked
+- getTicket (board) › getTicketAgent: a sub-agent's own transcript tail, a task's output tail, and unknown ids
+- searchTickets (board) › pages with nextCursor, scopes to project_key, and snippets the matching text
+- board tools over the real orchestrator › list_tickets notes when results were capped; search_tickets returns compact hits
+- board tools over the real orchestrator › get_ticket exposes the spec and its revision, driver and transcript only when asked
+- listInbox (board) › newest first, with source, status, outcome and the watcher prompt; output only on request
+- listInbox (board) › filters by status and by source (case-insensitive), and limit keeps the total
+- listInbox (board) › key picks one item (case-insensitive), and get_ticket on an Inbox key points at list_inbox
+
+#### service/src/orchestrator/replan.test.ts: 15 rows, mostly new: next/orchestrator/replan.test.ts
+
+- review comments go to the Work model › a chat in review runs on Work; resume_work keeps it there, and the re-review is Opus again
+- return_to_planning › a blocked work chat hands off to a Plan run on the Plan model; Start resumes work on the Work model
+- return_to_planning › the Plan run is a new conversation even though the card left Blocked
+- return_to_planning › a work run can hand off too, and doesn't submit or block itself afterwards
+- return_to_planning › start_after_plan: work starts on the Work model when the Plan run ends, never before
+- return_to_planning › a failed Plan run clears the approval and starts nothing
+- return_to_planning › a message during the Plan run withdraws the approval
+- return_to_planning › without start_after_plan a child whose dependencies are done waits in Planning
+- return_to_planning › from Review it stops a queued review run and resets both reviews
+- return_to_planning › from Done it hands off too
+- return_to_planning › refused while the ticket's complete run is going, and for plan and review runs
+- return_to_planning › refused for a ticket already in Planning, and for an empty reason
+- return_to_planning › plan, review and complete runs don't get the tool; work, conductor and chat do
+- replanPrompt › carries the reason and the human's message, and points a started ticket's planner at its branch
+- replanPrompt › leaves out what isn't there, and says the work starts on its own when the re-plan is approved
+
+#### service/src/orchestrator/run-recovery.test.ts: 9 rows, mostly new: next/orchestrator/run-recovery.test.ts
+
+- a crash whose end can't be recorded stays busy only until reconcileRuns can write it
+- a crash is recorded as failed right away once the retry can write
+- the session takes new runs after a crash instead of piling up `running` rows
+- a failing transcript write fails the run and closes the driver so the agent process stops
+- reconcileRuns leaves a live run and the run queued behind it alone
+- a complete run cut off by a restart puts the approval back, and approving again lands the ticket
+- an interrupted run of another kind leaves the human's approval alone
+- start() reconciles orphaned runs on a timer until stop()
+- a plan run cut off by a restart clears the approval, so the work doesn't start
+
+#### service/src/orchestrator/watchers.test.ts: 50 rows, mostly new: next/orchestrator/watchers.test.ts
+
+- toOutput › trims, and whitespace-only output is nothing
+- toOutput › cuts at the limit and marks it truncated; exactly the limit is not truncated
+- findKeys › finds upper-case keys once each, in order
+- findKeys › is capped
+- watcherArgv › a command line runs through the login shell
+- watcherArgv › a legacy command + args is spawned directly, without a shell
+- watcherArgv › loginShell uses an absolute $SHELL and falls back otherwise
+- WatcherRunner loop mode › delivers a run's output as one chunk and re-runs after exit 0
+- WatcherRunner loop mode › exit 4 (nothing to report) restarts after the restart delay, without an error
+- WatcherRunner loop mode › failures report the stderr tail and back off exponentially; success resets to the restart delay
+- WatcherRunner loop mode › backoff is capped
+- WatcherRunner loop mode › a spawn that throws is reported and retried
+- WatcherRunner loop mode › splits a long-lived stream into bursts while it is still running
+- WatcherRunner loop mode › whitespace-only bursts are skipped
+- WatcherRunner loop mode › a steady trickle is flushed by the max burst age while it is still streaming, at line ends
+- WatcherRunner loop mode › an idle flush delivers everything, including a last line without a newline
+- WatcherRunner loop mode › pretty JSON without a trailing newline stays one item per response
+- WatcherRunner loop mode › a max-age flush while output is still streaming keeps the partial line
+- WatcherRunner loop mode › a huge burst is cut at maxOutputChars and marked truncated
+- WatcherRunner loop mode › an onOutput throw is reported and does not stop the runner
+- WatcherRunner loop mode › async onOutput rejections are caught too
+- WatcherRunner loop mode › runNow kills a blocking child and restarts at once without an error
+- WatcherRunner loop mode › runNow cancels a pending backoff
+- WatcherRunner interval mode › runs every intervalSec and skips a tick while still running
+- WatcherRunner interval mode › each run's output is one chunk, however slowly it arrives; empty runs deliver nothing
+- WatcherRunner interval mode › interval is floored by minIntervalMs
+- WatcherRunner interval mode › a failing interval run reports the error but keeps the schedule
+- WatcherRunner interval mode › runNow starts a run immediately, but not a second concurrent one
+- WatcherRunner sync › starts enabled watchers only, and passes a legacy command's args, its env and its cwd straight to spawn
+- WatcherRunner sync › a cwd under ~ is expanded to the home directory; none means the service's own
+- WatcherRunner sync › a command line without args is run through the shell
+- WatcherRunner sync › stops removed and disabled watchers
+- WatcherRunner sync › restarts on command changes, not on cosmetic ones
+- WatcherRunner sync › output is delivered with the latest watcher object (and its prompt)
+- WatcherRunner sync › runNow on a disabled watcher does a one-off run; unknown ids throw
+- WatcherRunner sync › stopAll kills everything and nothing restarts
+- WatcherRunner sync › stopAll waits for a killed process to exit, then resolves
+- WatcherRunner live state › loop: a spawned process is running; a failed exit waits out the backoff with the failure count
+- WatcherRunner live state › loop: a process that stays up clears a stale error from an earlier run
+- WatcherRunner live state › loop: a clean exit resets the failure count
+- WatcherRunner live state › a spawn failure is an error and a wait, never running
+- WatcherRunner live state › interval: running during a run, then waiting for the next tick; failures count across runs
+- WatcherRunner live state › disabling or removing stops it; a disabled watcher is stopped from the start
+- WatcherRunner live state › a restart on a command change reports the new process, not the old one's exit
+- WatcherRunner live state › a one-off run of a disabled watcher is running, then stopped again
+- WatcherRunner live state › stopAll reports every watcher stopped
+- bunSpawn runs in the watcher's cwd with its env over the service's, pipes stderr, and kill stops the whole process group (new: next/contract/watcher-spawn.test.ts)
+- WatcherRunner with Bun.spawn › a shell command line gets pipes, variables and the watcher env (accepted loss)
+- WatcherRunner with Bun.spawn › a looping shell command printing pretty JSON without a newline gives one item per response (accepted loss)
+- WatcherRunner with Bun.spawn › a missing executable is reported, not thrown (accepted loss)
+
+#### service/src/orchestrator/watchers-integration.test.ts: 2 rows, mostly new: next/orchestrator/watchers-integration.test.ts
+
+- watchers → triage › a watcher's output is one triage item with its driver, deduped until it changes
+- watchers → triage › watcher events and the list carry the process state, live as it changes
+
+#### service/src/orchestrator/watcher-inbox.test.ts: 2 rows, mostly new: next/orchestrator/watcher-inbox.test.ts
+
+- watcher output → Inbox › a command line's output and the watcher prompt reach one triage session; the same output again doesn't
+- watcher output → Inbox › a legacy command + args is spawned as given, with no extra shell, and its output is triaged
+
+#### service/src/orchestrator/generic-watcher-e2e.test.ts: 3 rows, mostly new: next/orchestrator/generic-watcher-e2e.test.ts
+
+- generic watcher, end to end › an agent sets up a curl-loop watcher after approval; its events are triaged by the watcher's prompt
+- generic watcher, end to end › routing lives in the prompt: two watchers on the same events send them to different projects
+- generic watcher, end to end › a failing command shows up as the watcher's error, with its stderr
+
+#### service/src/orchestrator/branches.test.ts: 17 rows, mostly new: next/orchestrator/branches.test.ts
+
+- base branch settings › defaults to main; settings, projects and tickets refuse names git would refuse
+- base branch settings › ticket beats project beats settings; the stored setting survives a reload
+- base branch settings › a repo without the default branch falls back to its checked-out branch; an explicit base doesn't
+- completion after a restart (nothing cached about the repo's branches) › ${how}: the complete run's prompt names the fallback base, same as its system prompt
+- completion after a restart (nothing cached about the repo's branches) › while the complete run is being prepared the ticket counts as completing
+- the ticket's worktree branch › a new harness branch starts from the base branch, not the main checkout's HEAD
+- the ticket's worktree branch › an existing branch is checked out as is; a new name is created from the base branch
+- the ticket's worktree branch › a branch checked out in another worktree blocks the ticket, naming the branch and the path
+- the ticket's worktree branch › branch needs a worktree; it can't be changed from outside once the worktree exists
+- the ticket's worktree branch › create_ticket passes branch and base_branch through for a child
+- update_branch › a branch checked out in another worktree re-points the ticket there; nothing is deleted
+- update_branch › once that worktree is gone, starting again puts the leftover harness worktree on the ticket's branch
+- update_branch › when the ticket's branch can't go back into the leftover harness worktree, the ticket blocks saying why
+- update_branch › the commit count leaves out what the base branch already has
+- update_branch › otherwise it switches the ticket's worktree, creating the branch at HEAD when new; a dirty tree is refused
+- update_branch › base_branch alone; refused without a worktree, with nothing to change, and outside work runs
+- GET /projects/:id/branches › most recent first, filtered by substring then in-order letters, with where each is checked out
+
+#### service/src/orchestrator/missing-worktree.test.ts: 10 rows, mostly new: next/orchestrator/missing-worktree.test.ts
+
+- a missing worktree › a review runs from the project checkout, told the branch still exists and the commit it last reviewed
+- a missing worktree › with the branch merged and deleted, the note says it's gone and the reviewed commit already landed
+- a missing worktree › a work run is told to recreate the worktree from the base when the branch is gone
+- a missing worktree › a completion is told it doesn't need the worktree back, and a cleanup with nothing left ends done
+- a missing worktree › a chat about a done ticket gets no note: its worktree was removed on purpose
+- a failed completion › stays in review with the agent review approved; approving again lands it
+- a failed completion › a conductor's child stays approved, and its conductor completes it again
+- a completion stopped by a usage limit › blocks with both reviews back to pending, restarts after the reset, and goes through review and completion again
+- a completion stopped by a usage limit › a spend limit that names no reset time blocks without a restart
+- a failed review run › adds a failed entry, and the ticket stays in review with the review pending
+
+#### service/src/orchestrator/drafts.test.ts: 22 rows, mostly new: next/orchestrator/drafts.test.ts
+
+- creating a draft › is a planning ticket with no run, a Draft saved line, and no autoStart whatever start says
+- creating a draft › a blank prompt is allowed only for a draft, which is then titled Untitled draft
+- creating a draft › a launched ticket reports draft false
+- creating a draft › a draft can't be a child, nor have children, nor be depended on
+- submitting a draft › start true: in progress with a work run on its spec, keeping its board position
+- submitting a draft › a draft's @-mentioned file reaches the run and is announced; the spec stays as typed
+- submitting a draft › a draft that starts with a slash command reaches the agent with the command first, as typed
+- submitting a draft › start false: stays in planning with a plan run
+- submitting a draft › start true with an open dependency: waits (autoStart on) and starts when the dependency is done
+- submitting a draft › refused for a launched ticket (409), a blank draft (400) and a missing start (400)
+- drafts never run › start, status moves, messages, reviews, completion, cancel and reopen are refused with 409
+- drafts never run › the scheduler skips a draft whose dependencies finish, even with autoStart set
+- drafts never run › enqueueRun refuses a draft's session
+- editing a draft › kind and useWorktree: applied on a draft, 409 on a launched ticket; validated
+- editing a draft › a spec change re-titles a draft until it's named, never a launched ticket
+- editing a draft › turning the worktree off clears a requested branch; a branch needs a worktree and git
+- moving a draft to another project › takes the other project's next key, keeps the old one as an alias, resets branch choices
+- moving a draft to another project › a move and a branch in one PATCH: the branch is checked against the new project
+- moving a draft to another project › refused for a launched ticket (409) and an unknown project (404); a failed PATCH doesn't move it
+- moving a draft to another project › submitting under the new key launches it there
+- agents don't see drafts › list_tickets, search_tickets and get_ticket leave drafts out; acting on one is unknown
+- agents don't see drafts › triage can't dispatch into a draft by its key
+
+#### service/src/orchestrator/spec.test.ts: 20 rows, mostly new: next/orchestrator/spec.test.ts
+
+- edit_spec › applies its edits as one new revision with the note, author and run
+- edit_spec › a stale base revision fails with the current one, and the human's concurrent edit survives
+- edit_spec › a missing or ambiguous old_string, or an expected mismatch, changes nothing and names the revision
+- edit_spec › all or nothing: a later failing edit drops the earlier ones in the call
+- edit_spec › review runs can edit the spec (to record findings) but not replace it
+- update_ticket's spec › a human's PATCH between get_ticket and update_ticket refuses the stale write and keeps their text
+- which runs get the spec tools › review runs get read_spec and edit_spec; triage none; the others all three
+- update_spec images › stores local images and videos as the ticket's attachments and rewrites their src
+- update_spec images › a bad extension or bad magic bytes fails the call and stores nothing
+- update_spec images › deleting the ticket removes its attachment files
+- PATCH spec › needs baseRevision outside drafts; a stale one is a 409 with the current revision
+- submit_for_review › without spec_is_up_to_date: true it fails and the ticket stays in progress
+- review runs › round 2 gets round 1's commit and notes and is told to diff from it; round 1 isn't
+- review runs › the review prompt points at the approved baseline revision without inlining the spec's diff
+- review runs › an untouched spec says it is still the approved revision
+- messages and Activity › a message and the agent's answer stay out of Activity; the message still reaches the agent
+- messages and Activity › a message to a planning ticket gets its answer in the transcript, not Activity
+- spec revisions in Activity › each revision adds one entry with its note and number; creating the ticket adds none
+- spec revisions in Activity › an unchanged body or a stale base revision adds nothing
+- spec revisions in Activity › a multi-line note becomes one line, with the whole note in detail
+
+#### service/src/orchestrator/completion.test.ts: 32 rows, mostly new: next/orchestrator/completion.test.ts
+
+- what a project offers › a GitHub remote gh is logged into offers pr; other hosts and no remote don't; outside git only custom
+- what a project offers › the project default must be offered; a default the project stops offering falls back to merge
+- choosing at approval › the choice made before the agent review finishes is kept and runs once the ticket is ready
+- choosing at approval › an action the ticket doesn't offer is refused before anything changes
+- choosing at approval › custom follows the approver's instructions and gets no merge steps
+- choosing at approval › every review body HarnessKit's Approve builds is accepted and stored as it says
+- choosing at approval › a new action without instructions drops the earlier action's instructions
+- merge completions that can't finish › a completion that calls block ends in Blocked with its question, never done, and the approvals reset
+- merge completions that can't finish › a completion that ends with its branch unmerged blocks with the merge reason
+- merge completions that can't finish › a branch that was merged and deleted still counts as landed
+- merge completions that can't finish › a custom completion that merges nothing isn't checked
+- pull request completions › a pr completion that records no pull request blocks instead of finishing
+- pull request completions › record_pull_request is refused outside a pr completion
+- pull request completions › record_pull_request moves a link the ticket already has to the end, and looks up every link still untitled
+- pull request completions › record_pull_request wants the hash of a commit the repo has, and stores it in full
+- tickets with nothing to land (Ticket.hasChanges) › a worktree with no commits and nothing uncommitted offers no merge or pr, and approving cleans up
+- tickets with nothing to land (Ticket.hasChanges) › a commit made by hand during review shows up once the ticket is opened, and approving merges it
+- tickets with nothing to land (Ticket.hasChanges) › an uncommitted file counts as a change; one the base branch already has doesn't
+- tickets with nothing to land (Ticket.hasChanges) › a ticket without a worktree of its own (it ran in the project checkout) can't merge or open a pr
+- cleanup completions › a ticket working on its base branch (an existing PR head) can't merge or open a PR, and cleans up by default
+- cleanup completions › a cleanup that leaves the harness worktree or branch behind blocks instead of finishing
+- cleanup completions › only the branch left behind still blocks; with both gone the ticket is done
+- cleanup completions › a ticket whose worktree holds no work (a change made outside git) cleans up to done
+- cleanup completions › a ticket with a pull request open cleans up by default: it pushes the branch and records the pushed head
+- cleanup completions › without a remote a cleanup has nothing to push to, and record_pull_request stays refused without a pull request
+- cleanup completions › re-opening a done ticket forgets the landing it chose, so a ticket with a pull request then preselects clean up
+- Approve and take no action › in review: done and approved with no completion run, the worktree and branch left alone
+- Approve and take no action › outside review it is plain Mark done
+- children land on their parent's branch › a conductor's children branch from its branch, only merge, and merge into it
+- children land on their parent's branch › a child on its parent's branch refuses pr and custom
+- children land on their parent's branch › a child with its own base branch, or under a finished parent, gets the project's choices again
+- merge locks › jobs sharing a lock never run at once; different locks and no lock do
+
+#### service/src/orchestrator/files.test.ts: 20 rows, mostly new: next/orchestrator/files.test.ts
+
+- listPaths / searchPaths › a git repo lists tracked, untracked and gitignored files, plus their folders
+- listPaths / searchPaths › a plain folder is walked; node_modules is listed but not walked, VCS folders and .DS_Store left out
+- listPaths / searchPaths › the listing is reused briefly, then refreshed
+- listPaths / searchPaths › searchPaths ranks and labels files and folders
+- listPaths / searchPaths › typing into a folder the index skips lists it from disk
+- listPaths / searchPaths › typing a gitignored file's full name finds it
+- listPaths / searchPaths › browsing never leaves the folder, through .. or a symlink
+- listPaths / searchPaths › browsing doesn't list VCS internals or junk files
+- listPaths / searchPaths › ignored: node_modules is walked too, only for the file browser's search
+- listPaths / searchPaths › ignored: a plain folder's node_modules is walked and ranks after equal matches
+- listPaths / searchPaths › ignored: the browser's matches mark gitignored files and node_modules; the autocomplete's never do
+- listPaths / searchPaths › ignored: gitignored paths rank after tracked ones that match as well
+- listPaths / searchPaths › kind keeps only files or only folders, the browse fallback included
+- listPaths / searchPaths › a missing folder has no files
+- attachMentions › appends each mentioned file's contents and leaves other @words alone
+- attachMentions › no mentions of existing files leaves the prompt untouched
+- attachMentions › a folder attaches its listing
+- attachMentions › paths outside the working directory are refused, including through a symlink
+- attachMentions › binary files are skipped; big files are cut and say so
+- attachMentions › the total stays under the attachment limit
+
+#### service/src/orchestrator/file-view.test.ts: 31 rows, mostly new: next/orchestrator/file-view.test.ts
+
+- resolveFile › refuses paths that leave the root, .git internals and the root itself
+- resolveFile › an absolute path inside the root becomes relative
+- readFileView › reads a gitignored file from disk and reports it ignored
+- readFileView › git state: clean, modified, staged, untracked
+- readFileView › outside a repository everything git is false
+- readFileView › binary and too-large files come back without contents
+- readFileView › missing is a 404, a folder or an escaping path a 400
+- readFileDiff › a modified file diffs against HEAD, staged and unstaged together, and parses
+- readFileDiff › an untracked file shows as added; a clean or ignored one has an empty patch
+- readFileDiff › a deleted file still diffs; one git never knew is a 404
+- readFileDiff › a root inside a repository diffs paths relative to the root
+- readFileDiff › a repository without commits diffs against the empty tree
+- readFileDiff › outside a repository is a 409
+- writeFileContents › replaces the contents, last write wins, and reports the bytes written
+- writeFileContents › keeps CRLF line endings when the editor's text came back with bare LFs
+- writeFileContents › leaves a CRLF already in the text alone, and never adds CR to an LF file
+- writeFileContents › keeps the BOM the viewer stripped
+- writeFileContents › keeps whether the file ended in a newline
+- writeFileContents › an empty file or empty text has no newline to keep
+- writeFileContents › keeps the file mode and leaves no temp file beside it
+- writeFileContents › replaces by rename: the old inode is untouched, so open readers keep a whole file
+- writeFileContents › creates a missing file in an existing folder; 404 when the folder is missing
+- writeFileContents › writes a symlinked file through to its target inside the root
+- writeFileContents › refuses paths that leave the root, .git, and folders
+- writeFileContents › refuses a body that isn't text, has a NUL, or is over the cap (nothing is written)
+- writeFileContents › refuses to overwrite a binary or too-large file
+- writeFileContents › refuses .git in any case, and a symlink into .git
+- writeFileContents › answers 409 for a file that isn't valid UTF-8 rather than writing U+FFFD
+- writeFileContents › caps the bytes that land on disk, after CRs and the BOM are added
+- writeFileContents › answers 403 for a read-only file and leaves it alone
+- writeFileContents › a created file shows up in the path index at once
+
+#### service/src/orchestrator/board-write.test.ts: 46 rows, mostly new: next/orchestrator/board-write.test.ts
+
+- create_ticket › work run: a top-level ticket in planning with a plan run, on the project's driver
+- create_ticket › work run: start true begins work; project_key and conductor pick another project and kind
+- create_ticket › conductor run: a child that auto-starts, on the conductor's driver and model
+- create_ticket › use_worktree: a conductor's children follow the project unless the conductor opts out
+- create_ticket › validation errors from the shared create path reach the model
+- guard rails › skip_agent_review: agents set it on create and update, but not mid-review
+- guard rails › skip_human_review: agents may skip both reviews when asked, in one call or across two, but not mid-review
+- guard rails › a plan run's update_ticket edits its own ticket, every field, looser permission mode included
+- guard rails › end to end: a planning agent applies the brief's settings to its ticket before the human presses Start
+- guard rails › a plan run's update_ticket can't reach another ticket, and a work run still can't edit its own
+- guard rails › plan, review, complete and triage runs can't change the board, even calling ops directly
+- guard rails › no tool acts on the caller's own ticket
+- guard rails › a conductor can't target itself either, and review/complete only reach the caller's own children
+- guard rails › done is only reachable from planning; review can't be entered or left by a move
+- guard rails › a message to a ticket in review leaves it in review, from any agent: its reviewers decide
+- guard rails › a pending tool approval can't be answered, moved past, restarted or cancelled by another agent
+- guard rails › permission modes can be tightened, never loosened (including through inherit)
+- permission modes across tickets › a read_only work run's new ticket runs read_only, even when started straight away
+- permission modes across tickets › an ask conductor in an auto project gets ask children; equal strictness keeps inheriting
+- permission modes across tickets › a stricter agent can't drive a looser ticket: message, start, reopen or move it into a run
+- permission modes across tickets › a stricter agent can't edit a looser ticket, except to tighten its mode
+- permission modes across tickets › create_ticket with depends_on from a strict caller: the new ticket is never looser
+- permission modes across tickets › an ask conductor still steers its ask children
+- update, move, start, cancel, reopen › update_ticket edits another ticket's card through the shared validation
+- update, move, start, cancel, reopen › move_ticket and PATCH refuse in_progress: Start is the only way to begin work
+- update, move, start, cancel, reopen › move_ticket reorders by 0-based slot within the column, and needs a change
+- update, move, start, cancel, reopen › start_ticket and message_ticket work on any other ticket, not only a conductor's children
+- update, move, start, cancel, reopen › cancel_ticket aborts another ticket's run; reopen_ticket needs a done ticket and notes
+- pull requests (pull_request_urls, titles) › update_ticket sets the whole list in order, drops duplicates, and [] clears it
+- pull requests (pull_request_urls, titles) › a work run edits its own ticket's pull requests alone; another field on its own ticket is still refused
+- pull requests (pull_request_urls, titles) › a work run names its own ticket by an earlier key (after a project rename) and edits its pull requests
+- pull requests (pull_request_urls, titles) › each added link's title is fetched in the background; a lookup that can't run leaves its link unchecked
+- pull requests (pull_request_urls, titles) › gh answering without a title stamps the link as checked, so the start backfill doesn't retry it
+- pull requests (pull_request_urls, titles) › a failed lookup on refresh keeps the title already stored
+- pull requests (pull_request_urls, titles) › a title write bumps updated_at, so a board snapshot taken before it can't replace the titled copy
+- pull requests (pull_request_urls, titles) › title lookups run four at a time across tickets
+- pull requests (pull_request_urls, titles) › repeated refreshes while one is running start a single batch
+- pull requests (pull_request_urls, titles) › a title that arrives after its link was removed doesn't bring the link back
+- pull requests (pull_request_urls, titles) › refresh fetches every title again
+- pull requests (pull_request_urls, titles) › on start, a link whose title was never checked is fetched once
+- remote IDs (remote_id / remote_url) › create_ticket links the new ticket, a top-level one or a conductor's child, to a manual remote ID
+- remote IDs (remote_id / remote_url) › create_ticket refuses a bad remote ID or link before creating anything
+- remote IDs (remote_id / remote_url) › update_ticket links, re-links, changes or clears the link, and unlinks
+- remote IDs (remote_id / remote_url) › update_ticket keeps a watcher's link source when only the URL changes
+- remote IDs (remote_id / remote_url) › a stricter agent can't relink a looser ticket
+- end to end › a work agent creates, edits and moves another ticket through the tool layer
+
+#### service/src/orchestrator/orchestrator.test.ts: 132 rows, mostly new: next/orchestrator/orchestrator.test.ts
+
+- ticket lifecycle › start:true runs work with the brief, auto-reviews, then Complete with instructions → done
+- ticket lifecycle › start:false plans (update_spec), then /start runs the approved plan
+- ticket lifecycle › Start starts the work fresh; review runs start fresh and never write state
+- ticket lifecycle › requested changes start a fresh work conversation
+- ticket lifecycle › chats in review: the first after the submit starts fresh, a second resumes it
+- ticket lifecycle › blocked → in progress resumes the conversation running when the ticket blocked
+- ticket lifecycle › a failed run → blocked → restart resumes the failed run's conversation
+- ticket lifecycle › a complete run starts fresh and saves nothing; chats on Done start a new conversation and keep it
+- ticket lifecycle › a reopened ticket starts its work fresh
+- ticket lifecycle › a run that outlives its phase doesn't write its conversation back
+- ticket lifecycle › block → blocked; the human's answer resumes the agent with its tools, which unblocks and submits
+- ticket lifecycle › work run that ends without submitting is auto-submitted with the last assistant text
+- ticket lifecycle › auto-submit is skipped while another human message is queued
+- ticket lifecycle › work run failure (error event or thrown) → blocked with the error
+- ticket lifecycle › agent request_changes loops back to work until the reviewer approves
+- ticket lifecycle › human request_changes resets both reviews and re-runs work with the notes
+- ticket lifecycle › tickets of a project that skips the human review complete right after the agent approves, with the project's default action
+- ticket lifecycle › the human approval completes the ticket without pressing Complete
+- ticket lifecycle › approving while the agent review runs waits for it; its approval then completes with the chosen action
+- ticket lifecycle › the agent approval completes the ticket when the human review was pre-approved
+- ticket lifecycle › a second Complete while the approval's complete run is queued is refused
+- ticket lifecycle › cancelling a running completion puts the approval back; approving again lands it
+- ticket lifecycle › cancelling a completion still queued behind another run puts the approval back too
+- ticket lifecycle › while the complete run is in flight, a message or request for changes is refused and the ticket ends done
+- ticket lifecycle › a work run that fails after its ticket was marked done leaves it done
+- ticket lifecycle › an older app's autoComplete false is ignored: approving still completes
+- ticket lifecycle › complete requires review; skipAgent marks done without a run; drag to done runs nothing
+- ticket lifecycle › complete run failure stays in review with its agent review, and says why
+- ticket lifecycle › cancel aborts the active run and drops queued runs; status unchanged
+- ticket lifecycle › rerun agent review; an older app's message with move in review reopens work
+- ticket lifecycle › re-open sends a done ticket back to work with the notes; only done tickets, notes required
+- ticket lifecycle › re-opening a done ticket works on the plan again
+- ticket lifecycle › only moving to done suspends the ticket's browser tabs
+- ticket lifecycle › external keys, duplicates and validation
+- ticket lifecycle › delete removes ticket + session and closes the browser tab
+- ticket lifecycle › events: ticket.upserted busy flips and transcript.delta streams
+- skipping the agent review › a ticket created with skipAgentReview goes to review without a review run and waits only on the human
+- skipping the agent review › changes requested by the human come back skipped again on the next submit
+- skipping the agent review › with the project skipping the human review, a skipped agent review completes the ticket at once
+- skipping the agent review › the agent can skip its own review with submit_for_review skip_agent_review
+- skipping the agent review › an agent can skip the agent review of a ticket that skips its human review, and it lands unreviewed
+- skipping the agent review › turning skipAgentReview on while the agent review runs stops it; turning it off starts one
+- skipping the agent review › skipAgentReview must be a boolean
+- skipping the agent review › a conductor's child created with skip_agent_review is reviewed and completed by the conductor alone
+- skipping the human review › a ticket created with skipHumanReview lands as soon as its agent review approves it
+- skipping the human review › the human can still send it back while the agent review runs
+- skipping the human review › with both reviews skipped the ticket lands as soon as it's submitted
+- skipping the human review › the agent can skip the human review with submit_for_review skip_human_review
+- skipping the human review › an agent can skip both reviews at submit, or the human review of a ticket that skips its agent review, and it lands
+- skipping the human review › turning skipHumanReview on while the ticket waits on the human lands it
+- skipping the human review › turning it off while the agent review runs puts the human review back to pending
+- skipping the human review › a create that leaves the review switches out takes the project's defaults, and one that sets them wins
+- skipping the human review › project review defaults: older apps' requireHumanReview maps onto skipHumanReview, and a bad value is refused
+- skipping the human review › skipHumanReview must be a boolean
+- skipping the human review › a conductor's child that skips the human review lands without the conductor's approval
+- messages that leave the ticket where it is (chat runs) › in review: the agent answers with its work tools, and the ticket keeps its status and reviews
+- messages that leave the ticket where it is (chat runs) › in review: a chat that changed the work submits again, and the reviews start over with one reviewer
+- messages that leave the ticket where it is (chat runs) › in review: resume_work moves the ticket to in progress while the chat changes it, then it ends like a work run
+- messages that leave the ticket where it is (chat runs) › resume_work keeps the chat's conversation: a block resumes it, and the next submit drops it
+- messages that leave the ticket where it is (chat runs) › resume_work from a done chat keeps the chat's conversation for the next run
+- messages that leave the ticket where it is (chat runs) › resume_work is refused on a ticket that isn't in review or done
+- messages that leave the ticket where it is (chat runs) › in done: resume_work re-opens the ticket while the chat works, then it ends like a work run
+- messages that leave the ticket where it is (chat runs) › in review: block asks the human and starts the reviews over
+- messages that leave the ticket where it is (chat runs) › in blocked: a side question leaves the ticket blocked with its question open
+- messages that leave the ticket where it is (chat runs) › in blocked: once the agent unblocks, the chat ends like a work run (auto-submit, or block on a question)
+- messages that leave the ticket where it is (chat runs) › in blocked: block replaces the question; unblock is refused on a ticket that isn't blocked
+- messages that leave the ticket where it is (chat runs) › a blocked ticket without a worktree gets one before the chat; its status doesn't change
+- messages that leave the ticket where it is (chat runs) › in planning: the plan run takes the message, never a chat
+- messages that leave the ticket where it is (chat runs) › block and submit_for_review refuse a planning or done ticket
+- messages that leave the ticket where it is (chat runs) › in done: the ticket stays done; an older app's message with move re-opens it
+- messages that leave the ticket where it is (chat runs) › a failed chat leaves the ticket where it is, unless it had unblocked the ticket
+- messages that leave the ticket where it is (chat runs) › a chat's approval card leaves the ticket in its column, and answering it resumes the chat
+- messages that leave the ticket where it is (chat runs) › a blocked ticket's chat approval keeps its question, and unblock waits for the human's answer
+- messages that leave the ticket where it is (chat runs) › runs with the ticket's permission mode and all of its grants
+- messages that leave the ticket where it is (chat runs) › a read_only ticket's chat stays read-only
+- messages that leave the ticket where it is (chat runs) › a done ticket whose worktree is gone chats from the project checkout
+- messages that leave the ticket where it is (chat runs) › a done ticket chats from the checkout when its session still points at the removed worktree
+- messages that leave the ticket where it is (chat runs) › refused while the ticket is completing; text is required
+- scheduling › dependsOn + autoStart: dependent starts when its dependency is done
+- scheduling › dependents without autoStart are not started; start:true with open deps waits
+- scheduling › Start on a planned ticket with an open dependency queues it: planning, autoStart, started once the dependency is done
+- scheduling › Start ignores dependencies that are done or deleted, and doesn't hold a blocked ticket
+- approving the plan while planning runs › Start during a plan run approves the plan; the work starts when the run ends, on the final plan
+- approving the plan while planning runs › a second press changes nothing
+- approving the plan while planning runs › an agent's start_ticket approves it too, credited to the agent
+- approving the plan while planning runs › a human's approval credits the work start to the human
+- approving the plan while planning runs › a plan that ends by asking a question still starts the work
+- approving the plan while planning runs › cancelling the plan run clears the approval and starts nothing
+- approving the plan while planning runs › a failed plan run clears the approval and says why
+- approving the plan while planning runs › a message to an approved ticket withdraws the approval; the next Start while it answers approves again
+- approving the plan while planning runs › with open dependencies the work starts once the plan run has ended and they are done
+- approving the plan while planning runs › moving the ticket out of planning drops the approval
+- approving the plan while planning runs › with nothing running, Start begins the work as before
+- concurrency › runs are serialized per session
+- concurrency › global maxConcurrentRuns limit, raised live via settings
+- conductor › creates children, is notified of their changes, approves + completes them, then submits
+- conductor › child changes while the conductor is busy coalesce into one conductor run
+- conductor › a conductor's approval doesn't auto-complete its child: complete_ticket stays the conductor's call
+- conductor › conductor auto-submits when its run ends with every child done
+- conductor › default conductor children chain via dependsOn
+- conductor › a task ticket asked for a child conducts it: work runs are notified, review + complete it, then submit
+- conductor › a task ticket with children defaults list_tickets to its children; without child it files top-level tickets
+- conductor › review_ticket and complete_ticket reject tickets that aren't the caller's children
+- triage › the watcher's prompt names the project; the output's key becomes the ticket's remote ID
+- triage › plain text with a prompt reaches the triage prompt; a prompt naming no project is declined
+- triage › identical output is triaged once per source; changed output is triaged again
+- triage › inject validates source, text and prompt
+- triage › oversized injected output is cut and flagged in the prompt
+- triage › a ticket linked to the output's key is listed for triage, and ticket_key sends it the update
+- triage › dispatch without a key uses the project's next key and makes no mirror
+- triage › dispatch can put the new ticket on an existing branch, as its base too; a bad branch name is refused
+- triage › one output with several items can dispatch each; decline is refused after a dispatch
+- triage › decline_work can retitle the Inbox item
+- triage › [big] output dispatches as conductor tickets; triage run without a decision fails
+- mcp tokens › a run-scoped token resolves only while its run is active
+- recovery › runs left queued/running by a previous process are failed on start
+- worktrees › git projects get a worktree + branch per ticket; plain dirs use the project path
+- worktrees › re-opening a done ticket whose worktree and branch were removed recreates them
+- worktrees › a chat's resume_work on a done ticket recreates its removed worktree and names it
+- worktrees › useWorktree false: a git project with worktrees on runs the ticket in the project checkout
+- worktrees › useWorktree true: a project with worktrees off still gets one for that ticket
+- worktrees › the choice is kept through planning: started later, it still runs in the project checkout
+- worktrees › re-opening a done project-checkout ticket keeps it in the project checkout
+- worktrees › re-opening a done ticket with a removed worktree recreates it too
+- @-mentioned files › the brief's and a message's mentioned files go to the agent; the transcript keeps what was typed
+- @-mentioned files › a chat question gets its files; review and complete runs don't re-attach the brief's
+- @-mentioned files › a prompt without mentions reaches the agent as typed, with no status line
+- @-mentioned files › projectFiles and ticketFiles search the project folder, and the ticket's worktree once it has one
+- agent notes › update_notes replaces the ticket's notes without an Activity entry; the next run's prompt and get_ticket carry them, list_tickets leaves them out
+- agent notes › a work run that blocks and the chat that answers it get the same system prompt; what changed is in the run context
+- agent notes › empty notes clear them
+- run usage › a run records its model and sums the driver's usage reports
 
 ### service/src/permissions
 

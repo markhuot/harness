@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { PORTED, dispositionOf } from "./report-dispositions";
+import { DROPPED, PORTED, dispositionOf } from "./report-dispositions";
 import { extractAppChecks, extractBunTests, extractSimChecks, extractSnapshotTests, extractSwiftTests } from "./report-extract";
 import { REPORT_PATH, areaOf, buildReport, collectRows, listFiles, rowsForFile } from "./report";
 
@@ -148,5 +148,11 @@ describe("ported tests", () => {
 
   test("every port points at a file that exists, so a rename can't silently drop rows", () => {
     expect(PORTED.filter((p) => !existsSync(join(root, p.now))).map((p) => p.now)).toEqual([]);
+  });
+
+  test("a dropped test stays a loss row with its reason, though its file is gone", () => {
+    const rows = collectRows([], () => "").filter((r) => r.lossReason);
+    expect(rows.map((r) => r.name)).toEqual(DROPPED.map((d) => d.name));
+    expect(dispositionOf(rows[0]!)).toEqual({ status: "loss", reason: DROPPED[0]!.reason });
   });
 });

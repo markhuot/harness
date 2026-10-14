@@ -34,7 +34,58 @@ export const PORTED: Ported[] = [
     "permissions", "prompt-annotations", "prompt-attachments", "prompt-overrides", "prompts-builtin", "prompts", "remote-ids", "review-activity",
     "ticket-detail-parent", "usage-limit-restart", "usage-limit",
     "config-tools", "context-gauge", "key-aliases", "message-annotations", "message-attachments", "plan-usage", "steering", "subagents", "tasks",
+    "board-ops",
+    "replan",
+    "run-recovery",
+    "watchers",
+    "watchers-integration",
+    "watcher-inbox",
+    "generic-watcher-e2e",
+    "branches",
+    "missing-worktree",
+    "drafts",
+    "spec",
+    "completion",
+    "files",
+    "file-view",
+    "board-write",
+    "orchestrator",
   ].map((f) => ({ old: `${ORCH}${f}.test.ts`, now: `${NEXT_ORCH}${f}.test.ts` })),
+  // Three real-process watcher tests became one contract test that runs bunSpawn against /bin/sh
+  { old: `${ORCH}watchers.test.ts`, now: "next/contract/watcher-spawn.test.ts" },
+];
+
+/**
+ * Old tests that were not carried over because what they checked isn't ours (the shell, the OS) or another
+ * ported test already covers it. Each is a loss row with its reason, for the human to sign off on.
+ */
+export interface Dropped {
+  file: string;
+  group: string;
+  name: string;
+  reason: string;
+}
+const WATCHERS = `${ORCH}watchers.test.ts`;
+const SPAWN_GROUP = "WatcherRunner with Bun.spawn";
+export const DROPPED: Dropped[] = [
+  {
+    file: WATCHERS,
+    group: SPAWN_GROUP,
+    name: "a shell command line gets pipes, variables and the watcher env",
+    reason: "pipes and $VAR expansion are the shell's job; the ported fake-spawn test pins that a command line reaches `[shell, -lc, line]` whole, with the watcher env",
+  },
+  {
+    file: WATCHERS,
+    group: SPAWN_GROUP,
+    name: "a looping shell command printing pretty JSON without a newline gives one item per response",
+    reason: "the chunking is ours and the ported fake-spawn test 'pretty JSON without a trailing newline' covers it; a real shell loop only added the OS printing text",
+  },
+  {
+    file: WATCHERS,
+    group: SPAWN_GROUP,
+    name: "a missing executable is reported, not thrown",
+    reason: "Bun.spawn throwing ENOENT is the OS; our catch is covered by the ported 'spawn that throws' tests",
+  },
 ];
 
 /** sim-check functions whose behaviour the single walkthrough can't carry: the ticket's expected losses. */
@@ -50,6 +101,7 @@ const SIM_NAME_LOSSES: { name: RegExp; reason: string }[] = [
 ];
 
 export function dispositionOf(row: Row): Disposition {
+  if (row.lossReason) return { status: "loss", reason: row.lossReason };
   if (row.ref) return { status: "new", ref: row.ref };
   if (row.kind === "swift") return { status: "kept", reason: "HarnessKit's swift test needs no simulator and stays; it also decodes the service's golden files" };
   if (row.kind === "sim-check") {

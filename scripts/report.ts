@@ -9,7 +9,7 @@
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { PORTED, type Disposition, dispositionOf, label } from "./report-dispositions";
+import { DROPPED, PORTED, type Disposition, dispositionOf, label } from "./report-dispositions";
 import { type Row, extractAppChecks, extractBunTests, extractSimChecks, extractSnapshotTests, extractSwiftTests } from "./report-extract";
 
 const root = join(import.meta.dir, "..");
@@ -51,6 +51,7 @@ export function collectRows(files = listFiles(), read = (f: string) => readFileS
     if (!existsSync(join(root, p.now))) continue;
     for (const r of extractBunTests(p.old, read(p.now))) rows.push({ ...r, ref: p.now });
   }
+  for (const d of DROPPED) rows.push({ kind: "bun", file: d.file, group: d.group, name: d.name, lossReason: d.reason });
   return rows;
 }
 

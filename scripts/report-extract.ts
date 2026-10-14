@@ -12,6 +12,8 @@ export type Row = {
   name: string;
   /** For a test that moved: the new-suite file it lives in now (set by the report from PORTED). */
   ref?: string;
+  /** For a test that was dropped on purpose: why. The old file is gone; the row is listed so the loss stays visible. */
+  lossReason?: string;
 };
 
 const QUOTED = /^(["'`])((?:\\.|(?!\1).)*)\1/;
