@@ -9,6 +9,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Changed
+
+- For people working on Harness: the iPhone dock check now measures the gap between the board's bottom bar and the docked cards (one card, two cards, after a relaunch, after the palette closes), so a bar that sits too low fails the check instead of only a bar that runs under the cards.
+
 ## [app-20261014.0849](https://github.com/markhuot/harness/releases/tag/app-20261014.0849) - 2026-10-14
 
 ### Changed

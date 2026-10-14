@@ -1447,6 +1447,20 @@ async function dockSheet(udid: string, opts: { ghost?: boolean; shotName?: strin
   return until("the dock", async () => topDock(await labels(udid)), 6000);
 }
 
+/** The board's bottom bar sits DockMetrics.barGap (11pt) above the topmost docked card (or "N more…"), whatever the card count. */
+async function barClearsDock(udid: string, dockTop?: number) {
+  if (dockTop === undefined) {
+    dockTop = await until("a docked card", async () => {
+      const tops = (await nodes(udid)).filter((x) => (x.AXLabel && isDock(x.AXLabel)) || x.AXUniqueId === "ticket-dock-more").map((x) => x.frame.y);
+      return tops.length ? Math.min(...tops) : null;
+    }, 5000);
+  }
+  const bar = await findElement(udid, (x) => x === "New session");
+  if (!bar) throw new Error("no New session button on the board");
+  const gap = dockTop - (bar.frame.y + bar.frame.height);
+  if (Math.abs(gap - 11) > 3) throw new Error(`the bar sits ${Math.round(gap)}pt above the dock (top ${Math.round(dockTop)}), not 11`);
+}
+
 /** Swipes the docked ticket sheet down once: it closes the ticket on top. */
 async function swipeDockDown(udid: string, dock: AXNode) {
   // From near the card's top: AXe stops a drag at the screen's edge, and from a card's middle
@@ -1875,6 +1889,7 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
     await until("the child", async () => onChild(await labels(udid)), 8000);
     composerBefore = (await findElement(udid, (x) => x === "Send"))?.frame ?? null;
     await dockSheet(udid);
+    await barClearsDock(udid); // one card
     await goto(udid, `harness://ticket/${encodeURIComponent(b.key)}`, (l) => ticketShown(l, b.key) && !l.some(isDock));
     const label = await dockSheet(udid);
     if (label !== `${b.key}, ${b.title}, docked`) throw new Error(`the bottom card reads "${label}"`);
@@ -1892,8 +1907,7 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
     const dockTop = Math.min(cards[0]!.frame.y, more?.frame.y ?? Infinity);
     const newSession = await findElement(udid, (x) => x === "New session");
     if (!newSession) throw new Error("no New session button on the board");
-    if (newSession.frame.y + newSession.frame.height > dockTop)
-      throw new Error(`New session (bottom ${Math.round(newSession.frame.y + newSession.frame.height)}) runs under the dock (top ${Math.round(dockTop)})`);
+    await barClearsDock(udid, dockTop);
     // Every card shares the bar's left and right edges: Projects at its left end, New session at its right.
     const projects = await findElement(udid, (x) => x === "Projects");
     if (!projects) throw new Error("no Projects button on the board");
@@ -2069,17 +2083,27 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
       throw e;
     });
     if ((await count()) !== n) throw new Error(`${await count()} docked after the relaunch, not ${n}`);
+    await barClearsDock(udid);
     lastUrl.set(udid, BOARD);
     await shot(udid, "dock-relaunched-light");
     return `${keyOf(after)} on top of ${n}`;
   }, CHECK_CAP_MS, [DOWN]);
+  const PALETTE_BAR = "the bar keeps its place above the dock after the palette's keyboard comes and goes";
+  await check(PALETTE_BAR, async () => {
+    await tapWhere(udid, "Command palette");
+    await until("the palette's field", async () => (await labels(udid)).some((x) => x.startsWith("New Session…")), 8000);
+    await tapHeaderCancel(udid);
+    await until("the palette closed", async () => (await probe(udid))?.router.sheet == null, 8000);
+    await barClearsDock(udid);
+    return "11pt above the card";
+  }, CHECK_CAP_MS, [RELAUNCH]);
   await check("Projects closes every docked ticket", async () => {
     await tapWhere(udid, "Projects");
     await until("the Projects sheet", async () => (await labels(udid)).includes("Inbox"), 5000);
     await goto(udid, BOARD);
     if ((await labels(udid)).some(isDock)) throw new Error("a dock is still there after Projects");
     return "all closed";
-  }, CHECK_CAP_MS, [RELAUNCH]);
+  }, CHECK_CAP_MS, [PALETTE_BAR]);
 }
 
 /**
