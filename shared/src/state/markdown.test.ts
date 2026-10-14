@@ -99,3 +99,13 @@ describe("ticketLinkable", () => {
     expect(ticketLinkable(state, "PLAYR-124")).toBe(false);
   });
 });
+
+test("a link inside bold or italic stays a link; the text around it keeps the emphasis", () => {
+  expect(inlineTokens("**[a.ts:1](harness://file/a.ts#L1)**")).toEqual([{ t: "link", text: "a.ts:1", url: "harness://file/a.ts#L1" }]);
+  expect(inlineTokens("*see [b](https://x.test) now*")).toEqual([
+    { t: "em", text: "see " },
+    { t: "link", text: "b", url: "https://x.test" },
+    { t: "em", text: " now" },
+  ]);
+  expect(inlineTokens("**plain**")).toEqual([{ t: "strong", text: "plain" }]);
+});

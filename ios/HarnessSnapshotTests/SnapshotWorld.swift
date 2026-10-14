@@ -31,7 +31,7 @@ struct SnapshotWorld {
         3. Show a paused ticket in *Blocked* with the reason.
 
         ## Status
-        - [x] Menu item and confirmation
+        - [x] **[TicketMenu.swift:42](harness://file/ios/Harness/TicketMenu.swift#L42)** menu item and confirmation
         - [ ] Resume from a push notification
         - [ ] Tests for the paused state
 

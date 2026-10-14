@@ -11,6 +11,26 @@ struct DockMetricsTests {
         #expect(DockMetrics.stackHeight(rows: 5) == CGFloat(292))
     }
 
+    @Test func clearanceReachesTheTopOfTheWholeStack() {
+        // 852pt screen, 34pt home indicator, cards float 8pt up: the stack's top is 852 - 8 - stackHeight.
+        for rows in 1...3 {
+            let top = 852 - 8 - DockMetrics.stackHeight(rows: rows)
+            let clearance = DockMetrics.clearance(screenHeight: 852, stackTop: top, homeIndicator: 34, rows: rows)
+            #expect(clearance == DockMetrics.stackHeight(rows: rows) + 8 - 34)
+        }
+        // A taller stack always asks for more room, so the bar never ends up under the top card.
+        let one = DockMetrics.clearance(screenHeight: 852, stackTop: 852 - 8 - 52, homeIndicator: 34, rows: 1)
+        let three = DockMetrics.clearance(screenHeight: 852, stackTop: 852 - 8 - 172, homeIndicator: 34, rows: 3)
+        #expect(three - one == 120)
+    }
+
+    @Test func clearanceBeforeMeasuringGrowsWithTheRows() {
+        let one = DockMetrics.clearance(screenHeight: nil, stackTop: nil, homeIndicator: 34, rows: 1)
+        let two = DockMetrics.clearance(screenHeight: nil, stackTop: nil, homeIndicator: 34, rows: 2)
+        #expect(two - one == 60)
+        #expect(DockMetrics.clearance(screenHeight: nil, stackTop: nil, homeIndicator: 34, rows: 0) == one)
+    }
+
     @Test func dockedCardsShareTheBarsSides() {
         for (width, radius) in [(393, 55), (375, 39), (402, 62)] as [(CGFloat, CGFloat)] {
             let screen = ConcentricBar.Screen(width: width, height: 852, homeIndicator: 34)
