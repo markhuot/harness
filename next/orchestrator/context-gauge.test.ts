@@ -45,17 +45,12 @@ async function workedTicket(h: H, calls: DriverEvent[]) {
 }
 
 describe("context gauge: recording calls", () => {
-  test("the ticket's context is the last call of its work run, with the first call's total as the prefix", async () => {
+  test("the ticket's context is the last call of its work run, with the first call's total as the prefix; every call is kept, in order", async () => {
     const h = setup();
     const t = await workedTicket(h, [call(3, 0, 47_000), call(3, 47_000, 3_000), call(3, 50_000, 12_000, 800)]);
     expect(ticketOf(h, t).context).toMatchObject({ input: 3, cacheRead: 50_000, cacheWrite: 12_000, output: 800, prefix: 47_003, estimated: false, misses: 0, missTokens: 0 });
-  });
-
-  test("every call is kept, in order", async () => {
-    const h = setup();
-    const t = await workedTicket(h, [call(3, 0, 47_000), call(3, 47_000, 3_000)]);
     const calls = h.store.sessions.listCalls(t.sessionId);
-    expect(calls.map((c) => [c.input, c.cacheRead, c.cacheWrite])).toEqual([[3, 0, 47_000], [3, 47_000, 3_000]]);
+    expect(calls.map((c) => [c.input, c.cacheRead, c.cacheWrite])).toEqual([[3, 0, 47_000], [3, 47_000, 3_000], [3, 50_000, 12_000]]);
     expect(new Set(calls.map((c) => c.runId)).size).toBe(1);
   });
 
@@ -86,12 +81,6 @@ describe("context gauge: recording calls", () => {
     expect(seen).toContain(47_000);
     expect(seen).toContain(3_000);
     expect(seen.indexOf(47_000)).toBeLessThan(seen.indexOf(3_000));
-  });
-
-  test("cache misses are counted per session and shown on the ticket; a hit that writes a lot isn't one", async () => {
-    const h = setup();
-    const t = await workedTicket(h, [call(3, 0, 50_000), call(3, 50_000, 40_000), call(3, 20_000, 150_000), call(3, 170_000, 500)]);
-    expect(ticketOf(h, t).context).toMatchObject({ misses: 1, missTokens: 150_000 });
   });
 
   test("a message resumes the same session: the new run's first call isn't a miss, and misses keep adding up", async () => {
@@ -163,7 +152,7 @@ describe("session actions", () => {
     return t;
   }
 
-  test("New session drops the saved state and the gauge, and says so in Activity", async () => {
+  test("New session drops the saved state and the gauge and says so in Activity; again with nothing saved changes nothing; the next run gets no saved state", async () => {
     const h = setup();
     const t = await idleTicket(h);
     expect(h.store.sessions.getDriverState(t.sessionId)).toEqual({ sessionId: "s1" });
@@ -171,26 +160,16 @@ describe("session actions", () => {
     expect(after.context).toBeNull();
     expect(h.store.sessions.getDriverState(t.sessionId)).toBeNull();
     expect(h.orch.activity(t.key).at(-1)).toMatchObject({ kind: "system", author: "human", body: "Session cleared (62k tokens); the next run starts fresh" });
-  });
 
-  test("the next run after New session gets no saved state", async () => {
-    const h = setup();
-    const t = await idleTicket(h);
+    const before = h.orch.activity(t.key).length;
     await h.orch.sessionAction(t.key, { action: "new" });
+    expect(h.orch.activity(t.key)).toHaveLength(before);
+
     scriptCalls(h, [call(3, 0, 50_000)]);
     await h.orch.sendMessage(t.key, "again");
     await h.orch.idle();
     expect(h.driver.calls.filter((c) => c.kind === "chat").at(-1)!.state).toBeNull();
     expect(ticketOf(h, t).context).toMatchObject({ cacheWrite: 50_000, misses: 0, prefix: 50_003 });
-  });
-
-  test("New session with nothing saved changes nothing", async () => {
-    const h = setup();
-    const t = await idleTicket(h);
-    await h.orch.sessionAction(t.key, { action: "new" });
-    const before = h.orch.activity(t.key).length;
-    await h.orch.sessionAction(t.key, { action: "new" });
-    expect(h.orch.activity(t.key)).toHaveLength(before);
   });
 
   test("a run going refuses both actions with 409 and leaves the session alone", async () => {

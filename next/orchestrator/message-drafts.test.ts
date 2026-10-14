@@ -2,13 +2,12 @@
 // agent is saved on the ticket, so another device can finish it. An app's send uses it up; an
 // agent's message_ticket doesn't. Uploads waiting in a draft survive the startup sweep.
 
-import { afterEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, utimesSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { HarnessApiError, HarnessClient, type HarnessEvent, type Ticket } from "@harness/shared";
+import { HarnessApiError, type HarnessEvent, type Ticket } from "@harness/shared";
 import { createService } from "../support/service";
-import { DummyDriver } from "../../service/src/drivers/dummy";
-import { FakeDriver, makeOrchestrator, stubBrowser, tempHome } from "../../service/src/testing/fakes";
+import { FakeDriver, makeOrchestrator } from "../../service/src/testing/fakes";
 import { png } from "../../service/src/testing/media";
 
 function setup() {
@@ -30,7 +29,7 @@ async function blocked(h: H) {
 }
 
 describe("a message draft", () => {
-  test("is saved on the ticket with its origin, and an upsert carries it", async () => {
+  test("is saved on the ticket with its origin, and an upsert carries it; a save that changes nothing emits nothing, the same text from another device does", async () => {
     const h = setup();
     const t = await blocked(h);
     h.upserts.length = 0;
@@ -40,34 +39,23 @@ describe("a message draft", () => {
     expect(h.upserts.map((u) => u.messageDraft?.text)).toEqual(["Use the second one"]);
     // Not a change to the ticket: its updatedAt (the board's recency) stays put.
     expect(saved.updatedAt).toBe(t.updatedAt);
-  });
 
-  test("a save that changes nothing emits nothing; the same text from another device does", async () => {
-    const h = setup();
-    const t = await blocked(h);
-    h.orch.saveMessageDraft(t.key, { text: "Hi", origin: "a" });
     h.upserts.length = 0;
-    h.orch.saveMessageDraft(t.key, { text: "Hi", origin: "a" });
+    h.orch.saveMessageDraft(t.key, { text: "Use the second one", origin: "phone-1" });
     expect(h.upserts).toHaveLength(0);
-    h.orch.saveMessageDraft(t.key, { text: "Hi", origin: "b" });
+    h.orch.saveMessageDraft(t.key, { text: "Use the second one", origin: "b" });
     expect(h.upserts.map((u) => u.messageDraft?.origin)).toEqual(["b"]);
   });
 
-  test("empty text and no attachments clear it", async () => {
-    const h = setup();
-    const t = await blocked(h);
-    h.orch.saveMessageDraft(t.key, { text: "Hi" });
-    expect(h.orch.saveMessageDraft(t.key, { text: "", origin: "a" }).messageDraft).toBeNull();
-    expect(h.store.tickets.get(t.id)!.messageDraft).toBeNull();
-  });
-
-  test("keeps its attachments with their notes; attachments alone are a draft", async () => {
+  test("keeps its attachments with their notes (attachments alone are a draft); empty text and no attachments clear it", async () => {
     const h = setup();
     const t = await blocked(h);
     const up = h.orch.uploadAttachment(png(2, 2), "Pasted image.png", "image/png");
     const annotation = { width: 2, height: 2, marks: [{ n: 1, x: 1, y: 1, message: "this" }] };
     const saved = h.orch.saveMessageDraft(t.key, { text: "", attachments: [{ id: up.id, annotation }] });
     expect(saved.messageDraft?.attachments).toEqual([{ ...up, annotation }]);
+    expect(h.orch.saveMessageDraft(t.key, { text: "", origin: "a" }).messageDraft).toBeNull();
+    expect(h.store.tickets.get(t.id)!.messageDraft).toBeNull();
   });
 
   test("bad input is a 400, and a draft ticket (no agent yet) is a 409", async () => {
@@ -133,7 +121,6 @@ describe("a message draft", () => {
 describe("over HTTP", () => {
   test("PUT /tickets/:key/message-draft saves it, GET /tickets lists it, POST /messages clears it", async () => {
     const svc = createService();
-    const home = svc.home;
     const client = svc.client();
     const dir = svc.projectDir("web");
     const project = await client.createProject({ path: dir, key: "WEB" });

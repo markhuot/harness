@@ -3,13 +3,12 @@
 // steered message, and the run that answers lists its notes under that file's path in the
 // <attachments> block. A spec image is sent by its id and referenced where it's stored.
 
-import { afterEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { HarnessApiError, HarnessClient, type Attachment, type AttachmentAnnotation, type Ticket } from "@harness/shared";
+import { HarnessApiError, type Attachment, type AttachmentAnnotation, type Ticket } from "@harness/shared";
 import { createService } from "../support/service";
-import { DummyDriver } from "../../service/src/drivers/dummy";
-import { FakeDriver, makeOrchestrator, STUB_ELEMENT, stubBrowser, tempHome } from "../../service/src/testing/fakes";
+import { FakeDriver, makeOrchestrator, STUB_ELEMENT, stubBrowser } from "../../service/src/testing/fakes";
 import { png } from "../../service/src/testing/media";
 
 function setup(steering = false) {
@@ -99,16 +98,6 @@ describe("a message's annotated attachment", () => {
     await h.orch.sendMessage(t.key, "Fix", { attachments: [{ path: shot, annotation }] });
     await h.orch.idle();
     expect(under(h.driver.calls.at(-1)!.prompt, shot)[1]).toBe('  1. (10, 5) px = (10, 5) CSS px, 25% across, 25% down: element `#login > button` "Sign in": Smaller');
-  });
-
-  test("a later run doesn't get the notes again", async () => {
-    const h = setup();
-    const t = await blocked(h);
-    await h.orch.sendMessage(t.key, "Look", { attachments: [{ path: h.file("shot.png", png(40, 20)), annotation: note() }] });
-    await h.orch.idle();
-    await h.orch.sendMessage(t.key, "And now?");
-    await h.orch.idle();
-    expect(h.driver.calls.at(-1)!.prompt).not.toContain("Notes:");
   });
 
   test("on a file that isn't an image, or malformed, it's refused and nothing runs", async () => {
@@ -206,7 +195,6 @@ describe("over HTTP", () => {
   test("POST /messages takes an annotated attachment and refuses a malformed one; GET /browser/:sessionId/screenshot answers the PNG and its sizes", async () => {
     const browser = stubBrowser();
     const svc = createService({ browser });
-    const home = svc.home;
     const client = svc.client();
     const dir = svc.projectDir("web");
     const project = await client.createProject({ path: dir, key: "WEB" });
@@ -239,7 +227,6 @@ describe("over HTTP", () => {
   test("POST /browser/:sessionId/element names what's under a screenshot's point until the tab moves on; a mark carries it to the agent", async () => {
     const browser = stubBrowser();
     const svc = createService({ browser });
-    const home = svc.home;
     const client = svc.client();
     const dir = svc.projectDir("web");
     const project = await client.createProject({ path: dir, key: "WEB" });

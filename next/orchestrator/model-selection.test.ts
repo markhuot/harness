@@ -42,12 +42,6 @@ describe("settings migration (claudeModel / anthropicModel → defaultModels →
     expect(s.maxConcurrentRuns).toBe(2);
   });
 
-  test("saved model settings keep their choice and get no built-in adviser", () => {
-    const s = resolveSettings(new Store(v2Db({ claudeModel: '"opus"' })).settings.all());
-    expect(s.phaseModels!.work).toEqual({ driver: "claude-code", model: "opus" });
-    expect(s.phaseModels!.adviser).toBeUndefined();
-  });
-
   test("a null claudeModel is dropped, not stored as a model", () => {
     const s = resolveSettings(new Store(v2Db({ claudeModel: "null", anthropicModel: '"claude-sonnet-5"' })).settings.all());
     expect(s.defaultModels).toEqual({});

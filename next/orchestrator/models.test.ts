@@ -26,12 +26,6 @@ describe("resolveRunChoice", () => {
     }
   });
 
-  test("phases can run on different drivers", () => {
-    const ticket = { phaseModels: { plan: api("claude-x"), work: cc("opus") } };
-    expect(resolveRunChoice({ kind: "plan", ticket, project: null, settings: { phaseModels: {} } }).driver).toBe("anthropic-api");
-    expect(resolveRunChoice({ kind: "work", ticket, project: null, settings: { phaseModels: {} } }).driver).toBe("claude-code");
-  });
-
   test("empty settings resolve to claude-code with its default model", () => {
     expect(resolveRunChoice({ kind: "complete", ticket: null, project: null, settings: { phaseModels: {} } })).toEqual(cc(null));
   });

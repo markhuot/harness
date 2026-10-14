@@ -2,13 +2,12 @@
 // their paths and its images inline, a running agent gets them steered in, a message the run never
 // took in keeps them in its queued run, and their uploads live as long as the ticket.
 
-import { afterEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { HarnessApiError, HarnessClient, type Attachment, type Ticket } from "@harness/shared";
+import { HarnessApiError, type Attachment, type Ticket } from "@harness/shared";
 import { createService } from "../support/service";
-import { DummyDriver } from "../../service/src/drivers/dummy";
-import { FakeDriver, makeOrchestrator, stubBrowser, tempHome } from "../../service/src/testing/fakes";
+import { FakeDriver, makeOrchestrator, stubBrowser } from "../../service/src/testing/fakes";
 import { png } from "../../service/src/testing/media";
 
 function setup(steering = false) {

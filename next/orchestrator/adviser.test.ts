@@ -42,32 +42,34 @@ describe("the adviser reaches planning and review runs", () => {
     expect(prompts(h, "work")[0]).not.toContain("adviser");
   });
 
-  test("an adviser on the run's own model adds nothing", async () => {
-    const h = setup();
-    h.orch.updateSettings({ phaseModels: { adviser: fake("sonnet") } });
-    await h.orch.createTicket({ projectId: h.project.id, spec: "go" });
-    await h.orch.idle();
-    expect(prompts(h, "review")[0]).not.toContain("adviser");
-  });
-
-  test("a driver without subagents keeps today's prompt", async () => {
-    const h = setup(() => {});
-    await h.orch.createTicket({ projectId: h.project.id, spec: "go" });
-    await h.orch.idle();
-    expect(prompts(h, "review")[0]).not.toContain("adviser");
-  });
-
-  test("an adviser set to another driver adds nothing", async () => {
-    const h = setup();
-    h.orch.updateSettings({ phaseModels: { adviser: { driver: "other", model: "opus" } } });
-    await h.orch.createTicket({ projectId: h.project.id, spec: "go" });
-    await h.orch.idle();
-    expect(prompts(h, "review")[0]).not.toContain("adviser");
-  });
-
-  test("an adviser with no model of its own (the driver default) adds nothing", async () => {
-    const h = setup();
-    h.orch.updateSettings({ phaseModels: { adviser: fake(null) } });
+  test.each<[string, () => ReturnType<typeof setup>]>([
+    [
+      "an adviser on the run's own model adds nothing",
+      () => {
+        const h = setup();
+        h.orch.updateSettings({ phaseModels: { adviser: fake("sonnet") } });
+        return h;
+      },
+    ],
+    ["a driver without subagents keeps today's prompt", () => setup(() => {})],
+    [
+      "an adviser set to another driver adds nothing",
+      () => {
+        const h = setup();
+        h.orch.updateSettings({ phaseModels: { adviser: { driver: "other", model: "opus" } } });
+        return h;
+      },
+    ],
+    [
+      "an adviser with no model of its own (the driver default) adds nothing",
+      () => {
+        const h = setup();
+        h.orch.updateSettings({ phaseModels: { adviser: fake(null) } });
+        return h;
+      },
+    ],
+  ])("%s", async (_title, build) => {
+    const h = build();
     await h.orch.createTicket({ projectId: h.project.id, spec: "go" });
     await h.orch.idle();
     expect(prompts(h, "review")[0]).not.toContain("adviser");
