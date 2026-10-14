@@ -280,10 +280,10 @@ export type Seeded = { project: Project; review: Ticket; planning: Ticket; block
  * on its own, and GREET-6, in review with agent notes for its Details tab. Created one at a time so the
  * keys are always GREET-1 … GREET-6.
  */
-export async function seed(d: Daemon): Promise<Seeded> {
+export async function seed(d: Daemon, extraFiles: Record<string, string> = {}): Promise<Seeded> {
   const api = client(d);
   await seedDummySettings(api);
-  const repo = await seedRepo(join(d.scratch, "greeter"), GREETER_FILES);
+  const repo = await seedRepo(join(d.scratch, "greeter"), { ...GREETER_FILES, ...extraFiles });
   const project = await api<Project>("POST", "/projects", { path: repo, name: "greeter", key: "GREET", useWorktrees: true, defaultDriver: "dummy" });
   const create = (prompt: string, extra: Record<string, unknown> = {}) => api<Ticket>("POST", "/tickets", { projectId: project.id, spec: prompt, driver: "dummy", start: true, ...extra });
   const ticket = async (key: string) => (await api<TicketDetail>("GET", `/tickets/${key}`)).ticket;

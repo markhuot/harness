@@ -14,7 +14,7 @@ Names generated at runtime (loops, helpers, `test.each`) appear as their templat
 
 ## Progress
 
-6081 rows: 3928 open, 753 new, 5 walkthrough, 65 accepted loss, 1330 kept.
+6081 rows: 3916 open, 753 new, 17 walkthrough, 65 accepted loss, 1330 kept.
 
 | Area | Rows | Open | New | Walkthrough | Loss | Kept | Deletable |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | :---: |
@@ -25,7 +25,7 @@ Names generated at runtime (loops, helpers, `test.each`) appear as their templat
 | app/src/renderer | 689 | 689 | 0 | 0 | 0 | 0 |  |
 | editor/scripts | 3 | 3 | 0 | 0 | 0 | 0 |  |
 | editor/src | 31 | 31 | 0 | 0 | 0 | 0 |  |
-| ios sim-check | 92 | 29 | 0 | 5 | 58 | 0 |  |
+| ios sim-check | 92 | 17 | 0 | 17 | 58 | 0 |  |
 | ios snapshot tests | 30 | 26 | 0 | 0 | 4 | 0 |  |
 | ios/HarnessKit (swift) | 1330 | 0 | 0 | 0 | 0 | 1330 | yes |
 | ios/Tools | 153 | 153 | 0 | 0 | 0 | 0 |  |
@@ -2521,10 +2521,10 @@ Signed off by the human. They stay listed here so each can be brought back at th
 - mentionChecks › composer: @src/a lists src/app.ts, a tap completes it and Send posts the message (open)
 - mentionChecks › New session: /co lists the agent's commands, a tap completes one, and the toolbar launches (open)
 - draftChecks › composer: moving the caret keeps what's typed (open)
-- usageChecks › usage: the info popover explains the limits (open)
-- usageChecks › usage: Projected at reset shows pace, the tick and too-early (open)
+- usageChecks › usage: the info popover explains the limits (walkthrough: next/walkthrough/ios.ts › plan usage)
+- usageChecks › usage: Projected at reset shows pace, the tick and too-early (walkthrough: next/walkthrough/ios.ts › plan usage)
 - usageChecks › usage: the filter shows one driver, and the choice survives a relaunch
-- usageChecks › usage: Hide collapses the section to its header (open)
+- usageChecks › usage: Hide collapses the section to its header (walkthrough: next/walkthrough/ios.ts › plan usage)
 - attachmentChecks › tapping an inline image opens the viewer on it; swiping pages; Close closes (open)
 - attachmentChecks › an image smaller than the screen opens centred at its own size (open)
 - attachmentChecks › swiping down closes the viewer (open)
@@ -2536,21 +2536,21 @@ Signed off by the human. They stay listed here so each can be brought back at th
 - interactionChains › prompt editor: a bad variable shows inline and can't save; Save stores the fixed override, Reset to built-in (confirmed) clears it (open)
 - interactionChains › prompt editor: a tapped variable goes in at the cursor, and the next key follows it (open)
 - interactionChains › ticket details: tapping a model in the Models picker saves it to the phase (open)
-- interactionChains › the gauge's 44 pt tap target sits on the ticket key's row, after it (open)
-- interactionChains › a gauge opens its menu and its About popover (open)
-- interactionChains › New session asks first, and Limit… opens the limit sheet (open)
-- interactionChains › the misses row in the gauge menu opens its explanation (open)
-- interactionChains › a compacting session shows the spinner gauge and a Compacting… composer (open)
+- interactionChains › the gauge's 44 pt tap target sits on the ticket key's row, after it (walkthrough: next/walkthrough/ios.ts › context gauge)
+- interactionChains › a gauge opens its menu and its About popover (walkthrough: next/walkthrough/ios.ts › context gauge)
+- interactionChains › New session asks first, and Limit… opens the limit sheet (walkthrough: next/walkthrough/ios.ts › context gauge limit)
+- interactionChains › the misses row in the gauge menu opens its explanation (walkthrough: next/walkthrough/ios.ts › context gauge states)
+- interactionChains › a compacting session shows the spinner gauge and a Compacting… composer (walkthrough: next/walkthrough/ios.ts › context gauge states)
 - interactionChains › touch and hold on a card previews its ticket on the Spec tab, with no moves in the menu, and offers the ticket's actions (open)
-- interactionChains › a relative file link in a spec opens the file viewer in the ticket's folder, at its lines (open)
+- interactionChains › a relative file link in a spec opens the file viewer in the ticket's folder, at its lines (walkthrough: next/walkthrough/ios.ts › file link)
 - interactionChains › the bottom bar's field opens the palette; Show child tickets runs and its label flips (walkthrough: next/walkthrough/ios.ts › command palette)
 - interactionChains › a leading > shows only commands, not the ticket that matches (walkthrough: next/walkthrough/ios.ts › command palette)
 - interactionChains › ⌘K over a ticket sheet lists its actions; Copy ticket key copies it (walkthrough: next/walkthrough/ios.ts › ticket commands)
-- interactionChains › Open file… (⌘P) finds a file in the ticket's folder and opens it at the typed lines (open)
+- interactionChains › Open file… (⌘P) finds a file in the ticket's folder and opens it at the typed lines (walkthrough: next/walkthrough/ios.ts › open file palette)
 - interactionChains › Settings → General has a Save on blur switch that flips when pressed (walkthrough: next/walkthrough/ios.ts › settings)
-- interactionChains › a Terraform file opens highlighted, like the Changes tab shows it (open)
+- interactionChains › a Terraform file opens highlighted, like the Changes tab shows it (walkthrough: next/walkthrough/ios.ts › terraform highlight)
 - interactionChains › the file editor edits, shows the unsaved dot and writes the file with Save (open)
-- agentsFilterChecks › Agents & tasks: the filter survives opening a row and coming back (open)
+- agentsFilterChecks › Agents & tasks: the filter survives opening a row and coming back (walkthrough: next/walkthrough/ios.ts › agents & tasks filter)
 
 ### ios snapshot tests
 

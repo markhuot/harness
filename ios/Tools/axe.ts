@@ -81,6 +81,8 @@ export function axeFor(udid: string, developerDir: string) {
     keyCombo: (modifier: number, key: number) => run("key-combo", "--modifiers", String(modifier), "--key", String(key)),
     swipe: (x1: number, y1: number, x2: number, y2: number, seconds = 0.6) =>
       run("swipe", "--start-x", String(x1), "--start-y", String(y1), "--end-x", String(x2), "--end-y", String(y2), "--duration", String(seconds)),
+    /** A tap at a point, for what has no label of its own (a link inside a paragraph, a sheet's Cancel). */
+    tapAt: (x: number, y: number) => run("tap", "-x", String(Math.round(x)), "-y", String(Math.round(y))),
     /** A press held for a moment: a Toggle ignores the instantaneous tap `tap` sends. */
     press: (x: number, y: number) => run("touch", "-x", String(Math.round(x)), "-y", String(Math.round(y)), "--down", "--up", "--delay", "0.15"),
   };

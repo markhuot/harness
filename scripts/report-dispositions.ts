@@ -107,6 +107,16 @@ const SIM_WALKTHROUGH: { name: RegExp; screen: string }[] = [
   { name: /bottom bar's field opens the palette/, screen: "command palette" },
   { name: /leading > shows only commands/, screen: "command palette" },
   { name: /⌘K over a ticket sheet/, screen: "ticket commands" },
+  { name: /^Agents & tasks: the filter survives/, screen: "agents & tasks filter" },
+  { name: /a relative file link in a spec opens the file viewer/, screen: "file link" },
+  { name: /a Terraform file opens highlighted/, screen: "terraform highlight" },
+  { name: /^Open file… \(⌘P\) finds a file/, screen: "open file palette" },
+  { name: /the gauge's 44 pt tap target sits on the ticket key's row/, screen: "context gauge" },
+  { name: /a gauge opens its menu and its About popover/, screen: "context gauge" },
+  { name: /New session asks first, and Limit… opens the limit sheet/, screen: "context gauge limit" },
+  { name: /the misses row in the gauge menu opens its explanation/, screen: "context gauge states" },
+  { name: /a compacting session shows the spinner gauge/, screen: "context gauge states" },
+  { name: /^usage: /, screen: "plan usage" },
 ];
 
 export function dispositionOf(row: Row): Disposition {

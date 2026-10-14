@@ -150,6 +150,7 @@ import { setSpawnObserver, acquire, acquireReady, daemonAnswers, checkDisk, ensu
 import { CheckSelector, noMatchMessage, parseGrep } from "./sim-grep";
 import { chooseKept, claimKept, staleAppNote, hashApp, hashService, listKept, MARKER_KEY, planApp, readReuseState, REUSE_VERSION, writeReuseState, type ReuseState, type Want } from "./sim-reuse";
 import { callerSite, diffProfiles, Profile, summarize, type ProfileData } from "./profile";
+import { GREETINGS_PATH, GREETING_FOR, GREET_JA, greetings, usageFixture, type UsageReport } from "./fixtures";
 import { PROBE_FILE, parseState, settled as probeSettled, waitFor as probeWaitFor, type DebugState } from "./probe";
 import { parsePrepare, plan as planRun, resolveShot, SEED_NAMES, type Entry, type Plan, type SeedName } from "./sim-select";
 
@@ -989,28 +990,6 @@ async function startDaemon(want: Want) {
 // --usage: the dummy driver reports no plan usage, and the real ones read the account's login, so
 // the app talks to this proxy instead: it forwards everything to the daemon (HTTP and the event
 // socket) except GET /usage, which it answers from `usageReport`.
-type UsageReport = { drivers: unknown[] };
-const WEEK_S = 7 * 86400;
-const usageNow = () => Date.now();
-/** A window `elapsed` of the way through `windowSeconds`. */
-const usageWindow = (id: string, label: string, used: number, windowSeconds: number, elapsed: number) => ({
-  id, label, usedPercent: used, windowSeconds, resetsAt: Math.round(usageNow() + (1 - elapsed) * windowSeconds * 1000),
-});
-/** Claude: amber 5-hour (red when projected), a weekly that's green projected, an Opus week too early to project, a Sonnet week that's full. Copilot can't be read. */
-const usageFixture = (): UsageReport => ({
-  drivers: [
-    {
-      driver: "claude-code", name: "Claude Code", fetchedAt: usageNow() - 180_000,
-      windows: [
-        usageWindow("five_hour", "5-hour", 82, 18000, 1 - (2 * 3600 + 14 * 60) / 18000),
-        usageWindow("seven_day", "Weekly", 45, WEEK_S, 0.8),
-        usageWindow("seven_day_opus", "Weekly · Opus", 2, WEEK_S, 0.05),
-        usageWindow("seven_day_sonnet", "Weekly · Sonnet", 100, WEEK_S, 0.5),
-      ],
-    },
-    { driver: "github-copilot", name: "GitHub Copilot", windows: [], error: "Sign in to GitHub to see Copilot usage", fetchedAt: usageNow() - 180_000 },
-  ],
-});
 const usageReport: UsageReport = usageFixture();
 const usageProxy = usageOnly
   ? startDaemonProxy(() => base, { intercept: (req) => (req.method === "GET" && new URL(req.url).pathname === "/usage" ? Response.json({ data: usageReport }) : undefined) })
@@ -1105,34 +1084,7 @@ const CODE_BRIEF = [
  * edited in the changes ticket's worktree (greetingFor rewritten, greet_da removed, greet_ja
  * changed, greet_eo added) for the viewer's Diff tab.
  */
-const GREETINGS_PATH = "src/greetings.ts";
-const LOCALES: [string, string][] = [
-  ["en", "Hello"], ["de", "Hallo"], ["fr", "Bonjour"], ["es", "Hola"], ["it", "Ciao"], ["pt", "Olá"],
-  ["nl", "Hallo"], ["sv", "Hej"], ["da", "Hej"], ["fi", "Hei"], ["pl", "Cześć"], ["cs", "Ahoj"],
-  ["tr", "Merhaba"], ["ja", "Konnichiwa"], ["ko", "Annyeong"], ["hi", "Namaste"], ["sw", "Jambo"], ["haw", "Aloha"],
-];
-function greetingsLines(edited: boolean): string[] {
-  const out = ["// Greetings by locale, for main() and the API.", "", "export const GREETINGS: Record<string, string> = {", ...LOCALES.map(([k, v]) => `  ${k}: "${v}",`), "};", ""];
-  out.push('/** The greeting for a locale: "de-AT" falls back to "de", anything unknown to English. */', "export function greetingFor(locale: string): string {");
-  if (edited) out.push("  const [lang] = locale.toLowerCase().split(/[-_]/);", "  return GREETINGS[lang!] ?? GREETINGS.en!;");
-  else out.push('  const lang = locale.split("-")[0];', '  return GREETINGS[lang] || "Hello";');
-  out.push("}", "");
-  for (const [k] of LOCALES) {
-    if (edited && k === "da") continue;
-    out.push(`export function greet_${k}(name: string): string {`, edited && k === "ja" ? "  return `${GREETINGS.ja}, ${name}-san!`;" : `  return \`\${GREETINGS.${k}}, \${name}!\`;`, "}", "");
-  }
-  if (edited) out.push("export function greet_eo(name: string): string {", "  return `Saluton, ${name}!`;", "}", "");
-  return out;
-}
-const greetings = (edited: boolean) => greetingsLines(edited).join("\n");
-/** 1-based lines of the function whose first line starts with `head`, closing brace included. */
-function functionLines(lines: string[], head: string): [number, number] {
-  const start = lines.findIndex((l) => l.startsWith(head));
-  return [start + 1, lines.indexOf("}", start) + 1];
-}
-const GREETING_FOR = functionLines(greetingsLines(false), "export function greetingFor");
-/** Far enough down that the viewer has to scroll to it. */
-const GREET_JA = functionLines(greetingsLines(true), "export function greet_ja");
+// GREETINGS_PATH, greetings(), GREETING_FOR and GREET_JA live in ./fixtures.
 
 /**
  * Settings → Prompts: a working override of the review message, and a broken one of the Files
