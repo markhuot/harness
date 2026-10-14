@@ -2,10 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { HarnessEvent, Ticket } from "@harness/shared";
-import type { DriverEvent, RunRequest } from "../drivers/types";
-import { FakeDriver, makeOrchestrator } from "../testing/fakes";
-import { HarnessError } from "./errors";
-import { tokensLabel } from "./orchestrator";
+import type { DriverEvent, RunRequest } from "../../service/src/drivers/types";
+import { FakeDriver, makeOrchestrator } from "../../service/src/testing/fakes";
+import { HarnessError } from "../../service/src/orchestrator/errors";
+import { tokensLabel } from "../../service/src/orchestrator/orchestrator";
 
 type Call = Extract<DriverEvent, { type: "call" }>["call"];
 const call = (input: number, cacheRead: number, cacheWrite: number, output = 50): DriverEvent => ({ type: "call", call: { input, cacheRead, cacheWrite, output } });

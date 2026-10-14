@@ -6,10 +6,10 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { HarnessApiError, HarnessClient, type Attachment, type Ticket } from "@harness/shared";
-import { createHarness, type Harness } from "../app";
-import { DummyDriver } from "../drivers/dummy";
-import { FakeDriver, makeOrchestrator, stubBrowser, tempHome } from "../testing/fakes";
-import { png } from "../testing/media";
+import { createService } from "../support/service";
+import { DummyDriver } from "../../service/src/drivers/dummy";
+import { FakeDriver, makeOrchestrator, stubBrowser, tempHome } from "../../service/src/testing/fakes";
+import { png } from "../../service/src/testing/media";
 
 function setup(steering = false) {
   const driver = new FakeDriver();
@@ -206,19 +206,12 @@ describe("uploads", () => {
 });
 
 describe("over HTTP", () => {
-  let harness: Harness | null = null;
-  afterEach(async () => {
-    await harness?.stop();
-    harness = null;
-  });
-
   test("POST /messages takes attachments; each is served from its transcript entry with ?token=, 404 once gone", async () => {
-    const home = tempHome("harness-message-att-http-");
-    harness = await createHarness({ home, port: 0, drivers: [new DummyDriver({ delayMs: 0 })], browser: stubBrowser(), watchers: null, log: () => {} });
-    const client = new HarnessClient({ baseUrl: harness.url, token: harness.token });
-    await client.updateSettings({ defaultDriver: "dummy" });
-    const dir = join(home, "work", "web");
-    mkdirSync(dir, { recursive: true });
+    const browser = stubBrowser();
+    const svc = createService({ browser });
+    const home = svc.home;
+    const client = svc.client();
+    const dir = svc.projectDir("web");
     const project = await client.createProject({ path: dir, key: "WEB" });
     const t = await client.createTicket({ projectId: project.id, spec: "Plan it", start: false });
     const up = await client.uploadAttachment(new Blob([png(2, 2)], { type: "image/png" }), "Pasted image", "image/png");
@@ -230,19 +223,19 @@ describe("over HTTP", () => {
     const sent = entry!.content.type === "text" ? entry!.content.attachments! : [];
     expect(sent).toEqual([up, { id: expect.any(String), path: other, name: "notes.txt", source: "file", kind: "file", mimeType: "text/plain", size: 5 }]);
 
-    const img = await fetch(client.attachmentUrl(up.id));
+    const img = await svc.fetch(client.attachmentUrl(up.id));
     expect([img.status, img.headers.get("content-type")]).toEqual([200, "image/png"]);
     expect(Buffer.from(await img.arrayBuffer()).equals(png(2, 2))).toBe(true);
-    expect((await fetch(client.attachmentUrl(sent[1]!.id), { method: "HEAD" })).status).toBe(200);
+    expect((await svc.fetch(client.attachmentUrl(sent[1]!.id), { method: "HEAD" })).status).toBe(200);
     // Legacy: by transcript entry and index, for iPhone apps from before the registry.
-    const legacy = (id: string, i: number) => `${harness!.url}/transcript/${id}/attachments/${i}?token=${harness!.token}`;
-    expect((await fetch(legacy(entry!.id, 0))).status).toBe(200);
+    const legacy = (id: string, i: number) => `http://service.test/transcript/${id}/attachments/${i}?token=${svc.token}`;
+    expect((await svc.fetch(legacy(entry!.id, 0))).status).toBe(200);
     rmSync(other);
-    expect((await fetch(client.attachmentUrl(sent[1]!.id), { method: "HEAD" })).status).toBe(404);
-    expect((await fetch(legacy(entry!.id, 1), { method: "HEAD" })).status).toBe(404);
-    expect((await fetch(legacy(entry!.id, 5))).status).toBe(404);
-    expect((await fetch(legacy("nope", 0))).status).toBe(404);
-    expect((await fetch(legacy(entry!.id, 0).replace(/token=[^&]+/, "token=nope"))).status).toBe(401);
+    expect((await svc.fetch(client.attachmentUrl(sent[1]!.id), { method: "HEAD" })).status).toBe(404);
+    expect((await svc.fetch(legacy(entry!.id, 1), { method: "HEAD" })).status).toBe(404);
+    expect((await svc.fetch(legacy(entry!.id, 5))).status).toBe(404);
+    expect((await svc.fetch(legacy("nope", 0))).status).toBe(404);
+    expect((await svc.fetch(legacy(entry!.id, 0).replace(/token=[^&]+/, "token=nope"))).status).toBe(401);
 
     const missing = await client.sendMessage(t.key, "x", { attachments: [{ path: join(home, "gone.png") }] }).catch((e) => e);
     expect(missing).toBeInstanceOf(HarnessApiError);

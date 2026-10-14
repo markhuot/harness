@@ -7,11 +7,11 @@ import { appendFileSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { tempDir } from "@harness/shared/testing";
-import type { DriverEvent, RunRequest } from "../drivers/types";
+import type { DriverEvent, RunRequest } from "../../service/src/drivers/types";
 import { Database } from "bun:sqlite";
-import { migrate, MIGRATIONS } from "../db";
-import { FakeDriver, makeOrchestrator } from "../testing/fakes";
-import { cleanEnd, confineOutputPath, dummyTaskOutputDir, readSnapshot, readTaskOutput, stripAnsi } from "../task-output";
+import { migrate, MIGRATIONS } from "../../service/src/db";
+import { FakeDriver, makeOrchestrator } from "../../service/src/testing/fakes";
+import { cleanEnd, confineOutputPath, dummyTaskOutputDir, readSnapshot, readTaskOutput, stripAnsi } from "../../service/src/task-output";
 
 // Task output has to live where the CLI keeps it, so these files go under /tmp/claude-<uid>.
 const outDir = join(dummyTaskOutputDir(), `test-${randomUUID()}`);

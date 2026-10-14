@@ -5,11 +5,11 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { HarnessEvent, Subagent } from "@harness/shared";
-import type { DriverEvent, RunRequest } from "../drivers/types";
-import { Store } from "../store";
+import type { DriverEvent, RunRequest } from "../../service/src/drivers/types";
+import { Store } from "../../service/src/store";
 import { Database } from "bun:sqlite";
-import { migrate, MIGRATIONS, openDb } from "../db";
-import { FakeDriver, makeOrchestrator } from "../testing/fakes";
+import { migrate, MIGRATIONS, openDb } from "../../service/src/db";
+import { FakeDriver, makeOrchestrator } from "../../service/src/testing/fakes";
 
 function setup(script: (req: RunRequest) => AsyncGenerator<DriverEvent>) {
   const driver = new FakeDriver();

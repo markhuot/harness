@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import type { HarnessEvent, PlanWindow } from "@harness/shared";
-import { EventBus } from "../events";
-import { PlanUsageError } from "../drivers/types";
-import { FakeDriver } from "../testing/fakes";
-import { BACKOFF_MS, MAX_BACKOFF_MS, PlanUsageTracker } from "./plan-usage";
+import { EventBus } from "../../service/src/events";
+import { PlanUsageError } from "../../service/src/drivers/types";
+import { FakeDriver } from "../../service/src/testing/fakes";
+import { BACKOFF_MS, MAX_BACKOFF_MS, PlanUsageTracker } from "../../service/src/orchestrator/plan-usage";
 
 const window = (usedPercent: number, over: Partial<PlanWindow> = {}): PlanWindow => ({ id: "five_hour", label: "5-hour", usedPercent, resetsAt: 9_000_000, windowSeconds: 18_000, ...over });
 

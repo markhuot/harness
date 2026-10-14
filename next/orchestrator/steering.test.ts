@@ -4,8 +4,8 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { Ticket } from "@harness/shared";
-import { FakeDriver, makeOrchestrator } from "../testing/fakes";
-import { STEER_FALLBACK_STATUS } from "./orchestrator";
+import { FakeDriver, makeOrchestrator } from "../../service/src/testing/fakes";
+import { STEER_FALLBACK_STATUS } from "../../service/src/orchestrator/orchestrator";
 
 function setup(steering = true) {
   const driver = new FakeDriver();
