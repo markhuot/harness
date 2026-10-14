@@ -1898,8 +1898,11 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
     const projects = await findElement(udid, (x) => x === "Projects");
     if (!projects) throw new Error("no Projects button on the board");
     const barLeft = projects.frame.x, barRight = newSession.frame.x + newSession.frame.width;
+    // A card's accessibility frame stops short of its ✕ (the open button), whose capsule ends 10pt past it.
+    const closes = (await nodes(udid)).filter((n) => n.AXUniqueId === "ticket-dock-close");
     for (const n of [...cards, ...(more ? [more] : [])]) {
-      const right = n.frame.x + n.frame.width;
+      const x = closes.find((c) => c.frame.y >= n.frame.y && c.frame.y < n.frame.y + n.frame.height);
+      const right = x ? x.frame.x + x.frame.width + 10 : n.frame.x + n.frame.width;
       if (Math.abs(n.frame.x - barLeft) > 2 || Math.abs(right - barRight) > 2)
         throw new Error(`"${n.AXLabel}" (${Math.round(n.frame.x)}–${Math.round(right)}) isn't as wide as the bar (${Math.round(barLeft)}–${Math.round(barRight)})`);
     }
