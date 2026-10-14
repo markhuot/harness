@@ -40,8 +40,10 @@ export function createDiffEditor(parent: HTMLElement, options: DiffEditorOptions
   view.render({ oldFile: side(options.original, "a"), newFile: side(options.modified, "b"), containerWrapper: parent });
   return {
     setTheme(input) {
+      const was = JSON.stringify(shikiThemes(theme));
       theme = { ...theme, ...normalizeTheme(input) };
       syncTokens();
+      if (JSON.stringify(shikiThemes(theme)) === was) return;
       view.setOptions(opts());
       view.rerender();
     },

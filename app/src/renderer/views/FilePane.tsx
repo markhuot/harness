@@ -1,5 +1,5 @@
 // A file pane: one project or ticket file in full, editable (views/FileViewer.tsx draws it with the
-// CodeMirror editor in editor/), opened from a file link in chat (components/Markdown.tsx) or the
+// @pierre/diffs editor in editor/), opened from a file link in chat (components/Markdown.tsx) or the
 // store's openFile. The linked lines are highlighted and scrolled into view, on open and whenever a
 // link moves the pane to other lines. Copy link gives a link to the selected lines, else the linked ones.
 //
@@ -8,7 +8,7 @@
 // shows another file; without it, closing or replacing a pane with unsaved edits asks first.
 //
 // A file with uncommitted changes (git.dirty, or untracked in a repo) gets a Diff tab against HEAD
-// in the merge view. Contents and diff are refetched on window focus, on a reconnect (epoch), when
+// in the side-by-side diff view. Contents and diff are refetched on window focus, on a reconnect (epoch), when
 // the ticket's worktree or branch changes, and with the refresh button; what's on screen stays until
 // the new copy arrives, and a clean editor takes it silently while one with edits keeps them.
 
@@ -196,12 +196,9 @@ export function FilePane({ paneId, content, zoomed }: { paneId: string; content:
     [writeFile, toast],
   );
   const selectedLines = (): { startLine: number; endLine?: number } | null => {
-    const sel = handle.current?.view.state.selection.main;
-    if (!sel || sel.empty) return null;
-    const doc = handle.current!.view.state.doc;
-    const startLine = doc.lineAt(sel.from).number;
-    const endLine = doc.lineAt(sel.to).number;
-    return endLine > startLine ? { startLine, endLine } : { startLine };
+    const lines = handle.current?.getSelectionLines();
+    if (!lines) return null;
+    return lines.end > lines.start ? { startLine: lines.start, endLine: lines.end } : { startLine: lines.start };
   };
 
   // --- actions -------------------------------------------------------------------------------

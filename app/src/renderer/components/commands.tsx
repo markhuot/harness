@@ -108,9 +108,16 @@ const CAPTURE = "canvas, [data-terminal]";
 const CONTROL = "button, a[href], summary, [role=button], [role=tab], [role=menuitem], [role=menuitemcheckbox], [role=switch], input";
 const OVERLAY = ".modal, .menu, .palette";
 
+/** The focused element inside any shadow roots under `el` (the file editor draws its text in one). */
+function deepest(el: Element | null): Element | null {
+  let a = el;
+  while (a?.shadowRoot?.activeElement) a = a.shadowRoot.activeElement;
+  return a;
+}
+
 export function keyContext(el: Element | null): KeyContext {
   return {
-    inText: !!el?.closest(TEXT),
+    inText: !!deepest(el)?.closest(TEXT),
     inCapture: !!el?.closest(CAPTURE),
     overlay: !!document.querySelector(OVERLAY),
     onControl: !!el?.closest(CONTROL),

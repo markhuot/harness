@@ -22,6 +22,7 @@ function fakeHandle(options: EditorOptions): EditorHandle {
     markSaved: () => void calls.push("markSaved"),
     focus: () => void calls.push("focus"),
     setReadOnly: () => {},
+    setSelection: () => {},
     getSelectionLines: () => null,
     scrollToCursor: () => void calls.push("scrollToCursor"),
     probe: () => ({ markedLines: ["b"], selection: { anchor: 1, head: 2 }, dirty, scrollY: 0, lineCount: 4 }),

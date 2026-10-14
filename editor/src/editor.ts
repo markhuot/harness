@@ -4,7 +4,7 @@
 
 import { VirtualizedFile, Virtualizer, type FileContents } from "@pierre/diffs";
 import { Editor } from "@pierre/diffs/edit";
-import { MAX_HIGHLIGHT_LINES, countLines, createBaseline, clampRange, offsetOf, selectionLines, type LineRange } from "./doc";
+import { MAX_HIGHLIGHT_LINES, countLines, createBaseline, clampRange, offsetOf, positionOf, selectionLines, type LineRange } from "./doc";
 import { PLAIN, resolveLanguage } from "./language";
 import { applyTokens, chromeCSS, normalizeTheme, shikiThemes, type EditorTheme, type ThemeInput, type TokenMap } from "./theme";
 
@@ -37,6 +37,8 @@ export interface EditorHandle {
   markSaved(contents?: string): void;
   focus(): void;
   setReadOnly(readOnly: boolean): void;
+  /** Puts the cursor at a document offset (a selection to `head` when given) and scrolls it into view. */
+  setSelection(anchor: number, head?: number): void;
   /** The lines the selection covers (1-based, inclusive), or null for a caret. */
   getSelectionLines(): LineRange | null;
   /** Scrolls the caret's line into view (the keyboard came up over it). */
@@ -77,6 +79,9 @@ function emitter<A extends unknown[]>() {
 /** The shadow root @pierre/diffs draws a file into. */
 export const shadowOf = (parent: ParentNode): ShadowRoot | null => parent.querySelector("diffs-container")?.shadowRoot ?? null;
 
+/** How many frames a reveal keeps its scroll position asserted while the file lays out (about half a second). */
+const SETTLE_FRAMES = 30;
+
 let keys = 0;
 
 export function createEditor(parent: HTMLElement, options: EditorOptions): EditorHandle {
@@ -109,17 +114,61 @@ export function createEditor(parent: HTMLElement, options: EditorOptions): Edito
   const language = () => (countLines(contents) > MAX_HIGHLIGHT_LINES ? PLAIN : resolveLanguage(options.language, options.languages));
   const fileName = options.language && /[./\\]/.test(options.language) ? options.language : `file.${options.language ?? "txt"}`;
 
-  const text = () => editor?.getText() ?? contents;
+  /**
+   * The editor can't take selections (or report them) until it has drawn the file, and the virtualized
+   * file draws on a later frame, so a call that finds it unready is tried again each frame until it takes.
+   */
+  let generation = 0;
+  const whenReady = (fn: () => void, tries = 120) => {
+    const mine = generation;
+    const attempt = (left: number) => {
+      if (mine !== generation) return;
+      try {
+        fn();
+      } catch (error) {
+        if (left > 0) requestAnimationFrame(() => attempt(left - 1));
+        else console.error(error);
+      }
+    };
+    attempt(tries);
+  };
+  /**
+   * Puts the cursor somewhere. The editor focuses itself to show a selection, and gives focus back
+   * badly (typing stops landing after a blur and a refocus), so the cursor is only set where focus is wanted.
+   */
+  const select = (selections: Parameters<Editor["setSelections"]>[0]) => {
+    editor?.setSelections(selections);
+    focusing = true;
+  };
+  /** Focus was asked for, or the editor took it to show a cursor. */
+  let focusing = false;
+  const focusEditor = () => {
+    focusing = true;
+    editor?.focus();
+  };
+
+  /** Selections and the view state, once the editor has a document (undefined before that). */
+  const viewState = () => {
+    try {
+      return editor?.getViewState();
+    } catch {
+      return undefined;
+    }
+  };
+
+  /** The document: `contents` follows every edit (onChange), so it needs nothing from an editor that hasn't drawn yet. */
+  const text = () => contents;
 
   const syncDirty = () => {
     if (base.check(text())) dirtyEv.emit(base.dirty);
   };
 
   /** Draws the document into a fresh file (and edit session unless read-only), keeping the scroll position. */
-  const build = (view?: { selections?: ReturnType<Editor<"file">["getViewState"]>["selections"]; scrollTop: number }) => {
+  const build = (view?: { selections?: ReturnType<Editor<"file">["getViewState"]>["selections"]; scrollTop: number; focused?: boolean }) => {
     const themes = shikiThemes(theme);
     virtualizer = new Virtualizer();
     virtualizer.setup(page ? parent.ownerDocument : parent);
+    generation++;
     file = new VirtualizedFile({ ...themes, disableFileHeader: true, overflow: "scroll", unsafeCSS: chromeCSS }, virtualizer);
     const input: FileContents = { name: fileName, contents, lang: language() as FileContents["lang"], cacheKey: `editor-${++keys}` };
     file.render({ file: input, containerWrapper: parent });
@@ -130,24 +179,33 @@ export function createEditor(parent: HTMLElement, options: EditorOptions): Edito
             marked = null;
             file?.setSelectedLines(null);
           }
+          contents = ed.getText();
           syncDirty();
-          change.emit(text());
+          change.emit(contents);
         },
-        onBlur: () => blur.emit(),
+        onBlur: () => {
+          focusing = false;
+          blur.emit();
+        },
       });
       editor = ed;
       stopEdit = ed.edit(file);
-      if (view?.selections?.length) ed.setSelections(view.selections as never);
+      const selections = view?.selections;
+      // The cursor and focus come back only if the editor had focus: an idle one has no cursor worth keeping.
+      if (view?.focused) {
+        whenReady(() => {
+          if (selections?.length) select(selections as never);
+          focusEditor();
+        });
+      }
     }
     if (view) scrollEl().scrollTop = view.scrollTop;
     if (marked && file) file.setSelectedLines(marked);
   };
 
   const teardown = () => {
-    if (editor) {
-      contents = editor.getText();
-      stopEdit?.();
-    }
+    generation++;
+    if (editor) stopEdit?.();
     editor = stopEdit = undefined;
     file?.cleanUp();
     virtualizer?.cleanUp();
@@ -157,7 +215,7 @@ export function createEditor(parent: HTMLElement, options: EditorOptions): Edito
 
   /** Draws the document again (new text, or a read-only change), keeping the selection and scroll position. */
   const rebuild = (next?: string) => {
-    const view = { selections: editor?.getViewState().selections, scrollTop: scrollEl().scrollTop };
+    const view = { selections: viewState()?.selections, scrollTop: scrollEl().scrollTop, focused: !!shadowOf(parent)?.activeElement };
     teardown();
     if (next !== undefined) contents = next;
     build(view);
@@ -179,9 +237,21 @@ export function createEditor(parent: HTMLElement, options: EditorOptions): Edito
     const { start, end } = clampRange(range, countLines(text()));
     marked = { start, end };
     file?.setSelectedLines(marked);
-    // An empty cursor at the start, never a selection the first keystroke would replace.
-    editor?.setSelections([{ start: { line: start - 1, character: 0 }, end: { line: start - 1, character: 0 }, direction: "none" }]);
-    scrollTo(Math.floor((start + end) / 2), "center");
+    const middle = Math.floor((start + end) / 2);
+    scrollTo(middle, "center");
+    // The virtualizer keeps the view anchored while the file lays out (its first measure can shift it a
+    // whole file's height), so the scroll is asserted again over the next frames, until the reader moves it.
+    let frames = 0;
+    let moved = false;
+    const stop = () => (moved = true);
+    for (const type of ["wheel", "touchstart", "keydown", "pointerdown"]) parent.addEventListener(type, stop, { once: true, capture: true });
+    const settle = () => {
+      if (moved || mine !== generation || marked?.start !== start || ++frames > SETTLE_FRAMES) return;
+      scrollTo(middle, "center");
+      requestAnimationFrame(settle);
+    };
+    const mine = generation;
+    requestAnimationFrame(settle);
   };
 
   // Cmd/Ctrl+S inside the editor (the keystroke is composed through the shadow root to the parent).
@@ -194,18 +264,18 @@ export function createEditor(parent: HTMLElement, options: EditorOptions): Edito
 
   build();
   if (options.range) {
-    // The first lines render a frame later; reveal once the layout exists.
     revealLines(options.range);
-    requestAnimationFrame(() => file && marked && scrollTo(Math.floor((marked.start + marked.end) / 2), "center"));
   }
 
   return {
     setTheme(input) {
+      const was = JSON.stringify(shikiThemes(theme));
       theme = { ...theme, ...normalizeTheme(input) };
       syncTokens();
-      if (!file) return;
-      file.setOptions({ ...shikiThemes(theme), disableFileHeader: true, overflow: "scroll", unsafeCSS: chromeCSS });
-      file.rerender();
+      // Colors that didn't change need no redraw (the page's own tokens are CSS variables, live already).
+      if (!file || JSON.stringify(shikiThemes(theme)) === was) return;
+      // Redrawn from scratch: a file re-rendered in place stops taking keystrokes.
+      rebuild();
     },
     reveal: revealLines,
     getContents: text,
@@ -218,20 +288,26 @@ export function createEditor(parent: HTMLElement, options: EditorOptions): Edito
     markSaved(saved) {
       if (base.mark(saved ?? text(), text())) dirtyEv.emit(base.dirty);
     },
-    focus: () => editor?.focus(),
+    focus: () => whenReady(focusEditor),
     setReadOnly(on) {
       if (on === readOnly) return;
       readOnly = on;
       rebuild();
     },
-    getSelectionLines: () => selectionLines(editor?.getViewState().selections?.[0]),
+    setSelection(anchor, head = anchor) {
+      const t = text();
+      const [a, b] = [positionOf(t, anchor), positionOf(t, head)];
+      const forward = anchor <= head;
+      whenReady(() => select([{ start: forward ? a : b, end: forward ? b : a, direction: anchor === head ? "none" : forward ? "forward" : "backward" }]));
+    },
+    getSelectionLines: () => selectionLines(viewState()?.selections?.[0]),
     scrollToCursor() {
-      const sel = editor?.getViewState().selections?.[0];
+      const sel = viewState()?.selections?.[0];
       if (sel) scrollTo(sel.end.line + 1, "nearest");
     },
     probe() {
       const t = text();
-      const sel = editor?.getViewState().selections?.[0];
+      const sel = viewState()?.selections?.[0];
       const root = shadowOf(parent);
       return {
         markedLines: Array.from(root?.querySelectorAll("[data-line][data-selected-line]") ?? [], (el) => el.textContent ?? ""),

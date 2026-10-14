@@ -1,5 +1,5 @@
-/* File panes (views/FilePane.tsx). The header matches a terminal's; the body holds the CodeMirror
-   editor or merge view (FileViewer.tsx), which scroll themselves and take their colors from the
+/* File panes (views/FilePane.tsx). The header matches a terminal's; the body holds the @pierre/diffs
+   editor or diff view (FileViewer.tsx), which scroll in their box and take their colors from the
    theme variables on <html>. */
 
 .file-pane {
@@ -85,22 +85,15 @@
 .file-editor-slot[hidden] {
   display: none;
 }
+/* The editor scrolls in this box (the file is drawn only where it shows, so a long one stays light). */
 .file-editor {
   flex: 1;
   min-height: 0;
-  overflow: hidden;
+  overflow: auto;
 }
-.file-editor > .cm-editor {
-  height: 100%;
-}
-/* The merge view scrolls both sides together in its own box. */
 .file-diff {
   flex: 1;
   min-height: 0;
-  overflow: hidden;
-}
-.file-diff > .cm-mergeView {
-  height: 100%;
   overflow: auto;
 }
 .file-plain {
