@@ -159,7 +159,7 @@ async function simulatorFor(name: string): Promise<string> {
 }
 
 /** Builds with ios/Tools/build.ts sim (its progress on stderr) and returns the .app it printed. */
-async function buildApp(): Promise<string> {
+export async function buildApp(): Promise<string> {
   checkDisk();
   log(`building the native app (${freeGiB().toFixed(1)} GiB free)…`);
   const p = Bun.spawn(["bun", join(IOS, "Tools", "build.ts"), "sim"], { cwd: REPO, env: process.env, stdout: "pipe", stderr: "inherit" });
@@ -201,7 +201,7 @@ async function openAndWait(udid: string, axe: Axe, url: string, what: string, ac
 }
 
 /** Installs the app fresh (no saved servers or tokens), cold-launches it on the pair link and waits for the board. */
-async function installAndPair(udid: string, axe: Axe, app: string, pairUrl: string) {
+export async function installAndPair(udid: string, axe: Axe, app: string, pairUrl: string) {
   await sh(["xcrun", "simctl", "terminate", udid, BUNDLE], { allowFail: true });
   await sh(["xcrun", "simctl", "uninstall", udid, BUNDLE], { allowFail: true });
   await sh(["xcrun", "simctl", "terminate", udid, DEV_BUNDLE], { allowFail: true });
@@ -219,7 +219,7 @@ async function installAndPair(udid: string, axe: Axe, app: string, pairUrl: stri
 
 /** Opens a link in the running app and waits for a new screen (any screen of the app's, when the
  * same link was just opened and nothing should change). */
-async function openLink(udid: string, axe: Axe, link: string, previous: { url: string; key: string }) {
+export async function openLink(udid: string, axe: Axe, link: string, previous: { url: string; key: string }) {
   const before = previous.url === link ? null : previous.key;
   const labels = await openAndWait(udid, axe, link, `opening ${link} (the app never left the previous screen)`, (l) => {
     const state = screenState(l);
@@ -248,9 +248,9 @@ async function shoot(udid: string, name: string) {
 
 // ------------------------------------------------------------------ daemon
 
-type Daemon = TestDaemon & { scratch: string };
+export type Daemon = TestDaemon & { scratch: string };
 
-async function startDaemon(): Promise<Daemon> {
+export async function startDaemon(): Promise<Daemon> {
   const scratch = mkdtempSync(join(tmpdir(), "harness-dev-projects-"));
   try {
     return { ...(await startDaemonShared({ delayMs: 1 })), scratch };
@@ -261,7 +261,7 @@ async function startDaemon(): Promise<Daemon> {
 }
 
 /** SIGTERM, then SIGKILL after 20 s; deletes its home and scratch. */
-async function stopDaemon(d: Daemon, printErrors = false) {
+export async function stopDaemon(d: Daemon, printErrors = false) {
   if (printErrors) {
     const err = join(d.home, "daemon.err");
     if (existsSync(err)) console.error(readFileSync(err, "utf8").slice(-2000));
@@ -280,7 +280,7 @@ export type Seeded = { project: Project; review: Ticket; planning: Ticket; block
  * on its own, and GREET-6, in review with agent notes for its Details tab. Created one at a time so the
  * keys are always GREET-1 … GREET-6.
  */
-async function seed(d: Daemon): Promise<Seeded> {
+export async function seed(d: Daemon): Promise<Seeded> {
   const api = client(d);
   await seedDummySettings(api);
   const repo = await seedRepo(join(d.scratch, "greeter"), GREETER_FILES);

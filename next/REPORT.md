@@ -14,7 +14,7 @@ Names generated at runtime (loops, helpers, `test.each`) appear as their templat
 
 ## Progress
 
-6080 rows: 3933 open, 753 new, 0 walkthrough, 64 accepted loss, 1330 kept.
+6081 rows: 3934 open, 753 new, 0 walkthrough, 64 accepted loss, 1330 kept.
 
 | Area | Rows | Open | New | Walkthrough | Loss | Kept | Deletable |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | :---: |
@@ -28,7 +28,7 @@ Names generated at runtime (loops, helpers, `test.each`) appear as their templat
 | ios sim-check | 92 | 35 | 0 | 0 | 57 | 0 |  |
 | ios snapshot tests | 30 | 26 | 0 | 0 | 4 | 0 |  |
 | ios/HarnessKit (swift) | 1330 | 0 | 0 | 0 | 0 | 1330 | yes |
-| ios/Tools | 152 | 152 | 0 | 0 | 0 | 0 |  |
+| ios/Tools | 153 | 153 | 0 | 0 | 0 | 0 |  |
 | ios/Tools/highlighter | 14 | 14 | 0 | 0 | 0 | 0 |  |
 | plugins/git | 15 | 15 | 0 | 0 | 0 | 0 |  |
 | plugins/sdk | 20 | 20 | 0 | 0 | 0 | 0 |  |
@@ -4287,7 +4287,7 @@ Signed off by the human. They stay listed here so each can be brought back at th
 
 ### ios/Tools
 
-#### ios/Tools/axe.test.ts: 6 rows, mostly open
+#### ios/Tools/axe.test.ts: 7 rows, mostly open
 
 - reads AXLabels as they show on screen, unescaping AXe's \\/
 - the Open in “Harness”? prompt wins over whatever is behind it
@@ -4295,6 +4295,7 @@ Signed off by the human. They stay listed here so each can be brought back at th
 - a failed pair is told apart from the pairing spinner
 - SpringBoard and the splash aren't the app
 - live numbers don't make a new screen, but different text does
+- flattens the tree depth first, keeping label, value and identifier, and tolerates AXe printing nothing
 
 #### ios/Tools/build-cache.test.ts: 5 rows, mostly open
 

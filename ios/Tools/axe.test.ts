@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { parseLabels, screenKey, screenState } from "./axe";
+import { flattenTree, parseLabels, screenKey, screenState } from "./axe";
 
 test("reads AXLabels as they show on screen, unescaping AXe's \\/", () => {
   const out = `[{ "AXLabel" : "Harness", "children" : [{ "AXLabel" : "path: src\\/app.ts" }, { "AXLabel" : null }, { "AXLabel" : "" }] }]`;
@@ -32,4 +32,15 @@ test("SpringBoard and the splash aren't the app", () => {
 test("live numbers don't make a new screen, but different text does", () => {
   expect(screenKey(["Harness", "started 47s ago"])).toBe(screenKey(["Harness", "started 48s ago"]));
   expect(screenKey(["Harness", "Ticket", "key: GREET-1"])).not.toBe(screenKey(["Harness", "Prompt", "id: run.review"]));
+});
+
+test("flattens the tree depth first, keeping label, value and identifier, and tolerates AXe printing nothing", () => {
+  const out = `warning: noise\n[{ "AXLabel" : "Harness", "children" : [{ "AXLabel" : "a\\/b", "AXValue" : "on", "AXUniqueId" : "palette-field" }, { "AXLabel" : null, "children" : [{ "AXLabel" : "deep" }] }] }]`;
+  expect(flattenTree(out)).toEqual([
+    { label: "Harness", value: null, id: null },
+    { label: "a/b", value: "on", id: "palette-field" },
+    { label: null, value: null, id: null },
+    { label: "deep", value: null, id: null },
+  ]);
+  expect(flattenTree("")).toEqual([]);
 });

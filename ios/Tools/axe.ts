@@ -72,6 +72,23 @@ export function axeFor(udid: string, developerDir: string) {
   };
   return {
     labels: async () => parseLabels(await run("describe-ui")),
+    /** Every element on screen, flattened: its label, value and accessibilityIdentifier. */
+    nodes: async (): Promise<AXElement[]> => flattenTree(await run("describe-ui")),
     tap: (label: string) => run("tap", "--label", label),
   };
+}
+
+export interface AXElement { label: string | null; value: string | null; id: string | null }
+
+/** AXe's describe-ui JSON → every element, flattened depth first (empty when AXe printed nothing). */
+export function flattenTree(describeUi: string): AXElement[] {
+  const start = describeUi.indexOf("[");
+  if (start < 0) return [];
+  const out: AXElement[] = [];
+  const visit = (n: { AXLabel?: string | null; AXValue?: string | null; AXUniqueId?: string | null; children?: unknown[] }) => {
+    out.push({ label: n.AXLabel?.replace(/\\\//g, "/") ?? null, value: n.AXValue ?? null, id: n.AXUniqueId ?? null });
+    for (const c of n.children ?? []) visit(c as typeof n);
+  };
+  for (const n of JSON.parse(describeUi.slice(start)) as Parameters<typeof visit>[0][]) visit(n);
+  return out;
 }
