@@ -14,7 +14,7 @@ Names generated at runtime (loops, helpers, `test.each`) appear as their templat
 
 ## Progress
 
-6081 rows: 3934 open, 753 new, 0 walkthrough, 64 accepted loss, 1330 kept.
+6081 rows: 3928 open, 753 new, 5 walkthrough, 65 accepted loss, 1330 kept.
 
 | Area | Rows | Open | New | Walkthrough | Loss | Kept | Deletable |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | :---: |
@@ -25,7 +25,7 @@ Names generated at runtime (loops, helpers, `test.each`) appear as their templat
 | app/src/renderer | 689 | 689 | 0 | 0 | 0 | 0 |  |
 | editor/scripts | 3 | 3 | 0 | 0 | 0 | 0 |  |
 | editor/src | 31 | 31 | 0 | 0 | 0 | 0 |  |
-| ios sim-check | 92 | 35 | 0 | 0 | 57 | 0 |  |
+| ios sim-check | 92 | 29 | 0 | 5 | 58 | 0 |  |
 | ios snapshot tests | 30 | 26 | 0 | 0 | 4 | 0 |  |
 | ios/HarnessKit (swift) | 1330 | 0 | 0 | 0 | 0 | 1330 | yes |
 | ios/Tools | 153 | 153 | 0 | 0 | 0 | 0 |  |
@@ -127,6 +127,12 @@ Signed off by the human. They stay listed here so each can be brought back at th
 - panelChecks › docking stashes the panel as a card in the bottom-right corner, and the card restores its path (ios/Tools/sim-check.ts)
 - panelChecks › holding the dragged panel in the trailing 40% shows the ghost card and docks it on release; the card restores it at its root (ios/Tools/sim-check.ts)
 - usageChecks › usage: the filter shows one driver, and the choice survives a relaunch (ios/Tools/sim-check.ts)
+
+### a memory measurement of docked tickets, not behaviour a screen shows; the dock itself is an accepted loss
+
+1 rows:
+
+- memoryChecks › past the five live ones, more docked tickets cost about nothing (ios/Tools/sim-check.ts)
 
 ### keyboard handling: needs the software keyboard and real focus, which a deep-link walkthrough doesn't drive
 
@@ -2484,7 +2490,7 @@ Signed off by the human. They stay listed here so each can be brought back at th
 - fileDockChecks › a dirty file card's Close asks, and Discard closes the card
 - fileDockChecks › a failed save as a file card closes keeps the edits: the card comes back with them and Save retries
 - fileDockChecks › a file card's ✕ closes only it
-- memoryChecks › past the five live ones, more docked tickets cost about nothing (open)
+- memoryChecks › past the five live ones, more docked tickets cost about nothing
 - cardStackChecks › the tickets behind the panel wait as cards just left of it, never over the sidebar
 - cardStackChecks › docked, every ticket is a card in the bottom-right corner; a tap opens that one
 - panelChecks › a board card opens its ticket in the side panel against the trailing edge
@@ -2524,7 +2530,7 @@ Signed off by the human. They stay listed here so each can be brought back at th
 - attachmentChecks › swiping down closes the viewer (open)
 - attachmentChecks › the video page plays and swiping down closes it too (open)
 - visitScreens › ${list.length} routes open without crashing the app (open)
-- interactionChains › ticket details: agent notes start collapsed, and a tap on the header opens and closes them (open)
+- interactionChains › ticket details: agent notes start collapsed, and a tap on the header opens and closes them (walkthrough: next/walkthrough/ios.ts › ticket details)
 - interactionChains › composer answers a blocked ticket (open)
 - interactionChains › Approve menu → Approve and… takes typed instructions and approves (open)
 - interactionChains › prompt editor: a bad variable shows inline and can't save; Save stores the fixed override, Reset to built-in (confirmed) clears it (open)
@@ -2537,11 +2543,11 @@ Signed off by the human. They stay listed here so each can be brought back at th
 - interactionChains › a compacting session shows the spinner gauge and a Compacting… composer (open)
 - interactionChains › touch and hold on a card previews its ticket on the Spec tab, with no moves in the menu, and offers the ticket's actions (open)
 - interactionChains › a relative file link in a spec opens the file viewer in the ticket's folder, at its lines (open)
-- interactionChains › the bottom bar's field opens the palette; Show child tickets runs and its label flips (open)
-- interactionChains › a leading > shows only commands, not the ticket that matches (open)
-- interactionChains › ⌘K over a ticket sheet lists its actions; Copy ticket key copies it (open)
+- interactionChains › the bottom bar's field opens the palette; Show child tickets runs and its label flips (walkthrough: next/walkthrough/ios.ts › command palette)
+- interactionChains › a leading > shows only commands, not the ticket that matches (walkthrough: next/walkthrough/ios.ts › command palette)
+- interactionChains › ⌘K over a ticket sheet lists its actions; Copy ticket key copies it (walkthrough: next/walkthrough/ios.ts › ticket commands)
 - interactionChains › Open file… (⌘P) finds a file in the ticket's folder and opens it at the typed lines (open)
-- interactionChains › Settings → General has a Save on blur switch that flips when pressed (open)
+- interactionChains › Settings → General has a Save on blur switch that flips when pressed (walkthrough: next/walkthrough/ios.ts › settings)
 - interactionChains › a Terraform file opens highlighted, like the Changes tab shows it (open)
 - interactionChains › the file editor edits, shows the unsaved dot and writes the file with Save (open)
 - agentsFilterChecks › Agents & tasks: the filter survives opening a row and coming back (open)

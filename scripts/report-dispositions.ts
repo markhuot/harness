@@ -100,6 +100,15 @@ const SIM_NAME_LOSSES: { name: RegExp; reason: string }[] = [
   { name: /ipad/i, reason: "iPad layouts: the walkthrough runs on one iPhone" },
 ];
 
+/** sim-check checks the iPhone walkthrough carries now, by the screen that asserts them. */
+const SIM_WALKTHROUGH: { name: RegExp; screen: string }[] = [
+  { name: /agent notes start collapsed/, screen: "ticket details" },
+  { name: /Save on blur switch/, screen: "settings" },
+  { name: /bottom bar's field opens the palette/, screen: "command palette" },
+  { name: /leading > shows only commands/, screen: "command palette" },
+  { name: /⌘K over a ticket sheet/, screen: "ticket commands" },
+];
+
 export function dispositionOf(row: Row): Disposition {
   if (row.lossReason) return { status: "loss", reason: row.lossReason };
   if (row.ref) return { status: "new", ref: row.ref };
@@ -107,6 +116,8 @@ export function dispositionOf(row: Row): Disposition {
   if (row.kind === "sim-check") {
     for (const l of SIM_NAME_LOSSES) if (l.name.test(row.name)) return { status: "loss", reason: l.reason };
     for (const l of SIM_LOSSES) if (l.group.test(row.group)) return { status: "loss", reason: l.reason };
+    for (const c of SIM_WALKTHROUGH) if (c.name.test(row.name)) return { status: "walkthrough", ref: `next/walkthrough/ios.ts › ${c.screen}` };
+    if (row.group === "memoryChecks") return { status: "loss", reason: "a memory measurement of docked tickets, not behaviour a screen shows; the dock itself is an accepted loss" };
   }
   if (row.kind === "snapshot" && row.file.endsWith("SnapshotAssertTests.swift")) {
     return { status: "loss", reason: "tests the snapshot diff helper, which retires with the snapshots; the walkthrough's reference diff gets its own bun test" };

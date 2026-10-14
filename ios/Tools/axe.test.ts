@@ -35,12 +35,12 @@ test("live numbers don't make a new screen, but different text does", () => {
 });
 
 test("flattens the tree depth first, keeping label, value and identifier, and tolerates AXe printing nothing", () => {
-  const out = `warning: noise\n[{ "AXLabel" : "Harness", "children" : [{ "AXLabel" : "a\\/b", "AXValue" : "on", "AXUniqueId" : "palette-field" }, { "AXLabel" : null, "children" : [{ "AXLabel" : "deep" }] }] }]`;
+  const out = `warning: noise\n[{ "AXLabel" : "Harness", "children" : [{ "AXLabel" : "a\\/b", "AXValue" : "on", "AXUniqueId" : "palette-field", "frame" : { "x" : 1, "y" : 2, "width" : 3, "height" : 4 } }, { "AXLabel" : null, "children" : [{ "AXLabel" : "deep" }] }] }]`;
   expect(flattenTree(out)).toEqual([
-    { label: "Harness", value: null, id: null },
-    { label: "a/b", value: "on", id: "palette-field" },
-    { label: null, value: null, id: null },
-    { label: "deep", value: null, id: null },
+    { label: "Harness", value: null, id: null, frame: null },
+    { label: "a/b", value: "on", id: "palette-field", frame: { x: 1, y: 2, width: 3, height: 4 } },
+    { label: null, value: null, id: null, frame: null },
+    { label: "deep", value: null, id: null, frame: null },
   ]);
   expect(flattenTree("")).toEqual([]);
 });

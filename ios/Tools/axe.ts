@@ -75,18 +75,26 @@ export function axeFor(udid: string, developerDir: string) {
     /** Every element on screen, flattened: its label, value and accessibilityIdentifier. */
     nodes: async (): Promise<AXElement[]> => flattenTree(await run("describe-ui")),
     tap: (label: string) => run("tap", "--label", label),
+    /** Types into the focused field. */
+    type: (text: string) => run("type", text),
+    /** A key chord: modifiers and key are HID codes (⌘ is 227, K is 14, P is 19). */
+    keyCombo: (modifier: number, key: number) => run("key-combo", "--modifiers", String(modifier), "--key", String(key)),
+    swipe: (x1: number, y1: number, x2: number, y2: number, seconds = 0.6) =>
+      run("swipe", "--start-x", String(x1), "--start-y", String(y1), "--end-x", String(x2), "--end-y", String(y2), "--duration", String(seconds)),
+    /** A press held for a moment: a Toggle ignores the instantaneous tap `tap` sends. */
+    press: (x: number, y: number) => run("touch", "-x", String(Math.round(x)), "-y", String(Math.round(y)), "--down", "--up", "--delay", "0.15"),
   };
 }
 
-export interface AXElement { label: string | null; value: string | null; id: string | null }
+export interface AXElement { label: string | null; value: string | null; id: string | null; frame: { x: number; y: number; width: number; height: number } | null }
 
 /** AXe's describe-ui JSON → every element, flattened depth first (empty when AXe printed nothing). */
 export function flattenTree(describeUi: string): AXElement[] {
   const start = describeUi.indexOf("[");
   if (start < 0) return [];
   const out: AXElement[] = [];
-  const visit = (n: { AXLabel?: string | null; AXValue?: string | null; AXUniqueId?: string | null; children?: unknown[] }) => {
-    out.push({ label: n.AXLabel?.replace(/\\\//g, "/") ?? null, value: n.AXValue ?? null, id: n.AXUniqueId ?? null });
+  const visit = (n: { AXLabel?: string | null; AXValue?: string | null; AXUniqueId?: string | null; frame?: { x: number; y: number; width: number; height: number } | null; children?: unknown[] }) => {
+    out.push({ label: n.AXLabel?.replace(/\\\//g, "/") ?? null, value: n.AXValue ?? null, id: n.AXUniqueId ?? null, frame: n.frame ?? null });
     for (const c of n.children ?? []) visit(c as typeof n);
   };
   for (const n of JSON.parse(describeUi.slice(start)) as Parameters<typeof visit>[0][]) visit(n);
