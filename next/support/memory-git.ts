@@ -114,6 +114,8 @@ export function createMemoryGit() {
     async resolveCommit(cwd, ref) {
       const r = repoOf(cwd);
       if (!r) return null;
+      if (ref === "HEAD") return headOf(r, cwd);
+      if (ref.startsWith("refs/heads/")) return r.branches.get(ref.slice("refs/heads/".length)) ?? null;
       const tip = tipOf(r, ref);
       if (tip || !/^[0-9a-f]{4,39}$/.test(ref)) return tip;
       // An abbreviated sha: the one commit it starts, or nothing when it's ambiguous.
