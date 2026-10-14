@@ -1,5 +1,4 @@
 import HarnessKit
-import PhotosUI
 import SwiftUI
 import UIKit
 
@@ -32,13 +31,13 @@ final class DockWindow: UIWindow {
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
         // Hit-tested by the published frames, not "nil if the hit view is the root": SwiftUI's own
         // gesture views make that unreliable on iOS 18 and later.
-        guard MainActor.assumeIsolated({ hit.contains(point) }) else { return nil }
+        guard hit.contains(point) else { return nil }
         return super.hitTest(point, with: event)
     }
 }
 
-/// The dock window's root: the status bar and orientations are the main window's, so adding the
-/// window changes neither.
+/// The dock window's root: the status bar and orientations are those of whatever is on top in the
+/// main window (a cover, the ticket sheet), so adding the window changes neither.
 final class DockHostController: UIHostingController<DockWindowRoot> {
     var mainRoot: () -> UIViewController? = { nil }
 
@@ -60,20 +59,39 @@ final class DockHostController: UIHostingController<DockWindowRoot> {
 @MainActor final class DockWindowController {
     private var window: DockWindow?
     private var disconnect: NSObjectProtocol?
+    /// The scene's own window, found when the dock is shown: the first window that isn't the dock's
+    /// (not a system one such as the text-effects window).
+    private weak var mainWindow: UIWindow?
+    private weak var scene: UIWindowScene?
+    private var lastDepth = 0
+    private weak var host: DockHostController?
 
     /// Shows the dock in `scene` (once; a second call for the same scene changes nothing).
-    func show(in scene: UIWindowScene, root: @escaping (DockHitRegion, DockWindowState, @escaping () -> Bool) -> DockWindowRoot) {
+    func show(in scene: UIWindowScene, root: @escaping (DockHitRegion, DockWindowState, @escaping (Int) -> Bool) -> DockWindowRoot) {
         if let window, window.windowScene === scene { return }
         tearDown()
+        mainWindow = Self.mainWindow(in: scene)
+        self.scene = scene
         let window = DockWindow(windowScene: scene)
         window.windowLevel = .normal + 1
         window.backgroundColor = .clear
         let state = DockWindowState()
-        let probe: () -> Bool = { [weak scene] in scene.map(Self.dialogUp) ?? false }
+        let probe: (Int) -> Bool = { [weak self] expected in
+            guard let self else { return false }
+            let depth = self.presentedChain.count
+            if depth != self.lastDepth {
+                // What's on top changed: so may the status bar style and orientations the dock host forwards.
+                self.lastDepth = depth
+                self.host?.setNeedsStatusBarAppearanceUpdate()
+            }
+            return DockCards.dialogUp(presentedDepth: depth, expected: expected)
+        }
         let host = DockHostController(rootView: root(window.hit, state, probe))
+        self.host = host
         host.view.backgroundColor = .clear
-        host.mainRoot = { [weak scene, weak window] in
-            scene?.windows.first { $0 !== window && !($0 is DockWindow) }?.rootViewController
+        host.mainRoot = { [weak self] in
+            guard let self else { return nil }
+            return self.presentedChain.last ?? self.mainWindow?.rootViewController
         }
         window.rootViewController = host
         window.isHidden = false
@@ -81,6 +99,10 @@ final class DockHostController: UIHostingController<DockWindowRoot> {
         disconnect = NotificationCenter.default.addObserver(forName: UIScene.didDisconnectNotification, object: scene, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.tearDown() }
         }
+    }
+
+    private static func mainWindow(in scene: UIWindowScene) -> UIWindow? {
+        scene.windows.first { !($0 is DockWindow) && $0.isKeyWindow } ?? scene.windows.first { !($0 is DockWindow) }
     }
 
     func tearDown() {
@@ -91,19 +113,19 @@ final class DockHostController: UIHostingController<DockWindowRoot> {
         window = nil
     }
 
-    /// Something the app doesn't know about is up over the ticket: an alert or action sheet, the
-    /// share sheet, a photo or document picker. SwiftUI's own sheets and covers are the Router's.
-    static func dialogUp(in scene: UIWindowScene) -> Bool {
-        guard let main = scene.windows.first(where: { !($0 is DockWindow) && $0.isKeyWindow }) ?? scene.windows.first(where: { !($0 is DockWindow) }) else { return false }
-        var top = main.rootViewController
-        while let next = top?.presentedViewController, !next.isBeingDismissed { top = next }
-        switch top {
-        case is UIAlertController, is UIActivityViewController, is UIDocumentPickerViewController,
-             is UIImagePickerController, is PHPickerViewController:
-            return true
-        default:
-            return false
+    /// What the main window has presented, bottom to top, leaving out what is on its way out: the
+    /// ticket sheet, then anything on top of it (alerts, the share sheet, pickers, and the SwiftUI
+    /// sheets, popovers and covers the screens open themselves).
+    private var presentedChain: [UIViewController] {
+        var chain: [UIViewController] = []
+        // The scene may not have had its window yet when the dock was shown.
+        if mainWindow == nil, let scene { mainWindow = Self.mainWindow(in: scene) }
+        var top = mainWindow?.rootViewController
+        while let next = top?.presentedViewController, !next.isBeingDismissed {
+            chain.append(next)
+            top = next
         }
+        return chain
     }
 }
 
@@ -115,7 +137,8 @@ struct DockWindowRoot: View {
     let inset: DockedSheetInset
     let hit: DockHitRegion
     let state: DockWindowState
-    let dialogProbe: () -> Bool
+    /// Whether something is presented over the ticket, given how many presentations the dock expects.
+    let dialogProbe: (Int) -> Bool
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
@@ -140,11 +163,13 @@ struct DockWindowRoot: View {
 private struct PhoneDock: View {
     let hit: DockHitRegion
     let state: DockWindowState
-    let dialogProbe: () -> Bool
+    let dialogProbe: (Int) -> Bool
     @Environment(Router.self) private var router
     @Environment(DockedSheetInset.self) private var inset
     @Environment(DockHold.self) private var hold
     @Environment(\.concentricScreen) private var screen
+    /// The app is in front: the dock window's own scenePhase isn't reliable, so it follows the app.
+    @State private var active = UIApplication.shared.applicationState != .background
 
     private var shown: Bool {
         DockCards.isShown(count: router.waitingSheets.count, ghost: hold.armed, sheetUp: router.sheet != nil, coverUp: router.cover != nil,
@@ -156,7 +181,7 @@ private struct PhoneDock: View {
         GeometryReader { geo in
             DockedCardsContainer(sheets: router.waitingSheets, layout: .phone(screen: screen, region: geo.size),
                                  ghost: hold.armed ? router.ticketSheet?.title : nil,
-                                 docked: router.ticketSheetState == .docked, onReport: report)
+                                 docked: router.ticketSheetState == .docked, shown: shown, onReport: report)
                 .frame(width: geo.size.width, height: geo.size.height, alignment: .bottom)
         }
         .ignoresSafeArea(.keyboard)
@@ -164,17 +189,36 @@ private struct PhoneDock: View {
         .animation(.easeOut(duration: 0.15), value: shown)
         .accessibilityHidden(!shown)
         .onChange(of: shown, initial: true) { _, shown in hit.enabled = shown }
-        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in state.keyboardUp = true; inset.keyboardUp = true }
-        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in state.keyboardUp = false; inset.keyboardUp = false }
-        // A dialog the Router doesn't know about: looked for while there are cards to hide.
-        .task(id: router.waitingSheets.isEmpty) {
-            guard !router.waitingSheets.isEmpty else { state.dialogUp = false; return }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { note in
+            // The software keyboard on this screen: not the hardware keyboard's shortcut bar, which is short.
+            let frame = (note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect) ?? .zero
+            setKeyboard(frame.height > 100)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in setKeyboard(false) }
+        .onDisappear { setKeyboard(false) }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)) { _ in active = true }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willResignActiveNotification)) { _ in active = false }
+        // A presentation the Router doesn't know about, looked for while there are cards to hide and the
+        // app is in front. The ticket sheet is the one presentation the dock expects.
+        .task(id: !router.waitingSheets.isEmpty && active) {
+            guard !router.waitingSheets.isEmpty, active else { state.dialogUp = false; return }
             while !Task.isCancelled {
-                let up = dialogProbe()
+                var up = dialogProbe(router.ticketSheet != nil ? 1 : 0)
+                // A ticket sheet that was just docked or closed is still presented for a beat after the
+                // router lets go of it: look again before treating it as someone else's.
+                if up, !state.dialogUp {
+                    try? await Task.sleep(for: .milliseconds(120))
+                    up = dialogProbe(router.ticketSheet != nil ? 1 : 0)
+                }
                 if up != state.dialogUp { state.dialogUp = up }
                 try? await Task.sleep(for: .milliseconds(150))
             }
         }
+    }
+
+    private func setKeyboard(_ up: Bool) {
+        state.keyboardUp = up
+        inset.keyboardUp = up
     }
 
     private func report(_ report: DockedCardsReport) {

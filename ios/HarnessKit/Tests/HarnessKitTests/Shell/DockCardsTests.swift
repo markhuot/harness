@@ -58,4 +58,15 @@ struct DockLabelsTests {
         #expect(DockCards.isShown(count: 0, ghost: true, sheetUp: false, coverUp: false, keyboardUp: false, dialogUp: false))
         #expect(!DockCards.isShown(count: 0, ghost: true, sheetUp: false, coverUp: false, keyboardUp: true, dialogUp: false))
     }
+
+    @Test func anyPresentationAboveTheTicketSheetIsADialog() {
+        // The ticket sheet itself (depth 1 of 1) and a bare board (0 of 0) are not.
+        #expect(!DockCards.dialogUp(presentedDepth: 1, expected: 1))
+        #expect(!DockCards.dialogUp(presentedDepth: 0, expected: 0))
+        // A picker, popover or cover over the ticket sheet, or an alert over the board, is.
+        #expect(DockCards.dialogUp(presentedDepth: 2, expected: 1))
+        #expect(DockCards.dialogUp(presentedDepth: 1, expected: 0))
+        // The ticket sheet not presented yet (it was just opened): nothing to hide for.
+        #expect(!DockCards.dialogUp(presentedDepth: 0, expected: 1))
+    }
 }

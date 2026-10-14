@@ -1877,6 +1877,7 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
   const MORE = "with 3 docked, two cards and \"1 more…\" expand into the list, whose oldest opens at its saved path";
   const CLOSE = "a card's ✕ closes only that ticket";
   const STABLE = "switching cards while a ticket is open keeps the dock mounted: only the swapped card changes";
+  const PICKER = "a picker the ticket screen opens itself (not the Router) hides the dock over the sheet and gives it back on Done";
   const AWAY = "a swipe away from the presented sheet closes it and leaves the next as the docked card, no sheet";
   const RELAUNCH = "the dock comes back after the app is quit and relaunched";
 
@@ -2024,6 +2025,25 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
     if (mounts !== 1) throw new Error(`the dock mounted ${mounts} times since launch, not once`);
     return `${sheetKey} swapped in over ${was}; the other card stayed at ${Math.round(upper.frame.y)}; one mount`;
   }, CHECK_CAP_MS, [MORE]);
+  await check(PICKER, async () => {
+    const isModels = (l: string) => l.startsWith("Models, ");
+    await goto(udid, `harness://ticket/${encodeURIComponent(b.key)}?tab=details`, (l) => l.some(isModels));
+    const n = await count();
+    if (n < 1) throw new Error("no cards over the open ticket to hide");
+    await tapWhere(udid, isModels);
+    await until("the model sheet", async () => (await labels(udid)).includes("Search models"), 6000);
+    await until("the dock hidden under the picker", async () => (await count()) === 0, 4000).catch(async (e) => {
+      await say("with the model sheet open");
+      throw e;
+    });
+    await tapWhere(udid, "Done");
+    await until("the model sheet closed", async () => !(await labels(udid)).includes("Search models"), 5000);
+    await until("the dock back", async () => (await count()) === n, 4000).catch(async (e) => {
+      await say("after the model sheet closed");
+      throw e;
+    });
+    return `${n} cards hid under the Models sheet and came back`;
+  }, CHECK_CAP_MS, [STABLE]);
   await check(CLOSE, async () => {
     const before = await dockSheet(udid);
     const n = await count();
@@ -2034,7 +2054,7 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
     }, 6000);
     if ((await count()) !== n - 1) throw new Error(`${await count()} docked after ✕, not ${n - 1}`);
     return `${n} → ${n - 1}`;
-  }, CHECK_CAP_MS, [STABLE]);
+  }, CHECK_CAP_MS, [PICKER]);
   await check(AWAY, async () => {
     // Open the top card's ticket, then swipe it away fast: the system dismissal closes it.
     const before = (await top())!;

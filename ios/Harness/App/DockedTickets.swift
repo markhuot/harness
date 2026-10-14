@@ -473,6 +473,9 @@ struct DockedCardsContainer: View {
     var ghost: String?
     /// The top ticket was just docked: VoiceOver lands on its card, as the sheet it left is gone.
     var docked = false
+    /// False while the dock is hidden (a sheet, a keyboard, a dialog): an open list closes rather than
+    /// reopening when the dock comes back.
+    var shown = true
     var onReport: (DockedCardsReport) -> Void = { _ in }
     @Environment(Router.self) private var router
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -487,6 +490,7 @@ struct DockedCardsContainer: View {
             }
             if !layout.hidden {
                 cards.padding(layout.insets)
+                    .accessibilityAddTraits(expanded ? .isModal : [])
             }
             if layout.ghostSlot {
                 DockGhostCard(title: ghost ?? "", armed: ghost != nil)
@@ -500,6 +504,7 @@ struct DockedCardsContainer: View {
         .onChange(of: sheets.isEmpty) { _, empty in
             if empty { expanded = false; stack = nil }
         }
+        .onChange(of: shown) { _, shown in if !shown { expanded = false } }
         .onChange(of: docked) { _, docked in if docked { focused = sheets.first?.id } }
         .onChange(of: report, initial: true) { _, report in onReport(report) }
         .onAppear {

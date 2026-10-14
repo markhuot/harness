@@ -32,4 +32,12 @@ public enum DockCards {
     public static func isShown(count: Int, ghost: Bool = false, sheetUp: Bool, coverUp: Bool, keyboardUp: Bool, dialogUp: Bool) -> Bool {
         (count > 0 || ghost) && !sheetUp && !coverUp && !keyboardUp && !dialogUp
     }
+
+    /// Something the Router doesn't own is presented over the ticket: an alert, the share sheet, a
+    /// picker, or any SwiftUI sheet, popover or cover a screen opens itself. The dock is only shown
+    /// with no Router sheet or cover up, so the one presentation it expects is the ticket sheet
+    /// (`expected` 1); a deeper chain of live presentations is a stranger's, whatever its class.
+    public static func dialogUp(presentedDepth: Int, expected: Int) -> Bool {
+        presentedDepth > expected
+    }
 }

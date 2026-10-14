@@ -43,6 +43,7 @@ struct RootView: View {
             .onDisappear { dockWindow.tearDown() }
             .onAppear {
                 WindowDirectory.shared.mainActive(router, scene: scene)
+                syncDockWindow()
                 #if SIM_CHECK
                 DebugProbe.shared.attach(router)
                 #endif
