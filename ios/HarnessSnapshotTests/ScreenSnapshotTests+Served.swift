@@ -159,6 +159,25 @@ extension ScreenSnapshotTests {
         try await snapshot("transcript-reply-list", router: openTicket("HAR-30", .transcript)) { RootView() }
     }
 
+    /// A tool call with a description shows it, the raw command faint after it; a Read shows the file
+    /// name and line range; a summarized thinking block shows above them.
+    func testTranscriptToolLabels() async throws {
+        let ticket = Self.extra(31, "Label tool calls", status: .review)
+        world.add([ticket])
+        let sid = ticket.sessionId
+        setTranscript(ticket, [
+            entry(1, sid, .user, .text(text: "Why is the build slow?")),
+            entry(2, sid, .assistant, .thinking(text: "The build output suggests the cache is cold, so I'll check the config first.")),
+            entry(3, sid, .assistant, .toolCall(callId: "c1", name: "Bash", input: .object(["command": .string("bun run build --verbose"), "description": .string("Build and show timings")]))),
+            entry(4, sid, .tool, .toolResult(callId: "c1", name: "Bash", output: [.text(text: "done")], isError: false)),
+            entry(5, sid, .assistant, .toolCall(callId: "c2", name: "Read", input: .object(["file_path": .string("/work/app/ios/HarnessKit/Sources/HarnessKit/State/Format.swift"), "offset": .number(100), "limit": .number(76)]))),
+            entry(6, sid, .tool, .toolResult(callId: "c2", name: "Read", output: [.text(text: "…")], isError: false)),
+            entry(7, sid, .assistant, .toolCall(callId: "c3", name: "Bash", input: .object(["command": .string("git status --short")]))),
+            entry(8, sid, .tool, .toolResult(callId: "c3", name: "Bash", output: [.text(text: "")], isError: false)),
+        ])
+        try await snapshot("transcript-tool-labels", router: openTicket("HAR-31", .transcript)) { RootView() }
+    }
+
     static let tableBrief = [
         "Speed up the simulator walk-through",
         "",

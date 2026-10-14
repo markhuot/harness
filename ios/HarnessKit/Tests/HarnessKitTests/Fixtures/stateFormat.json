@@ -3062,6 +3062,259 @@
       "output": "tool"
     }
   ],
+  "toolLabelCases": [
+    {
+      "name": "bash with description",
+      "input": {
+        "name": "Bash",
+        "input": {
+          "command": "bun test\nmore",
+          "description": "Run the tests"
+        }
+      },
+      "output": {
+        "label": "Run the tests",
+        "detail": "bun test"
+      }
+    },
+    {
+      "name": "description first line only",
+      "input": {
+        "name": "Agent",
+        "input": {
+          "description": "Find callers\nand more",
+          "prompt": "p"
+        }
+      },
+      "output": {
+        "label": "Find callers",
+        "detail": "{\"description\":\"Find callers\\nand more\",\"prompt\":\"p\"}"
+      }
+    },
+    {
+      "name": "description equal to preview has no detail",
+      "input": {
+        "name": "x",
+        "input": {
+          "command": "same",
+          "description": "same"
+        }
+      },
+      "output": {
+        "label": "same",
+        "detail": ""
+      }
+    },
+    {
+      "name": "blank description falls back",
+      "input": {
+        "name": "Bash",
+        "input": {
+          "command": "ls",
+          "description": "  "
+        }
+      },
+      "output": {
+        "label": "ls",
+        "detail": ""
+      }
+    },
+    {
+      "name": "non-string description falls back",
+      "input": {
+        "name": "Bash",
+        "input": {
+          "command": "ls",
+          "description": 5
+        }
+      },
+      "output": {
+        "label": "ls",
+        "detail": ""
+      }
+    },
+    {
+      "name": "no description",
+      "input": {
+        "name": "Bash",
+        "input": {
+          "command": "ls -la"
+        }
+      },
+      "output": {
+        "label": "ls -la",
+        "detail": ""
+      }
+    },
+    {
+      "name": "read whole file",
+      "input": {
+        "name": "Read",
+        "input": {
+          "file_path": "/a/b/Format.swift"
+        }
+      },
+      "output": {
+        "label": "Format.swift",
+        "detail": "/a/b/Format.swift"
+      }
+    },
+    {
+      "name": "read with offset and limit",
+      "input": {
+        "name": "Read",
+        "input": {
+          "file_path": "/a/b/Format.swift",
+          "offset": 100,
+          "limit": 76
+        }
+      },
+      "output": {
+        "label": "Format.swift:100–175",
+        "detail": "/a/b/Format.swift"
+      }
+    },
+    {
+      "name": "read with offset only",
+      "input": {
+        "name": "Read",
+        "input": {
+          "file_path": "/a/b/Format.swift",
+          "offset": 100
+        }
+      },
+      "output": {
+        "label": "Format.swift:100–",
+        "detail": "/a/b/Format.swift"
+      }
+    },
+    {
+      "name": "read with limit only",
+      "input": {
+        "name": "Read",
+        "input": {
+          "file_path": "/a/b/Format.swift",
+          "limit": 50
+        }
+      },
+      "output": {
+        "label": "Format.swift:1–50",
+        "detail": "/a/b/Format.swift"
+      }
+    },
+    {
+      "name": "read ignores a fractional offset",
+      "input": {
+        "name": "Read",
+        "input": {
+          "file_path": "/a/b/c.ts",
+          "offset": 1.5
+        }
+      },
+      "output": {
+        "label": "c.ts",
+        "detail": "/a/b/c.ts"
+      }
+    },
+    {
+      "name": "edit shows the file name",
+      "input": {
+        "name": "Edit",
+        "input": {
+          "file_path": "/a/b/c.ts",
+          "old_string": "x",
+          "new_string": "y"
+        }
+      },
+      "output": {
+        "label": "c.ts",
+        "detail": "/a/b/c.ts"
+      }
+    },
+    {
+      "name": "file tool without a path",
+      "input": {
+        "name": "Read",
+        "input": {}
+      },
+      "output": {
+        "label": "",
+        "detail": ""
+      }
+    },
+    {
+      "name": "description wins over file name",
+      "input": {
+        "name": "Edit",
+        "input": {
+          "file_path": "/a/c.ts",
+          "description": "Rename it"
+        }
+      },
+      "output": {
+        "label": "Rename it",
+        "detail": "/a/c.ts"
+      }
+    },
+    {
+      "name": "other tool with a file_path keeps the path",
+      "input": {
+        "name": "Grep",
+        "input": {
+          "file_path": "/a/b/c.ts"
+        }
+      },
+      "output": {
+        "label": "/a/b/c.ts",
+        "detail": ""
+      }
+    },
+    {
+      "name": "string input",
+      "input": {
+        "name": "x",
+        "input": "multi\nline"
+      },
+      "output": {
+        "label": "multi\nline",
+        "detail": ""
+      }
+    },
+    {
+      "name": "array input",
+      "input": {
+        "name": "x",
+        "input": [
+          1
+        ]
+      },
+      "output": {
+        "label": "[1]",
+        "detail": ""
+      }
+    },
+    {
+      "name": "null",
+      "input": {
+        "name": "x",
+        "input": null
+      },
+      "output": {
+        "label": "",
+        "detail": ""
+      }
+    },
+    {
+      "name": "undefined (missing)",
+      "input": {
+        "name": "x"
+      },
+      "output": {
+        "label": "",
+        "detail": ""
+      }
+    }
+  ],
   "toolPreviewCases": [
     {
       "name": "bash first line",

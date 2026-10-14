@@ -232,6 +232,14 @@ try {
   // Each finished tool row shows the time between its call and result, left of its ✓/✗ icon.
   const toolElapsed = await js<string[]>(`[...document.querySelectorAll(".t-tool-head")].map(h => { const e = h.querySelector(".t-tool-elapsed"); return e && h.lastElementChild === e.nextElementSibling ? e.textContent : ""; })`);
   check("tool rows show elapsed time before the result icon", toolElapsed.length > 0 && toolElapsed.every((t) => t === "7s"), toolElapsed.join(","));
+  // A call with a description shows it as the label, the raw command faint after it; a Read shows
+  // the file name and line range instead of the full path.
+  const toolLabels = await js<{ label: string; detail: string }[]>(`[...document.querySelectorAll(".t-tool-head")].map(h => ({ label: h.querySelector(".t-tool-label")?.textContent ?? "", detail: h.querySelector(".t-tool-detail")?.textContent.trim() ?? "" }))`);
+  check(
+    "tool rows label by description and file name, with the raw command or path as detail",
+    toolLabels[0]?.label === "Find where useArticle is used" && toolLabels[0].detail === 'rg -n "useArticle" src --type ts' && toolLabels[1]?.label === "useArticle.ts:10–49" && toolLabels[1].detail.endsWith("/src/hooks/useArticle.ts"),
+    JSON.stringify(toolLabels.slice(0, 2)),
+  );
   // Expanding a tool row adds `open` as its own class (the ".t-tool.open" styles hang off it).
   await js(`document.querySelector(".t-tool-head").click()`);
   const toolOpened = await until("tool row open class", () => js<boolean>(`document.querySelector(".t-tool-head").parentElement.matches(".t-tool.open")`).then((v) => v || undefined));

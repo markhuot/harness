@@ -172,6 +172,11 @@ struct FormatTests {
         #expect(Format.groupTranscript(c.input).map(TranscriptItemSummary.init) == c.output)
     }
 
+    @Test(arguments: Fixture.cases("stateFormat", "toolLabelCases", input: ToolPreviewInput.self, output: Format.ToolLabel.self))
+    func toolLabel(_ c: Fixture.Case<ToolPreviewInput, Format.ToolLabel>) {
+        #expect(Format.toolLabel(c.input.name, input: c.input.input) == c.output)
+    }
+
     @Test(arguments: Fixture.cases("stateFormat", "toolPreviewCases", input: ToolPreviewInput.self, output: String.self))
     func toolPreview(_ c: Fixture.Case<ToolPreviewInput, String>) {
         #expect(Format.toolPreview(c.input.name, input: c.input.input) == c.output)

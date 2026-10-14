@@ -243,7 +243,7 @@ export async function bootWorld(opts: Pick<StartDaemonOptions, "delayMs" | "read
     push("system", { type: "status", text: `Run started (${runKind})` });
     push("assistant", { type: "thinking", text: "The user wants this done carefully. Let me look at the relevant files first." });
     push("assistant", { type: "text", text: `I'll start by looking at how \`${s.title.split(" ").slice(-1)[0]}\` is wired up in the codebase.` });
-    push("assistant", { type: "tool_call", callId: "call_1", name: "Bash", input: { command: 'rg -n "useArticle" src --type ts', timeout_ms: 30000 } });
+    push("assistant", { type: "tool_call", callId: "call_1", name: "Bash", input: { command: 'rg -n "useArticle" src --type ts', description: "Find where useArticle is used", timeout_ms: 30000 } });
     push("tool", {
       type: "tool_result",
       callId: "call_1",
@@ -256,7 +256,7 @@ export async function bootWorld(opts: Pick<StartDaemonOptions, "delayMs" | "read
       text: 'Allowed: rg -n "useArticle" src --type ts — read-only command',
       permission: { tool: "bash", summary: 'rg -n "useArticle" src --type ts', decision: "allow", reason: "read-only command", source: "policy", mode: "auto" },
     });
-    push("assistant", { type: "tool_call", callId: "call_2", name: "Read", input: { file_path: `${s.project.path}/src/hooks/useArticle.ts`, limit: 40 } });
+    push("assistant", { type: "tool_call", callId: "call_2", name: "Read", input: { file_path: `${s.project.path}/src/hooks/useArticle.ts`, offset: 10, limit: 40 } });
     push("tool", { type: "tool_result", callId: "call_2", name: "Read", output: [{ type: "text", text: "ENOENT: no such file or directory" }], isError: true });
     if (s.status === "blocked") push("system", { type: "error", text: s.blockedReason ?? "Run failed" });
     push("assistant", { type: "text", text: "Found it. The hook caches by slug, not by id, which explains the stale data. I'll switch the cache key and add a regression test." });
