@@ -683,6 +683,9 @@ describe("systemPrompt working efficiently", () => {
       expect(text).toContain("in parallel");
       expect(text).toContain("tests and the typecheck in one command");
       expect(text).toContain("one blocking command");
+      // A pending sub-agent is waited on by ending the turn, not by a foreground sleep (MEDL-23 tried `sleep 60`).
+      expect(text).toContain("background sub-agent or task, end your turn");
+      expect(text).toContain("Don't `sleep` or poll to wait for it");
       expect(text).toContain("sips -Z 800");
       // The edit-tool rule lives once, in Files; this section only adds batching the edits.
       const edits = kind === "work" || kind === "complete" || kind === "chat";

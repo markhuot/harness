@@ -23,7 +23,8 @@ Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, 
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -108,7 +109,8 @@ Read files with \`read_file\` and find them with \`list_files\`, not \`cat\`, \`
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -193,7 +195,8 @@ Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, 
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -278,7 +281,8 @@ Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, 
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -363,7 +367,8 @@ Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, 
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -448,7 +453,8 @@ Read files with \`read_file\` and find them with \`list_files\`, not \`cat\`, \`
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -534,7 +540,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -642,7 +649,8 @@ Change files with \`edit_file\` (part of a file) and \`write_file\` (new file or
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -750,7 +758,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -858,7 +867,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -966,7 +976,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -1081,7 +1092,8 @@ Change files with \`edit_file\` (part of a file) and \`write_file\` (new file or
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -1196,7 +1208,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -1311,7 +1324,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -1426,7 +1440,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -1541,7 +1556,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -1656,7 +1672,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -1771,7 +1788,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -1886,7 +1904,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -2001,7 +2020,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -2116,7 +2136,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -2222,7 +2243,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -2329,7 +2351,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -2447,7 +2470,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -2555,7 +2579,8 @@ Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, 
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -2629,7 +2654,8 @@ Read files with \`read_file\` and find them with \`list_files\`, not \`cat\`, \`
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -2703,7 +2729,8 @@ Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, 
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -2777,7 +2804,8 @@ Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, 
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -2851,7 +2879,8 @@ Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, 
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -2925,7 +2954,8 @@ Read files with \`read_file\` and find them with \`list_files\`, not \`cat\`, \`
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -2999,7 +3029,8 @@ Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, 
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -3073,7 +3104,8 @@ Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, 
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -3147,7 +3179,8 @@ Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, 
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -3221,7 +3254,8 @@ Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, 
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -3295,7 +3329,8 @@ Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, 
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -3369,7 +3404,8 @@ Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, 
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -3443,7 +3479,8 @@ Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, 
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -3517,7 +3554,8 @@ Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, 
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -3591,7 +3629,8 @@ Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, 
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -3663,7 +3702,8 @@ Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, 
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -3736,7 +3776,8 @@ Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, 
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -3813,7 +3854,8 @@ Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, 
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -3889,7 +3931,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -3961,7 +4004,8 @@ Change files with \`edit_file\` (part of a file) and \`write_file\` (new file or
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -4033,7 +4077,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -4105,7 +4150,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -4177,7 +4223,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -4257,7 +4304,8 @@ Change files with \`edit_file\` (part of a file) and \`write_file\` (new file or
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -4337,7 +4385,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -4417,7 +4466,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -4497,7 +4547,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -4579,7 +4630,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -4661,7 +4713,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -4743,7 +4796,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -4820,7 +4874,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -4897,7 +4952,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -4977,7 +5033,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -5047,7 +5104,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -5118,7 +5176,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -5201,7 +5260,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -5273,7 +5333,8 @@ Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, 
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -5376,7 +5437,8 @@ Read files with \`read_file\` and find them with \`list_files\`, not \`cat\`, \`
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -5479,7 +5541,8 @@ Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, 
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -5582,7 +5645,8 @@ Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, 
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -5685,7 +5749,8 @@ Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, 
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -5794,7 +5859,8 @@ Read files with \`read_file\` and find them with \`list_files\`, not \`cat\`, \`
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -5903,7 +5969,8 @@ Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, 
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -6012,7 +6079,8 @@ Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, 
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -6121,7 +6189,8 @@ Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, 
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -6230,7 +6299,8 @@ Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, 
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -6339,7 +6409,8 @@ Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, 
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -6448,7 +6519,8 @@ Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, 
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -6557,7 +6629,8 @@ Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, 
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -6666,7 +6739,8 @@ Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, 
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -6775,7 +6849,8 @@ Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, 
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -6876,7 +6951,8 @@ Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, 
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -6978,7 +7054,8 @@ Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, 
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -7090,7 +7167,8 @@ Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, 
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -7195,7 +7273,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -7290,7 +7369,8 @@ Change files with \`edit_file\` (part of a file) and \`write_file\` (new file or
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -7385,7 +7465,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -7480,7 +7561,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -7575,7 +7657,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -7676,7 +7759,8 @@ Change files with \`edit_file\` (part of a file) and \`write_file\` (new file or
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -7777,7 +7861,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -7896,7 +7981,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -8022,7 +8108,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -8129,7 +8216,8 @@ Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, 
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -8236,7 +8324,8 @@ Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, 
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -8349,7 +8438,8 @@ Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, 
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -8453,7 +8543,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -8541,7 +8632,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -8624,7 +8716,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -8712,7 +8805,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -8792,7 +8886,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -8871,7 +8966,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -8969,7 +9065,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -9055,7 +9152,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -9153,7 +9251,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -9236,7 +9335,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -9318,7 +9418,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -9404,7 +9505,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -9490,7 +9592,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -9578,7 +9681,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -9658,7 +9762,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -9737,7 +9842,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -9826,7 +9932,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -9915,7 +10022,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -10006,7 +10114,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -10089,7 +10198,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -10171,7 +10281,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -10258,7 +10369,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -10345,7 +10457,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -10434,7 +10547,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -10514,7 +10628,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -10593,7 +10708,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -10685,7 +10801,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -10777,7 +10894,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -10871,7 +10989,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -10954,7 +11073,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -11036,7 +11156,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -11124,7 +11245,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -11212,7 +11334,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -11300,7 +11423,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -11384,7 +11508,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -11467,7 +11592,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -11552,7 +11678,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -11637,7 +11764,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -11722,7 +11850,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -11803,7 +11932,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -11883,7 +12013,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -11977,7 +12108,8 @@ Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, 
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -12063,7 +12195,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -12157,7 +12290,8 @@ Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, 
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -12243,7 +12377,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -12337,7 +12472,8 @@ Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, 
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -12423,7 +12559,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -12517,7 +12654,8 @@ Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, 
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -12603,7 +12741,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -12697,7 +12836,8 @@ Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, 
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -12783,7 +12923,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -12894,7 +13035,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -12991,7 +13133,8 @@ Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, 
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -13080,7 +13223,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -13192,7 +13336,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -13290,7 +13435,8 @@ Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, 
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -13379,7 +13525,8 @@ Read files with \`Read\` and find them with \`Grep\` and \`Glob\`, not \`cat\`, 
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -13461,7 +13608,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -13539,7 +13687,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -13633,7 +13782,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -13739,7 +13889,8 @@ Change files with \`Edit\` (part of a file) and \`Write\` (new file or full rewr
 Take fewer, bigger turns:
 * Make independent reads, searches and checks, and independent edits, in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## File links
@@ -13832,7 +13983,8 @@ Each run starts with a <harness_run> block in front of its first message: the ti
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## Board
@@ -13881,7 +14033,8 @@ Each run starts with a <harness_run> block in front of its first message: the ti
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## Board
@@ -13930,7 +14083,8 @@ Each run starts with a <harness_run> block in front of its first message: the ti
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## Board
@@ -13979,7 +14133,8 @@ Each run starts with a <harness_run> block in front of its first message: the ti
 Take fewer, bigger turns:
 * Make independent reads, searches and checks in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.
 
 ## Board

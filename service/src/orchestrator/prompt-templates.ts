@@ -451,7 +451,8 @@ Change files with {{editTool}} (part of a file) and {{writeTool}} (new file or f
 Take fewer, bigger turns:
 * Make independent reads, searches and checks{{#if canEdit}}, and independent edits,{{/if}} in parallel in one turn.
 * Run the tests and the typecheck in one command (chain them with \`&&\`).
-* Wait on a build or other long command with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* Wait on a build or other long command you run yourself with one blocking command (a long enough timeout, or a monitor that returns when it ends), not by polling.
+* After you start a background sub-agent or task, end your turn if you have nothing else to do: the run stays open and you're resumed when it reports back. Don't \`sleep\` or poll to wait for it.
 * Downscale a screenshot before reading it (e.g. \`sips -Z 800 shot.png\`), and look at each one once.`,
   },
 
