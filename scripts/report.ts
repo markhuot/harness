@@ -88,7 +88,7 @@ export function buildReport(rows: Row[]): string {
     "",
     "- **new**: covered by a test in the new suite (`next/`); the old one is deleted only after a spot mutation check shows the new one can fail.",
     "- **walkthrough**: covered by a screen of the iPhone or Mac walkthrough.",
-    "- **loss**: accepted loss. The reason is what the human signs off on.",
+    "- **loss**: accepted loss. The human has signed off on the reason; the row stays listed so it can be revisited at the end.",
     "- **kept**: not part of the retired suite; it stays as it is.",
     "- **open**: no decision yet. An area is deleted only when it has no open rows.",
     "",
@@ -106,9 +106,9 @@ export function buildReport(rows: Row[]): string {
   }
   out.push("");
 
-  // Accepted losses, grouped by reason: the part the human signs off on.
+  // Accepted losses, grouped by reason. They stay listed after sign-off: the human may bring some back at the end.
   const losses = withD.filter((r) => r.d.status === "loss");
-  out.push("## Accepted losses for sign-off", "");
+  out.push("## Accepted losses", "", "Signed off by the human. They stay listed here so each can be brought back at the end if it turns out to be missed.", "");
   if (losses.length === 0) out.push("None.", "");
   const reasons = [...new Set(losses.map((r) => (r.d as { reason: string }).reason))];
   for (const reason of reasons) {

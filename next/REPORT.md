@@ -6,7 +6,7 @@ Every old test and every sim-check and Mac-check check is a row, with where it w
 
 - **new**: covered by a test in the new suite (`next/`); the old one is deleted only after a spot mutation check shows the new one can fail.
 - **walkthrough**: covered by a screen of the iPhone or Mac walkthrough.
-- **loss**: accepted loss. The reason is what the human signs off on.
+- **loss**: accepted loss. The human has signed off on the reason; the row stays listed so it can be revisited at the end.
 - **kept**: not part of the retired suite; it stays as it is.
 - **open**: no decision yet. An area is deleted only when it has no open rows.
 
@@ -49,7 +49,9 @@ Names generated at runtime (loops, helpers, `test.each`) appear as their templat
 | shared/src/testing | 39 | 39 | 0 | 0 | 0 | 0 |  |
 | shared/src/themes | 19 | 19 | 0 | 0 | 0 | 0 |  |
 
-## Accepted losses for sign-off
+## Accepted losses
+
+Signed off by the human. They stay listed here so each can be brought back at the end if it turns out to be missed.
 
 ### tests the snapshot diff helper, which retires with the snapshots; the walkthrough's reference diff gets its own bun test
 
