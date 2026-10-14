@@ -86,7 +86,7 @@ struct DockGhostCard: View {
     private var reduceMotion: Bool { forceReduceMotion || systemReduceMotion }
 
     /// Seconds for one pulse.
-    static let pulsePeriod = 1.6
+    static let pulsePeriod = 4.8
     /// How far the card rises at the top of the pulse.
     static let bounce: CGFloat = 3
 
