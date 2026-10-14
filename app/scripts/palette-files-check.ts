@@ -152,6 +152,22 @@ try {
   await type("[data-testid=palette-input]", "settings");
   await Bun.sleep(500);
   check("a plain word shows no files", (await rowsOf()).every((r) => r.kind !== "file"));
+  // A leading ">" is commands only, even for text that matches a file, and the board offers its child tickets toggle.
+  await type("[data-testid=palette-input]", ">src/components/Button.tsx");
+  await Bun.sleep(500);
+  check("a > query shows no file even for the path that matches", (await rowsOf()).every((r) => r.kind !== "file"));
+  await type("[data-testid=palette-input]", ">");
+  await Bun.sleep(300);
+  const onlyCommands = await rowsOf();
+  check("a bare > lists commands only", onlyCommands.length > 0 && onlyCommands.every((r) => r.kind === "command" || r.kind === "nav"), JSON.stringify(onlyCommands.map((r) => r.id)));
+  // The board's commands come with the focus on the board (its search box, here).
+  await key("Escape", "Escape", 27);
+  await js(`document.querySelector('[data-testid=board-search]').focus()`);
+  await key("k", "KeyK", 75, 4);
+  await until("palette", () => exists("[data-testid=palette-input]"));
+  await type("[data-testid=palette-input]", ">child tickets");
+  const kids = await until("the child tickets command", async () => (await rowsOf()).find((r) => r.id === "cmd:board.children") ?? false).catch(() => null);
+  check("the board's child tickets command is in the palette", !!kids && /child tickets/i.test(kids.text), JSON.stringify(kids));
   await key("Escape", "Escape", 27);
 
   // 7. A focused ticket pane is the root.
