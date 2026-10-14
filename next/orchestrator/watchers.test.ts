@@ -453,17 +453,21 @@ describe("WatcherRunner sync", () => {
     expect(procs[0]!.args).toEqual(["-lc", "while true; do curl -s https://x/events; sleep 60; done"]);
   });
 
-  test("stops removed and disabled watchers", async () => {
+  test("stops removed and disabled watchers, and a disabled one starts stopped", async () => {
     const { spawn, procs } = fakeSpawn();
     const h = harness(spawn);
-    h.runner.sync([watcher({ id: "a" }), watcher({ id: "b" })]);
+    h.runner.sync([watcher({ id: "a" }), watcher({ id: "b" }), watcher({ id: "off", enabled: false })]);
     await waitFor(() => procs.length === 2, { label: "spawns" });
-    h.runner.sync([watcher({ id: "b", enabled: false })]);
+    expect(h.runner.live("off")).toMatchObject({ state: "stopped", nextRunAt: null }); // a disabled watcher is stopped from the start
+    h.runner.sync([watcher({ id: "b", enabled: false }), watcher({ id: "off", enabled: false })]);
+    expect(h.runner.live("b")?.state).toBe("stopped");
     await waitFor(() => procs.every((p) => p.killed), { label: "kills" });
     await pause();
     expect(procs.length).toBe(2); // killed on purpose → no restart
     expect(procs.map((p) => p.kills)).toEqual([1, 1]);
     expect(h.errors().filter((e) => e !== null)).toEqual([]);
+    expect(h.states("b").at(-1)).toBe("stopped"); // the killed process's exit doesn't report a wait
+    expect(h.runner.live("a")).toBeUndefined();
   });
 
   test("restarts on command changes, not on cosmetic ones", async () => {
@@ -486,6 +490,10 @@ describe("WatcherRunner sync", () => {
     h.runner.sync([{ ...w, name: "renamed", args: ["--follow"], env: { A: "1" } }]);
     await waitFor(() => procs.length === 3, { label: "env restart" });
     expect(procs[1]!.killed).toBe(true);
+    await pause();
+    // the new process is reported, not the old one's exit
+    expect(h.runner.live("w1")?.state).toBe("running");
+    expect(h.states()).not.toContain("stopped");
   });
 
   test("output is delivered with the latest watcher object (and its prompt)", async () => {
@@ -514,10 +522,11 @@ describe("WatcherRunner sync", () => {
     await waitFor(() => h.outputs.length === 1, { label: "one-off output" });
     await pause();
     expect(procs.length).toBe(1); // not looped
+    expect(h.states()).toEqual(["stopped", "running", "stopped"]);
     await expect(h.runner.runNow("missing")).rejects.toThrow("Unknown watcher");
   });
 
-  test("stopAll kills everything and nothing restarts", async () => {
+  test("stopAll kills everything, nothing restarts, and every watcher reports stopped", async () => {
     const { spawn, procs } = fakeSpawn();
     const h = harness(spawn);
     h.runner.sync([watcher({ id: "a" }), watcher({ id: "b", mode: "interval", intervalSec: 0.004 })]);
@@ -526,6 +535,8 @@ describe("WatcherRunner sync", () => {
     expect(procs.map((p) => p.kills)).toEqual([1, 1]);
     await Bun.sleep(20); // several interval ticks
     expect(procs.length).toBe(2);
+    expect([h.runner.live("a")?.state, h.runner.live("b")?.state]).toEqual(["stopped", "stopped"]);
+    expect([h.states("a").at(-1), h.states("b").at(-1)]).toEqual(["stopped", "stopped"]);
   });
 
   test("stopAll waits for a killed process to exit, then resolves", async () => {
@@ -617,56 +628,5 @@ describe("WatcherRunner live state", () => {
     procs[1]!.exit(0);
     await waitFor(() => h.runner.live("w1")?.failures === 0, { label: "reset" });
     expect(h.errors().at(-1)).toBeNull();
-  });
-
-  test("disabling or removing stops it; a disabled watcher is stopped from the start", async () => {
-    const { spawn, procs } = fakeSpawn();
-    const h = harness(spawn);
-    h.runner.sync([watcher(), watcher({ id: "off", enabled: false })]);
-    await waitFor(() => h.runner.live("w1")?.state === "running", { label: "running" });
-    expect(h.runner.live("off")).toMatchObject({ state: "stopped", nextRunAt: null });
-    h.runner.sync([watcher({ enabled: false }), watcher({ id: "off", enabled: false })]);
-    expect(h.runner.live("w1")?.state).toBe("stopped");
-    await waitFor(() => procs[0]!.killed, { label: "kill" });
-    await pause();
-    expect(h.states().at(-1)).toBe("stopped"); // the killed process's exit doesn't report a wait
-    h.runner.sync([]);
-    expect(h.runner.live("w1")).toBeUndefined();
-  });
-
-  test("a restart on a command change reports the new process, not the old one's exit", async () => {
-    const { spawn, procs } = fakeSpawn();
-    const h = harness(spawn);
-    h.runner.sync([watcher()]);
-    await waitFor(() => procs.length === 1, { label: "first" });
-    h.runner.sync([watcher({ command: "watch --v2" })]);
-    await waitFor(() => procs.length === 2, { label: "second" });
-    await pause();
-    expect(procs[0]!.killed).toBe(true);
-    expect(h.runner.live("w1")?.state).toBe("running");
-    expect(h.states()).not.toContain("stopped");
-  });
-
-  test("a one-off run of a disabled watcher is running, then stopped again", async () => {
-    const { spawn, procs } = fakeSpawn();
-    const h = harness(spawn);
-    h.runner.sync([watcher({ enabled: false, mode: "interval" })]);
-    await h.runner.runNow("w1");
-    await waitFor(() => procs.length === 1, { label: "spawn" });
-    expect(h.runner.live("w1")?.state).toBe("running");
-    procs[0]!.exit(0);
-    await waitFor(() => h.runner.live("w1")?.state === "stopped", { label: "stopped" });
-    expect(h.states()).toEqual(["stopped", "running", "stopped"]);
-  });
-
-  test("stopAll reports every watcher stopped", async () => {
-    const { spawn, procs } = fakeSpawn();
-    const h = harness(spawn);
-    h.runner.sync([watcher({ id: "a" }), watcher({ id: "b", mode: "interval" })]);
-    await waitFor(() => procs.length === 2, { label: "spawns" });
-    await h.runner.stopAll();
-    await pause();
-    expect([h.runner.live("a")?.state, h.runner.live("b")?.state]).toEqual(["stopped", "stopped"]);
-    expect([h.states("a").at(-1), h.states("b").at(-1)]).toEqual(["stopped", "stopped"]);
   });
 });

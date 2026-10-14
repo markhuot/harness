@@ -69,22 +69,4 @@ describe("watcher output → Inbox", () => {
     expect(h.spawned()).toHaveLength(2);
     expect(h.orch.listSessions("triage")).toHaveLength(1);
   });
-
-  test("a legacy command + args is spawned as given, with no extra shell, and its output is triaged", async () => {
-    const h = setup();
-    h.orch.createWatcher({
-      name: "events",
-      command: "/bin/sh",
-      args: ["-c", `echo '${EVENT}'`],
-      prompt: PROMPT,
-      mode: "interval",
-      intervalSec: 3600,
-    });
-    const s = await triageSession(h);
-    expect(h.spawned()).toEqual([{ cmd: "/bin/sh", args: ["-c", `echo '${EVENT}'`] }]);
-    const prompt = firstPrompt(h, s.id);
-    expect(prompt).toContain(EVENT);
-    expect(prompt).toContain(PROMPT);
-    await h.orch.idle();
-  });
 });

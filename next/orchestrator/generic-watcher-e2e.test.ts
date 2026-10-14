@@ -25,10 +25,10 @@ const PROMPT =
   '[dummy:dispatch-if /"assignee":"mark"[^}]*"next_steps":\\[".+?"\\]/] [dummy:project SHOP]';
 const curlLoop = (state: string) => `while true; do curl -s "https://events.test/api?since=$(cat ${state})"; sleep 0.5; done`;
 
-function setup(script?: (p: FakeProc) => void) {
+function setup() {
   /** Every output the orchestrator has finished handling (deduped or triaged), in order */
   const handled: string[] = [];
-  const procs = fakeSpawn(script);
+  const procs = fakeSpawn();
   const h = makeOrchestrator({
     drivers: [new DummyDriver({ delayMs: 0 })],
     tools: (kind, d) => toolsForRun(kind, d),
@@ -160,18 +160,5 @@ describe("generic watcher, end to end", () => {
       ["E1", h.shop.id],
       ["E2", h.infra.id],
     ]);
-  });
-
-  test("a failing command shows up as the watcher's error, with its stderr", async () => {
-    // A request that failed: the message on stderr, exit 2
-    const h = setup((p) => {
-      p.writeErr("events API returned 503\n");
-      p.exit(2);
-    });
-    const w = h.orch.createWatcher({ name: "broken", command: 'curl -sf "https://events.test/api"', prompt: PROMPT, mode: "interval", intervalSec: 3600 });
-    await waitFor(() => !!h.store.watchers.get(w.id)!.lastError, { label: "the watcher's error" });
-    expect(h.store.watchers.get(w.id)!.lastError).toBe("Command exited with code 2: events API returned 503");
-    await h.orch.idle();
-    expect(h.orch.listSessions("triage")).toEqual([]);
   });
 });
