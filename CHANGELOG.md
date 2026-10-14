@@ -11,7 +11,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
-- The file viewer and editor now color code with the same highlighter as the Changes tab, on the Mac and on iPhone and iPad. A `.tf` (Terraform) file, which showed as plain text, is now highlighted like it is in Changes, and so is every other language Changes colors. The Diff tab shows the same side-by-side diff the Changes tab draws. Files over 10,000 lines open as plain text so they open fast. Editing, saving, Save on blur, undo, line-ending preservation and linked-line highlighting work as before; the editor also gains Find (Cmd+F) and multiple cursors on the Mac.
+- The file viewer and editor now color code with the same highlighter as the Changes tab, on the Mac and on iPhone and iPad. A `.tf` (Terraform) file, which showed as plain text, is now highlighted like it is in Changes, and so is every other language Changes colors. The Diff tab shows the same side-by-side diff the Changes tab draws. Files over 10,000 lines open as plain text so they open fast. Editing, saving, Save on blur, undo, line-ending preservation and linked-line highlighting work as before.
 - For people working on Harness: `@pierre/diffs` is pinned to exactly 1.5.1 in the app, service, git plugin and editor, so the Mac build, the iPhone bundle and the Changes tab all load the same version of its beta editor. `bun run verify` runs the Mac file-pane check and the iPhone file chains when you change `editor/`.
 
 - On iPhone, docked ticket cards are now as wide as the board's bottom bar, inset from the screen's sides to follow the device's corner curve. The bar keeps that width while a ticket is docked instead of narrowing to match the card.
@@ -73,6 +73,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Removed
 
+- CodeMirror is gone from the app: the editor's language table, theme and its dozen CodeMirror packages are removed, so the file viewer has one syntax highlighter instead of two.
 - For people working on Harness: `app/scripts/mock-service.ts` (2,800 lines that re-implemented the service in memory) and `bun run --cwd app mock`.
 - For people working on Harness: the stray `service/smoke3.tmp.ts` scratch script.
 
