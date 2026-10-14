@@ -10,8 +10,9 @@ import { toolsForRun } from "../../service/src/tools";
 import { clearPullRequestTargets } from "../../service/src/store/projects";
 import { useRuntime } from "../../service/src/store/util";
 import { onTempCleanup } from "@harness/shared/testing";
+import { createMemoryGit, type MemoryGit } from "./memory-git";
 
-type Options = Parameters<typeof makeOrchestrator>[0];
+type Options = NonNullable<Parameters<typeof makeOrchestrator>[0]> & { memoryGit?: MemoryGit };
 
 const TOKEN = "test-token";
 
@@ -32,7 +33,10 @@ export function createService(opts: Options = {}) {
   });
   clearPullRequestTargets();
   onTempCleanup(restore);
-  const h = makeOrchestrator({ tools: toolsForRun, ...opts });
+  // Git is in memory unless the test brings its own port; the scripted agent's commits and merges land in the same memory.
+  const git = opts.memoryGit ?? createMemoryGit();
+  const h = makeOrchestrator({ tools: toolsForRun, git: git.port, ...opts });
+  h.driver.workGit = git.work;
   const http = createHttpHandler({
     orchestrator: h.orch,
     bus: h.bus,
@@ -71,5 +75,5 @@ export function createService(opts: Options = {}) {
     return dir;
   }
 
-  return { ...h, http, request, connect, projectDir, token: TOKEN, tick: (ms: number) => void (clock += ms) };
+  return { ...h, git, http, request, connect, projectDir, token: TOKEN, tick: (ms: number) => void (clock += ms) };
 }

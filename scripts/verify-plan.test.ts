@@ -11,6 +11,12 @@ describe("planLayers", () => {
     expect(ids(["service/src/api/tickets.ts"])).toEqual(["bun:service", "typecheck"]);
   });
 
+  test("the new suite runs when it changes, and when the git adapter or what drives it changes", () => {
+    expect(ids(["next/support/guard.ts"])).toEqual(["typecheck", "next"]);
+    expect(ids(["service/src/orchestrator/worktree.ts"])).toEqual(["bun:service", "typecheck", "next"]);
+    expect(ids(["service/src/api/tickets.ts"])).toEqual(["bun:service", "typecheck"]);
+  });
+
   test("shared and repo-wide config widen to every package's tests", () => {
     expect(ids(["shared/src/types.ts"])).toEqual(["bun:all", "typecheck"]);
     expect(ids(["bun.lock"])).toEqual(["bun:all", "typecheck"]);
@@ -137,6 +143,6 @@ describe("the mapping points at things that exist", () => {
 
 describe("allLayers", () => {
   test("runs every package, swift test, the given app checks and both simulator layers", () => {
-    expect(allLayers(["smoke", "groups-check"]).map((l) => l.id)).toEqual(["bun:all", "typecheck", "swift-test", "app-build", "app-check:smoke", "app-check:groups-check", "snapshots", "sim-check"]);
+    expect(allLayers(["smoke", "groups-check"]).map((l) => l.id)).toEqual(["bun:all", "typecheck", "next", "swift-test", "app-build", "app-check:smoke", "app-check:groups-check", "snapshots", "sim-check"]);
   });
 });

@@ -134,6 +134,9 @@ import { findKeys, toOutput, WatcherRunner, type WatcherOutput } from "./watcher
 import { RunQueue, type QueuedJob } from "./queue";
 import { branchForKey, isInside } from "./worktree";
 import { realGit, type GitPort } from "./git-port";
+
+/** An upper bound for a Promise.race: resolves after `ms` without holding the process open. Not a wait; the race is won by the thing it bounds. */
+const bound = (ms: number) => new Promise<void>((resolve) => void setTimeout(resolve, ms).unref?.());
 import { readFileDiff, readFileView, writeFileContents } from "./file-view";
 import { attachMentions, searchPaths, type SearchOptions } from "./files";
 import { compactNotes } from "../annotations";
@@ -698,7 +701,7 @@ export class Orchestrator {
       a.cancelled = true;
       a.controller.abort();
     }
-    await Promise.race([Promise.all(actives.map((a) => this.queue.whenSessionIdle(a.run.sessionId))), Bun.sleep(5000)]);
+    await Promise.race([Promise.all(actives.map((a) => this.queue.whenSessionIdle(a.run.sessionId))), bound(5000)]);
   }
 
   /** Nothing queued, running or starting: restarting the service now interrupts no agent. */
@@ -717,8 +720,8 @@ export class Orchestrator {
     const deadline = Date.now() + timeoutMs;
     // Microtask-scheduled work (conductor flushes) may enqueue right after a run ends.
     for (;;) {
-      await Promise.race([this.queue.idle(), Bun.sleep(Math.max(0, deadline - Date.now()))]);
-      await Promise.race([Promise.allSettled([...this.background]), Bun.sleep(Math.max(0, deadline - Date.now()))]);
+      await Promise.race([this.queue.idle(), bound(Math.max(0, deadline - Date.now()))]);
+      await Promise.race([Promise.allSettled([...this.background]), bound(Math.max(0, deadline - Date.now()))]);
       await Bun.sleep(1);
       if (this.queue.pendingCount === 0 && this.queue.runningCount === 0 && this.background.size === 0) return;
       if (Date.now() > deadline) throw new Error("orchestrator did not become idle in time");
@@ -2379,7 +2382,7 @@ export class Orchestrator {
       a.cancelled = true;
       a.controller.abort();
     }
-    await Promise.race([this.queue.whenSessionIdle(sessionId), Bun.sleep(5000)]);
+    await Promise.race([this.queue.whenSessionIdle(sessionId), bound(5000)]);
   }
 
   rerunAgentReview(key: string): Ticket {
@@ -2418,7 +2421,7 @@ export class Orchestrator {
         a.cancelled = true;
         a.controller.abort();
       }
-      if (wait) await Promise.race([this.queue.whenSessionIdle(sessionId), Bun.sleep(5000)]);
+      if (wait) await Promise.race([this.queue.whenSessionIdle(sessionId), bound(5000)]);
     }
     this.touchSession(sessionId);
   }

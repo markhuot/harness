@@ -1,7 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync } from "node:fs";
-import { join } from "node:path";
-import { git } from "../../service/src/orchestrator/worktree";
 import { createService } from "../support/service";
 
 describe("the run path, in this process", () => {
@@ -51,14 +48,11 @@ describe("the run path, in this process", () => {
     expect(listed!.tools).toContain("read_spec");
   });
 
-  test("git: a work run commits on its worktree branch and completing merges it", async () => {
+  test("git: a work run commits on its worktree branch and the ticket reports changes", async () => {
     const s = createService();
     s.driver.commitsWork = true;
-    const repo = join(s.home, "repo");
-    mkdirSync(repo);
-    for (const args of [["init", "-q", "-b", "main"], ["commit", "-q", "--allow-empty", "-m", "init"]]) {
-      expect((await git(args, repo)).code).toBe(0);
-    }
+    const repo = s.projectDir("repo");
+    s.git.initRepo(repo);
     const project = await s.request("POST", "/projects", { path: repo, key: "web" });
     await s.request("POST", "/tickets", { projectId: project.data.id, spec: "x" });
     await s.orch.idle();

@@ -27,6 +27,8 @@ const BUN = "bun";
 const bunAll: Layer = { id: "bun:all", title: "bun tests (every package)", cmd: [BUN, "run", "test"], kind: "light" };
 const bunIn = (dir: string): Layer => ({ id: `bun:${dir}`, title: `bun tests (${dir})`, cmd: [BUN, "run", "--cwd", dir, "test"], kind: "light" });
 const typecheck: Layer = { id: "typecheck", title: "typecheck (tsc, all projects)", cmd: [BUN, "run", "typecheck"], kind: "light" };
+/** The new in-process suite (next/): its guarded tier and its contract tier against real git. */
+const nextSuite: Layer = { id: "next", title: "new suite (next/: guarded tier and contract tier)", cmd: [BUN, "run", "test:next"], kind: "light" };
 const swiftTest: Layer = { id: "swift-test", title: "swift test (HarnessKit)", cmd: ["swift", "test", "--package-path", "ios/HarnessKit"], kind: "light" };
 const snapshots: Layer = { id: "snapshots", title: "iOS snapshot tests (iPhone, iPad)", cmd: [BUN, "run", "sim", "snapshots"], kind: "sim" };
 /** sim-check with these args; it takes the simulator lock itself. */
@@ -108,6 +110,9 @@ export const RULES: Rule[] = [
   { name: "docs", match: /\.md$/, layers: none },
   { name: "shared package", match: /^shared\//, layers: () => [bunAll, typecheck] },
   { name: "repo-wide config and scripts", match: /^(package\.json|bun\.lock|bunfig\.toml|tsconfig[^/]*\.json|scripts\/)/, layers: () => [bunAll, typecheck] },
+  { name: "new suite", match: /^next\//, layers: () => [nextSuite, typecheck] },
+  // The services the new suite runs in process, and the git adapter its contract tier checks against real git.
+  { name: "service code the new suite drives", match: /^service\/src\/(orchestrator|browser|testing)\//, layers: () => [nextSuite] },
   { name: "service", match: /^service\//, layers: () => [bunIn("service"), typecheck] },
   // The editor is the Mac file pane and the iPhone's web page, and its tests can't draw a file (that needs a
   // real layout engine), so both apps' file checks run too.
@@ -145,7 +150,7 @@ export const RULES: Rule[] = [
 
 /** The layers `--all` runs: every package's tests, the typecheck, swift test, every simulator and Mac app check. */
 export function allLayers(appChecks: string[]): PlannedLayer[] {
-  const layers = [bunAll, typecheck, swiftTest, appBuild, ...appChecks.map(appCheck), snapshots, walkThrough];
+  const layers = [bunAll, typecheck, nextSuite, swiftTest, appBuild, ...appChecks.map(appCheck), snapshots, walkThrough];
   return layers.map((l) => ({ ...l, reasons: ["--all"] }));
 }
 

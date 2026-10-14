@@ -168,6 +168,19 @@ export interface RecordedCall {
 const replanReason = (p: string) => `needs a new approach${p.includes("/replan-fail") ? " /fail plan broke" : ""}`;
 const wantsAutoReplan = (p: string) => p.includes("/replan-auto") || p.includes("/replan-fail");
 
+/** What the scripted agent does to git: commit its work, merge its branch, name its head. The default uses the git binary; the new suite swaps in an in-memory one. */
+export interface WorkGit {
+  commitWork(cwd: string, runId: string): Promise<void>;
+  mergeTicketBranch(cwd: string, branch: string, baseBranch: string | null | undefined): Promise<void>;
+  headCommit(cwd: string): Promise<string>;
+}
+
+export const realWorkGit: WorkGit = {
+  commitWork: (cwd, runId) => commitWork(cwd, runId),
+  mergeTicketBranch: (cwd, branch, base) => mergeTicketBranch(cwd, branch, base),
+  headCommit: async (cwd) => (await git(["rev-parse", "HEAD"], cwd)).stdout.trim(),
+};
+
 /** A commit in `cwd` (FakeDriver.commitsWork), when it's a git checkout. */
 async function commitWork(cwd: string, runId: string) {
   if ((await git(["rev-parse", "--is-inside-work-tree"], cwd)).code !== 0) return;
@@ -231,6 +244,8 @@ export class FakeDriver implements Driver {
    * (Ticket.hasChanges). Off by default: most tests' tickets change nothing.
    */
   commitsWork = false;
+  /** How the scripted agent touches git (default: the git binary) */
+  workGit: WorkGit = realWorkGit;
   /** Optional per-run override */
   script: ((req: RunRequest) => AsyncIterable<DriverEvent>) | null = null;
   /** What the driver says it can do with a saved session (null: nothing) */
@@ -397,7 +412,7 @@ export class FakeDriver implements Driver {
         const thrown = /\/throw (.+)/.exec(p);
         if (thrown) throw new Error(thrown[1]!);
         if (p.includes("/nosubmit")) return;
-        if (this.commitsWork) await commitWork(req.cwd, req.runId);
+        if (this.commitsWork) await this.workGit.commitWork(req.cwd, req.runId);
         await ops.postNote(ctx, "Did the work.");
         const skips = { ...(p.includes("/skipreview") && { skipAgentReview: true }), ...(p.includes("/skiphuman") && { skipHumanReview: true }) };
         if (Object.keys(skips).length) {
@@ -484,7 +499,7 @@ export class FakeDriver implements Driver {
         yield { type: "text", text: "Finalized." };
         // A pull request completion records one, unless its instructions say [no-pr].
         if (ctx.ticket?.completionAction === "pr" && !p.includes("[no-pr]")) {
-          const head = (await git(["rev-parse", "HEAD"], req.cwd)).stdout.trim();
+          const head = await this.workGit.headCommit(req.cwd);
           await ops.recordPullRequest(ctx, `https://github.com/acme/web/pull/${ctx.ticket.key.split("-").pop()}`, head);
         }
         // A merge completion merges, unless its instructions say [no-merge] (it ends having done nothing)
@@ -494,7 +509,7 @@ export class FakeDriver implements Driver {
             await ops.block(ctx, "Which side of the conflict should win?");
             return;
           }
-          if (!p.includes("[no-merge]") && ctx.ticket?.branch) await mergeTicketBranch(req.cwd, ctx.ticket.branch, /base branch `([^`]+)`/.exec(p)?.[1]);
+          if (!p.includes("[no-merge]") && ctx.ticket?.branch) await this.workGit.mergeTicketBranch(req.cwd, ctx.ticket.branch, /base branch `([^`]+)`/.exec(p)?.[1]);
         }
         await ops.postNote(ctx, "Completed.");
         return;

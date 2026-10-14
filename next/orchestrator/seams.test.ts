@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createService } from "../support/service";
-import { realGit, type GitPort } from "../../service/src/orchestrator/git-port";
+import type { GitPort } from "../../service/src/orchestrator/git-port";
+import { createMemoryGit } from "../support/memory-git";
 
 describe("clock and id seams", () => {
   test("two services stamp the same times and ids for the same steps", async () => {
@@ -35,8 +36,9 @@ describe("clock and id seams", () => {
 describe("the git port", () => {
   test("every git question the orchestrator asks goes through the injected port", async () => {
     const asked: string[] = [];
-    const spy = new Proxy(realGit, { get: (t, k: string) => (...args: unknown[]) => (asked.push(k), (t as any)[k](...args)) }) as GitPort;
-    const s = createService({ git: spy });
+    const memory = createMemoryGit();
+    const spy = new Proxy(memory.port, { get: (t, k: string) => (...args: unknown[]) => (asked.push(k), (t as any)[k](...args)) }) as GitPort;
+    const s = createService({ git: spy, memoryGit: memory });
     const project = await s.request("POST", "/projects", { path: s.projectDir("acme"), key: "acme" });
     await s.request("POST", "/tickets", { projectId: project.data.id, spec: "x", start: true });
     await s.orch.idle();
