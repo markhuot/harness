@@ -3,8 +3,8 @@
 // took in keeps them in its queued run, and their uploads live as long as the ticket.
 
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { HarnessApiError, type Attachment, type Ticket } from "@harness/shared";
 import { createService } from "../support/service";
 import { FakeDriver, makeOrchestrator, stubBrowser } from "../../service/src/testing/fakes";
@@ -167,45 +167,8 @@ describe("steering", () => {
   });
 });
 
-describe("uploads", () => {
-  test("an upload sent with a message survives the startup sweep, and goes when its ticket is deleted", async () => {
-    const h = setup();
-    const t = await blocked(h);
-    const sent = h.orch.uploadAttachment(png(1, 1), "Pasted image.png", "image/png");
-    const stray = h.orch.uploadAttachment(png(1, 1), "Stray.png", "image/png");
-    await h.orch.sendMessage(t.key, "From my phone", { attachments: [{ id: sent.id }] });
-    await h.orch.idle();
-    const old = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
-    for (const p of [sent.path, stray.path]) utimesSync(dirname(p), old, old);
-
-    h.orch.sweepUploads();
-    expect(existsSync(sent.path)).toBe(true);
-    expect(existsSync(stray.path)).toBe(false);
-
-    expect(h.store.attachments.get(sent.id)).not.toBeNull();
-    expect(h.store.attachments.get(stray.id)).toBeNull();
-
-    await h.orch.deleteTicket(t.key);
-    expect(existsSync(sent.path)).toBe(false);
-    expect(h.store.attachments.get(sent.id)).toBeNull();
-  });
-
-  test("an upload a message shares with another ticket stays until neither uses it", async () => {
-    const h = setup();
-    const t = await blocked(h);
-    const up = h.orch.uploadAttachment(png(1, 1), "Pasted image.png", "image/png");
-    await h.orch.sendMessage(t.key, "See", { attachments: [{ id: up.id }] });
-    await h.orch.idle();
-    const child = await h.orch.createTicket({ projectId: h.project.id, spec: "child", draft: true, promptAttachments: [{ id: up.id }] });
-    await h.orch.deleteTicket(t.key);
-    expect(existsSync(up.path)).toBe(true);
-    await h.orch.deleteTicket(child.key);
-    expect(existsSync(up.path)).toBe(false);
-  });
-});
-
 describe("over HTTP", () => {
-  test("POST /messages takes attachments; each is served from its transcript entry with ?token=, 404 once gone", async () => {
+  test("POST /messages takes attachments; each is served from its transcript entry by the legacy index route with ?token=, 404 once gone", async () => {
     const browser = stubBrowser();
     const svc = createService({ browser });
     const home = svc.home;
@@ -222,15 +185,11 @@ describe("over HTTP", () => {
     const sent = entry!.content.type === "text" ? entry!.content.attachments! : [];
     expect(sent).toEqual([up, { id: expect.any(String), path: other, name: "notes.txt", source: "file", kind: "file", mimeType: "text/plain", size: 5 }]);
 
-    const img = await svc.fetch(client.attachmentUrl(up.id));
-    expect([img.status, img.headers.get("content-type")]).toEqual([200, "image/png"]);
-    expect(Buffer.from(await img.arrayBuffer()).equals(png(2, 2))).toBe(true);
-    expect((await svc.fetch(client.attachmentUrl(sent[1]!.id), { method: "HEAD" })).status).toBe(200);
+    // (GET /attachments/:id itself is covered in prompt-attachments' "over HTTP".)
     // Legacy: by transcript entry and index, for iPhone apps from before the registry.
     const legacy = (id: string, i: number) => `http://service.test/transcript/${id}/attachments/${i}?token=${svc.token}`;
     expect((await svc.fetch(legacy(entry!.id, 0))).status).toBe(200);
     rmSync(other);
-    expect((await svc.fetch(client.attachmentUrl(sent[1]!.id), { method: "HEAD" })).status).toBe(404);
     expect((await svc.fetch(legacy(entry!.id, 1), { method: "HEAD" })).status).toBe(404);
     expect((await svc.fetch(legacy(entry!.id, 5))).status).toBe(404);
     expect((await svc.fetch(legacy("nope", 0))).status).toBe(404);

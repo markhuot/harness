@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
 import { createService } from "../support/service";
 import type { GitPort } from "../../service/src/orchestrator/git-port";
 import { newId, now } from "../../service/src/store/util";
@@ -56,12 +56,11 @@ describe("per-test teardown", () => {
     expect(now()).toBe(1_700_000_000_010);
   });
 
-  test("the next test in the same file starts on the real clock and ids", () => {
+  // Runs once the describe's tests are done, in whatever order they ran: the last test's service
+  // must have been torn down by the preload's afterEach, leaving the real clock and ids.
+  afterAll(() => {
     expect(now()).toBeGreaterThan(1_790_000_000_000);
     expect(newId()).not.toMatch(/^id-/);
-    const s = createService();
-    expect(newId()).toBe("id-1");
-    expect(s.tick).toBeDefined();
   });
 
   test("a second service in a test body gets its own counters, and the first is stopped afterwards", async () => {

@@ -121,8 +121,9 @@ describe("uploads", () => {
     expect(h.store.attachments.get(shotId)).not.toBeNull();
   });
 
-  test("an upload another ticket also uses stays when one of them is deleted, and goes with the last", async () => {
+  test("an upload shared with another ticket stays when one of them is deleted, and goes with the last (prompt+prompt, message+prompt)", async () => {
     const h = setup();
+    // Ticket + ticket: the second attaches the upload by its path.
     const up = h.orch.uploadAttachment(png(1, 1), "Pasted image.png", "image/png");
     const parent = await h.orch.createTicket({ projectId: h.web.id, spec: "parent", draft: true, promptAttachments: [{ id: up.id }] });
     const child = await h.orch.createTicket({ projectId: h.web.id, spec: "child", draft: true, promptAttachments: [{ path: up.path }] });
@@ -133,6 +134,20 @@ describe("uploads", () => {
     await h.orch.deleteTicket(parent.key);
     expect(existsSync(up.path)).toBe(false);
     expect(h.store.attachments.get(up.id)).toBeNull();
+
+    // Message + ticket: the first user is a message sent to a blocked ticket.
+    const sent = h.orch.uploadAttachment(png(1, 1), "Sent.png", "image/png");
+    const talker = await h.orch.createTicket({ projectId: h.web.id, spec: "do it /block Which screenshot?" });
+    await h.orch.idle();
+    await h.orch.sendMessage(talker.key, "See", { attachments: [{ id: sent.id }] });
+    await h.orch.idle();
+    const draft = await h.orch.createTicket({ projectId: h.web.id, spec: "child", draft: true, promptAttachments: [{ id: sent.id }] });
+    await h.orch.deleteTicket(talker.key);
+    expect(existsSync(sent.path)).toBe(true);
+    expect(h.store.attachments.get(sent.id)).not.toBeNull();
+    await h.orch.deleteTicket(draft.key);
+    expect(existsSync(sent.path)).toBe(false);
+    expect(h.store.attachments.get(sent.id)).toBeNull();
   });
 
   test("the startup sweep forgets registry rows whose files are gone or that nothing uses, and keeps what a ticket uses", async () => {
@@ -143,13 +158,19 @@ describe("uploads", () => {
     const vanished = h.orch.registerAttachment({ path: h.file("vanished.txt") });
     const loose = h.orch.registerAttachment({ path: h.file("loose.txt") });
     await h.orch.createTicket({ projectId: h.web.id, spec: "x", draft: true, promptAttachments: [{ id: used.id }] });
+    // An upload used only by a message sent to a ticket also survives.
+    const sent = h.orch.uploadAttachment(png(1, 1), "sent.png", "image/png");
+    const talker = await h.orch.createTicket({ projectId: h.web.id, spec: "do it /block Which screenshot?" });
+    await h.orch.idle();
+    await h.orch.sendMessage(talker.key, "From my phone", { attachments: [{ id: sent.id }] });
+    await h.orch.idle();
     rmSync(vanished.path);
     const old = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
-    for (const a of [used, orphan]) utimesSync(join(a.path, ".."), old, old);
+    for (const a of [used, orphan, sent]) utimesSync(join(a.path, ".."), old, old);
     h.store.db.query("UPDATE attachments SET created_at = $t WHERE id <> $young").run({ t: old.getTime(), young: young.id });
     h.orch.sweepUploads();
-    expect([used, orphan, young, vanished, loose].map((a) => !!h.store.attachments.get(a.id))).toEqual([true, false, true, false, false]);
-    expect([existsSync(used.path), existsSync(orphan.path), existsSync(young.path), existsSync(loose.path)]).toEqual([true, false, true, true]);
+    expect([used, orphan, young, vanished, loose, sent].map((a) => !!h.store.attachments.get(a.id))).toEqual([true, false, true, false, false, true]);
+    expect([existsSync(used.path), existsSync(orphan.path), existsSync(young.path), existsSync(loose.path), existsSync(sent.path)]).toEqual([true, false, true, true, true]);
   });
 });
 
