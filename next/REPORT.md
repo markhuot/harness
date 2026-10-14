@@ -14,7 +14,7 @@ Names generated at runtime (loops, helpers, `test.each`) appear as their templat
 
 ## Progress
 
-6171 rows: 4780 open, 0 new, 0 walkthrough, 61 accepted loss, 1330 kept.
+6176 rows: 4359 open, 426 new, 0 walkthrough, 61 accepted loss, 1330 kept.
 
 | Area | Rows | Open | New | Walkthrough | Loss | Kept | Deletable |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | :---: |
@@ -33,13 +33,13 @@ Names generated at runtime (loops, helpers, `test.each`) appear as their templat
 | plugins/git | 15 | 15 | 0 | 0 | 0 | 0 |  |
 | plugins/sdk | 20 | 20 | 0 | 0 | 0 | 0 |  |
 | release | 34 | 34 | 0 | 0 | 0 | 0 |  |
-| scripts | 66 | 66 | 0 | 0 | 0 | 0 |  |
+| scripts | 71 | 71 | 0 | 0 | 0 | 0 |  |
 | service/src | 129 | 129 | 0 | 0 | 0 | 0 |  |
 | service/src/api | 114 | 114 | 0 | 0 | 0 | 0 |  |
 | service/src/browser | 173 | 173 | 0 | 0 | 0 | 0 |  |
 | service/src/drivers | 251 | 251 | 0 | 0 | 0 | 0 |  |
 | service/src/notifications | 43 | 43 | 0 | 0 | 0 | 0 |  |
-| service/src/orchestrator | 853 | 853 | 0 | 0 | 0 | 0 |  |
+| service/src/orchestrator | 853 | 427 | 426 | 0 | 0 | 0 |  |
 | service/src/permissions | 38 | 38 | 0 | 0 | 0 | 0 |  |
 | service/src/plugins | 12 | 12 | 0 | 0 | 0 | 0 |  |
 | service/src/store | 81 | 81 | 0 | 0 | 0 | 0 |  |
@@ -4593,7 +4593,7 @@ Signed off by the human. They stay listed here so each can be brought back at th
 - parseArgs and the CLI › a green run is silent on stdout and exits 4 (nothing to report)
 - the example watcher › runs the nightly script daily from a checkout that has it, and tells triage to decline green runs
 
-#### scripts/report.test.ts: 15 rows, mostly open
+#### scripts/report.test.ts: 17 rows, mostly open
 
 - extractors › bun tests carry their describe path, and a name on the next line is found
 - extractors › test.each keeps the name after its table; template names stay as templates
@@ -4610,6 +4610,8 @@ Signed off by the human. They stay listed here so each can be brought back at th
 - report › an area is deletable only when it has no open rows
 - report › every old test file in the repo is accounted for in the report
 - report › the committed report is current: regenerate it with `bun scripts/report.ts` after adding or moving a test
+- ported tests › a moved file's tests are still rows under their old path, marked new with where they went
+- ported tests › every port points at a file that exists, so a rename can't silently drop rows
 
 #### scripts/run-layer.test.ts: 6 rows, mostly open
 
@@ -4620,7 +4622,7 @@ Signed off by the human. They stay listed here so each can be brought back at th
 - SIGTERM to the runner reaches the layer's children, and the runner exits 143
 - a grandchild holding the output pipes doesn't keep a finished layer waiting for the time limit
 
-#### scripts/verify-plan.test.ts: 24 rows, mostly open
+#### scripts/verify-plan.test.ts: 27 rows, mostly open
 
 - planLayers › a service file runs the service's tests and the typecheck, not every package
 - planLayers › the new suite runs when it changes, and when the git adapter or what drives it changes
@@ -4646,6 +4648,9 @@ Signed off by the human. They stay listed here so each can be brought back at th
 - planLayers › an empty diff also falls back rather than verifying nothing
 - the mapping points at things that exist › every RENDERER_CHECKS pattern matches a real renderer file
 - allLayers › runs every package, swift test, the given app checks and both simulator layers
+- newTestsInOldDirs › a new test or check in a directory the new suite replaces is refused
+- newTestsInOldDirs › the new suite, HarnessKit's swift tests, the repo's own tooling tests and non-test files pass
+- service code the new suite drives › a change under service/src/orchestrator runs the new suite and the service's old tests and typecheck
 
 #### scripts/verify.test.ts: 5 rows, mostly open
 
@@ -5515,57 +5520,6 @@ Signed off by the human. They stay listed here so each can be brought back at th
 
 ### service/src/orchestrator
 
-#### service/src/orchestrator/activity-lines.test.ts: 9 rows, mostly open
-
-- agents' notes show their first line › post_note, submit_for_review and an approval take any length: the first line in full, the rest in detail
-- agents' notes show their first line › a conductor's approval shows its first line too; a human's is kept as written
-- review runs record findings in the spec › a reviewer can edit_spec but not replace the spec; triage can do neither
-- long text the service records is summarized › a reviewer's request-changes notes: Activity shows the first line, the author and the next reviewer get all of it
-- long text the service records is summarized › an auto-submit shows the first line of the agent's last message, with all of it in detail
-- long text the service records is summarized › a failed run's error is one line
-- every column change is in Activity › start, submit, approve and land: one entry per move, on the entry that caused it or a moved entry
-- every column change is in Activity › a human's drag is a moved entry by the human; block and unblock carry their own move
-- every column change is in Activity › a status update that doesn't change the column adds no move
-
-#### service/src/orchestrator/adviser.test.ts: 8 rows, mostly open
-
-- the adviser reaches planning and review runs › when it applies, both get the adviser block with its model
-- the adviser reaches planning and review runs › an adviser on the run's own model adds nothing
-- the adviser reaches planning and review runs › a driver without subagents keeps today's prompt
-- the adviser reaches planning and review runs › an adviser set to another driver adds nothing
-- the adviser reaches planning and review runs › an adviser with no model of its own (the driver default) adds nothing
-- the adviser reaches planning and review runs › a ticket's own Adviser choice wins over the settings'
-- review_decision adviser_findings › the findings land verbatim under their own heading, after the notes
-- review_decision adviser_findings › an approval carries them too, and no heading appears without findings
-
-#### service/src/orchestrator/approvals.test.ts: 15 rows, mostly open
-
-- tool permission approvals › unapproved call blocks the ticket with a pending approval and never auto-submits
-- tool permission approvals › allow_once grants exactly that call once (deep-equal input), then resumes work
-- tool permission approvals › allow_tool allows every later call of that tool on the ticket
-- tool permission approvals › deny (explicit or via a human message) resumes work with the reason
-- tool permission approvals › review/plan runs are denied outright without touching the ticket
-- tool permission approvals › a complete run needing approval resumes as a complete run
-- tool permission approvals › summarizeToolInput prefers command / file_path / url, else compact JSON
-- plan mode › a plan run's ExitPlanMode is denied: the human approves the plan with Start
-- agent review ping-pong cap › third consecutive agent request_changes blocks instead of starting more work; human action resets
-- agent review ping-pong cap › an approval between rejections resets the count
-- work run ending with a question › blocks with the question instead of auto-submitting
-- work run ending with a question › endsWithQuestion ignores trailing emoji, punctuation and markdown
-- migrations and events › v1 → latest: bypassPermissions → acceptEdits (v2) → ask (v4); the default mode is auto
-- migrations and events › v3 → v4 maps each claude-code mode onto a harness mode and adds nullable overrides
-- migrations and events › deleting a ticket emits session.deleted
-
-#### service/src/orchestrator/attachments.test.ts: 7 rows, mostly open
-
-- spec attachments › relative image paths resolve against the run's working directory
-- spec attachments › too many, too large or missing files fail the write and store nothing
-- spec attachments › a write refused for a stale revision keeps no copies
-- fileOutputScope (browser_screenshot save_to) › read-only follows the run kind and the effective mode (ticket → project → settings)
-- fileOutputScope (browser_screenshot save_to) › a read-only run's relative save_to lands in its scratch folder, which goes with the ticket
-- deleting removes attachment files › deleteTicket removes the ticket's files and leaves other tickets' alone
-- deleting removes attachment files › deleteProject removes every ticket's files
-
 #### service/src/orchestrator/board-ops.test.ts: 16 rows, mostly open
 
 - listTickets (board) › default scope: conductor → children, task → its project, triage → every project
@@ -5654,27 +5608,6 @@ Signed off by the human. They stay listed here so each can be brought back at th
 - update_branch › base_branch alone; refused without a worktree, with nothing to change, and outside work runs
 - GET /projects/:id/branches › most recent first, filtered by substring then in-order letters, with where each is checked out
 
-#### service/src/orchestrator/classifier-denials.test.ts: 18 rows, mostly open
-
-- classifier denials → approval cards › a run that ends after a denial blocks the ticket with a classifier approval instead of auto-submitting
-- classifier denials → approval cards › when the agent blocked after the denial, the approval is attached to its block
-- classifier denials → approval cards › an agent that found another way and submitted is reviewed, with the denied call on record
-- classifier denials → approval cards › no card when the denied call went through later in the same run
-- classifier denials → approval cards › allow_once: the resumed run gets exactly that call as a one-time grant, used up by it
-- classifier denials → approval cards › a chat's classifier denial opens a card without moving the ticket; answering it retries in a chat
-- classifier denials → approval cards › a chat's denial of a tool the ticket allows is retried as a chat, where the ticket is
-- classifier denials → approval cards › allow_tool on a classifier denial: the tool is always allowed and the denied call also gets a one-time grant
-- classifier denials → approval cards › a later denial of a tool the human allows on the ticket is retried with the call pre-approved, no card
-- classifier denials → approval cards › automatic retries stop after ${MAX_AUTO_RETRIES} in a row; then a human is asked
-- classifier denials → approval cards › an exact rule the CLI still denied: the card comes back, and the next grant goes through the prompt tool
-- classifier denials → approval cards › a grant the CLI never asked about expires with the run it was handed to
-- classifier denials → approval cards › a failed run keeps its grants for the next run
-- classifier denials → approval cards › deny still resumes with the denial and no grant
-- classifier denials → approval cards › a denial during a complete run blocks instead of marking done; allow_once resumes the complete run
-- classifier denials → approval cards › review runs never get the ticket's grants, and their denials don't open cards
-- classifier denials → approval cards › read-only tickets get no grants
-- grantKey › a Bash call's description, timeout and run_in_background aren't part of the grant; everything else is
-
 #### service/src/orchestrator/completion.test.ts: 32 rows, mostly open
 
 - what a project offers › a GitHub remote gh is logged into offers pr; other hosts and no remote don't; outside git only custom
@@ -5709,63 +5642,6 @@ Signed off by the human. They stay listed here so each can be brought back at th
 - children land on their parent's branch › a child on its parent's branch refuses pr and custom
 - children land on their parent's branch › a child with its own base branch, or under a finished parent, gets the project's choices again
 - merge locks › jobs sharing a lock never run at once; different locks and no lock do
-
-#### service/src/orchestrator/config-tools.test.ts: 16 rows, mostly open
-
-- config tools behind human approval › a work run creates a watcher and then re-routes it, each call after its own allow-once
-- config tools behind human approval › a grant covers only the approved input: a changed retry asks again
-- config tools behind human approval › gated grants aren't handed to the driver, and allowedTools never unlocks a gated tool
-- config tools behind human approval › read-only tickets are denied outright: no approval card, nothing changes
-- config tools behind human approval › validation errors come back as tool errors before a human is asked
-- config tools behind human approval › the API key never reaches a model: get_settings hides it and update_settings can't set it
-- config tools behind human approval › prompts: get_settings names the customized ones (text only with include_prompts); update_settings validates before a human is asked
-- config tools behind human approval › update_settings applies the same validation as PATCH /settings once approved
-- config tools behind human approval › base_branch: bad names are refused before a human is asked; good ones apply to settings and projects once approved
-- config tools behind human approval › mutating ops refuse runs without a human in the loop, whatever tool reaches them
-- config tools behind human approval › delete_ticket refuses the agent's own ticket and its ancestors; others go to a human
-- config tools behind human approval › list_watchers shows which env vars are set, never their values; update_watcher merges env
-- config tools behind human approval › prompt is passed straight through to the orchestrator on create and update
-- config tools behind human approval › a watcher created through the tools runs and its output reaches the Inbox
-- config tools behind human approval › prompt round-trips through storage and list_watchers
-- config tools behind human approval › watcher models and the watcher defaults go through the tools, merged per driver
-
-#### service/src/orchestrator/context-gauge.test.ts: 22 rows, mostly open
-
-- context gauge: recording calls › the ticket's context is the last call of its work run, with the first call's total as the prefix
-- context gauge: recording calls › every call is kept, in order
-- context gauge: recording calls › a review run's calls don't move the gauge: it runs in a conversation of its own
-- context gauge: recording calls › the gauge updates live: each call re-broadcasts the ticket
-- context gauge: recording calls › cache misses are counted per session and shown on the ticket; a hit that writes a lot isn't one
-- context gauge: recording calls › a message resumes the same session: the new run's first call isn't a miss, and misses keep adding up
-- context gauge: recording calls › an estimate (a driver that reports no tokens) is marked estimated and never counts misses
-- context gauge: recording calls › a call from a run that started before the session was cleared doesn't touch the new session's gauge
-- context gauge: recording calls › moving to review starts the next run fresh, and the gauge with it
-- session actions › New session drops the saved state and the gauge, and says so in Activity
-- session actions › the next run after New session gets no saved state
-- session actions › New session with nothing saved changes nothing
-- session actions › a run going refuses both actions with 409 and leaves the session alone
-- session actions › an unknown action is a 400
-- session actions › Compact runs the driver's compact, keeps the state, and shows the new size and an Activity line
-- session actions › while compacting, messages and ticket actions are refused with 409, and they work again after
-- session actions › cancelling a compact leaves the saved session and gauge as they were
-- session actions › a failed compact says why in Activity and leaves the gauge alone
-- session actions › Compact needs a saved session and a driver that can
-- driver capabilities › the driver list carries what each driver can do with a session
-- contextGaugeLimit setting › defaults to 250k, saves, and refuses what isn't 10k–2M tokens
-- tokensLabel › writes counts the way the gauge does
-
-#### service/src/orchestrator/context-usage.test.ts: 10 rows, mostly open
-
-- isCacheMiss › a call that re-writes the conversation after the cache expired is a miss
-- isCacheMiss › a large write that still reads the conversation back isn't (a big tool result, not a lost cache)
-- isCacheMiss › a write at the threshold isn't a miss, one token over (with the cache gone) is
-- isCacheMiss › reading half or more of the previous context back is a hit, just under half is a miss
-- isCacheMiss › a run's first call is never a miss: it starts from whatever cache the last run left
-- isCacheMiss › with nothing before it, or an estimate on either side, there's nothing to compare
-- applyCall › the first call sets the prefix; later calls move the context but not the prefix
-- applyCall › misses and the tokens they re-wrote add up across a session, including a second run
-- applyCall › an estimate never counts misses and says so
-- compactedContext › restarts the miss tally and keeps the prefix, with the new size as the whole context
 
 #### service/src/orchestrator/drafts.test.ts: 22 rows, mostly open
 
@@ -5855,54 +5731,6 @@ Signed off by the human. They stay listed here so each can be brought back at th
 - generic watcher, end to end › routing lives in the prompt: two watchers on the same events send them to different projects
 - generic watcher, end to end › a failing command shows up as the watcher's error, with its stderr
 
-#### service/src/orchestrator/key-aliases.test.ts: 5 rows, mostly open
-
-- old ticket keys after a project rename › ticketDetail by old key returns the ticket with its current key and resolvedFrom
-- old ticket keys after a project rename › dependsOn with an old key is stored as the current key; self-dependency via old key is refused
-- old ticket keys after a project rename › deleting a ticket by its old key works, and the old key then 404s
-- old ticket keys after a project rename › a conductor that learned a child's key before the rename can still drive it
-- old ticket keys after a project rename › triage sends an update to a renamed ticket by its old key only as ticket_key; the old key alone as key makes a new linked ticket
-
-#### service/src/orchestrator/message-annotations.test.ts: 12 rows, mostly open
-
-- a message's annotated attachment › is in the transcript entry and the run's attachments, and the answering run lists its notes under that file
-- a message's annotated attachment › a browser screenshot's mark names its element in the answering run's prompt
-- a message's annotated attachment › a later run doesn't get the notes again
-- a message's annotated attachment › on a file that isn't an image, or malformed, it's refused and nothing runs
-- a message's annotated attachment › an older app's move (re-opening a done ticket, or sending a review one back to work) carries it into the work run
-- a spec image by id › is referenced at its stored file, named after it, and its notes are listed under that path
-- a spec image by id › a file from an earlier message goes again by id, with its own notes this time
-- a spec image by id › an unknown id is refused and nothing runs
-- steering › a running agent gets the notes in the steered message; the transcript keeps the annotated attachment
-- steering › a message the run never took in is queued with its annotated attachment
-- over HTTP › POST /messages takes an annotated attachment and refuses a malformed one; GET /browser/:sessionId/screenshot answers the PNG and its sizes
-- over HTTP › POST /browser/:sessionId/element names what's under a screenshot's point until the tab moves on; a mark carries it to the agent
-
-#### service/src/orchestrator/message-attachments.test.ts: 10 rows, mostly open
-
-- a message's attachments › go with the run that answers it: paths in the prompt, images inline, listed on the transcript entry
-- a message's attachments › a later run doesn't get them again
-- a message's attachments › attachments alone are a message; no text and no attachments isn't; a path that isn't there is refused
-- a message's attachments › are refused while a tool approval waits, since that message answers the approval
-- a message's attachments › an older app's move re-opening a done ticket with a message sends them with its work run
-- steering › a running agent takes the message in with its images; the transcript keeps the words and the files
-- steering › a message the run never took in is queued with its attachments, and shown once
-- uploads › an upload sent with a message survives the startup sweep, and goes when its ticket is deleted
-- uploads › an upload a message shares with another ticket stays until neither uses it
-- over HTTP › POST /messages takes attachments; each is served from its transcript entry with ?token=, 404 once gone
-
-#### service/src/orchestrator/message-drafts.test.ts: 9 rows, mostly open
-
-- a message draft › is saved on the ticket with its origin, and an upsert carries it
-- a message draft › a save that changes nothing emits nothing; the same text from another device does
-- a message draft › empty text and no attachments clear it
-- a message draft › keeps its attachments with their notes; attachments alone are a draft
-- a message draft › bad input is a 400, and a draft ticket (no agent yet) is a 409
-- a message draft › an app's send uses it up (one upsert clears it everywhere); an agent's message leaves it
-- a message draft › a send that fails keeps the draft
-- a message draft › an upload waiting in a draft survives the startup sweep, and goes with its ticket
-- over HTTP › PUT /tickets/:key/message-draft saves it, GET /tickets lists it, POST /messages clears it
-
 #### service/src/orchestrator/missing-worktree.test.ts: 10 rows, mostly open
 
 - a missing worktree › a review runs from the project checkout, told the branch still exists and the commit it last reviewed
@@ -5915,41 +5743,6 @@ Signed off by the human. They stay listed here so each can be brought back at th
 - a completion stopped by a usage limit › blocks with both reviews back to pending, restarts after the reset, and goes through review and completion again
 - a completion stopped by a usage limit › a spend limit that names no reset time blocks without a restart
 - a failed review run › adds a failed entry, and the ticket stays in review with the review pending
-
-#### service/src/orchestrator/model-selection.test.ts: 23 rows, mostly open
-
-- settings migration (claudeModel / anthropicModel → defaultModels → phaseModels) › the legacy model for the default driver becomes Planning/Work/Review; the old keys are removed
-- settings migration (claudeModel / anthropicModel → defaultModels → phaseModels) › saved model settings keep their choice and get no built-in adviser
-- settings migration (claudeModel / anthropicModel → defaultModels → phaseModels) › a null claudeModel is dropped, not stored as a model
-- settings migration (claudeModel / anthropicModel → defaultModels → phaseModels) › no legacy values (a fresh install) → the built-in tiers; tickets and projects get the new columns
-- settings validation › migration 38 turns driver + model columns into per-phase choices
-- settings validation › the built-in Complete default is seeded once: a cleared one stays cleared
-- settings validation › model maps: known drivers only, ids without spaces, empty → null
-- settings validation › browserIdleTabMinutes: default 5, integer 0–1440, a bad stored value falls back
-- settings validation › legacy defaultModels PATCH sets the Work driver's model; null clears it
-- settings validation › phaseModels PATCH merges per phase; null clears a phase, which stays cleared
-- model reaches the driver › RunRequest.model follows ticket → project → settings → null
-- model reaches the driver › changing a ticket's model applies to the next run and keeps the conversation state
-- model reaches the driver › switching driver clears the model unless one is given
-- model reaches the driver › review runs use the Review choice; a ticket's legacy model sets its Review too
-- model reaches the driver › each phase resolves on its own across ticket → project → settings, on its own driver
-- model reaches the driver › a run on another driver than the saved conversation's starts fresh
-- model reaches the driver › a ticket's legacy driver/model write: the inherited driver with no model follows the project
-- model reaches the driver › project defaultModels validate driver ids and merge
-- model reaches the driver › listModels: unknown driver 404s; results are cached until refresh
-- watcher driver and model › triage runs on the watcher's driver, else settings.watcherDriver, else defaultDriver
-- watcher driver and model › triage model: watcher.models → settings.watcherModels → settings.defaultModels → null
-- watcher driver and model › watcher models validate driver ids and merge per driver
-- watcher driver and model › settings: watcherDriver must be a known driver; watcherModels merge like the other maps
-
-#### service/src/orchestrator/models.test.ts: 6 rows, mostly open
-
-- resolveRunChoice › each phase resolves on its own: ticket → project → settings
-- resolveRunChoice › conductor and chat runs use the Work choice
-- resolveRunChoice › phases can run on different drivers
-- resolveRunChoice › empty settings resolve to claude-code with its default model
-- resolveRunModel › a ticket run takes its phase's model only on the driver it was queued on
-- resolveRunModel › standalone sessions take the project's, then settings', Work model on their own driver
 
 #### service/src/orchestrator/orchestrator.test.ts: 132 rows, mostly open
 
@@ -6086,13 +5879,260 @@ Signed off by the human. They stay listed here so each can be brought back at th
 - agent notes › empty notes clear them
 - run usage › a run records its model and sums the driver's usage reports
 
-#### service/src/orchestrator/permissions.test.ts: 18 rows, mostly open
+#### service/src/orchestrator/replan.test.ts: 15 rows, mostly open
+
+- review comments go to the Work model › a chat in review runs on Work; resume_work keeps it there, and the re-review is Opus again
+- return_to_planning › a blocked work chat hands off to a Plan run on the Plan model; Start resumes work on the Work model
+- return_to_planning › the Plan run is a new conversation even though the card left Blocked
+- return_to_planning › a work run can hand off too, and doesn't submit or block itself afterwards
+- return_to_planning › start_after_plan: work starts on the Work model when the Plan run ends, never before
+- return_to_planning › a failed Plan run clears the approval and starts nothing
+- return_to_planning › a message during the Plan run withdraws the approval
+- return_to_planning › without start_after_plan a child whose dependencies are done waits in Planning
+- return_to_planning › from Review it stops a queued review run and resets both reviews
+- return_to_planning › from Done it hands off too
+- return_to_planning › refused while the ticket's complete run is going, and for plan and review runs
+- return_to_planning › refused for a ticket already in Planning, and for an empty reason
+- return_to_planning › plan, review and complete runs don't get the tool; work, conductor and chat do
+- replanPrompt › carries the reason and the human's message, and points a started ticket's planner at its branch
+- replanPrompt › leaves out what isn't there, and says the work starts on its own when the re-plan is approved
+
+#### service/src/orchestrator/run-recovery.test.ts: 9 rows, mostly open
+
+- a crash whose end can't be recorded stays busy only until reconcileRuns can write it
+- a crash is recorded as failed right away once the retry can write
+- the session takes new runs after a crash instead of piling up `running` rows
+- a failing transcript write fails the run and closes the driver so the agent process stops
+- reconcileRuns leaves a live run and the run queued behind it alone
+- a complete run cut off by a restart puts the approval back, and approving again lands the ticket
+- an interrupted run of another kind leaves the human's approval alone
+- start() reconciles orphaned runs on a timer until stop()
+- a plan run cut off by a restart clears the approval, so the work doesn't start
+
+#### service/src/orchestrator/spec.test.ts: 20 rows, mostly open
+
+- edit_spec › applies its edits as one new revision with the note, author and run
+- edit_spec › a stale base revision fails with the current one, and the human's concurrent edit survives
+- edit_spec › a missing or ambiguous old_string, or an expected mismatch, changes nothing and names the revision
+- edit_spec › all or nothing: a later failing edit drops the earlier ones in the call
+- edit_spec › review runs can edit the spec (to record findings) but not replace it
+- update_ticket's spec › a human's PATCH between get_ticket and update_ticket refuses the stale write and keeps their text
+- which runs get the spec tools › review runs get read_spec and edit_spec; triage none; the others all three
+- update_spec images › stores local images and videos as the ticket's attachments and rewrites their src
+- update_spec images › a bad extension or bad magic bytes fails the call and stores nothing
+- update_spec images › deleting the ticket removes its attachment files
+- PATCH spec › needs baseRevision outside drafts; a stale one is a 409 with the current revision
+- submit_for_review › without spec_is_up_to_date: true it fails and the ticket stays in progress
+- review runs › round 2 gets round 1's commit and notes and is told to diff from it; round 1 isn't
+- review runs › the review prompt points at the approved baseline revision without inlining the spec's diff
+- review runs › an untouched spec says it is still the approved revision
+- messages and Activity › a message and the agent's answer stay out of Activity; the message still reaches the agent
+- messages and Activity › a message to a planning ticket gets its answer in the transcript, not Activity
+- spec revisions in Activity › each revision adds one entry with its note and number; creating the ticket adds none
+- spec revisions in Activity › an unchanged body or a stale base revision adds nothing
+- spec revisions in Activity › a multi-line note becomes one line, with the whole note in detail
+
+#### service/src/orchestrator/watcher-inbox.test.ts: 2 rows, mostly open
+
+- watcher output → Inbox › a command line's output and the watcher prompt reach one triage session (fake spawn)
+- watcher output → Inbox › a real /bin/sh -c watcher produces the triage session
+
+#### service/src/orchestrator/watchers-integration.test.ts: 2 rows, mostly open
+
+- watchers → triage › a real watcher's output is one triage item with its driver, deduped until it changes
+- watchers → triage › watcher events and the list carry the process state, live as it changes
+
+#### service/src/orchestrator/watchers.test.ts: 50 rows, mostly open
+
+- toOutput › trims, and whitespace-only output is nothing
+- toOutput › cuts at the limit and marks it truncated; exactly the limit is not truncated
+- findKeys › finds upper-case keys once each, in order
+- findKeys › is capped
+- watcherArgv › a command line runs through the login shell
+- watcherArgv › a legacy command + args is spawned directly, without a shell
+- watcherArgv › loginShell uses an absolute $SHELL and falls back otherwise
+- WatcherRunner loop mode › delivers a run's output as one chunk and re-runs after exit 0
+- WatcherRunner loop mode › exit 4 (nothing to report) restarts promptly without an error
+- WatcherRunner loop mode › failures report stderr and back off exponentially; success resets
+- WatcherRunner loop mode › backoff is capped
+- WatcherRunner loop mode › a spawn that throws is reported and retried
+- WatcherRunner loop mode › splits a long-lived stream into bursts while it is still running
+- WatcherRunner loop mode › whitespace-only bursts are skipped
+- WatcherRunner loop mode › a steady trickle is still flushed by the max burst age
+- WatcherRunner loop mode › an idle flush delivers everything, including a last line without a newline
+- WatcherRunner loop mode › pretty JSON without a trailing newline stays one item per response
+- WatcherRunner loop mode › a max-age flush while output is still streaming keeps the partial line
+- WatcherRunner loop mode › a huge burst is cut at maxOutputChars and marked truncated
+- WatcherRunner loop mode › an onOutput throw is reported and does not stop the runner
+- WatcherRunner loop mode › async onOutput rejections are caught too
+- WatcherRunner loop mode › runNow kills a blocking child and restarts at once without an error
+- WatcherRunner loop mode › runNow cancels a pending backoff
+- WatcherRunner interval mode › runs every intervalSec and skips a tick while still running
+- WatcherRunner interval mode › each run's output is one chunk, however slowly it arrives; empty runs deliver nothing
+- WatcherRunner interval mode › interval is floored by minIntervalMs
+- WatcherRunner interval mode › a failing interval run reports the error but keeps the schedule
+- WatcherRunner interval mode › runNow starts a run immediately, but not a second concurrent one
+- WatcherRunner sync › starts enabled watchers only, passes cwd/env/args
+- WatcherRunner sync › a command line without args is run through the shell
+- WatcherRunner sync › stops removed and disabled watchers
+- WatcherRunner sync › restarts on command changes, not on cosmetic ones
+- WatcherRunner sync › output is delivered with the latest watcher object (and its prompt)
+- WatcherRunner sync › runNow on a disabled watcher does a one-off run; unknown ids throw
+- WatcherRunner sync › stopAll kills everything and nothing restarts
+- WatcherRunner live state › loop: a spawned process is running; a failed exit waits out the backoff with the failure count
+- WatcherRunner live state › loop: a process that stays up clears a stale error from an earlier run
+- WatcherRunner live state › loop: a clean exit resets the failure count
+- WatcherRunner live state › a spawn failure is an error and a wait, never running
+- WatcherRunner live state › interval: running during a run, then waiting for the next tick; failures count across runs
+- WatcherRunner live state › disabling or removing stops it; a disabled watcher is stopped from the start
+- WatcherRunner live state › a restart on a command change reports the new process, not the old one's exit
+- WatcherRunner live state › a one-off run of a disabled watcher is running, then stopped again
+- WatcherRunner live state › stopAll reports every watcher stopped
+- WatcherRunner with Bun.spawn › a legacy command + args runs directly, with the watcher env and cwd
+- WatcherRunner with Bun.spawn › stopping a loop watcher stops what its shell is running too, at once
+- WatcherRunner with Bun.spawn › a shell command line gets pipes, variables and the watcher env
+- WatcherRunner with Bun.spawn › a looping shell command printing pretty JSON without a newline gives one item per response
+- WatcherRunner with Bun.spawn › a failing process reports its stderr
+- WatcherRunner with Bun.spawn › a missing executable is reported, not thrown
+
+#### service/src/orchestrator/activity-lines.test.ts: 9 rows, mostly new: next/orchestrator/activity-lines.test.ts
+
+- agents' notes show their first line › post_note, submit_for_review and an approval take any length: the first line in full, the rest in detail
+- agents' notes show their first line › a conductor's approval shows its first line too; a human's is kept as written
+- review runs record findings in the spec › a reviewer can edit_spec but not replace the spec; triage can do neither
+- long text the service records is summarized › a reviewer's request-changes notes: Activity shows the first line, the author and the next reviewer get all of it
+- long text the service records is summarized › an auto-submit shows the first line of the agent's last message, with all of it in detail
+- long text the service records is summarized › a failed run's error is one line
+- every column change is in Activity › start, submit, approve and land: one entry per move, on the entry that caused it or a moved entry
+- every column change is in Activity › a human's drag is a moved entry by the human; block and unblock carry their own move
+- every column change is in Activity › a status update that doesn't change the column adds no move
+
+#### service/src/orchestrator/adviser.test.ts: 8 rows, mostly new: next/orchestrator/adviser.test.ts
+
+- the adviser reaches planning and review runs › when it applies, both get the adviser block with its model
+- the adviser reaches planning and review runs › an adviser on the run's own model adds nothing
+- the adviser reaches planning and review runs › a driver without subagents keeps today's prompt
+- the adviser reaches planning and review runs › an adviser set to another driver adds nothing
+- the adviser reaches planning and review runs › an adviser with no model of its own (the driver default) adds nothing
+- the adviser reaches planning and review runs › a ticket's own Adviser choice wins over the settings'
+- review_decision adviser_findings › the findings land verbatim under their own heading, after the notes
+- review_decision adviser_findings › an approval carries them too, and no heading appears without findings
+
+#### service/src/orchestrator/approvals.test.ts: 15 rows, mostly new: next/orchestrator/approvals.test.ts
+
+- tool permission approvals › unapproved call blocks the ticket with a pending approval and never auto-submits
+- tool permission approvals › allow_once grants exactly that call once (deep-equal input), then resumes work
+- tool permission approvals › allow_tool allows every later call of that tool on the ticket
+- tool permission approvals › deny (explicit or via a human message) resumes work with the reason
+- tool permission approvals › review/plan runs are denied outright without touching the ticket
+- tool permission approvals › a complete run needing approval resumes as a complete run
+- tool permission approvals › summarizeToolInput prefers command / file_path / url, else compact JSON
+- plan mode › a plan run's ExitPlanMode is denied: the human approves the plan with Start
+- agent review ping-pong cap › third consecutive agent request_changes blocks instead of starting more work; human action resets
+- agent review ping-pong cap › an approval between rejections resets the count
+- work run ending with a question › blocks with the question instead of auto-submitting
+- work run ending with a question › endsWithQuestion ignores trailing emoji, punctuation and markdown
+- migrations and events › v1 → latest: bypassPermissions → acceptEdits (v2) → ask (v4); the default mode is auto
+- migrations and events › v3 → v4 maps each claude-code mode onto a harness mode and adds nullable overrides
+- migrations and events › deleting a ticket emits session.deleted
+
+#### service/src/orchestrator/attachments.test.ts: 7 rows, mostly new: next/orchestrator/attachments.test.ts
+
+- spec attachments › relative image paths resolve against the run's working directory
+- spec attachments › too many, too large or missing files fail the write and store nothing
+- spec attachments › a write refused for a stale revision keeps no copies
+- fileOutputScope (browser_screenshot save_to) › read-only follows the run kind and the effective mode (ticket → project → settings)
+- fileOutputScope (browser_screenshot save_to) › a read-only run's relative save_to lands in its scratch folder, which goes with the ticket
+- deleting removes attachment files › deleteTicket removes the ticket's files and leaves other tickets' alone
+- deleting removes attachment files › deleteProject removes every ticket's files
+
+#### service/src/orchestrator/classifier-denials.test.ts: 18 rows, mostly new: next/orchestrator/classifier-denials.test.ts
+
+- classifier denials → approval cards › a run that ends after a denial blocks the ticket with a classifier approval instead of auto-submitting
+- classifier denials → approval cards › when the agent blocked after the denial, the approval is attached to its block
+- classifier denials → approval cards › an agent that found another way and submitted is reviewed, with the denied call on record
+- classifier denials → approval cards › no card when the denied call went through later in the same run
+- classifier denials → approval cards › allow_once: the resumed run gets exactly that call as a one-time grant, used up by it
+- classifier denials → approval cards › a chat's classifier denial opens a card without moving the ticket; answering it retries in a chat
+- classifier denials → approval cards › a chat's denial of a tool the ticket allows is retried as a chat, where the ticket is
+- classifier denials → approval cards › allow_tool on a classifier denial: the tool is always allowed and the denied call also gets a one-time grant
+- classifier denials → approval cards › a later denial of a tool the human allows on the ticket is retried with the call pre-approved, no card
+- classifier denials → approval cards › automatic retries stop after ${MAX_AUTO_RETRIES} in a row; then a human is asked
+- classifier denials → approval cards › an exact rule the CLI still denied: the card comes back, and the next grant goes through the prompt tool
+- classifier denials → approval cards › a grant the CLI never asked about expires with the run it was handed to
+- classifier denials → approval cards › a failed run keeps its grants for the next run
+- classifier denials → approval cards › deny still resumes with the denial and no grant
+- classifier denials → approval cards › a denial during a complete run blocks instead of marking done; allow_once resumes the complete run
+- classifier denials → approval cards › review runs never get the ticket's grants, and their denials don't open cards
+- classifier denials → approval cards › read-only tickets get no grants
+- grantKey › a Bash call's description, timeout and run_in_background aren't part of the grant; everything else is
+
+#### service/src/orchestrator/context-usage.test.ts: 10 rows, mostly new: next/orchestrator/context-usage.test.ts
+
+- isCacheMiss › a call that re-writes the conversation after the cache expired is a miss
+- isCacheMiss › a large write that still reads the conversation back isn't (a big tool result, not a lost cache)
+- isCacheMiss › a write at the threshold isn't a miss, one token over (with the cache gone) is
+- isCacheMiss › reading half or more of the previous context back is a hit, just under half is a miss
+- isCacheMiss › a run's first call is never a miss: it starts from whatever cache the last run left
+- isCacheMiss › with nothing before it, or an estimate on either side, there's nothing to compare
+- applyCall › the first call sets the prefix; later calls move the context but not the prefix
+- applyCall › misses and the tokens they re-wrote add up across a session, including a second run
+- applyCall › an estimate never counts misses and says so
+- compactedContext › restarts the miss tally and keeps the prefix, with the new size as the whole context
+
+#### service/src/orchestrator/message-drafts.test.ts: 9 rows, mostly new: next/orchestrator/message-drafts.test.ts
+
+- a message draft › is saved on the ticket with its origin, and an upsert carries it
+- a message draft › a save that changes nothing emits nothing; the same text from another device does
+- a message draft › empty text and no attachments clear it
+- a message draft › keeps its attachments with their notes; attachments alone are a draft
+- a message draft › bad input is a 400, and a draft ticket (no agent yet) is a 409
+- a message draft › an app's send uses it up (one upsert clears it everywhere); an agent's message leaves it
+- a message draft › a send that fails keeps the draft
+- a message draft › an upload waiting in a draft survives the startup sweep, and goes with its ticket
+- over HTTP › PUT /tickets/:key/message-draft saves it, GET /tickets lists it, POST /messages clears it
+
+#### service/src/orchestrator/model-selection.test.ts: 23 rows, mostly new: next/orchestrator/model-selection.test.ts
+
+- settings migration (claudeModel / anthropicModel → defaultModels → phaseModels) › the legacy model for the default driver becomes Planning/Work/Review; the old keys are removed
+- settings migration (claudeModel / anthropicModel → defaultModels → phaseModels) › saved model settings keep their choice and get no built-in adviser
+- settings migration (claudeModel / anthropicModel → defaultModels → phaseModels) › a null claudeModel is dropped, not stored as a model
+- settings migration (claudeModel / anthropicModel → defaultModels → phaseModels) › no legacy values (a fresh install) → the built-in tiers; tickets and projects get the new columns
+- settings validation › migration 38 turns driver + model columns into per-phase choices
+- settings validation › the built-in Complete default is seeded once: a cleared one stays cleared
+- settings validation › model maps: known drivers only, ids without spaces, empty → null
+- settings validation › browserIdleTabMinutes: default 5, integer 0–1440, a bad stored value falls back
+- settings validation › legacy defaultModels PATCH sets the Work driver's model; null clears it
+- settings validation › phaseModels PATCH merges per phase; null clears a phase, which stays cleared
+- model reaches the driver › RunRequest.model follows ticket → project → settings → null
+- model reaches the driver › changing a ticket's model applies to the next run and keeps the conversation state
+- model reaches the driver › switching driver clears the model unless one is given
+- model reaches the driver › review runs use the Review choice; a ticket's legacy model sets its Review too
+- model reaches the driver › each phase resolves on its own across ticket → project → settings, on its own driver
+- model reaches the driver › a run on another driver than the saved conversation's starts fresh
+- model reaches the driver › a ticket's legacy driver/model write: the inherited driver with no model follows the project
+- model reaches the driver › project defaultModels validate driver ids and merge
+- model reaches the driver › listModels: unknown driver 404s; results are cached until refresh
+- watcher driver and model › triage runs on the watcher's driver, else settings.watcherDriver, else defaultDriver
+- watcher driver and model › triage model: watcher.models → settings.watcherModels → settings.defaultModels → null
+- watcher driver and model › watcher models validate driver ids and merge per driver
+- watcher driver and model › settings: watcherDriver must be a known driver; watcherModels merge like the other maps
+
+#### service/src/orchestrator/models.test.ts: 6 rows, mostly new: next/orchestrator/models.test.ts
+
+- resolveRunChoice › each phase resolves on its own: ticket → project → settings
+- resolveRunChoice › conductor and chat runs use the Work choice
+- resolveRunChoice › phases can run on different drivers
+- resolveRunChoice › empty settings resolve to claude-code with its default model
+- resolveRunModel › a ticket run takes its phase's model only on the driver it was queued on
+- resolveRunModel › standalone sessions take the project's, then settings', Work model on their own driver
+
+#### service/src/orchestrator/permissions.test.ts: 18 rows, mostly new: next/orchestrator/permissions.test.ts
 
 - permission mode resolution › ticket override → project override → settings (default auto)
 - permission mode resolution › create accepts a mode; invalid modes are rejected everywhere
 - permission mode resolution › the legacy claudePermissionMode setting from older clients maps onto permissionMode
 - permission mode resolution › the driver receives the resolved mode on the run request
-- native tools behind the PermissionGate (dummy /bash) › auto: classifier allow runs the command and logs an audit entry
 - native tools behind the PermissionGate (dummy /bash) › auto: soft_deny is the agent's to work around; a run that ends stuck on it gets the card; allow_once reruns it via the grant
 - native tools behind the PermissionGate (dummy /bash) › auto: hard_deny refuses with the reason and does not block the ticket
 - native tools behind the PermissionGate (dummy /bash) › auto: a hanging classifier times out into a human approval
@@ -6106,23 +6146,9 @@ Signed off by the human. They stay listed here so each can be brought back at th
 - claude-code prompt-tool calls in an auto-mode ticket go to the classifier first › hard_deny: refused with the reason, no card
 - claude-code prompt-tool calls in an auto-mode ticket go to the classifier first › no classifier: a human is asked, as before
 - claude-code prompt-tool calls in an auto-mode ticket go to the classifier first › an ask-mode ticket still sends prompt-tool calls straight to a human
+- auto: classifier allow runs the command and logs an audit entry (new: next/contract/native-bash.test.ts)
 
-#### service/src/orchestrator/plan-usage.test.ts: 12 rows, mostly open
-
-- PlanUsageTracker › reads each driver that has a plan, skips the ones that don't, and tells clients
-- PlanUsageTracker › status follows the fullest window: near the limit from 90%, limited at 100%
-- PlanUsageTracker › a driver that turns out to have no plan (null) shows no row
-- PlanUsageTracker › an unreadable plan says why instead of keeping the old bar
-- PlanUsageTracker › transient failures back off, doubling up to the cap; a poll or a forced read in that time is skipped
-- PlanUsageTracker › a Retry-After longer than the backoff is waited out, and never past the cap
-- PlanUsageTracker › a forced read still goes through the short backoff after a failure that isn't a rate limit
-- PlanUsageTracker › a success clears the backoff
-- PlanUsageTracker › two refreshes at once make one request
-- rate-limit reports as the fallback › when the endpoint can't be read, the CLI's own window report stands in for the bar
-- rate-limit reports as the fallback › with no percentage the status still says how close the account is
-- rate-limit reports as the fallback › a warning or rejection reads the endpoint again right away; an all-clear doesn't
-
-#### service/src/orchestrator/prompt-annotations.test.ts: 7 rows, mostly open
+#### service/src/orchestrator/prompt-annotations.test.ts: 7 rows, mostly new: next/orchestrator/prompt-annotations.test.ts
 
 - creating and editing › a New session keeps an annotation on its image; on a file that isn't one, or malformed, it's refused
 - creating and editing › a draft PATCH saves, changes and clears the annotation on one attachment, leaving the others
@@ -6132,7 +6158,7 @@ Signed off by the human. They stay listed here so each can be brought back at th
 - agent tools › get_ticket lists each annotated prompt attachment's notes
 - over HTTP › POST and PATCH /tickets carry an attachment's annotation, and refuse a malformed one
 
-#### service/src/orchestrator/prompt-attachments.test.ts: 10 rows, mostly open
+#### service/src/orchestrator/prompt-attachments.test.ts: 10 rows, mostly new: next/orchestrator/prompt-attachments.test.ts
 
 - creating and editing › a ticket keeps its attachments where they are, and the source comes from the service
 - creating and editing › a draft's list changes by PATCH, keeping one whose file has gone; a launched ticket's is fixed
@@ -6145,7 +6171,7 @@ Signed off by the human. They stay listed here so each can be brought back at th
 - agent tools › create_ticket attaches files (relative to the cwd), and get_ticket lists them with whether they're missing
 - over HTTP › POST /uploads registers a paste; GET /attachments/:id serves it with ?token=, the legacy index route too, and 404s once it's gone
 
-#### service/src/orchestrator/prompt-overrides.test.ts: 20 rows, mostly open
+#### service/src/orchestrator/prompt-overrides.test.ts: 20 rows, mostly new: next/orchestrator/prompt-overrides.test.ts
 
 - prompt registry › has exactly the protocol's prompt ids
 - prompt registry › ${id}: the built-in uses every declared variable and nothing else
@@ -6168,7 +6194,7 @@ Signed off by the human. They stay listed here so each can be brought back at th
 - overrides reach runs › the catalog reports a stored override that no longer validates
 - renamed prompt ids › an override under system.complete / run.complete applies to the _merge prompts, read or sent
 
-#### service/src/orchestrator/prompts-builtin.test.ts: 27 rows, mostly open
+#### service/src/orchestrator/prompts-builtin.test.ts: 27 rows, mostly new: next/orchestrator/prompts-builtin.test.ts
 
 - built-in system prompts › ${kind} · ${name} · builtinTools ${builtinTools}
 - built-in system prompts › ${kind} with children · branch ${branch}
@@ -6198,7 +6224,7 @@ Signed off by the human. They stay listed here so each can be brought back at th
 - built-in run prompts › reopenPrompt · with a pull request
 - built-in run prompts › triagePrompt · prompt ${!!prompt} · existing ${existing} · truncated ${truncated}
 
-#### service/src/orchestrator/prompts.test.ts: 93 rows, mostly open
+#### service/src/orchestrator/prompts.test.ts: 93 rows, mostly new: next/orchestrator/prompts.test.ts
 
 - systemPrompt tool references › ${kind} mentions only tools its run can call
 - systemPrompt tool references › the Spec and Activity section lets every ticket run but review edit the spec, with capture tools the run has
@@ -6294,7 +6320,7 @@ Signed off by the human. They stay listed here so each can be brought back at th
 - the system prompt stays the same across the runs of one session › two planning runs with a spec revision between them
 - the system prompt stays the same across the runs of one session › the system prompt names the session's ticket, project and working directory, and points at the run context
 
-#### service/src/orchestrator/remote-ids.test.ts: 13 rows, mostly open
+#### service/src/orchestrator/remote-ids.test.ts: 13 rows, mostly new: next/orchestrator/remote-ids.test.ts
 
 - triage with remote IDs › key alone creates a new native-keyed ticket linked to the remote ID, even when a local ticket has that key
 - triage with remote IDs › a second dispatch with the same key makes another linked ticket; ticket_key messages the existing one
@@ -6310,25 +6336,7 @@ Signed off by the human. They stay listed here so each can be brought back at th
 - linking by hand (PATCH /tickets/:key externalRef) › links with source manual, keeps a watcher link's origin when only its URL changes, unlinks with null
 - linking by hand (PATCH /tickets/:key externalRef) › rejects a key that isn't FOO-123, a non-http URL, and a malformed body without changing anything
 
-#### service/src/orchestrator/replan.test.ts: 15 rows, mostly open
-
-- review comments go to the Work model › a chat in review runs on Work; resume_work keeps it there, and the re-review is Opus again
-- return_to_planning › a blocked work chat hands off to a Plan run on the Plan model; Start resumes work on the Work model
-- return_to_planning › the Plan run is a new conversation even though the card left Blocked
-- return_to_planning › a work run can hand off too, and doesn't submit or block itself afterwards
-- return_to_planning › start_after_plan: work starts on the Work model when the Plan run ends, never before
-- return_to_planning › a failed Plan run clears the approval and starts nothing
-- return_to_planning › a message during the Plan run withdraws the approval
-- return_to_planning › without start_after_plan a child whose dependencies are done waits in Planning
-- return_to_planning › from Review it stops a queued review run and resets both reviews
-- return_to_planning › from Done it hands off too
-- return_to_planning › refused while the ticket's complete run is going, and for plan and review runs
-- return_to_planning › refused for a ticket already in Planning, and for an empty reason
-- return_to_planning › plan, review and complete runs don't get the tool; work, conductor and chat do
-- replanPrompt › carries the reason and the human's message, and points a started ticket's planner at its branch
-- replanPrompt › leaves out what isn't there, and says the work starts on its own when the re-plan is approved
-
-#### service/src/orchestrator/review-activity.test.ts: 6 rows, mostly open
+#### service/src/orchestrator/review-activity.test.ts: 6 rows, mostly new: next/orchestrator/review-activity.test.ts
 
 - review decisions in Activity › the agent reviewer's approval, then the human's
 - review decisions in Activity › the agent reviewer's and the human's requested changes
@@ -6337,42 +6345,127 @@ Signed off by the human. They stay listed here so each can be brought back at th
 - review decisions in Activity › turning skip-human-review on while a ticket waits in review records it too
 - review decisions in Activity › a conductor's approval of its child is recorded as the conductor's
 
-#### service/src/orchestrator/run-recovery.test.ts: 9 rows, mostly open
+#### service/src/orchestrator/ticket-detail-parent.test.ts: 1 row, mostly new: next/orchestrator/ticket-detail-parent.test.ts
 
-- a crash whose end can't be recorded stays busy only until reconcileRuns can write it
-- a crash is recorded as failed right away once the retry can write
-- the session takes new runs after a crash instead of piling up `running` rows
-- a failing transcript write fails the run and closes the driver so the agent process stops
-- reconcileRuns leaves a live run and the run queued behind it alone
-- a complete run cut off by a restart puts the approval back, and approving again lands the ticket
-- an interrupted run of another kind leaves the human's approval alone
-- start() reconciles orphaned runs on a timer until stop()
-- a plan run cut off by a restart clears the approval, so the work doesn't start
+- a child's detail includes its parent conductor; a top-level ticket's parent is null
 
-#### service/src/orchestrator/spec.test.ts: 20 rows, mostly open
+#### service/src/orchestrator/usage-limit-restart.test.ts: 3 rows, mostly new: next/orchestrator/usage-limit-restart.test.ts
 
-- edit_spec › applies its edits as one new revision with the note, author and run
-- edit_spec › a stale base revision fails with the current one, and the human's concurrent edit survives
-- edit_spec › a missing or ambiguous old_string, or an expected mismatch, changes nothing and names the revision
-- edit_spec › all or nothing: a later failing edit drops the earlier ones in the call
-- edit_spec › review runs can edit the spec (to record findings) but not replace it
-- update_ticket's spec › a human's PATCH between get_ticket and update_ticket refuses the stale write and keeps their text
-- which runs get the spec tools › review runs get read_spec and edit_spec; triage none; the others all three
-- update_spec images › stores local images and videos as the ticket's attachments and rewrites their src
-- update_spec images › a bad extension or bad magic bytes fails the call and stores nothing
-- update_spec images › deleting the ticket removes its attachment files
-- PATCH spec › needs baseRevision outside drafts; a stale one is a 409 with the current revision
-- submit_for_review › without spec_is_up_to_date: true it fails and the ticket stays in progress
-- review runs › round 2 gets round 1's commit and notes and is told to diff from it; round 1 isn't
-- review runs › the review prompt points at the approved baseline revision without inlining the spec's diff
-- review runs › an untouched spec says it is still the approved revision
-- messages and Activity › a message and the agent's answer stay out of Activity; the message still reaches the agent
-- messages and Activity › a message to a planning ticket gets its answer in the transcript, not Activity
-- spec revisions in Activity › each revision adds one entry with its note and number; creating the ticket adds none
-- spec revisions in Activity › an unchanged body or a stale base revision adds nothing
-- spec revisions in Activity › a multi-line note becomes one line, with the whole note in detail
+- usage-limit restarts › a run stopped by a usage limit blocks until 5 minutes after the reset, then restarts
+- usage-limit restarts › any other failure blocks without a restart
+- usage-limit restarts › moving the ticket drops the restart
 
-#### service/src/orchestrator/steering.test.ts: 7 rows, mostly open
+#### service/src/orchestrator/usage-limit.test.ts: 12 rows, mostly new: next/orchestrator/usage-limit.test.ts
+
+- usageLimitResetAt › the CLI's spend limit with a zone resets later the same day
+- usageLimitResetAt › a time that has passed today is tomorrow's
+- usageLimitResetAt › the zone decides the instant
+- usageLimitResetAt › a date names that day, across a DST change
+- usageLimitResetAt › a date earlier in the year is next year's
+- usageLimitResetAt › the epoch form
+- usageLimitResetAt › anything else isn't a usage limit with a reset
+- isUsageLimit › spend and usage limits, with or without a reset time
+- isUsageLimit › other failures aren't
+- usageLimitResumeAt › restarts five minutes after the reset
+- usageLimitResumeAt › a reset already past (the epoch form) restarts five minutes from now
+- usageLimitResumeAt › no reset, no restart
+
+#### service/src/orchestrator/config-tools.test.ts: 16 rows, mostly new: next/orchestrator/config-tools.test.ts
+
+- config tools behind human approval › a work run creates a watcher and then re-routes it, each call after its own allow-once
+- config tools behind human approval › a grant covers only the approved input: a changed retry asks again
+- config tools behind human approval › gated grants aren't handed to the driver, and allowedTools never unlocks a gated tool
+- config tools behind human approval › read-only tickets are denied outright: no approval card, nothing changes
+- config tools behind human approval › validation errors come back as tool errors before a human is asked
+- config tools behind human approval › the API key never reaches a model: get_settings hides it and update_settings can't set it
+- config tools behind human approval › prompts: get_settings names the customized ones (text only with include_prompts); update_settings validates before a human is asked
+- config tools behind human approval › update_settings applies the same validation as PATCH /settings once approved
+- config tools behind human approval › base_branch: bad names are refused before a human is asked; good ones apply to settings and projects once approved
+- config tools behind human approval › mutating ops refuse runs without a human in the loop, whatever tool reaches them
+- config tools behind human approval › delete_ticket refuses the agent's own ticket and its ancestors; others go to a human
+- config tools behind human approval › list_watchers shows which env vars are set, never their values; update_watcher merges env
+- config tools behind human approval › prompt is passed straight through to the orchestrator on create and update
+- config tools behind human approval › prompt round-trips through storage and list_watchers
+- config tools behind human approval › watcher models and the watcher defaults go through the tools, merged per driver
+- config tools behind human approval › a watcher created through the tools runs and its output reaches the Inbox (new: next/contract/watcher-config.test.ts)
+
+#### service/src/orchestrator/context-gauge.test.ts: 22 rows, mostly new: next/orchestrator/context-gauge.test.ts
+
+- context gauge: recording calls › the ticket's context is the last call of its work run, with the first call's total as the prefix
+- context gauge: recording calls › every call is kept, in order
+- context gauge: recording calls › a review run's calls don't move the gauge: it runs in a conversation of its own
+- context gauge: recording calls › the gauge updates live: each call re-broadcasts the ticket
+- context gauge: recording calls › cache misses are counted per session and shown on the ticket; a hit that writes a lot isn't one
+- context gauge: recording calls › a message resumes the same session: the new run's first call isn't a miss, and misses keep adding up
+- context gauge: recording calls › an estimate (a driver that reports no tokens) is marked estimated and never counts misses
+- context gauge: recording calls › a call from a run that started before the session was cleared doesn't touch the new session's gauge
+- context gauge: recording calls › moving to review starts the next run fresh, and the gauge with it
+- session actions › New session drops the saved state and the gauge, and says so in Activity
+- session actions › the next run after New session gets no saved state
+- session actions › New session with nothing saved changes nothing
+- session actions › a run going refuses both actions with 409 and leaves the session alone
+- session actions › an unknown action is a 400
+- session actions › Compact runs the driver's compact, keeps the state, and shows the new size and an Activity line
+- session actions › while compacting, messages and ticket actions are refused with 409, and they work again after
+- session actions › cancelling a compact leaves the saved session and gauge as they were
+- session actions › a failed compact says why in Activity and leaves the gauge alone
+- session actions › Compact needs a saved session and a driver that can
+- driver capabilities › the driver list carries what each driver can do with a session
+- contextGaugeLimit setting › defaults to 250k, saves, and refuses what isn't 10k–2M tokens
+- tokensLabel › writes counts the way the gauge does
+
+#### service/src/orchestrator/key-aliases.test.ts: 5 rows, mostly new: next/orchestrator/key-aliases.test.ts
+
+- old ticket keys after a project rename › ticketDetail by old key returns the ticket with its current key and resolvedFrom
+- old ticket keys after a project rename › dependsOn with an old key is stored as the current key; self-dependency via old key is refused
+- old ticket keys after a project rename › deleting a ticket by its old key works, and the old key then 404s
+- old ticket keys after a project rename › a conductor that learned a child's key before the rename can still drive it
+- old ticket keys after a project rename › triage sends an update to a renamed ticket by its old key only as ticket_key; the old key alone as key makes a new linked ticket
+
+#### service/src/orchestrator/message-annotations.test.ts: 12 rows, mostly new: next/orchestrator/message-annotations.test.ts
+
+- a message's annotated attachment › is in the transcript entry and the run's attachments, and the answering run lists its notes under that file
+- a message's annotated attachment › a browser screenshot's mark names its element in the answering run's prompt
+- a message's annotated attachment › a later run doesn't get the notes again
+- a message's annotated attachment › on a file that isn't an image, or malformed, it's refused and nothing runs
+- a message's annotated attachment › an older app's move (re-opening a done ticket, or sending a review one back to work) carries it into the work run
+- a spec image by id › is referenced at its stored file, named after it, and its notes are listed under that path
+- a spec image by id › a file from an earlier message goes again by id, with its own notes this time
+- a spec image by id › an unknown id is refused and nothing runs
+- steering › a running agent gets the notes in the steered message; the transcript keeps the annotated attachment
+- steering › a message the run never took in is queued with its annotated attachment
+- over HTTP › POST /messages takes an annotated attachment and refuses a malformed one; GET /browser/:sessionId/screenshot answers the PNG and its sizes
+- over HTTP › POST /browser/:sessionId/element names what's under a screenshot's point until the tab moves on; a mark carries it to the agent
+
+#### service/src/orchestrator/message-attachments.test.ts: 10 rows, mostly new: next/orchestrator/message-attachments.test.ts
+
+- a message's attachments › go with the run that answers it: paths in the prompt, images inline, listed on the transcript entry
+- a message's attachments › a later run doesn't get them again
+- a message's attachments › attachments alone are a message; no text and no attachments isn't; a path that isn't there is refused
+- a message's attachments › are refused while a tool approval waits, since that message answers the approval
+- a message's attachments › an older app's move re-opening a done ticket with a message sends them with its work run
+- steering › a running agent takes the message in with its images; the transcript keeps the words and the files
+- steering › a message the run never took in is queued with its attachments, and shown once
+- uploads › an upload sent with a message survives the startup sweep, and goes when its ticket is deleted
+- uploads › an upload a message shares with another ticket stays until neither uses it
+- over HTTP › POST /messages takes attachments; each is served from its transcript entry with ?token=, 404 once gone
+
+#### service/src/orchestrator/plan-usage.test.ts: 12 rows, mostly new: next/orchestrator/plan-usage.test.ts
+
+- PlanUsageTracker › reads each driver that has a plan, skips the ones that don't, and tells clients
+- PlanUsageTracker › status follows the fullest window: near the limit from 90%, limited at 100%
+- PlanUsageTracker › a driver that turns out to have no plan (null) shows no row
+- PlanUsageTracker › an unreadable plan says why instead of keeping the old bar
+- PlanUsageTracker › transient failures back off, doubling up to the cap; a poll or a forced read in that time is skipped
+- PlanUsageTracker › a Retry-After longer than the backoff is waited out, and never past the cap
+- PlanUsageTracker › a forced read still goes through the short backoff after a failure that isn't a rate limit
+- PlanUsageTracker › a success clears the backoff
+- PlanUsageTracker › two refreshes at once make one request
+- rate-limit reports as the fallback › when the endpoint can't be read, the CLI's own window report stands in for the bar
+- rate-limit reports as the fallback › with no percentage the status still says how close the account is
+- rate-limit reports as the fallback › a warning or rejection reads the endpoint again right away; an all-clear doesn't
+
+#### service/src/orchestrator/steering.test.ts: 7 rows, mostly new: next/orchestrator/steering.test.ts
 
 - steering a running agent › a message to an in-progress ticket goes into the running work run, not a new run
 - steering a running agent › a message to a planning ticket steers its plan run
@@ -6382,7 +6475,7 @@ Signed off by the human. They stay listed here so each can be brought back at th
 - steering a running agent › a message to a blocked ticket steers its running chat, with the unblock note for the agent
 - steering a running agent › once a chat has unblocked the ticket, a message to it (now in progress) still reaches that chat
 
-#### service/src/orchestrator/subagents.test.ts: 13 rows, mostly open
+#### service/src/orchestrator/subagents.test.ts: 13 rows, mostly new: next/orchestrator/subagents.test.ts
 
 - sub-agents › a sub-agent's output lands in its own transcript, and the ticket's run keeps its own last word
 - sub-agents › sub-agents still running when the run ends are stopped with it
@@ -6398,7 +6491,7 @@ Signed off by the human. They stay listed here so each can be brought back at th
 - service restart: a stale run's sub-agents are stopped
 - migration 13 drops the made-up \"Sub-agent\" rows from Bash heartbeats and keeps real ones
 
-#### service/src/orchestrator/tasks.test.ts: 14 rows, mostly open
+#### service/src/orchestrator/tasks.test.ts: 14 rows, mostly new: next/orchestrator/tasks.test.ts
 
 - background tasks › a task is listed with its kind and command; it finishes with its summary and its output is kept
 - background tasks › the kept tail is taken again by a report after the end, so lines written in between are kept
@@ -6414,94 +6507,6 @@ Signed off by the human. They stay listed here so each can be brought back at th
 - readTaskOutput › cleanEnd and stripAnsi
 - readTaskOutput › confineOutputPath refuses paths outside the CLI's temp folders, symlinks included
 - migration 22 keeps existing sub-agents as agents
-
-#### service/src/orchestrator/ticket-detail-parent.test.ts: 1 row, mostly open
-
-- a child's detail includes its parent conductor; a top-level ticket's parent is null
-
-#### service/src/orchestrator/usage-limit-restart.test.ts: 3 rows, mostly open
-
-- usage-limit restarts › a run stopped by a usage limit blocks until 5 minutes after the reset, then restarts
-- usage-limit restarts › any other failure blocks without a restart
-- usage-limit restarts › moving the ticket drops the restart
-
-#### service/src/orchestrator/usage-limit.test.ts: 12 rows, mostly open
-
-- usageLimitResetAt › the CLI's spend limit with a zone resets later the same day
-- usageLimitResetAt › a time that has passed today is tomorrow's
-- usageLimitResetAt › the zone decides the instant
-- usageLimitResetAt › a date names that day, across a DST change
-- usageLimitResetAt › a date earlier in the year is next year's
-- usageLimitResetAt › the epoch form
-- usageLimitResetAt › anything else isn't a usage limit with a reset
-- isUsageLimit › spend and usage limits, with or without a reset time
-- isUsageLimit › other failures aren't
-- usageLimitResumeAt › restarts five minutes after the reset
-- usageLimitResumeAt › a reset already past (the epoch form) restarts five minutes from now
-- usageLimitResumeAt › no reset, no restart
-
-#### service/src/orchestrator/watcher-inbox.test.ts: 2 rows, mostly open
-
-- watcher output → Inbox › a command line's output and the watcher prompt reach one triage session (fake spawn)
-- watcher output → Inbox › a real /bin/sh -c watcher produces the triage session
-
-#### service/src/orchestrator/watchers-integration.test.ts: 2 rows, mostly open
-
-- watchers → triage › a real watcher's output is one triage item with its driver, deduped until it changes
-- watchers → triage › watcher events and the list carry the process state, live as it changes
-
-#### service/src/orchestrator/watchers.test.ts: 50 rows, mostly open
-
-- toOutput › trims, and whitespace-only output is nothing
-- toOutput › cuts at the limit and marks it truncated; exactly the limit is not truncated
-- findKeys › finds upper-case keys once each, in order
-- findKeys › is capped
-- watcherArgv › a command line runs through the login shell
-- watcherArgv › a legacy command + args is spawned directly, without a shell
-- watcherArgv › loginShell uses an absolute $SHELL and falls back otherwise
-- WatcherRunner loop mode › delivers a run's output as one chunk and re-runs after exit 0
-- WatcherRunner loop mode › exit 4 (nothing to report) restarts promptly without an error
-- WatcherRunner loop mode › failures report stderr and back off exponentially; success resets
-- WatcherRunner loop mode › backoff is capped
-- WatcherRunner loop mode › a spawn that throws is reported and retried
-- WatcherRunner loop mode › splits a long-lived stream into bursts while it is still running
-- WatcherRunner loop mode › whitespace-only bursts are skipped
-- WatcherRunner loop mode › a steady trickle is still flushed by the max burst age
-- WatcherRunner loop mode › an idle flush delivers everything, including a last line without a newline
-- WatcherRunner loop mode › pretty JSON without a trailing newline stays one item per response
-- WatcherRunner loop mode › a max-age flush while output is still streaming keeps the partial line
-- WatcherRunner loop mode › a huge burst is cut at maxOutputChars and marked truncated
-- WatcherRunner loop mode › an onOutput throw is reported and does not stop the runner
-- WatcherRunner loop mode › async onOutput rejections are caught too
-- WatcherRunner loop mode › runNow kills a blocking child and restarts at once without an error
-- WatcherRunner loop mode › runNow cancels a pending backoff
-- WatcherRunner interval mode › runs every intervalSec and skips a tick while still running
-- WatcherRunner interval mode › each run's output is one chunk, however slowly it arrives; empty runs deliver nothing
-- WatcherRunner interval mode › interval is floored by minIntervalMs
-- WatcherRunner interval mode › a failing interval run reports the error but keeps the schedule
-- WatcherRunner interval mode › runNow starts a run immediately, but not a second concurrent one
-- WatcherRunner sync › starts enabled watchers only, passes cwd/env/args
-- WatcherRunner sync › a command line without args is run through the shell
-- WatcherRunner sync › stops removed and disabled watchers
-- WatcherRunner sync › restarts on command changes, not on cosmetic ones
-- WatcherRunner sync › output is delivered with the latest watcher object (and its prompt)
-- WatcherRunner sync › runNow on a disabled watcher does a one-off run; unknown ids throw
-- WatcherRunner sync › stopAll kills everything and nothing restarts
-- WatcherRunner live state › loop: a spawned process is running; a failed exit waits out the backoff with the failure count
-- WatcherRunner live state › loop: a process that stays up clears a stale error from an earlier run
-- WatcherRunner live state › loop: a clean exit resets the failure count
-- WatcherRunner live state › a spawn failure is an error and a wait, never running
-- WatcherRunner live state › interval: running during a run, then waiting for the next tick; failures count across runs
-- WatcherRunner live state › disabling or removing stops it; a disabled watcher is stopped from the start
-- WatcherRunner live state › a restart on a command change reports the new process, not the old one's exit
-- WatcherRunner live state › a one-off run of a disabled watcher is running, then stopped again
-- WatcherRunner live state › stopAll reports every watcher stopped
-- WatcherRunner with Bun.spawn › a legacy command + args runs directly, with the watcher env and cwd
-- WatcherRunner with Bun.spawn › stopping a loop watcher stops what its shell is running too, at once
-- WatcherRunner with Bun.spawn › a shell command line gets pipes, variables and the watcher env
-- WatcherRunner with Bun.spawn › a looping shell command printing pretty JSON without a newline gives one item per response
-- WatcherRunner with Bun.spawn › a failing process reports its stderr
-- WatcherRunner with Bun.spawn › a missing executable is reported, not thrown
 
 ### service/src/permissions
 

@@ -17,8 +17,27 @@ export type Disposition =
   | { status: "loss"; reason: string }
   | { status: "kept"; reason: string };
 
-/** Rows covered by the new suite: file pattern (and optionally the test name) → new test file. */
-export const COVERED_BY_NEW: { file: RegExp; name?: RegExp; ref: string }[] = [];
+/**
+ * Old test files that moved into the new suite. The old file is gone, so its rows come from `now` (each row keeps the
+ * old path, so the area and the progress table stay where they were). A test that moved to a different file than its
+ * neighbours (it needs a real process, say, so it lives in next/contract) is a second entry for the same `old`.
+ */
+export interface Ported {
+  old: string;
+  now: string;
+}
+const ORCH = "service/src/orchestrator/";
+const NEXT_ORCH = "next/orchestrator/";
+export const PORTED: Ported[] = [
+  ...[
+    "activity-lines", "adviser", "approvals", "attachments", "classifier-denials", "context-usage", "message-drafts", "model-selection", "models",
+    "permissions", "prompt-annotations", "prompt-attachments", "prompt-overrides", "prompts-builtin", "prompts", "remote-ids", "review-activity",
+    "ticket-detail-parent", "usage-limit-restart", "usage-limit",
+    "config-tools", "context-gauge", "key-aliases", "message-annotations", "message-attachments", "plan-usage", "steering", "subagents", "tasks",
+  ].map((f) => ({ old: `${ORCH}${f}.test.ts`, now: `${NEXT_ORCH}${f}.test.ts` })),
+  { old: `${ORCH}permissions.test.ts`, now: "next/contract/native-bash.test.ts" },
+  { old: `${ORCH}config-tools.test.ts`, now: "next/contract/watcher-config.test.ts" },
+];
 
 /** sim-check functions whose behaviour the single walkthrough can't carry: the ticket's expected losses. */
 const SIM_LOSSES: { group: RegExp; reason: string }[] = [
@@ -33,9 +52,7 @@ const SIM_NAME_LOSSES: { name: RegExp; reason: string }[] = [
 ];
 
 export function dispositionOf(row: Row): Disposition {
-  for (const c of COVERED_BY_NEW) {
-    if (c.file.test(row.file) && (!c.name || c.name.test(row.name))) return { status: "new", ref: c.ref };
-  }
+  if (row.ref) return { status: "new", ref: row.ref };
   if (row.kind === "swift") return { status: "kept", reason: "HarnessKit's swift test needs no simulator and stays; it also decodes the service's golden files" };
   if (row.kind === "sim-check") {
     for (const l of SIM_NAME_LOSSES) if (l.name.test(row.name)) return { status: "loss", reason: l.reason };

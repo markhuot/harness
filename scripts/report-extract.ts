@@ -10,6 +10,8 @@ export type Row = {
   group: string;
   /** The test or check's own name: what it checks. */
   name: string;
+  /** For a test that moved: the new-suite file it lives in now (set by the report from PORTED). */
+  ref?: string;
 };
 
 const QUOTED = /^(["'`])((?:\\.|(?!\1).)*)\1/;

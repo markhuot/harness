@@ -18,7 +18,7 @@
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { runCommand } from "./run-layer";
-import { allLayers, planLayers, type PlannedLayer } from "./verify-plan";
+import { allLayers, newTestsInOldDirs, planLayers, type PlannedLayer } from "./verify-plan";
 
 const root = join(import.meta.dir, "..");
 
@@ -48,15 +48,15 @@ async function git(args: string[]): Promise<{ code: number; out: string }> {
 }
 
 /** Files changed since `base` branched off, committed or not, plus untracked ones. */
-async function changedFiles(base?: string): Promise<{ files: string[]; base: string }> {
+async function changedFiles(base?: string): Promise<{ files: string[]; added: string[]; base: string }> {
   let ref = base;
   if (!ref) for (const c of ["main", "origin/main"]) if ((await git(["rev-parse", "--verify", "--quiet", c])).code === 0) { ref = c; break; }
   if (!ref) throw new Error("no main or origin/main to diff against; pass --base=<ref>");
   const mb = await git(["merge-base", ref, "HEAD"]);
   if (mb.code !== 0) throw new Error(`no merge base between ${ref} and HEAD`);
-  const [diff, untracked] = await Promise.all([git(["diff", "--name-only", mb.out]), git(["ls-files", "--others", "--exclude-standard"])]);
+  const [diff, added, untracked] = await Promise.all([git(["diff", "--name-only", mb.out]), git(["diff", "--name-only", "--diff-filter=A", mb.out]), git(["ls-files", "--others", "--exclude-standard"])]);
   const files = [...new Set([...diff.out.split("\n"), ...untracked.out.split("\n")].filter(Boolean))].sort();
-  return { files, base: `${ref} (${mb.out.slice(0, 8)})` };
+  return { files, added: [...new Set([...added.out.split("\n"), ...untracked.out.split("\n")].filter(Boolean))].sort(), base: `${ref} (${mb.out.slice(0, 8)})` };
 }
 
 export function formatPlan(layers: PlannedLayer[], notes: string[]): string {
@@ -94,7 +94,12 @@ async function main(argv: string[]): Promise<number> {
     layers = allLayers(["smoke", ...checks]);
     console.log("verify --all");
   } else {
-    const { files, base } = opts.files ? { files: opts.files, base: "--files" } : await changedFiles(opts.base);
+    const { files, added, base } = opts.files ? { files: opts.files, added: [] as string[], base: "--files" } : await changedFiles(opts.base);
+    const stray = newTestsInOldDirs(added);
+    if (stray.length) {
+      console.log(`❌ new test files in the old suite's directories (write them under next/ instead):\n${stray.map((f) => `  ${f}`).join("\n")}`);
+      return 1;
+    }
     const plan = planLayers(files);
     layers = plan.layers;
     notes = plan.notes;

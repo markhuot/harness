@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { FALLBACK_REASON, IOS_FEATURE_CHECKS, RENDERER_CHECKS, RENDERER_FALLBACK, allLayers, planLayers } from "./verify-plan";
+import { FALLBACK_REASON, IOS_FEATURE_CHECKS, RENDERER_CHECKS, RENDERER_FALLBACK, allLayers, newTestsInOldDirs, planLayers } from "./verify-plan";
 
 const root = join(import.meta.dir, "..");
 const ids = (files: string[]) => planLayers(files).layers.map((l) => l.id);
@@ -144,5 +144,28 @@ describe("the mapping points at things that exist", () => {
 describe("allLayers", () => {
   test("runs every package, swift test, the given app checks and both simulator layers", () => {
     expect(allLayers(["smoke", "groups-check"]).map((l) => l.id)).toEqual(["bun:all", "typecheck", "next", "swift-test", "app-build", "app-check:smoke", "app-check:groups-check", "snapshots", "sim-check"]);
+  });
+});
+
+describe("newTestsInOldDirs", () => {
+  test("a new test or check in a directory the new suite replaces is refused", () => {
+    expect(
+      newTestsInOldDirs([
+        "service/src/orchestrator/new-thing.test.ts",
+        "app/scripts/foo-check.ts",
+        "ios/HarnessSnapshotTests/NewScreenTests.swift",
+        "shared/src/x.test.ts",
+      ]),
+    ).toEqual(["service/src/orchestrator/new-thing.test.ts", "app/scripts/foo-check.ts", "ios/HarnessSnapshotTests/NewScreenTests.swift", "shared/src/x.test.ts"]);
+  });
+
+  test("the new suite, HarnessKit's swift tests, the repo's own tooling tests and non-test files pass", () => {
+    expect(newTestsInOldDirs(["next/orchestrator/x.test.ts", "ios/HarnessKit/Tests/FooTests.swift", "scripts/verify.test.ts", "service/src/orchestrator/x.ts"])).toEqual([]);
+  });
+});
+
+describe("service code the new suite drives", () => {
+  test("a change under service/src/orchestrator runs the new suite and the service's old tests and typecheck", () => {
+    expect(planLayers(["service/src/orchestrator/orchestrator.ts"]).layers.map((l) => l.id)).toEqual(["bun:service", "typecheck", "next"]);
   });
 });

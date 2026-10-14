@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { dispositionOf } from "./report-dispositions";
+import { PORTED, dispositionOf } from "./report-dispositions";
 import { extractAppChecks, extractBunTests, extractSimChecks, extractSnapshotTests, extractSwiftTests } from "./report-extract";
 import { REPORT_PATH, areaOf, buildReport, collectRows, listFiles, rowsForFile } from "./report";
 
@@ -136,5 +136,17 @@ describe("report", () => {
 
   test("the committed report is current: regenerate it with `bun scripts/report.ts` after adding or moving a test", () => {
     expect(readFileSync(join(root, REPORT_PATH), "utf8") === buildReport(collectRows())).toBe(true);
+  });
+});
+
+describe("ported tests", () => {
+  test("a moved file's tests are still rows under their old path, marked new with where they went", () => {
+    const rows = collectRows(["next/orchestrator/adviser.test.ts"], () => 'test("a", () => {});').filter((r) => r.file === "service/src/orchestrator/adviser.test.ts");
+    expect(rows).toHaveLength(1);
+    expect(dispositionOf(rows[0]!)).toEqual({ status: "new", ref: "next/orchestrator/adviser.test.ts" });
+  });
+
+  test("every port points at a file that exists, so a rename can't silently drop rows", () => {
+    expect(PORTED.filter((p) => !existsSync(join(root, p.now))).map((p) => p.now)).toEqual([]);
   });
 });

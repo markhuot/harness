@@ -112,7 +112,7 @@ export const RULES: Rule[] = [
   { name: "repo-wide config and scripts", match: /^(package\.json|bun\.lock|bunfig\.toml|tsconfig[^/]*\.json|scripts\/)/, layers: () => [bunAll, typecheck] },
   { name: "new suite", match: /^next\//, layers: () => [nextSuite, typecheck] },
   // The services the new suite runs in process, and the git adapter its contract tier checks against real git.
-  { name: "service code the new suite drives", match: /^service\/src\/(orchestrator|browser|testing)\//, layers: () => [nextSuite] },
+  { name: "service code the new suite drives", match: /^service\/src\/(orchestrator|browser|testing)\//, layers: () => [nextSuite, bunIn("service"), typecheck] },
   { name: "service", match: /^service\//, layers: () => [bunIn("service"), typecheck] },
   // The editor is the Mac file pane and the iPhone's web page, and its tests can't draw a file (that needs a
   // real layout engine), so both apps' file checks run too.
@@ -153,6 +153,14 @@ export function allLayers(appChecks: string[]): PlannedLayer[] {
   const layers = [bunAll, typecheck, nextSuite, swiftTest, appBuild, ...appChecks.map(appCheck), snapshots, walkThrough];
   return layers.map((l) => ({ ...l, reasons: ["--all"] }));
 }
+
+/**
+ * Test files live in the old suite's directories until the new suite replaces them; a new one added there would
+ * make the migration grow instead of shrink. HarnessKit's swift tests stay (they need no simulator), and the
+ * repo's own tooling tests (scripts/) aren't part of what the new suite replaces.
+ */
+const OLD_SUITE_TEST = /^(service|shared|app|editor|plugins|release|ios\/Tools|ios\/HarnessSnapshotTests)\/.*(\.test\.tsx?|Tests?\.swift|-check\.ts)$/;
+export const newTestsInOldDirs = (added: string[]): string[] => added.filter((f) => OLD_SUITE_TEST.test(f));
 
 export const FALLBACK_REASON = "no rule for the file, so the default (bun tests + typecheck)";
 

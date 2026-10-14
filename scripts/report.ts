@@ -9,7 +9,7 @@
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { type Disposition, dispositionOf, label } from "./report-dispositions";
+import { PORTED, type Disposition, dispositionOf, label } from "./report-dispositions";
 import { type Row, extractAppChecks, extractBunTests, extractSimChecks, extractSnapshotTests, extractSwiftTests } from "./report-extract";
 
 const root = join(import.meta.dir, "..");
@@ -45,6 +45,11 @@ export function collectRows(files = listFiles(), read = (f: string) => readFileS
   for (const f of files) {
     if (!existsSync(join(root, f))) continue;
     rows.push(...rowsForFile(f, read(f)));
+  }
+  // Tests that moved: the old file is gone; its rows come from where they live now.
+  for (const p of PORTED) {
+    if (!existsSync(join(root, p.now))) continue;
+    for (const r of extractBunTests(p.old, read(p.now))) rows.push({ ...r, ref: p.now });
   }
   return rows;
 }
