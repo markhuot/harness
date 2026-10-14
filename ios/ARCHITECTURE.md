@@ -443,9 +443,9 @@ room. New session works the same way (the same New session comes forward); a tic
 presented New session takes its place, and `replace(newSession, with:)` turns New session into its
 ticket in place wherever it sits in the list.
 
-`activateSheet(id:)` makes any sheet the top, presented or docked as the top was;
-`activateAdjacentSheet(.next/.previous)` sends the top to the back or brings the last to the top,
-so repeated swipes walk the whole dock. `dismissSheet()` and `closeSheet(id:)` close one sheet:
+`activateSheet(id:)` makes any sheet the top, presented or docked as the top was.
+`waitingSheets` is what the dock draws as cards: every sheet while docked, the ones behind the
+presented top while a ticket is up (the presented ticket is the sheet, not a card). `dismissSheet()` and `closeSheet(id:)` close one sheet:
 when it was the top, the next becomes the top, docked. `dismissAllSheets()` is Projects.
 `removeTicket` and `replaceTicket` reach into every sheet and touch only the matching ones. Only the
 first `liveSheetCount` (5) are live (`liveSheets`): both hosts mount a `TicketSheetContent` for each
@@ -470,10 +470,16 @@ glass cards, the most recent at the bottom, scrolled to the bottom and scrolling
 it's given, under a small glass capsule that collapses it. The list has no background of its own;
 it sits on a `DockedBackdrop`, a radial progressive blur (a material masked by a radial gradient,
 plus a light tint of the palette's background) rising out of the bottom on iPhone and the
-bottom-right corner on iPad. Switching while a ticket is up is a
-long press on its title (`TicketDetailHero`'s `.dockedTicketsMenu`, while `\.inTicketSheet` and more
-than one is docked): a system context menu of the other docked tickets (`DockedTicketsMenuItems`:
-the first `Router.shownDockCount`, 10, then "N more").
+bottom-right corner on iPad. Both platforms draw the cards with one container, `DockedCardsContainer`
+(App/DockedTickets.swift): it owns the cards, the "N more…" expansion and its backdrop, `open` (the
+ticket becomes the top, and the sheet is presented if it was docked) and ✕ (a file holding unsaved
+edits comes forward instead of closing, on both). What differs is a `DockedCardsLayout`: the
+iPhone's is full width with the bottom bar's side inset and `phoneVisible` cards, rising from the
+bottom; the iPad's is the corner, a fixed card width from `DockMetrics.cardMode`, `padVisible` cards
+fitted to the height, and the three modes. On the iPad the title's long press (`TicketDetailHero`'s
+`.dockedTicketsMenu`, in the panel only) also lists the other docked tickets as a system context menu
+(`DockedTicketsMenuItems`: the first `Router.shownDockCount`, 10, then "N more"); the iPhone has no
+such menu, since its cards are over the ticket.
 `DockedTicketsKeeper` (on MainTabs) holds `BoardStore.watchKey` for every docked key, so a done
 ticket the board hasn't paged in still has its title, and drops the sheets of keys the server
 reports missing (`missingKeys`) through `removeTicket`.
@@ -505,9 +511,9 @@ hit-testing is cancelled once the system pan takes over, a SwiftUI drag blocks s
 touches in window coordinates; the sheet's displacement is its presentation layer's frame against
 where it rested, which is also how a thumb resting low during a scroll is told from a drag, since the
 sheet hasn't moved. `DockHold` runs it (a task wakes when a still finger's hold would arm) and fires a
-medium haptic when it arms. Armed, a ghost dock card (`DockGhostCard`, "Dock") shows at the bottom, in
-a hosting view added above the presented view in the container: the sheet covers the window below its
-top edge, and nothing sets a transform on the presented view, since UIKit drives its frame. A release
+medium haptic when it arms. Armed, a ghost dock card (`DockGhostCard`, "Dock") shows at the bottom as
+the dock window's incoming slot (above the sheet, which covers the main window below its top edge);
+nothing sets a transform on the presented view, since UIKit drives its frame. A release
 while armed latches a timestamped intent that the dismissal binding reads and clears once
 (`takeIntent`), so a programmatic dismissal can't dock; if the system cancels an armed dismissal, an
 upward flick say, `notifyWhenInteractionChanges` docks it anyway. VoiceOver has a "Dock" custom action
@@ -515,18 +521,42 @@ on the sheet and no visible button. This leans on sheet internals (the presentat
 container view, the transition coordinator): there is no fallback if a release breaks it, and
 `git revert` is the way back.
 
-Docked, the top ticket is a card in the main window, an overlay on the compact sections
-(`DockedCardsOverlay`), over the board: `DockedCard` 52pt tall, 8pt from the home indicator and in from the sides as far as the board's bottom bar (its concentric inset, `DockMetrics.phoneSides(screen:)`), with the other docked tickets stacked above it, up to two cards in all, then "N more…" on
-top. It is an overlay rather than a second, docked sheet, which would pop in after the dismissal and
-bring back the glass rim and shadow that led the other cards out of the sheet. The overlay publishes
-where its bottom card and the top of the whole collapsed stack sit (`DockedSheetInset.top`, `.stackTop`), `DockClearance` gives the board's bottom
-clearance down to that measured top (`DockMetrics.clearance`, with or without a keyboard), and the bottom bar rides above the stack at its own inset; the keyboard doesn't lift it. "N more…" expands
-every ticket but the top into the `DockedCardList` over the board, on the backdrop; a tap on the
-backdrop collapses it. A tap on the card opens the sheet (hiding the card in the same transaction),
-a horizontal swipe along it (a high-priority SwiftUI drag, or the card's button would keep any drag
-that stays inside it and take its lift as a tap) moves to the next or previous ticket, and a swipe
-down or its ✕ closes it. VoiceOver has Next and Previous docked ticket and Close actions, and focus
-moves to the card after a dismissal. Reduce Motion fades the card and the ghost.
+The iPhone's dock is one persistent dock in a window of its own (`DockWindow`, App/DockWindow.swift),
+above the main window and everything it presents, which is why the cards show over the board, the
+open ticket sheet and a file sheet alike: anything hosted inside the system sheet would remount with
+each presentation. RootView creates one `DockWindow` per main window scene at compact width (none for
+a ticket window, and torn down at regular width, where the iPad's panel host draws its own stack),
+and it hosts `DockedCardsContainer` with the router, the app model, `DockHold` and
+`DockedSheetInset` in its environment. It never becomes the key window (`canBecomeKey` is false, so
+the composer keeps first responder), forwards the status bar style and orientations to the main
+window's root, and takes touches only where the cards are: `DockWindow.hitTest` reads the rects the
+container publishes (`DockedCardsReport`), or the whole screen while the list is open, rather than
+asking whether the hit view is the root, which SwiftUI's gesture views make unreliable on iOS 18+.
+The container never mounts again while the app runs (`DebugState.dockMounts` counts it, and
+sim-check asserts one): cards insert and remove by id, so opening a sheet from the board, switching
+tickets from a card, or docking changes only the cards that change. Each card is `DockedCard`, 52pt
+tall, 8pt from the home indicator and in from the sides as far as the board's bottom bar (its
+concentric inset, `DockMetrics.phoneSides(screen:)`), the most recent at the bottom, up to two, then
+"N more…" on top. The dock is shown while there are waiting cards or the hold-to-dock ghost, and
+fades out (`DockCards.isShown`) while a keyboard is up, a picker, the palette or a cover is
+(`Router.sheet`, `.cover`), or a dialog the Router doesn't know about is: an alert, action sheet,
+share sheet or photo or document picker presented from the main window's controllers, which a short
+poll in the dock window looks for. The container publishes where the top of the collapsed stack is
+(`DockedSheetInset.stackTop`): `DockClearance` gives the board's bottom clearance down to that
+measured top (`DockMetrics.clearance`, with or without a keyboard), and the bottom bar rides above
+the stack at its own inset. In the ticket sheet each screen keeps the same room at its bottom
+(`SheetDockRoom`, inside the stack's screens like the board's), and the composer sits
+`TicketDock.barGap` above it (`TicketDock.composerGap`); a keyboard drops both
+(`DockedSheetInset.keyboardUp`), as the dock is hidden then and the composer rides the keys. "N more…"
+expands every waiting ticket into the `DockedCardList` over the screen on the backdrop; a tap on the
+backdrop collapses it. A tap on a card makes its ticket the sheet (`activateSheet`, plus `restoreDock`
+when docked), a card's ✕ closes it. There is no gesture on the cards and no VoiceOver Next or
+Previous: the cards are how a person switches. VoiceOver has Close on each card, and focus moves to
+the bottom card after a ticket docks. Reduce Motion fades the cards and the ghost. The ghost dock card
+is the dock's incoming bottom slot: the cards lift one row (an offset, with no clearance asked for),
+and a release docks the ticket into it. Snapshots draw only their own window, so SnapshotRenderer
+composites the dock window over the screen, drawing it over a picture of what is below it so the glass
+has something behind it.
 
 The ticket's view is torn down on dismissal, which docking now does too. Composer drafts are the
 board store's (`BoardStore.messageDraft(for:)`) and the stack's path is the Router's. What the view
@@ -553,16 +583,16 @@ or Discard for a typed draft as Cancel does and close an empty one at once; with
 registered they just dismiss. Docking, pop-out and a card's ✕ don't ask, and the draft is
 saved as whenever the screen goes. A rightward drag on the panel's top edge or its button corner moves the panel with the finger (iPadOS has no native side sheet, so the panel decides itself, as little as it can). `PanelRelease` closes the ticket when the drag moved at least 40pt and its projected end (`predictedEndTranslation`) passes half the panel's width, else it springs back; either way the slide is a spring seeded with the finger's release velocity, so momentum carries through. Speed and distance never dock: holding the finger in the trailing 40% of the window for about 0.5 s with the panel dragged more than 80pt clear arms the same `DockArming` rule through `DockHold`, the host (`TicketPanelHost`) draws a ghost dock card in the bottom slot of the docked card stack (the cards shift up a row, nothing reserves room; collapsed, it covers the one card), and releasing then slides the panel to the card and docks it. The panel has a VoiceOver "Dock" action and keeps its dock button. Esc closes it too.
 Docked, the panel stays mounted (drafts, scroll and path survive) but off the edge and `disabled`,
-and every docked ticket waits as a glass-capsule `DockedCard` in `DockedCardStack`, the same
+and every docked ticket waits as a glass-capsule `DockedCard` in the same `DockedCardsContainer`, the same
 cards as the iPhone's, in the board's
 bottom-right corner inside the safe area, stacking upward with the newest at the bottom. While the
 panel is open the other docked tickets' cards stay there, their trailing edge on the panel's
 leading edge (`TicketSidePanel(onWidth:)` reports it as it resizes). The stack keeps to the board's
 column and never covers the sidebar: DesktopShell measures where the column starts
-(`DockedSheetInset.contentLeading`), and `DockedCardStack.mode` picks cards when the column left of
+(`DockedSheetInset.contentLeading`), and `DockMetrics.cardMode` (through `DockedCardsLayout.pad`) picks cards when the column left of
 the panel has room for one at least 200pt wide, the "N more…" card alone ("<n> docked tickets")
 holding every docked ticket when it has less, and nothing when even that won't fit (a wide panel;
-the title's long press still lists them). Each card is about 320pt wide (`DockedCardStack.maxWidth`,
+the title's long press still lists them). Each card is about 320pt wide (`DockMetrics.maxCardWidth`,
 narrower in a narrow column); a tap opens that ticket in the panel and its ✕ closes just that one.
 At most five show, fewer when the height doesn't fit them (`DockCards.split`'s `fitting`), then
 "N more…", which expands the `DockedCardList` over the corner, as tall as its cards up to the
@@ -723,12 +753,13 @@ harness://projects closes them all. Shots are `panel-*.png`. A compact window's 
 covered, since AXe and simctl can't resize a window or enter Split View; the iPhone's `--sheets`
 checks drive the same sheet, and `dockStackChecks` there covers several docked tickets the same
 way (two cards, the newest at the bottom, with the board's bar above the taller dock; a tap on a
-card; the long press on the title, listing only the others; a swipe along the dock; two cards and
-"10 more…" expanding into the list of twelve, the oldest, parked, reopening at its pushed screen; a
-card's ✕ and a swipe down closing only the top; a terminate and relaunch keeping the dock; and the
-app's footprint with none, 5 and 20 docked; `dock-*.png`). AXe stops a drag at the screen's edge,
-so sim-check swipes the dock down from near a card's top, where enough of the drag is left to
-throw the sheet away.
+card, after which the other cards stay over the open sheet with the composer 11pt above them; two
+cards and "1 more…" expanding into the list of three; switching cards under an open sheet leaving
+the other card where it was and the dock's mount count at one; a card's ✕ closing only that ticket; a
+terminate and relaunch keeping the dock; and the app's footprint with none, 5 and 20 docked;
+`dock-*.png`). The dock window shows up in AXe's tree like any other window, so the same card labels
+drive both platforms. `--keyboard` adds the composer sitting on the keys with a ticket docked and
+the dock out of the way.
 
 The simulator's backboardd sometimes aborts in Metal texture validation (`MTLSimDriver`,
 `CA::OGL::FlattenNode`) during long `sim-check --ipad` runs with ticket windows open, and the app and
@@ -1144,7 +1175,7 @@ The shape is HarnessKit's `DebugState` (`Shell/DebugState.swift`, pinned by `Deb
 
 ```json
 {
-  "version": 1, "seq": 42, "settled": true, "quietMs": 812, "busy": [],
+  "version": 1, "seq": 42, "settled": true, "quietMs": 812, "busy": [], "dockMounts": 1,
   "router": {
     "selectedTab": "board", "path": ["ticket:HARNESS-1:spec"], "sheet": null, "cover": null,
     "ticketSheet": "presented",
@@ -1157,6 +1188,8 @@ The shape is HarnessKit's `DebugState` (`Shell/DebugState.swift`, pinned by `Deb
 }
 ```
 
+- `dockMounts` is how many times the phone's dock container has mounted since launch: one, however
+  tickets open, switch or dock.
 - `router` is the main window's `Router`: the selected tab's stack (one `kind:detail` string per screen),
   `sheet`/`cover`, the ticket sheet's state (`presented`, `docked`, `gone`) and every ticket sheet,
   most recently used first. `editor` is the file editor on screen (absent with none): the text of each

@@ -9,6 +9,15 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- On iPhone, docked tickets now show as cards at the bottom of the screen while a ticket or file sheet is open, not only over the board. The message box (or the sheet's bottom) sits above them with the same gap the board's bottom bar keeps. Tapping a card swaps the sheet to that ticket and only the cards that change move; the dock never slides out and back, whether you open a sheet from the board, dock one, or switch tickets. It steps aside while the keyboard, a picker, the palette or a dialog is up.
+
+### Changed
+
+- On iPhone, the dock's cards are the only way to switch or close docked tickets, since they now show over the ticket detail: the swipe along the top card (sideways to step, down to close), its VoiceOver Next/Previous docked ticket actions, and the long-press menu on the ticket's title are gone. A card's ✕ now asks about unsaved file edits on iPad too, as it already did on iPhone. The long-press title menu stays on iPad.
+- For people working on Harness: iPhone and iPad now draw docked cards with one shared container (`DockedCardsContainer`) with a layout per platform; the iPhone's lives in its own passthrough window (`DockWindow`). Snapshot tests composite that window over the screen, and sim-check checks the dock over an open sheet, that switching cards leaves the dock mounted once (`dockMounts` in the debug state), and the composer above the keyboard with a ticket docked.
+
 ### Fixed
 
 - On iPhone, the board's bottom bar now sits above the whole stack of docked ticket cards, measured from the stack's real top edge, instead of being covered by a lone card or tucked under the top card of two. It no longer depends on whether the keyboard is up.

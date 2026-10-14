@@ -1459,13 +1459,13 @@ async function barClearsDock(udid: string, dockTop?: number) {
   let gap = NaN;
   const deadline = Date.now() + 3000;
   do {
+    // The board's elements can lag a beat behind the dock after a sheet or the palette closes.
     const bar = await findElement(udid, (x) => x === "New session");
-    if (!bar) throw new Error("no New session button on the board");
-    gap = dockTop - (bar.frame.y + bar.frame.height);
+    gap = bar ? dockTop - (bar.frame.y + bar.frame.height) : NaN;
     if (Math.abs(gap - 11) <= 3) return;
     await sleep(250);
   } while (Date.now() < deadline);
-  throw new Error(`the bar sits ${Math.round(gap)}pt above the dock (top ${Math.round(dockTop)}), not 11`);
+  throw new Error(Number.isNaN(gap) ? "no New session button on the board" : `the bar sits ${Math.round(gap)}pt above the dock (top ${Math.round(dockTop)}), not 11`);
 }
 
 /**
@@ -1598,8 +1598,9 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
       throw e;
     });
     if (label !== `${kid.key}, ${kid.title}, docked`) throw new Error(`the dock reads "${label}", not ${kid.key} and its title`);
-    const l = await labels(udid);
-    if (!onBoard(l)) throw new Error("the board isn't showing over the dock");
+    await until("the board over the dock", async () => onBoard(await labels(udid)), 5000).catch(() => {
+      throw new Error("the board isn't showing over the dock");
+    });
     // The dock sits below the board's bottom bar, not over it.
     // The docked sheet's own frame, from its card: a glass capsule as wide and tall as the docked
     // sheet, whose open button starts at its leading edge and whose ✕ ends 10pt in.
