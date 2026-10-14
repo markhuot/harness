@@ -9,7 +9,7 @@ import { makeOrchestrator } from "../../service/src/testing/fakes";
 import { toolsForRun } from "../../service/src/tools";
 import { clearPullRequestTargets } from "../../service/src/store/projects";
 import { useRuntime } from "../../service/src/store/util";
-import { onTempCleanup } from "@harness/shared/testing";
+import { afterTest } from "./teardown";
 import { createMemoryGit, type MemoryGit } from "./memory-git";
 
 type Options = NonNullable<Parameters<typeof makeOrchestrator>[0]> & { memoryGit?: MemoryGit };
@@ -19,7 +19,8 @@ const TOKEN = "test-token";
 /**
  * The whole service for one test, in this process: an orchestrator on an in-memory store, the HTTP
  * handler called as a function (no Bun.serve), the websocket handler driven with a fake socket, and
- * the MCP handler. Everything it owns is created here, so nothing leaks to the next test.
+ * the MCP handler. The runtime it installs and the orchestrator it starts are torn down after the
+ * test, so a later test in the same file starts from the real clock and its own counters.
  */
 export function createService(opts: Options = {}) {
   // A fixed clock and counting ids, so stamps and ids repeat from one run to the next; the module-level
@@ -32,11 +33,13 @@ export function createService(opts: Options = {}) {
     newToken: (bytes) => String(++counter).padStart(bytes * 2, "0"),
   });
   clearPullRequestTargets();
-  onTempCleanup(restore);
   // Git is in memory unless the test brings its own port; the scripted agent's commits and merges land in the same memory.
   const git = opts.memoryGit ?? createMemoryGit();
   const h = makeOrchestrator({ tools: toolsForRun, git: git.port, ...opts });
   h.driver.workGit = git.work;
+  // The runtime it installed and the orchestrator it started end with the test (the preload runs these).
+  afterTest(restore);
+  afterTest(() => h.orch.stop());
   const http = createHttpHandler({
     orchestrator: h.orch,
     bus: h.bus,

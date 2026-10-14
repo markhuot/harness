@@ -224,7 +224,7 @@ export interface OrchestratorOptions {
   classifierTimeoutMs?: number;
   /** How often start() re-checks for runs no live job owns (default 60s; 0 disables) */
   reconcileIntervalMs?: number;
-  /** The clock for usage-limit restarts (default Date.now) */
+  /** The clock for usage-limit restarts, approval stamps and the upload sweep (default Date.now) */
   now?: () => number;
   /** Answers every git question about projects, branches and worktrees (default: the git binary) */
   git?: GitPort;

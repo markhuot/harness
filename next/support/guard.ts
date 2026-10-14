@@ -9,6 +9,7 @@
 
 import { appendFileSync } from "node:fs";
 import { afterEach, beforeEach } from "bun:test";
+import { runTeardowns } from "./teardown";
 
 export const CPU_CAP_MS = 1500;
 const MAX_SLEEP_MS = 25;
@@ -77,7 +78,8 @@ function register() {
     wall = performance.now();
     cpu = process.cpuUsage();
   });
-  afterEach(() => {
+  afterEach(async () => {
+    await runTeardowns();
     const used = process.cpuUsage(cpu);
     const cpuMs = (used.user + used.system) / 1000;
     const wallMs = performance.now() - wall;

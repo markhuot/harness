@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { createService } from "../support/service";
 import type { GitPort } from "../../service/src/orchestrator/git-port";
+import { newId, now } from "../../service/src/store/util";
 import { createMemoryGit } from "../support/memory-git";
 
 describe("clock and id seams", () => {
@@ -43,5 +44,32 @@ describe("the git port", () => {
     await s.request("POST", "/tickets", { projectId: project.data.id, spec: "x", start: true });
     await s.orch.idle();
     expect(asked).toContain("isRepo");
+  });
+});
+
+describe("per-test teardown", () => {
+  test("a service's fixed clock and ids are installed while its test runs", () => {
+    const s = createService();
+    expect(now()).toBe(1_700_000_000_000);
+    expect(newId()).toBe("id-1");
+    s.tick(10);
+    expect(now()).toBe(1_700_000_000_010);
+  });
+
+  test("the next test in the same file starts on the real clock and ids", () => {
+    expect(now()).toBeGreaterThan(1_790_000_000_000);
+    expect(newId()).not.toMatch(/^id-/);
+    const s = createService();
+    expect(newId()).toBe("id-1");
+    expect(s.tick).toBeDefined();
+  });
+
+  test("a second service in a test body gets its own counters, and the first is stopped afterwards", async () => {
+    const a = createService();
+    const idA = newId();
+    const b = createService();
+    expect(newId()).toBe("id-1");
+    expect(idA).toBe("id-1");
+    expect(a.orch).not.toBe(b.orch);
   });
 });

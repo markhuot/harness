@@ -2,8 +2,10 @@ import { randomBytes, randomUUID } from "node:crypto";
 
 /**
  * Where the service gets "the time" and "a new id". Production uses the real clock and random ids;
- * a test installs fixed ones with `useRuntime` so timestamps and ids are reproducible. Everything
- * that stamps or identifies stored data goes through `now()`, `newId()` and `newToken()`.
+ * a test installs fixed ones with `useRuntime` so timestamps and ids are reproducible. The
+ * stores and the orchestrator stamp and identify data through `now()`, `newId()` and
+ * `newToken()`; the watchers, websocket ids, the auth token in config and the claude-code and copilot
+ * drivers still use the real clock and random ids directly.
  */
 export interface Runtime {
   now(): number;
