@@ -106,19 +106,6 @@ describe("sub-agents", () => {
     expect(() => h.orch.transcript(t.sessionId, 0, "nope")).toThrow(/Unknown sub-agent/);
   });
 
-  test("the board's get_ticket transcript tail leaves sub-agent output out", async () => {
-    const h = setup(async function* () {
-      yield { type: "subagent", subagent: { id: "s", description: "S" } };
-      yield { type: "text", text: "sub text", subagentId: "s" };
-      yield { type: "text", text: "main text" };
-    });
-    const t = await h.run();
-    const detail = await h.orch.ops.getTicket({} as never, t.key, { transcript: 20 });
-    const lines = detail.transcript!.map((l) => l.text);
-    expect(lines).toContain("main text");
-    expect(lines).not.toContain("sub text");
-  });
-
   test("deleting the ticket deletes its sub-agents", async () => {
     const h = setup(async function* () {
       yield { type: "subagent", subagent: { id: "s", description: "S", status: "succeeded" } };

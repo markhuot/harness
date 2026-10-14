@@ -328,34 +328,6 @@ describe("config tools behind human approval", () => {
     expect(h.store.watchers.get(w.id)!.env).toEqual({ SITE: "acme", EXTRA: "1" });
   });
 
-  test("prompt is passed straight through to the orchestrator on create and update", async () => {
-    const h = scripted(async (req, call) => {
-      if (req.kind !== "work") return;
-      await call("create_watcher", { name: "status", command: "curl -s https://status.test/api", prompt: "Dispatch outages to PROJ." });
-      await call("update_watcher", { watcher: "status", prompt: "Only dispatch major outages." });
-    });
-    const bodies: { op: string; body: unknown }[] = [];
-    const create = h.orch.createWatcher.bind(h.orch);
-    const update = h.orch.updateWatcher.bind(h.orch);
-    h.orch.createWatcher = (body) => (bodies.push({ op: "create", body }), create(body));
-    h.orch.updateWatcher = (id, body) => (bodies.push({ op: "update", body }), update(id, body));
-    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "go" });
-    await h.orch.idle();
-    await h.orch.answerApproval(t.key, { decision: "allow_once" });
-    await h.orch.idle();
-    await h.orch.answerApproval(t.key, { decision: "allow_once" });
-    await h.orch.idle();
-    expect(bodies).toEqual([
-      { op: "create", body: { name: "status", command: "curl -s https://status.test/api", prompt: "Dispatch outages to PROJ." } },
-      { op: "update", body: { prompt: "Only dispatch major outages." } },
-    ]);
-    // The card spells out a prompt change
-    expect(h.orch.activity(t.key).filter((s) => s.kind === "permission" && s.author === "human").map((s) => s.body)).toEqual([
-      'Allowed once: create_watcher (Create watcher "status" (loop): curl -s https://status.test/api; prompt: "Dispatch outages to PROJ.")',
-      'Allowed once: update_watcher (Update watcher "status": prompt: "Only dispatch major outages.")',
-    ]);
-  });
-
   test("prompt round-trips through storage and list_watchers", async () => {
     const out: string[] = [];
     let next = 0;

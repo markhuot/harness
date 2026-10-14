@@ -170,7 +170,7 @@ describe("get_ticket and search with remote IDs", () => {
   const tool = (name: string) => allTools.find((t) => t.name === name)!;
   const text = (r: { content: { type: string; text?: string }[] }) => r.content.map((c) => c.text ?? "").join("");
 
-  test("a local key returns that ticket with the tickets linked to it as a remote ID (drafts left out)", async () => {
+  test("get_ticket: a local key lists the tickets linked to it as a remote ID (drafts left out); a linked ticket lists the others sharing its remote ID, not itself", async () => {
     const h = await trio();
     const r = JSON.parse(text(await tool("get_ticket").execute({ key: "MH-62" }, h.ctx(h.a))));
     expect(r.key).toBe("MH-62");
@@ -180,13 +180,10 @@ describe("get_ticket and search with remote IDs", () => {
       { key: h.b.key, title: "Stage two", status: "planning", project: "MH", externalKey: "MH-62" },
       { key: h.a.key, title: "Stage one", status: "planning", project: "MH", externalKey: "MH-62" },
     ]);
-  });
 
-  test("a linked ticket lists the others sharing its remote ID, not itself", async () => {
-    const h = await trio();
-    const r = JSON.parse(text(await tool("get_ticket").execute({ key: h.a.key }, h.ctx(h.native))));
-    expect(r).toMatchObject({ key: h.a.key, externalKey: "MH-62", externalUrl: "https://jira/MH-62" });
-    expect(r.relatedTickets.map((x: { key: string }) => x.key)).toEqual([h.b.key]);
+    const linked = JSON.parse(text(await tool("get_ticket").execute({ key: h.a.key }, h.ctx(h.native))));
+    expect(linked).toMatchObject({ key: h.a.key, externalKey: "MH-62", externalUrl: "https://jira/MH-62" });
+    expect(linked.relatedTickets.map((x: { key: string }) => x.key)).toEqual([h.b.key]);
     const unlinked = await h.make("Loner");
     expect(JSON.parse(text(await tool("get_ticket").execute({ key: unlinked.key }, h.ctx(h.native)))).relatedTickets).toEqual([]);
   });

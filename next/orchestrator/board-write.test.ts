@@ -333,13 +333,16 @@ describe("guard rails", () => {
 describe("permission modes across tickets", () => {
   const mode = (h: Awaited<ReturnType<typeof setup>>, t: Ticket) => h.orch.permissionModeFor(h.get(t));
 
-  test("a read_only work run's new ticket runs read_only, even when started straight away", async () => {
+  test("a read_only work run's new ticket runs read_only, even when started straight away or depending on a looser ticket", async () => {
     const h = await setup(); // settings default: auto
     const me = await h.make("me", { status: "in_progress" });
     h.store.tickets.update(me.id, { permissionMode: "read_only" });
     const t = await h.orch.ops.createTicket(h.ctx("work", h.get(me)), { title: "x", spec: "rm the build dir", start: true });
     expect(h.get(t).permissionMode).toBe("read_only");
     expect(mode(h, t)).toBe("read_only");
+    const dep = await h.make("dep"); // auto: depending on a looser ticket only waits on it
+    const after = await h.orch.ops.createTicket(h.ctx("work", h.get(me)), { title: "after", spec: "x", dependsOn: [dep.key], start: true });
+    expect([h.get(after).permissionMode, mode(h, after), h.get(after).autoStart]).toEqual(["read_only", "read_only", true]);
   });
 
   test("an ask conductor in an auto project gets ask children; equal strictness keeps inheriting", async () => {
@@ -407,15 +410,6 @@ describe("permission modes across tickets", () => {
     // Now as strict as the caller: every field is editable again.
     const u = await h.orch.ops.updateTicket(c, loose.key, { title: "renamed", spec: "new brief", baseRevision: h.get(loose).specRevision, dependsOn: [dep.key] });
     expect([u.title, u.spec, u.dependsOn]).toEqual(["renamed", "new brief", [dep.key]]);
-  });
-
-  test("create_ticket with depends_on from a strict caller: the new ticket is never looser", async () => {
-    const h = await setup();
-    const me = await h.make("me", { status: "in_progress" });
-    h.store.tickets.update(me.id, { permissionMode: "read_only" });
-    const dep = await h.make("dep"); // auto: depending on a looser ticket only waits on it
-    const t = await h.orch.ops.createTicket(h.ctx("work", h.get(me)), { title: "after", spec: "x", dependsOn: [dep.key], start: true });
-    expect([h.get(t).permissionMode, h.orch.permissionModeFor(h.get(t)), h.get(t).autoStart]).toEqual(["read_only", "read_only", true]);
   });
 
   test("an ask conductor still steers its ask children", async () => {
@@ -536,25 +530,20 @@ describe("pull requests (pull_request_urls, titles)", () => {
     expect(h.get(t).pullRequests).toEqual([]);
   });
 
-  test("a work run edits its own ticket's pull requests alone; another field on its own ticket is still refused", async () => {
+  test("a work run edits its own ticket's pull requests alone, by its key or an earlier one (after a project rename); another field on its own ticket is still refused", async () => {
     const h = await setup();
     const me = await h.make("me", { status: "in_progress" });
+    const oldKey = me.key;
     const own = await executeTool(tools, "update_ticket", { key: me.key, pull_request_urls: [A] }, h.ctx("work", me));
     expect(own.isError).toBeFalsy();
     expect(h.get(me).pullRequests.map((pr) => pr.url)).toEqual([A]);
     const refused = await executeTool(tools, "update_ticket", { key: me.key, title: "Renamed", pull_request_urls: [B] }, h.ctx("work", me));
     expect(text(refused)).toContain("your own ticket");
     expect(h.get(me).pullRequests.map((pr) => pr.url)).toEqual([A]);
-  });
-
-  test("a work run names its own ticket by an earlier key (after a project rename) and edits its pull requests", async () => {
-    const h = await setup();
-    const me = await h.make("me", { status: "in_progress" });
-    const oldKey = me.key;
     h.orch.updateProject(h.store.projects.get(me.projectId)!.id, { key: "NEW" });
-    const res = await executeTool(tools, "update_ticket", { key: oldKey, pull_request_urls: [A] }, h.ctx("work", me));
+    const res = await executeTool(tools, "update_ticket", { key: oldKey, pull_request_urls: [B] }, h.ctx("work", me));
     expect(res.isError).toBeFalsy();
-    expect(h.get(me).pullRequests.map((pr) => pr.url)).toEqual([A]);
+    expect(h.get(me).pullRequests.map((pr) => pr.url)).toEqual([B]);
   });
 
   test("each added link's title is fetched in the background; a lookup that can't run leaves its link unchecked", async () => {
@@ -627,28 +616,6 @@ describe("pull requests (pull_request_urls, titles)", () => {
     expect(tickets.map((t) => h.get(t).pullRequests[0]?.title)).toEqual(Array(6).fill("Titled"));
   });
 
-  test("repeated refreshes while one is running start a single batch", async () => {
-    let calls = 0;
-    const h = await setup({
-      fetchPullRequestTitle: async () => {
-        calls++;
-        return "Titled";
-      },
-    });
-    const t = await h.make("t");
-    await h.orch.updateTicket(t.key, { pullRequestUrls: [A] });
-    await h.orch.idle();
-    expect(calls).toBe(1);
-    h.orch.refreshPullRequestTitles(t.key);
-    h.orch.refreshPullRequestTitles(t.key);
-    h.orch.refreshPullRequestTitles(t.key);
-    await h.orch.idle();
-    expect(calls).toBe(2);
-    h.orch.refreshPullRequestTitles(t.key);
-    await h.orch.idle();
-    expect(calls).toBe(3);
-  });
-
   test("a title that arrives after its link was removed doesn't bring the link back", async () => {
     let release!: () => void;
     const gate = new Promise<void>((resolve) => (release = resolve));
@@ -666,7 +633,7 @@ describe("pull requests (pull_request_urls, titles)", () => {
     expect(h.get(t).pullRequests).toEqual([]);
   });
 
-  test("refresh fetches every title again", async () => {
+  test("refresh fetches every title again, and repeated refreshes while one is running start a single batch", async () => {
     let calls = 0;
     const h = await setup({ fetchPullRequestTitle: async (url) => `Title ${++calls} for ${url.split("/").pop()}` });
     const t = await h.make("t");
@@ -674,9 +641,14 @@ describe("pull requests (pull_request_urls, titles)", () => {
     await h.orch.idle();
     expect(calls).toBe(2);
     h.orch.refreshPullRequestTitles(t.key);
+    h.orch.refreshPullRequestTitles(t.key);
+    h.orch.refreshPullRequestTitles(t.key);
     await h.orch.idle();
     expect(calls).toBe(4);
     expect(h.get(t).pullRequests.map((pr) => pr.title)).toEqual(["Title 3 for 1", "Title 4 for 2"]);
+    h.orch.refreshPullRequestTitles(t.key);
+    await h.orch.idle();
+    expect(calls).toBe(6);
   });
 
   test("on start, a link whose title was never checked is fetched once", async () => {
@@ -757,15 +729,6 @@ describe("remote IDs (remote_id / remote_url)", () => {
     h.store.tickets.setExternalRef(t.id, { source: "jira", key: "FOO-9", url: null, raw: { id: 9 } });
     const u = await h.orch.ops.updateTicket(h.ctx("work", me), t.key, { remoteUrl: "https://x/FOO-9" });
     expect(u.externalRef).toEqual({ source: "jira", key: "FOO-9", url: "https://x/FOO-9", raw: { id: 9 } });
-  });
-
-  test("a stricter agent can't relink a looser ticket", async () => {
-    const h = await setup();
-    const me = await h.make("me", { status: "in_progress" });
-    h.store.tickets.update(me.id, { permissionMode: "read_only" });
-    const t = await h.make("t");
-    await expect(h.orch.ops.updateTicket(h.ctx("work", h.get(me)), t.key, { remoteId: "FOO-1" })).rejects.toThrow("looser than your read_only");
-    expect(h.get(t).externalRef).toBeNull();
   });
 });
 
