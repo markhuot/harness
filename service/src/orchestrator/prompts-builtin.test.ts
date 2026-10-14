@@ -223,6 +223,13 @@ describe("built-in system prompts", () => {
     { id: "a1", sessionId: "s1", ticketId: "t1", kind: "changes_requested", author: "agent", body: "Icon is\nwrong", meta: { by: "agent", round: 1, commit: "0123456789abcdef" }, createdAt: 0 },
     { id: "a2", sessionId: "s1", ticketId: "t1", kind: "message", author: "human", body: "Use the moon", meta: {}, createdAt: 0 },
   ];
+  test("the Past context line shows include_transcript as a count, not a flag", () => {
+    const text = instructions({ kind: "work", project, ticket: ticket(), session });
+    const line = text.split("\n").find((l) => l.startsWith("* Past context"))!;
+    expect(line).toMatch(/include_transcript: \d+/);
+    expect(line).toContain("never true/false");
+    expect(line).not.toContain("`include_transcript` for");
+  });
   test("work with recent activity", () => {
     expect(instructions({ kind: "work", project, ticket: ticket(), session, activity: recent })).toMatchSnapshot();
   });

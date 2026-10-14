@@ -46,7 +46,7 @@ export const getTicket = defineTool<{ key: string; include_transcript?: number; 
   inputSchema: schema(
     {
       key: { type: "string", minLength: 1, description: "Ticket key, e.g. \"NYTIMES-12\"." },
-      include_transcript: { type: "integer", minimum: 1, maximum: 50, description: "Also return the last N transcript entries (max 50)." },
+      include_transcript: { type: "integer", minimum: 1, maximum: 50, description: "Number of recent transcript entries to return (1-50), for example 10. A number, not true/false." },
       include_agents: { type: "boolean", description: "Also list its sub-agents and background tasks. Default false." },
     },
     ["key"],
@@ -88,12 +88,12 @@ export const getTicket = defineTool<{ key: string; include_transcript?: number; 
 export const getTicketAgent = defineTool<{ key: string; id: string; include_transcript?: number }>({
   name: "get_ticket_agent",
   description:
-    "Read one sub-agent or background task of a ticket's session in full (ids come from get_ticket with include_agents): its description, type, model, status, the task its agent gave it (prompt) and its result, long text clipped. For a sub-agent, also the last N messages and status lines of its own transcript (include_transcript, default 20, text only). For a background task (a Bash command or Monitor), the last part of its output, with truncated true when there's more before it.",
+    "Read one sub-agent or background task of a ticket's session in full (ids come from get_ticket with include_agents): its description, type, model, status, the task its agent gave it (prompt) and its result, long text clipped. For a sub-agent, also the last N messages and status lines of its own transcript (set include_transcript: N entries, default 20, text only). For a background task (a Bash command or Monitor), the last part of its output, with truncated true when there's more before it.",
   inputSchema: schema(
     {
       key: { type: "string", minLength: 1, description: "Ticket key, e.g. \"NYTIMES-12\"." },
       id: { type: "string", minLength: 1, description: "The sub-agent's or task's id, from get_ticket's agents." },
-      include_transcript: { type: "integer", minimum: 1, maximum: 50, description: "A sub-agent's last N transcript entries (max 50). Default 20." },
+      include_transcript: { type: "integer", minimum: 1, maximum: 50, description: "Number of recent transcript entries of a sub-agent to return (1-50), for example 10. A number, not true/false. Default 20." },
     },
     ["key", "id"],
   ),

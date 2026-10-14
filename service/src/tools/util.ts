@@ -26,6 +26,7 @@ export type PropSchema = {
   maxLength?: number;
   minItems?: number;
   maxItems?: number;
+  description?: string;
 };
 
 function typeOk(value: unknown, schema: PropSchema): boolean {
@@ -51,7 +52,10 @@ function typeOk(value: unknown, schema: PropSchema): boolean {
 
 function checkProp(toolName: string, key: string, value: unknown, schema: PropSchema, deep: boolean): void {
   if (!typeOk(value, schema)) {
-    throw new ToolInputError(`Invalid input for ${toolName}: "${key}" must be ${schema.type === "integer" ? "an integer" : `a ${schema.type}`}.`);
+    const wanted = schema.type === "integer" ? "an integer" : `a ${schema.type}`;
+    // A model that sends true/false for a count needs to be told to send a number, with the example from the schema.
+    const hint = schema.type === "integer" && typeof value === "boolean" ? ` (a number, not true/false)${schema.description ? `: ${schema.description}` : ""}` : "";
+    throw new ToolInputError(`Invalid input for ${toolName}: "${key}" must be ${wanted}${hint}.`);
   }
   if (schema.enum && !schema.enum.includes(value)) {
     throw new ToolInputError(`Invalid input for ${toolName}: "${key}" must be one of ${schema.enum.map((e) => JSON.stringify(e)).join(", ")}.`);

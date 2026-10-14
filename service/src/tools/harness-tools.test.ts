@@ -441,6 +441,20 @@ describe("board tools → HarnessOps", () => {
     expect((await tool("get_ticket_agent").execute({ key: "TEST-2", id: "a1", include_transcript: 51 }, ctx)).isError).toBe(true);
   });
 
+  test("a boolean include_transcript fails with a message that says to send a number", async () => {
+    const ctx = fakeContext({ ops: fakeOps() });
+    for (const name of ["get_ticket", "get_ticket_agent"]) {
+      for (const bad of [true, false]) {
+        const r = await tool(name).execute({ key: "TEST-2", id: "a1", include_transcript: bad }, ctx);
+        expect(r.isError).toBe(true);
+        expect(text(r)).toContain('"include_transcript" must be an integer (a number, not true/false)');
+        expect(text(r)).toContain("for example 10");
+      }
+      expect(text(await tool(name).execute({ key: "TEST-2", id: "a1", include_transcript: 0 }, ctx))).toContain("must be >= 1");
+      expect(text(await tool(name).execute({ key: "TEST-2", id: "a1", include_transcript: 51 }, ctx))).toContain("must be <= 50");
+    }
+  });
+
   test("get_ticket reports an alias it resolved through", async () => {
     const ops = fakeOps({
       getTicket: async () => ({

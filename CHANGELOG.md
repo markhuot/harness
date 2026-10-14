@@ -9,6 +9,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Changed
+
+- Agents no longer pass `include_transcript: true` to `get_ticket` and `get_ticket_agent`: the run instructions and tool descriptions now show it as a number of entries (1-50), and a true/false value gets an error that says to send a number.
+
 ## [app-20261014.1450](https://github.com/markhuot/harness/releases/tag/app-20261014.1450) - 2026-10-14
 
 ### Added

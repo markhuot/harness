@@ -349,8 +349,8 @@ approaches tried and rejected, how to verify, what's half done). `update_notes {
 the whole document (an empty string clears it); there's no hard limit, but the tool and prompts ask
 for under about 8,000 characters and the result says when it's over. Every ticket run's run context
 (see System prompt and run context) carries the notes in the "Sessions and agent notes" section (`system.notes`), which also
-explains the session rule and where past context lives (`get_ticket` with `include_transcript` and
-`include_agents`, `get_ticket_agent`, the branch's `git log` / `git diff <base>...`). `get_ticket`
+explains the session rule and where past context lives (`get_ticket` with `include_transcript: N` (a count) and
+`include_agents: true`, `get_ticket_agent`, the branch's `git log` / `git diff <base>...`). `get_ticket`
 returns `agentNotes`; `list_tickets` and `search_tickets` leave them out. When a run hasn't called
 `update_notes`, the results of `submit_for_review` and `block` end with a reminder (not a gate).
 Writes add no Activity entry; the Details tab shows the notes read-only on the Mac and iPhone/iPad.
