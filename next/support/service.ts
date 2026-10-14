@@ -35,7 +35,7 @@ export function createService(opts: Options = {}) {
   clearPullRequestTargets();
   // Git is in memory unless the test brings its own port; the scripted agent's commits and merges land in the same memory.
   const git = opts.memoryGit ?? createMemoryGit();
-  const h = makeOrchestrator({ tools: toolsForRun, git: git.port, ...opts });
+  const h = makeOrchestrator({ tools: toolsForRun, git: git.port, fileGit: git.files, ...opts });
   h.driver.workGit = git.work;
   // The runtime it installed and the orchestrator it started end with the test (the preload runs these).
   afterTest(restore);

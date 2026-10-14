@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import type { FileGit } from "../../service/src/orchestrator/file-git";
 import type { GitPort } from "../../service/src/orchestrator/git-port";
 
 /** What the contract needs from an implementation: a port, plus the few things a test does to git around it. */
@@ -196,6 +199,168 @@ export function gitPortContract(label: string, make: () => GitFixture) {
       expect((await f.port.listBranches(repo, "flg", 10)).map((b) => b.name)).toEqual(["feature/login"]);
       expect(await f.port.listBranches(repo, "", 1)).toHaveLength(1);
       expect(await f.port.listBranches(await f.plainDir(), "", 10)).toEqual([]);
+    });
+  });
+}
+
+/** What the FileGit contract needs: a port, plus `git init`, `git add` and `git commit` around it. */
+export interface FileGitFixture {
+  git: FileGit;
+  /** A fresh, empty directory. */
+  dir(): string;
+  /** `git init`: a repository with no commits. */
+  init(dir: string): Promise<void>;
+  /** `git add` of `paths` relative to `dir` (`git add .` when none). */
+  stage(dir: string, ...paths: string[]): Promise<void>;
+  /** `git commit` of what's staged. */
+  commit(dir: string): Promise<void>;
+}
+
+function write(root: string, files: Record<string, string>) {
+  for (const [rel, body] of Object.entries(files)) {
+    mkdirSync(dirname(join(root, rel)), { recursive: true });
+    writeFileSync(join(root, rel), body);
+  }
+}
+
+/**
+ * The assertions every FileGit must satisfy, against memory (next/git) and the git binary
+ * (next/contract). Patches are compared whole, so the fake's headers, hashes and hunks are git's.
+ */
+export function fileGitContract(label: string, make: () => FileGitFixture) {
+  describe(`FileGit contract: ${label}`, () => {
+    async function committed(files: Record<string, string>) {
+      const f = make();
+      const root = f.dir();
+      write(root, files);
+      await f.init(root);
+      await f.stage(root);
+      await f.commit(root);
+      return { f, root };
+    }
+
+    test("a repository and a folder inside it are repos; a plain or missing folder is not", async () => {
+      const { f, root } = await committed({ "pkg/a.txt": "a\n" });
+      expect(await f.git.isRepo(root)).toBe(true);
+      expect(await f.git.isRepo(join(root, "pkg"))).toBe(true);
+      expect(await f.git.isRepo(join(root, "missing"))).toBe(false);
+      const plain = f.dir();
+      expect(await f.git.isRepo(plain)).toBe(false);
+      expect(await f.git.listFiles(plain)).toBeNull();
+      expect(await f.git.status(plain, "a.txt")).toEqual([]);
+    });
+
+    test("listFiles: tracked and untracked files, ignored folders once, folders of nothing but ignored files, .git left out", async () => {
+      const f = make();
+      const root = f.dir();
+      write(root, {
+        ".gitignore": "dist/\n.env\n*.log\n",
+        "src/app.ts": "x",
+        "notes.md": "x",
+        "dist/assets/app.css": "x",
+        ".env": "x",
+        "a/.env": "x",
+        "a/b.log": "x",
+        "deep/x/keep.txt": "x",
+        "deep/x/c.log": "x",
+        "e/dist/o.js": "x",
+        "pkg/p.txt": "x",
+        "pkg/p.log": "x",
+        "vendor/pkg/.git/HEAD": "x",
+        "vendor/pkg/index.js": "x",
+      });
+      await f.init(root);
+      await f.stage(root, "src/app.ts");
+      const all = await f.git.listFiles(root);
+      expect(all!.files.sort()).toEqual([".gitignore", "deep/x/keep.txt", "notes.md", "pkg/p.txt", "src/app.ts", "vendor/pkg/index.js"]);
+      expect(all!.ignored.sort()).toEqual([".env", "a/", "a/.env", "a/b.log", "deep/x/c.log", "dist/", "e/", "e/dist/", "pkg/p.log"]);
+      // From a folder inside the repository, paths are relative to it.
+      expect(await f.git.listFiles(join(root, "pkg"))).toEqual({ files: ["p.txt"], ignored: ["p.log"] });
+      // A tracked file that's gone from disk is still listed.
+      await f.commit(root);
+      rmSync(join(root, "src/app.ts"));
+      expect((await f.git.listFiles(root))!.files).toContain("src/app.ts");
+    });
+
+    test("status: the porcelain codes for one path", async () => {
+      const { f, root } = await committed({ ".gitignore": ".env\ndist/\n", "clean.txt": "c\n", "mod.txt": "m\n", "staged.txt": "s\n", "both.txt": "b\n", "gone.txt": "g\n" });
+      write(root, { "mod.txt": "m2\n", "staged.txt": "s2\n", "both.txt": "b2\n", "fresh/new.txt": "n\n", ".env": "S=1\n", "dist/out.js": "o\n", "added.txt": "a\n" });
+      await f.stage(root, "staged.txt", "both.txt", "added.txt");
+      write(root, { "both.txt": "b3\n" });
+      rmSync(join(root, "gone.txt"));
+      const codes = async (rel: string) => f.git.status(root, rel);
+      expect(await codes("clean.txt")).toEqual([]);
+      expect(await codes("mod.txt")).toEqual([" M"]);
+      expect(await codes("staged.txt")).toEqual(["M "]);
+      expect(await codes("both.txt")).toEqual(["MM"]);
+      expect(await codes("added.txt")).toEqual(["A "]);
+      expect(await codes("gone.txt")).toEqual([" D"]);
+      expect(await codes("fresh/new.txt")).toEqual(["??"]);
+      expect(await codes(".env")).toEqual(["!!"]);
+      expect(await codes("dist/out.js")).toEqual(["!!"]);
+      expect(await codes("never.txt")).toEqual([]);
+      expect(await f.git.status(join(root, "fresh"), "new.txt")).toEqual(["??"]);
+    });
+
+    test("hasHead and headFile: nothing before the first commit; HEAD's bytes after, relative to a folder, null over the cap", async () => {
+      const f = make();
+      const root = f.dir();
+      write(root, { "a.txt": "four", "pkg/s.ts": "s\n" });
+      await f.init(root);
+      await f.stage(root);
+      expect(await f.git.hasHead(root)).toBe(false);
+      expect(await f.git.headFile(root, "a.txt", 100)).toBeNull();
+      await f.commit(root);
+      write(root, { "a.txt": "changed" });
+      expect(await f.git.hasHead(root)).toBe(true);
+      expect(new TextDecoder().decode((await f.git.headFile(root, "a.txt", 100))!)).toBe("four");
+      expect(new TextDecoder().decode((await f.git.headFile(join(root, "pkg"), "s.ts", 100))!)).toBe("s\n");
+      expect(await f.git.headFile(root, "a.txt", 4)).not.toBeNull();
+      expect(await f.git.headFile(root, "a.txt", 3)).toBeNull();
+      expect(await f.git.headFile(root, "never.txt", 100)).toBeNull();
+    });
+
+    test("diff: modified, deleted, untracked, inside a folder, against the empty tree, and over the cap", async () => {
+      const { f, root } = await committed({ "a.txt": "one\ntwo\nthree\n", "gone.txt": "bye\n", "pkg/s.ts": "a\n", "tail.txt": "a", "clean.txt": "c\n" });
+      write(root, { "a.txt": "one\nTWO\nthree\n" });
+      await f.stage(root, "a.txt");
+      write(root, { "a.txt": "one\nTWO\nthree\nfour\n", "pkg/s.ts": "b\n", "new [1].ts": "export {};\n", "tail.txt": "b" });
+      rmSync(join(root, "gone.txt"));
+      const text = async (r: string, rel: string, base: "head" | "empty" | "untracked") => {
+        const d = await f.git.diff(r, rel, base, 1 << 20);
+        expect(d.tooLarge).toBe(false);
+        return new TextDecoder().decode(d.patch);
+      };
+      expect(await text(root, "a.txt", "head")).toBe(
+        "diff --git a/a.txt b/a.txt\nindex 4cb29ea..6addb9b 100644\n--- a/a.txt\n+++ b/a.txt\n@@ -1,3 +1,4 @@\n one\n-two\n+TWO\n three\n+four\n",
+      );
+      expect(await text(root, "gone.txt", "head")).toBe("diff --git a/gone.txt b/gone.txt\ndeleted file mode 100644\nindex b023018..0000000\n--- a/gone.txt\n+++ /dev/null\n@@ -1 +0,0 @@\n-bye\n");
+      expect(await text(root, "new [1].ts", "untracked")).toBe(
+        "diff --git a/new [1].ts b/new [1].ts\nnew file mode 100644\nindex 0000000..cb0ff5c\n--- /dev/null\n+++ b/new [1].ts\t\n@@ -0,0 +1 @@\n+export {};\n",
+      );
+      expect(await text(join(root, "pkg"), "s.ts", "head")).toBe("diff --git a/s.ts b/s.ts\nindex 7898192..6178079 100644\n--- a/s.ts\n+++ b/s.ts\n@@ -1 +1 @@\n-a\n+b\n");
+      expect(await text(root, "tail.txt", "head")).toBe(
+        "diff --git a/tail.txt b/tail.txt\nindex 2e65efe..63d8dbd 100644\n--- a/tail.txt\n+++ b/tail.txt\n@@ -1 +1 @@\n-a\n\\ No newline at end of file\n+b\n\\ No newline at end of file\n",
+      );
+      expect(await text(root, "clean.txt", "head")).toBe("");
+      expect(await f.git.diff(root, "a.txt", "head", 10)).toEqual({ patch: new Uint8Array(0), tooLarge: true });
+
+      const fresh = f.dir();
+      write(fresh, { "a.txt": "a\n" });
+      await f.init(fresh);
+      await f.stage(fresh, "a.txt");
+      expect(await text(fresh, "a.txt", "empty")).toBe("diff --git a/a.txt b/a.txt\nnew file mode 100644\nindex 0000000..7898192\n--- /dev/null\n+++ b/a.txt\n@@ -0,0 +1 @@\n+a\n");
+    });
+
+    test("diff: changes far apart are separate hunks with three lines of context", async () => {
+      const body = Array.from({ length: 20 }, (_, i) => `line ${i + 1}\n`);
+      const { f, root } = await committed({ "long.txt": body.join("") });
+      const changed = [...body];
+      changed[1] = "LINE 2\n";
+      changed[17] = "LINE 18\n";
+      write(root, { "long.txt": changed.join("") });
+      const patch = new TextDecoder().decode((await f.git.diff(root, "long.txt", "head", 1 << 20)).patch);
+      expect(patch.split("\n").filter((l) => l.startsWith("@@"))).toEqual(["@@ -1,5 +1,5 @@", "@@ -15,6 +15,6 @@ line 14"]);
     });
   });
 }

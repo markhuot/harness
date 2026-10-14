@@ -1,10 +1,11 @@
 import { existsSync, mkdirSync, rmSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import type { BranchInfo } from "@harness/shared";
 import { harnessBranch } from "@harness/shared";
 import type { GitPort } from "../../service/src/orchestrator/git-port";
 import type { WorktreeEntry } from "../../service/src/orchestrator/worktree";
 import type { WorkGit } from "../../service/src/testing/fakes";
+import { createMemoryFileGit } from "./memory-file-git";
 
 interface Commit {
   parents: string[];
@@ -215,6 +216,18 @@ export function createMemoryGit() {
     },
   };
 
+  // The files half (FileGit, next/support/memory-file-git.ts): trees and indexes here, the working tree on disk.
+  const fileModel = createMemoryFileGit({
+    checkoutOf(path) {
+      for (let dir = norm(path); ; dir = dirname(dir)) {
+        const r = repos.find((x) => x.worktrees.has(dir));
+        if (r) return { root: dir, head: headOf(r, dir) };
+        if (dirname(dir) === dir) return null;
+      }
+    },
+    parentOf: (c) => repos.find((r) => r.commits.has(c))?.commits.get(c)?.parents[0] ?? null,
+  });
+
   /** What the scripted agent does to git, against the same memory. */
   const work: WorkGit = {
     async commitWork(cwd) {
@@ -251,6 +264,29 @@ export function createMemoryGit() {
     port,
     work,
     initRepo,
+    /** The file list's and viewer's git (FileGit), over the same repositories. */
+    files: fileModel.port,
+    /** `git init` with no commit yet: HEAD names `branch`, which doesn't exist. */
+    initEmptyRepo(dir: string, branch = "main") {
+      mkdirSync(join(dir, ".git"), { recursive: true });
+      const repo: Repo = { root: norm(dir), commits: new Map(), branches: new Map(), worktrees: new Map() };
+      repo.worktrees.set(repo.root, { branch, dirty: false });
+      repos.push(repo);
+    },
+    /** `git add` of `paths` relative to `dir` (`git add .` when none). */
+    stage(dir: string, ...paths: string[]) {
+      fileModel.stage(dir, paths);
+    },
+    /** `git commit` of what's staged in the checkout at `dir`. */
+    commitStaged(dir: string) {
+      const repo = requireRepo(dir);
+      const w = repo.worktrees.get(norm(dir))!;
+      const head = headOf(repo, dir);
+      const id = commit(repo, head ? [head] : []);
+      if (w.branch) repo.branches.set(w.branch, id);
+      else w.detached = id;
+      fileModel.commitIndex(norm(dir), head, id);
+    },
     /** A commit on whatever is checked out at `dir` (the test's stand-in for `git commit`), changing `file` when given. */
     async commitAt(dir: string, file?: string) {
       const repo = requireRepo(dir);
