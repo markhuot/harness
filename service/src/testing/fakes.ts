@@ -606,6 +606,7 @@ export function makeOrchestrator(opts: Partial<OrchestratorOptions> & { driver?:
     reconcileIntervalMs: opts.reconcileIntervalMs ?? 0,
     now: opts.now,
     git: opts.git,
+    fileGit: opts.fileGit,
   });
   store.settings.set({ defaultDriver: driver.id });
   onTempCleanup(async () => {

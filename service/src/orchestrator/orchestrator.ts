@@ -133,6 +133,7 @@ import { PROMPTS, promptTemplateError } from "./prompt-templates";
 import { findKeys, toOutput, WatcherRunner, type WatcherOutput } from "./watchers";
 import { RunQueue, type QueuedJob } from "./queue";
 import { branchForKey, isInside } from "./worktree";
+import { realFileGit, type FileGit } from "./file-git";
 import { realGit, type GitPort } from "./git-port";
 
 /** An upper bound for a Promise.race: resolves after `ms` without holding the process open. Not a wait; the race is won by the thing it bounds. */
@@ -228,6 +229,8 @@ export interface OrchestratorOptions {
   now?: () => number;
   /** Answers every git question about projects, branches and worktrees (default: the git binary) */
   git?: GitPort;
+  /** Answers the file list's and file viewer's git questions (default: the git binary) */
+  fileGit?: FileGit;
   /** A pull request's title from GitHub, or null (default: gh pr view; tests stub it) */
   fetchPullRequestTitle?: (url: string) => Promise<string | null>;
 }
@@ -522,6 +525,7 @@ export class Orchestrator {
   private resumeTimer: ReturnType<typeof setTimeout> | null = null;
   private now: () => number;
   private git: GitPort;
+  private fileGit: FileGit;
   private fetchTitle: (url: string) => Promise<string | null>;
   /** Title lookups running now, and the ones waiting for a slot (withTitleSlot) */
   private titleSlotsInUse = 0;
@@ -580,6 +584,7 @@ export class Orchestrator {
     this.reconcileIntervalMs = opts.reconcileIntervalMs ?? 60_000;
     this.now = opts.now ?? now;
     this.git = opts.git ?? realGit;
+    this.fileGit = opts.fileGit ?? realFileGit;
     this.fetchTitle = opts.fetchPullRequestTitle ?? fetchPullRequestTitle;
     this.planUsage = new PlanUsageTracker(() => this.driverList(), this.bus, () => this.now());
     const handlers = {
@@ -1147,7 +1152,7 @@ export class Orchestrator {
   projectFiles(projectId: string, q: string, limit?: number | string | null, opts: SearchOptions = {}): Promise<FileMatch[]> {
     const project = this.store.projects.get(projectId);
     if (!project) throw notFound(`Unknown project: ${projectId}`);
-    return searchPaths(project.path, q, clampLimit(limit, 50), opts);
+    return searchPaths(this.fileGit, project.path, q, clampLimit(limit, 50), opts);
   }
 
   /** The branch picker for a new session in `projectId`: local branches, most recent first (BranchInfo). */
@@ -1160,7 +1165,7 @@ export class Orchestrator {
   /** The @-mention autocomplete for a follow-up: paths where the ticket's next run works (its worktree once it has one). */
   ticketFiles(key: string, q: string, limit?: number | string | null, opts: SearchOptions = {}): Promise<FileMatch[]> {
     const root = this.ticketRoot(key);
-    return root ? searchPaths(root, q, clampLimit(limit, 50), opts) : Promise.resolve([]);
+    return root ? searchPaths(this.fileGit, root, q, clampLimit(limit, 50), opts) : Promise.resolve([]);
   }
 
   /**
@@ -1187,21 +1192,21 @@ export class Orchestrator {
 
   /** A file in the project folder for the file viewer (FileView). */
   projectFile(projectId: string, path: string): Promise<FileView> {
-    return readFileView(this.projectRoot(projectId), path);
+    return readFileView(this.fileGit, this.projectRoot(projectId), path);
   }
 
   /** A project file's uncommitted changes (FileDiff); 409 outside a git repository. */
   projectFileDiff(projectId: string, path: string): Promise<FileDiff> {
-    return readFileDiff(this.projectRoot(projectId), path);
+    return readFileDiff(this.fileGit, this.projectRoot(projectId), path);
   }
 
   /** A file where the ticket works (the same folder as ticketFiles) for the file viewer. */
   ticketFile(key: string, path: string): Promise<FileView> {
-    return readFileView(this.requireTicketRoot(key), path);
+    return readFileView(this.fileGit, this.requireTicketRoot(key), path);
   }
 
   ticketFileDiff(key: string, path: string): Promise<FileDiff> {
-    return readFileDiff(this.requireTicketRoot(key), path);
+    return readFileDiff(this.fileGit, this.requireTicketRoot(key), path);
   }
 
   /** Save a file in the project folder from the viewer's editor; last write wins. */

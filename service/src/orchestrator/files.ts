@@ -5,7 +5,7 @@ import { existsSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { open } from "node:fs/promises";
 import { basename, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { parseMentions, rankPaths, type FileMatch } from "@harness/shared";
-import { git, isGitRepo } from "./worktree";
+import type { FileGit } from "./file-git";
 
 /** Version-control internals: never listed. */
 const VCS_DIRS = new Set([".git", ".hg", ".svn"]);
@@ -48,13 +48,13 @@ const cache = new Map<string, { at: number; index: Promise<PathIndex> }>();
  * folders are walked from the top. Either way SKIP_DIRS show up as folders but aren't walked
  * (unless `deep`, which walks them last), and VCS_DIRS and JUNK_FILES are left out.
  */
-export function indexPaths(root: string, opts: { now?: number; deep?: boolean } = {}): Promise<PathIndex> {
+export function indexPaths(git: FileGit, root: string, opts: { now?: number; deep?: boolean } = {}): Promise<PathIndex> {
   const now = opts.now ?? Date.now();
   const deep = !!opts.deep;
   const key = `${deep ? "deep" : "std"}\0${root}`;
   const hit = cache.get(key);
   if (hit && now - hit.at < (deep ? DEEP_LIST_TTL_MS : LIST_TTL_MS)) return hit.index;
-  const index = collect(root, deep).then(({ paths, ignored }) => ({ paths: withDirs(paths), ignored }));
+  const index = collect(git, root, deep).then(({ paths, ignored }) => ({ paths: withDirs(paths), ignored }));
   cache.set(key, { at: now, index });
   index.catch(() => cache.delete(key));
   return index;
@@ -66,11 +66,11 @@ export function invalidatePaths(root: string) {
   cache.delete(`deep\0${root}`);
 }
 
-export async function listPaths(root: string, now = Date.now(), opts: { deep?: boolean } = {}): Promise<string[]> {
-  return (await indexPaths(root, { now, deep: opts.deep })).paths;
+export async function listPaths(git: FileGit, root: string, now = Date.now(), opts: { deep?: boolean } = {}): Promise<string[]> {
+  return (await indexPaths(git, root, { now, deep: opts.deep })).paths;
 }
 
-async function collect(root: string, deep: boolean): Promise<{ paths: string[]; ignored: Set<string> }> {
+async function collect(git: FileGit, root: string, deep: boolean): Promise<{ paths: string[]; ignored: Set<string> }> {
   const ignored = new Set<string>();
   if (!existsSync(root)) return { paths: [], ignored };
   const deferred: Dir[] = [];
@@ -78,16 +78,12 @@ async function collect(root: string, deep: boolean): Promise<{ paths: string[]; 
     if (deep && deferred.length) await walk(root, deferred, out, ignored, { limit: out.size + DEEP_WALK_LIMIT, descend: true, deadline: Date.now() + DEEP_WALK_MS });
     return { paths: [...out], ignored };
   };
-  if (await isGitRepo(root)) {
-    const [listed, ignoredList] = await Promise.all([
-      git(["ls-files", "-z", "--cached", "--others", "--exclude-standard"], root),
-      // --directory reports an ignored folder once ("dist/") instead of every file in it.
-      git(["ls-files", "-z", "--others", "--ignored", "--exclude-standard", "--directory"], root),
-    ]);
-    if (listed.code === 0) {
-      const out = new Set(listed.stdout.split("\0").filter((p) => p && !JUNK_FILES.has(basename(p))));
+  if (await git.isRepo(root)) {
+    const listed = await git.listFiles(root);
+    if (listed) {
+      const out = new Set(listed.files.filter((p) => !JUNK_FILES.has(basename(p))));
       const dirs: Dir[] = [];
-      for (const p of ignoredList.code === 0 ? ignoredList.stdout.split("\0").filter(Boolean) : []) {
+      for (const p of listed.ignored) {
         if (!p.endsWith("/")) {
           if (JUNK_FILES.has(basename(p))) continue;
         } else if (VCS_DIRS.has(basename(p))) continue;
@@ -206,9 +202,9 @@ export interface SearchOptions {
 }
 
 /** The autocomplete: files and folders under `root` matching `query`, best first. */
-export async function searchPaths(root: string, query: string, limit = 50, opts: SearchOptions = {}): Promise<FileMatch[]> {
+export async function searchPaths(git: FileGit, root: string, query: string, limit = 50, opts: SearchOptions = {}): Promise<FileMatch[]> {
   const q = query.trim();
-  const { paths: indexed, ignored } = await indexPaths(root, { deep: opts.ignored });
+  const { paths: indexed, ignored } = await indexPaths(git, root, { deep: opts.ignored });
   const browsed = browse(root, q);
   let paths = indexed;
   if (browsed.length) {
