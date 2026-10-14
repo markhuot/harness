@@ -35,8 +35,6 @@ export const PORTED: Ported[] = [
     "ticket-detail-parent", "usage-limit-restart", "usage-limit",
     "config-tools", "context-gauge", "key-aliases", "message-annotations", "message-attachments", "plan-usage", "steering", "subagents", "tasks",
   ].map((f) => ({ old: `${ORCH}${f}.test.ts`, now: `${NEXT_ORCH}${f}.test.ts` })),
-  { old: `${ORCH}permissions.test.ts`, now: "next/contract/native-bash.test.ts" },
-  { old: `${ORCH}config-tools.test.ts`, now: "next/contract/watcher-config.test.ts" },
 ];
 
 /** sim-check functions whose behaviour the single walkthrough can't carry: the ticket's expected losses. */
