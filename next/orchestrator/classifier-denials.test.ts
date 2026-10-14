@@ -4,10 +4,10 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import type { DriverEvent, RunRequest } from "../drivers/types";
-import { grantKey } from "../store/tickets";
-import { FakeDriver, makeOrchestrator } from "../testing/fakes";
-import { MAX_AUTO_RETRIES } from "./orchestrator";
+import type { DriverEvent, RunRequest } from "../../service/src/drivers/types";
+import { grantKey } from "../../service/src/store/tickets";
+import { FakeDriver, makeOrchestrator } from "../../service/src/testing/fakes";
+import { MAX_AUTO_RETRIES } from "../../service/src/orchestrator/orchestrator";
 
 const CALL = { command: "npx -y harness-check-pkg init", description: "Scaffold the project" };
 const REASON = "[Code from External]";

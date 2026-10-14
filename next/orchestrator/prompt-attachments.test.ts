@@ -6,13 +6,13 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { HarnessApiError, HarnessClient, type Ticket } from "@harness/shared";
-import { createHarness, type Harness } from "../app";
-import { DummyDriver } from "../drivers/dummy";
-import { executeTool } from "../drivers/types";
-import { makeOrchestrator, stubBrowser, tempHome } from "../testing/fakes";
-import { png } from "../testing/media";
-import { toolsForRun } from "../tools";
-import { fakeContext, fakeSession } from "../tools/fakes";
+import { createService } from "../support/service";
+import { DummyDriver } from "../../service/src/drivers/dummy";
+import { executeTool } from "../../service/src/drivers/types";
+import { makeOrchestrator, stubBrowser, tempHome } from "../../service/src/testing/fakes";
+import { png } from "../../service/src/testing/media";
+import { toolsForRun } from "../../service/src/tools";
+import { fakeContext, fakeSession } from "../../service/src/tools/fakes";
 
 function setup() {
   const h = makeOrchestrator({ tools: toolsForRun });
@@ -180,19 +180,11 @@ describe("agent tools", () => {
 });
 
 describe("over HTTP", () => {
-  let harness: Harness | null = null;
-  afterEach(async () => {
-    await harness?.stop();
-    harness = null;
-  });
-
   test("POST /uploads registers a paste; GET /attachments/:id serves it with ?token=, the legacy index route too, and 404s once it's gone", async () => {
-    const home = tempHome("harness-prompt-att-http-");
-    harness = await createHarness({ home, port: 0, drivers: [new DummyDriver({ delayMs: 0 })], browser: stubBrowser(), watchers: null, log: () => {} });
-    const client = new HarnessClient({ baseUrl: harness.url, token: harness.token });
-    await client.updateSettings({ defaultDriver: "dummy" });
-    const dir = join(home, "work", "web");
-    mkdirSync(dir, { recursive: true });
+    const svc = createService();
+    const home = svc.home;
+    const client = svc.client();
+    const dir = svc.projectDir("web");
     const project = await client.createProject({ path: dir, key: "WEB" });
     const up = await client.uploadAttachment(new Blob([png(2, 2)], { type: "image/png" }), "Pasted image", "image/png");
     expect(typeof up.id).toBe("string"); // (toMatchObject with expect.any would write the matcher into `up`)
@@ -203,26 +195,26 @@ describe("over HTTP", () => {
     expect(notes).toMatchObject({ path: other, name: "Notes", source: "file", kind: "file", mimeType: "text/plain", size: 5 });
     expect((await client.registerAttachment(other)).id).toBe(notes.id);
     for (const bad of [{ path: "notes.txt" }, { path: join(home, "nope.txt") }, {}]) {
-      const res = await fetch(`${harness.url}/attachments`, { method: "POST", headers: { authorization: `Bearer ${harness.token}`, "content-type": "application/json" }, body: JSON.stringify(bad) });
+      const res = await svc.fetch(`http://service.test/attachments`, { method: "POST", headers: { authorization: `Bearer ${svc.token}`, "content-type": "application/json" }, body: JSON.stringify(bad) });
       expect(res.status).toBe(400);
     }
     const t = await client.createTicket({ projectId: project.id, spec: "Look", draft: true, promptAttachments: [{ id: up.id }, { id: notes.id }] });
 
-    const img = await fetch(client.attachmentUrl(up.id));
+    const img = await svc.fetch(client.attachmentUrl(up.id));
     expect([img.status, img.headers.get("content-type"), img.headers.get("cache-control")]).toEqual([200, "image/png", "no-cache"]);
     expect(Buffer.from(await img.arrayBuffer()).equals(png(2, 2))).toBe(true);
-    expect((await fetch(client.attachmentUrl(notes.id), { method: "HEAD" })).headers.get("content-type")).toBe("text/plain");
+    expect((await svc.fetch(client.attachmentUrl(notes.id), { method: "HEAD" })).headers.get("content-type")).toBe("text/plain");
     // Legacy: by index, for iPhone apps from before the registry.
-    const legacy = (i: number) => `${harness!.url}/tickets/${t.key}/prompt-attachments/${i}?token=${harness!.token}`;
-    expect((await fetch(legacy(0))).status).toBe(200);
-    expect((await fetch(legacy(1), { method: "HEAD" })).status).toBe(200);
+    const legacy = (i: number) => `http://service.test/tickets/${t.key}/prompt-attachments/${i}?token=${svc.token}`;
+    expect((await svc.fetch(legacy(0))).status).toBe(200);
+    expect((await svc.fetch(legacy(1), { method: "HEAD" })).status).toBe(200);
 
     rmSync(other);
-    expect((await fetch(client.attachmentUrl(notes.id), { method: "HEAD" })).status).toBe(404);
-    expect((await fetch(legacy(1), { method: "HEAD" })).status).toBe(404);
-    expect((await fetch(legacy(7))).status).toBe(404);
-    expect((await fetch(client.attachmentUrl("nope"))).status).toBe(404);
-    expect((await fetch(client.attachmentUrl(up.id).replace(/token=[^&]+/, "token=nope"))).status).toBe(401);
+    expect((await svc.fetch(client.attachmentUrl(notes.id), { method: "HEAD" })).status).toBe(404);
+    expect((await svc.fetch(legacy(1), { method: "HEAD" })).status).toBe(404);
+    expect((await svc.fetch(legacy(7))).status).toBe(404);
+    expect((await svc.fetch(client.attachmentUrl("nope"))).status).toBe(404);
+    expect((await svc.fetch(client.attachmentUrl(up.id).replace(/token=[^&]+/, "token=nope"))).status).toBe(401);
     // The ticket itself still loads with its missing file listed.
     expect((await client.getTicket(t.key)).ticket.promptAttachments).toHaveLength(2);
 

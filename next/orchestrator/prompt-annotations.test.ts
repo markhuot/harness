@@ -6,13 +6,13 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { HarnessApiError, HarnessClient, type Attachment, type AttachmentAnnotation, type Ticket } from "@harness/shared";
-import { createHarness, type Harness } from "../app";
-import { DummyDriver } from "../drivers/dummy";
-import { executeTool } from "../drivers/types";
-import { makeOrchestrator, stubBrowser, tempHome } from "../testing/fakes";
-import { png } from "../testing/media";
-import { toolsForRun } from "../tools";
-import { fakeContext, fakeSession } from "../tools/fakes";
+import { createService } from "../support/service";
+import { DummyDriver } from "../../service/src/drivers/dummy";
+import { executeTool } from "../../service/src/drivers/types";
+import { makeOrchestrator, stubBrowser, tempHome } from "../../service/src/testing/fakes";
+import { png } from "../../service/src/testing/media";
+import { toolsForRun } from "../../service/src/tools";
+import { fakeContext, fakeSession } from "../../service/src/tools/fakes";
 
 function setup() {
   const h = makeOrchestrator({ tools: toolsForRun });
@@ -138,19 +138,11 @@ describe("agent tools", () => {
 });
 
 describe("over HTTP", () => {
-  let harness: Harness | null = null;
-  afterEach(async () => {
-    await harness?.stop();
-    harness = null;
-  });
-
   test("POST and PATCH /tickets carry an attachment's annotation, and refuse a malformed one", async () => {
-    const home = tempHome("harness-prompt-ann-http-");
-    harness = await createHarness({ home, port: 0, drivers: [new DummyDriver({ delayMs: 0 })], browser: stubBrowser(), watchers: null, log: () => {} });
-    const client = new HarnessClient({ baseUrl: harness.url, token: harness.token });
-    await client.updateSettings({ defaultDriver: "dummy" });
-    const dir = join(home, "work", "web");
-    mkdirSync(dir, { recursive: true });
+    const svc = createService();
+    const home = svc.home;
+    const client = svc.client();
+    const dir = svc.projectDir("web");
     const project = await client.createProject({ path: dir, key: "WEB" });
     const up = await client.uploadAttachment(new Blob([png(40, 20)], { type: "image/png" }), "Pasted image", "image/png");
     const t = await client.createTicket({ projectId: project.id, spec: "Look", draft: true, promptAttachments: [{ id: up.id, annotation: note() }] });

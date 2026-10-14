@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { makeOrchestrator } from "../testing/fakes";
-import { RESUME_GRACE_MS } from "./usage-limit";
+import { makeOrchestrator } from "../../service/src/testing/fakes";
+import { RESUME_GRACE_MS } from "../../service/src/orchestrator/usage-limit";
 
 const RESET = 1_791_230_400_000; // what the limit message names (epoch form, so no zone math here)
 const LIMIT = `Claude AI usage limit reached|${RESET / 1000}`;

@@ -4,9 +4,9 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import type { DriverEvent, RunRequest } from "../drivers/types";
-import { fakeContext, fakeSession } from "../tools/fakes";
-import { makeOrchestrator } from "../testing/fakes";
+import type { DriverEvent, RunRequest } from "../../service/src/drivers/types";
+import { fakeContext, fakeSession } from "../../service/src/tools/fakes";
+import { makeOrchestrator } from "../../service/src/testing/fakes";
 
 function setup() {
   const h = makeOrchestrator();

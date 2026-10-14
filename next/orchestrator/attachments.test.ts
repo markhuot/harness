@@ -6,10 +6,10 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readdirSync, truncateSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { HarnessEvent, RunKind, Ticket } from "@harness/shared";
-import { makeOrchestrator } from "../testing/fakes";
-import { gif, mp4, png } from "../testing/media";
-import { allTools } from "../tools";
-import { fakeContext, fakeSession } from "../tools/fakes";
+import { makeOrchestrator } from "../../service/src/testing/fakes";
+import { gif, mp4, png } from "../../service/src/testing/media";
+import { allTools } from "../../service/src/tools";
+import { fakeContext, fakeSession } from "../../service/src/tools/fakes";
 
 async function setup() {
   const h = makeOrchestrator();

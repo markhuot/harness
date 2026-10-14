@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { PhaseModels } from "@harness/shared";
-import { resolveRunChoice, resolveRunModel } from "./models";
+import { resolveRunChoice, resolveRunModel } from "../../service/src/orchestrator/models";
 
 const cc = (model: string | null) => ({ driver: "claude-code", model });
 const api = (model: string | null) => ({ driver: "anthropic-api", model });

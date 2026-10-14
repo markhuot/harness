@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { FakeDriver, makeOrchestrator } from "../testing/fakes";
+import { FakeDriver, makeOrchestrator } from "../../service/src/testing/fakes";
 
 // Planning and review runs launch an Opus adviser subagent when it applies: the run's driver has
 // subagents, the Adviser phase resolves to the same driver, and its model differs from the run's.

@@ -17,8 +17,8 @@ import {
   systemPrompt,
   triagePrompt,
   workStartPrompt,
-} from "./prompts";
-import { withRunContext } from "../drivers/types";
+} from "../../service/src/orchestrator/prompts";
+import { withRunContext } from "../../service/src/drivers/types";
 
 const project: Project = {
   id: "p1",

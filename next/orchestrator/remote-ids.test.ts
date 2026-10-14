@@ -7,11 +7,11 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { HarnessEvent, RemoteKeyMatches, Ticket } from "@harness/shared";
-import { FakeDriver, makeOrchestrator } from "../testing/fakes";
-import { fakeContext, fakeSession } from "../tools/fakes";
-import { allTools } from "../tools";
-import type { HarnessOps, ToolContext } from "../tools/types";
-import { RemoteIdError } from "../tools/util";
+import { FakeDriver, makeOrchestrator } from "../../service/src/testing/fakes";
+import { fakeContext, fakeSession } from "../../service/src/tools/fakes";
+import { allTools } from "../../service/src/tools";
+import type { HarnessOps, ToolContext } from "../../service/src/tools/types";
+import { RemoteIdError } from "../../service/src/tools/util";
 
 const jira = (key: string) => ({ source: "jira", key, url: `https://jira/${key}`, raw: null });
 

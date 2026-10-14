@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { ServerWebSocket } from "bun";
-import type { HarnessEvent } from "@harness/shared";
+import { HarnessClient, type HarnessEvent } from "@harness/shared";
 import { createHttpHandler } from "../../service/src/api/http";
 import { handleMcpRequest } from "../../service/src/api/mcp";
 import type { WsData } from "../../service/src/api/ws";
@@ -78,5 +78,11 @@ export function createService(opts: Options = {}) {
     return dir;
   }
 
-  return { ...h, git, http, request, connect, projectDir, token: TOKEN, tick: (ms: number) => void (clock += ms) };
+  /** fetch, answered by the handler in this process; takes the same arguments as the global one. */
+  const fetchLocal = (async (input: RequestInfo | URL, init?: RequestInit) =>
+    (await http.fetch(new Request(input, init), server)) ?? new Response(null, { status: 404 })) as typeof fetch;
+  /** The shared HarnessClient, talking to this service with no socket. */
+  const client = () => new HarnessClient({ baseUrl: "http://service.test", token: TOKEN, fetch: fetchLocal });
+
+  return { ...h, git, http, request, connect, projectDir, client, fetch: fetchLocal, token: TOKEN, tick: (ms: number) => void (clock += ms) };
 }

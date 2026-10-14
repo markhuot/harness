@@ -4,7 +4,7 @@
 import { expect, test } from "bun:test";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { FakeDriver, makeOrchestrator } from "../testing/fakes";
+import { FakeDriver, makeOrchestrator } from "../../service/src/testing/fakes";
 
 test("a child's detail includes its parent conductor; a top-level ticket's parent is null", async () => {
   const h = makeOrchestrator({ driver: new FakeDriver() });

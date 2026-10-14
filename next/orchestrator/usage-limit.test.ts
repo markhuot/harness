@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { isUsageLimit, RESUME_GRACE_MS, usageLimitResetAt, usageLimitResumeAt } from "./usage-limit";
+import { isUsageLimit, RESUME_GRACE_MS, usageLimitResetAt, usageLimitResumeAt } from "../../service/src/orchestrator/usage-limit";
 
 // 2026-10-05 14:20 EDT (18:20 UTC), when ACAMS-33's run hit its limit.
 const NOW = Date.UTC(2026, 9, 5, 18, 20);

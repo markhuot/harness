@@ -12,17 +12,17 @@ import {
   systemPrompt,
   triagePrompt,
   workStartPrompt,
-} from "./prompts";
-import type { ReviewContext } from "./prompts";
-import { promptTemplateError } from "./prompt-templates";
-import { allTools, browserTools, nativeTools, readOnlyNativeTools } from "../tools";
-import { WAIT_CONDITION_DOC } from "../browser/wait";
-import { SCRIPT_API } from "../tools/browser-run";
-import { AnthropicApiDriver } from "../drivers/anthropic-api";
-import { ClaudeCodeDriver } from "../drivers/claude-code";
-import { DummyDriver } from "../drivers/dummy";
-import { GitHubCopilotDriver } from "../drivers/github-copilot";
-import type { Driver } from "../drivers/types";
+} from "../../service/src/orchestrator/prompts";
+import type { ReviewContext } from "../../service/src/orchestrator/prompts";
+import { promptTemplateError } from "../../service/src/orchestrator/prompt-templates";
+import { allTools, browserTools, nativeTools, readOnlyNativeTools } from "../../service/src/tools";
+import { WAIT_CONDITION_DOC } from "../../service/src/browser/wait";
+import { SCRIPT_API } from "../../service/src/tools/browser-run";
+import { AnthropicApiDriver } from "../../service/src/drivers/anthropic-api";
+import { ClaudeCodeDriver } from "../../service/src/drivers/claude-code";
+import { DummyDriver } from "../../service/src/drivers/dummy";
+import { GitHubCopilotDriver } from "../../service/src/drivers/github-copilot";
+import type { Driver } from "../../service/src/drivers/types";
 
 // Tool availability per run kind, transcribed from DESIGN.md → Tools. Kept independent of
 // the prompts module so a prompt that names a tool its run can't call fails here.

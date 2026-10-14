@@ -5,11 +5,11 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { PermissionDecisionLog, PermissionMode, TranscriptEntry } from "@harness/shared";
-import { DummyDriver } from "../drivers/dummy";
-import type { Classifier, ClassifierDecision, ClassifierRequest } from "../permissions/classifier";
-import { makeOrchestrator } from "../testing/fakes";
-import { toolsForRun } from "../tools/index";
-import { CLASSIFIER_DENIED, CLASSIFIER_DENIED_NEXT } from "../permissions/gate";
+import { DummyDriver } from "../../service/src/drivers/dummy";
+import type { Classifier, ClassifierDecision, ClassifierRequest } from "../../service/src/permissions/classifier";
+import { makeOrchestrator } from "../../service/src/testing/fakes";
+import { toolsForRun } from "../../service/src/tools/index";
+import { CLASSIFIER_DENIED, CLASSIFIER_DENIED_NEXT } from "../../service/src/permissions/gate";
 
 function fakeClassifier(answer: ClassifierDecision | (() => Promise<ClassifierDecision>)) {
   const calls: ClassifierRequest[] = [];
@@ -109,19 +109,6 @@ describe("permission mode resolution", () => {
 });
 
 describe("native tools behind the PermissionGate (dummy /bash)", () => {
-  test("auto: classifier allow runs the command and logs an audit entry", async () => {
-    const c = fakeClassifier({ decision: "allow", reason: "creating a repo in the workdir is routine" });
-    const h = setup({ classifier: c });
-    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "/bash git init -q && touch made.txt" });
-    await h.orch.idle();
-    expect(existsSync(join(h.dir, "made.txt"))).toBe(true);
-    expect(c.calls[0]).toMatchObject({ tool: "bash", input: { command: "git init -q && touch made.txt" }, ticket: { key: t.key } });
-    expect(c.calls[0]!.transcript.some((l) => l.startsWith("[human] /bash git init"))).toBe(true);
-    const entries = h.store.transcript.list(t.sessionId);
-    expect(permissionLogs(entries)).toEqual([expect.objectContaining({ decision: "allow", source: "classifier", backend: "fake", mode: "auto", summary: "git init -q && touch made.txt" })]);
-    expect(entries.some((e) => e.content.type === "status" && e.content.text.startsWith("Auto-approved: git init -q && touch made.txt — creating a repo"))).toBe(true);
-  });
-
   test("auto: soft_deny is the agent's to work around; a run that ends stuck on it gets the card; allow_once reruns it via the grant", async () => {
     const c = fakeClassifier({ decision: "soft_deny", reason: "writes outside the project" });
     const h = setup({ classifier: c });

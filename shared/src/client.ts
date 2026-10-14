@@ -91,6 +91,8 @@ export function specConflict(err: unknown): SpecConflict | null {
 export interface HarnessClientOptions {
   baseUrl: string; // http://127.0.0.1:7717
   token: string;
+  /** Replaces the global fetch; tests hand in a function that calls the service's handler directly. */
+  fetch?: typeof fetch;
 }
 
 /** `?a=1&b=2` from the defined, non-empty values (or "" when there are none). */
@@ -114,7 +116,7 @@ export class HarnessClient {
   }
 
   async request<T>(method: string, path: string, body?: unknown): Promise<T> {
-    const res = await fetch(this.baseUrl + path, {
+    const res = await (this.opts.fetch ?? fetch)(this.baseUrl + path, {
       method,
       headers: {
         authorization: `Bearer ${this.opts.token}`,
@@ -312,7 +314,7 @@ export class HarnessClient {
    * machine. Resolves with the registered attachment to add to a draft or a message.
    */
   async uploadAttachment(data: Blob | ArrayBuffer | Uint8Array, name: string, mimeType?: string): Promise<Attachment> {
-    const res = await fetch(`${this.baseUrl}/uploads?name=${encodeURIComponent(name)}`, {
+    const res = await (this.opts.fetch ?? fetch)(`${this.baseUrl}/uploads?name=${encodeURIComponent(name)}`, {
       method: "POST",
       headers: { authorization: `Bearer ${this.opts.token}`, "content-type": mimeType || (data instanceof Blob && data.type) || "application/octet-stream" },
       body: data as Blob,

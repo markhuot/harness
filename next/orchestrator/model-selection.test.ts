@@ -2,10 +2,10 @@ import { Database } from "bun:sqlite";
 import { describe, expect, test } from "bun:test";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { migrate, MIGRATIONS } from "../db";
-import { Store } from "../store";
-import { FakeDriver, makeOrchestrator } from "../testing/fakes";
-import { resolveSettings, validateSettingsPatch } from "./settings";
+import { migrate, MIGRATIONS } from "../../service/src/db";
+import { Store } from "../../service/src/store";
+import { FakeDriver, makeOrchestrator } from "../../service/src/testing/fakes";
+import { resolveSettings, validateSettingsPatch } from "../../service/src/orchestrator/settings";
 
 function setup() {
   const work = new FakeDriver("fake");

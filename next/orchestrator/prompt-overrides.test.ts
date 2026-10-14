@@ -5,11 +5,11 @@ import { describe, expect, test } from "bun:test";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { parseTemplate, PROMPT_IDS, templateVariables, type Project, type Session, type Ticket } from "@harness/shared";
-import { makeOrchestrator } from "../testing/fakes";
-import { HarnessError } from "./errors";
-import { PROMPTS, renderPrompt } from "./prompt-templates";
-import { promptsWith, runContext, systemPrompt, workStartPrompt } from "./prompts";
-import { applySettingsPatch, DEFAULT_SETTINGS, resolveSettings, validateSettingsPatch } from "./settings";
+import { makeOrchestrator } from "../../service/src/testing/fakes";
+import { HarnessError } from "../../service/src/orchestrator/errors";
+import { PROMPTS, renderPrompt } from "../../service/src/orchestrator/prompt-templates";
+import { promptsWith, runContext, systemPrompt, workStartPrompt } from "../../service/src/orchestrator/prompts";
+import { applySettingsPatch, DEFAULT_SETTINGS, resolveSettings, validateSettingsPatch } from "../../service/src/orchestrator/settings";
 
 describe("prompt registry", () => {
   test("has exactly the protocol's prompt ids", () => {

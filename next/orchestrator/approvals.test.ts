@@ -3,10 +3,10 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { Database } from "bun:sqlite";
 import type { HarnessEvent } from "@harness/shared";
-import { FakeDriver, makeOrchestrator } from "../testing/fakes";
-import { migrate, MIGRATIONS } from "../db";
-import { APPROVAL_PENDING_MESSAGE, PLAN_APPROVAL_MESSAGE, endsWithQuestion, summarizeToolInput } from "./orchestrator";
-import { DEFAULT_SETTINGS, resolveSettings } from "./settings";
+import { FakeDriver, makeOrchestrator } from "../../service/src/testing/fakes";
+import { migrate, MIGRATIONS } from "../../service/src/db";
+import { APPROVAL_PENDING_MESSAGE, PLAN_APPROVAL_MESSAGE, endsWithQuestion, summarizeToolInput } from "../../service/src/orchestrator/orchestrator";
+import { DEFAULT_SETTINGS, resolveSettings } from "../../service/src/orchestrator/settings";
 
 function setup(driver?: FakeDriver) {
   const h = makeOrchestrator({ driver });

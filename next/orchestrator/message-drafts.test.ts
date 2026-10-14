@@ -6,10 +6,10 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, utimesSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { HarnessApiError, HarnessClient, type HarnessEvent, type Ticket } from "@harness/shared";
-import { createHarness, type Harness } from "../app";
-import { DummyDriver } from "../drivers/dummy";
-import { FakeDriver, makeOrchestrator, stubBrowser, tempHome } from "../testing/fakes";
-import { png } from "../testing/media";
+import { createService } from "../support/service";
+import { DummyDriver } from "../../service/src/drivers/dummy";
+import { FakeDriver, makeOrchestrator, stubBrowser, tempHome } from "../../service/src/testing/fakes";
+import { png } from "../../service/src/testing/media";
 
 function setup() {
   const h = makeOrchestrator({ driver: new FakeDriver() });
@@ -131,19 +131,11 @@ describe("a message draft", () => {
 });
 
 describe("over HTTP", () => {
-  let harness: Harness | null = null;
-  afterEach(async () => {
-    await harness?.stop();
-    harness = null;
-  });
-
   test("PUT /tickets/:key/message-draft saves it, GET /tickets lists it, POST /messages clears it", async () => {
-    const home = tempHome("harness-message-draft-http-");
-    harness = await createHarness({ home, port: 0, drivers: [new DummyDriver({ delayMs: 0 })], browser: stubBrowser(), watchers: null, log: () => {} });
-    const client = new HarnessClient({ baseUrl: harness.url, token: harness.token });
-    await client.updateSettings({ defaultDriver: "dummy" });
-    const dir = join(home, "work", "web");
-    mkdirSync(dir, { recursive: true });
+    const svc = createService();
+    const home = svc.home;
+    const client = svc.client();
+    const dir = svc.projectDir("web");
     const project = await client.createProject({ path: dir, key: "WEB" });
     const t = await client.createTicket({ projectId: project.id, spec: "Plan it", start: false });
 
