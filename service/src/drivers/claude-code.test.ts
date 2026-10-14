@@ -56,7 +56,7 @@ interface Setup {
 }
 
 function setup(
-  opts: { script?: unknown[]; env?: Record<string, string>; settings?: Partial<Settings>; bin?: string; loginUrlTimeoutMs?: number; backgroundWaitMs?: number; exitGraceMs?: number } = {},
+  opts: { script?: unknown[]; env?: Record<string, string>; settings?: Partial<Settings>; bin?: string; loginUrlTimeoutMs?: number; backgroundWaitMs?: number; exitGraceMs?: number; handbackWaitMs?: number } = {},
 ): Setup {
   const dir = tmp();
   const record = join(dir, "record.ndjson");
@@ -78,6 +78,7 @@ function setup(
     loginUrlTimeoutMs: opts.loginUrlTimeoutMs,
     backgroundWaitMs: opts.backgroundWaitMs,
     exitGraceMs: opts.exitGraceMs,
+    handbackWaitMs: opts.handbackWaitMs,
   });
   const ndjson = (file: string) =>
     existsSync(file)
@@ -553,6 +554,25 @@ describe("StreamJsonParser background tasks", () => {
     expect(p.runningTasks.size).toBe(0);
   });
 
+  // claude 2.1.299: a background task that finishes mid-turn reaches the agent at the next tool
+  // boundary as a replayed <task-notification> message; a long foreground call's notification
+  // never does.
+  test("a finished background task stays unreported until the agent is handed its notification", () => {
+    const p = new StreamJsonParser();
+    p.handle(init());
+    p.handle(bashCall("c1", "sleep 3", { run_in_background: true }));
+    p.handle({ ...taskStarted("b1", "c1", "Sleep 3"), is_backgrounded: true });
+    p.handle(toolResult("c1", BG("b1")));
+    p.handle(bashCall("c2", "sleep 8"));
+    p.handle({ ...taskStarted("f1", "c2", "Sleep 8"), is_backgrounded: false });
+    p.handle(taskDone("b1", "c1"));
+    p.handle(taskDone("f1", "c2"));
+    expect([...p.unreported.values()]).toEqual(["Sleep 3"]);
+    p.handle(toolResult("c2", "fg"));
+    p.handle({ type: "user", isReplay: true, uuid: "u1", message: { role: "user", content: "<task-notification>\n<task-id>b1</task-id>\n<status>completed</status>\n</task-notification>" } });
+    expect(p.unreported.size).toBe(0);
+  });
+
   test("a second turn in the same process is charged only its own cost", () => {
     const p = new StreamJsonParser({ sessionId: "sess-1", costUsd: 1 }, { requested: "auto", mode: "auto" });
     const first = [{ ...init(), permissionMode: "default" }, success({ total_cost_usd: 1.5 })].flatMap((m) => p.handle(m));
@@ -902,6 +922,64 @@ describe("ClaudeCodeDriver.run (fake binary)", () => {
     const { error } = await collect(s.driver.run(request()));
     expect(error).toBeNull();
     expect(s.marks()).toEqual([{ label: "after first turn", stdinClosed: false }]);
+  });
+
+  // HARNESS-509 (HARNESS-493): the last of two background agents finished while the agent was
+  // writing a text-only turn. The turn ended with nothing running, so stdin closed, but the CLI
+  // still ran the turn that told the agent, which started a verify agent; 15s later the CLI and
+  // that agent were stopped and the ticket was submitted.
+  test("a background task that finished mid-turn keeps the CLI alive for the turn that reports it", async () => {
+    const agent = (id: string, description: string) => ({ type: "assistant", message: { content: [{ type: "tool_use", id, name: "Agent", input: { description, prompt: "p", run_in_background: true } }] } });
+    const s = setup({
+      script: [
+        init(),
+        agent("a1", "Cross-file dedupe"),
+        { ...taskStarted("t1", "a1", "Cross-file dedupe", "local_agent"), is_backgrounded: true },
+        toolResult("a1", "Async agent launched successfully. agentId: t1"),
+        { type: "system", subtype: "task_updated", task_id: "t1", patch: { status: "completed" } },
+        taskDone("t1", "a1"),
+        success({ result: "Still waiting on the dedupe pass." }),
+        { __sleep: 200 },
+        { __mark: "after the turn" },
+        init(),
+        agent("a2", "Run verify"),
+        { ...taskStarted("t2", "a2", "Run verify", "local_agent"), is_backgrounded: true },
+        toolResult("a2", "Async agent launched successfully. agentId: t2"),
+        success({ result: "Verify is running." }),
+        { __sleep: 200 },
+        { __mark: "after the reporting turn" },
+        taskDone("t2", "a2"),
+        init(),
+        success({ result: "Verify passed." }),
+        { __until_stdin_closed: true },
+      ],
+    });
+    const { events, error } = await collect(s.driver.run(request()));
+    expect(error).toBeNull();
+    expect(s.marks()).toEqual([
+      { label: "after the turn", stdinClosed: false },
+      { label: "after the reporting turn", stdinClosed: false },
+    ]);
+    expect(events).toContainEqual({ type: "status", text: "Waiting for the agent to hear that a background task finished (Cross-file dedupe)." });
+  });
+
+  test("a finished background task's turn that never starts closes stdin after the handback wait", async () => {
+    const s = setup({
+      handbackWaitMs: 100,
+      script: [
+        init(),
+        bashCall("c1", "sleep 1", { run_in_background: true }),
+        taskStarted("b1", "c1", "Sleep"),
+        toolResult("c1", BG("b1")),
+        taskDone("b1", "c1"),
+        success(),
+        { __until_stdin_closed: true },
+        { __mark: "after" },
+      ],
+    });
+    const { error } = await collect(s.driver.run(request()));
+    expect(error).toBeNull();
+    expect(s.marks()).toEqual([{ label: "after", stdinClosed: true }]);
   });
 
   test("an error result ends the turn even with a background task running", async () => {

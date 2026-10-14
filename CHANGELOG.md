@@ -11,6 +11,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
+- A Claude Code run no longer ends while its agent still has to hear about a background agent or command that finished during its last turn. Before, the run closed at that turn's end; the agent still got the news and often started more work (a verify agent, say), which was stopped 15 seconds later and the ticket submitted with the agent mid-task. The Transcript now shows "Waiting for the agent to hear that a background task finished" instead.
 - The dock ghost card's purple glow no longer stutters around the card while it pulses; the glow and tint now fade smoothly in place instead of re-drawing in steps.
 
 ## [app-20261014.1831](https://github.com/markhuot/harness/releases/tag/app-20261014.1831) - 2026-10-14

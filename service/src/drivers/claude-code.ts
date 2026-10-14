@@ -41,6 +41,12 @@ export interface ClaudeCodeDriverOptions {
    * process under it are stopped.
    */
   exitGraceMs?: number;
+  /**
+   * How long a turn that ended with a finished background task its agent hasn't been told about
+   * waits for the CLI to start the turn that tells it (default 30s). That turn starts right away,
+   * so this only bounds a CLI that never does.
+   */
+  handbackWaitMs?: number;
   /** Plan usage's HTTP client (tests) */
   fetch?: typeof fetch;
   /** Plan usage's login tokens, in place of the Keychain and credentials file (tests) */
@@ -48,6 +54,9 @@ export interface ClaudeCodeDriverOptions {
 }
 
 const DEFAULT_EXIT_GRACE_MS = 15_000;
+const DEFAULT_HANDBACK_WAIT_MS = 30_000;
+/** The task ids in a <task-notification> the CLI hands the agent at a tool boundary */
+const NOTIFIED_TASK = /<task-id>([^<]+)<\/task-id>/g;
 
 /**
  * Harness tools that finish a run. A turn that called one ends even if background tasks are
@@ -529,6 +538,15 @@ export class StreamJsonParser {
   initPermissionMode: string | null = null;
   /** Background tasks (Bash and agents) started and not yet finished: CLI task id → description */
   readonly runningTasks = new Map<string, string>();
+  /**
+   * Background tasks that finished but whose notification the agent hasn't been handed yet: CLI
+   * task id → description. One that finishes mid-turn reaches the agent at its next tool
+   * boundary (a replayed <task-notification> message) or, when the turn ends first, in a turn of
+   * its own (its init). Until then the run isn't over (HARNESS-509).
+   */
+  readonly unreported = new Map<string, string>();
+  /** CLI task id → the description its task_started gave */
+  private taskLabels = new Map<string, string>();
   /** The agent called a tool that finishes the run (FINISHING_TOOLS) */
   finished = false;
   private toolNames = new Map<string, string>();
@@ -659,6 +677,7 @@ export class StreamJsonParser {
         }
         if (msg.subtype === "task_started" && typeof msg.task_id === "string") {
           this.runningTasks.set(msg.task_id, str(msg.description) ?? msg.task_id);
+          this.taskLabels.set(msg.task_id, str(msg.description) ?? msg.task_id);
           if (msg.is_backgrounded === true) this.backgrounded.add(msg.task_id);
           if (typeof msg.tool_use_id === "string") {
             this.taskCalls.set(msg.tool_use_id, msg.task_id);
@@ -666,6 +685,10 @@ export class StreamJsonParser {
           }
         } else if (msg.subtype === "task_notification" || (msg.subtype === "task_updated" && taskStatus(msg.patch?.status))) {
           if (typeof msg.task_id === "string") this.runningTasks.delete(msg.task_id);
+          // A foreground call's task ends with its result; only a background one is handed back.
+          if (msg.subtype === "task_notification" && typeof msg.task_id === "string" && this.backgrounded.has(msg.task_id)) {
+            this.unreported.set(msg.task_id, this.taskLabels.get(msg.task_id) ?? msg.task_id);
+          }
         }
         if (msg.subtype === "task_started" && typeof msg.tool_use_id === "string" && TASK_TOOLS[this.toolNames.get(msg.tool_use_id) ?? ""]) {
           // A Bash or Monitor call: a background task once it's known to be in the background
@@ -707,6 +730,8 @@ export class StreamJsonParser {
           // Every turn of the process starts with an init; report a mode downgrade once.
           const firstInit = !this.sawInit;
           this.sawInit = true;
+          // The turn starts with the notifications queued since the last one.
+          this.unreported.clear();
           noteSession(msg.session_id);
           if (typeof msg.permissionMode === "string") this.initPermissionMode = msg.permissionMode;
           const requested = this.permission?.requested;
@@ -785,6 +810,10 @@ export class StreamJsonParser {
       }
       case "user": {
         const content = msg.message?.content;
+        if (msg.isReplay === true && !subagentId) {
+          const text = typeof content === "string" ? content : Array.isArray(content) ? content.map((c: any) => (typeof c?.text === "string" ? c.text : "")).join("\n") : "";
+          for (const m of text.matchAll(NOTIFIED_TASK)) this.unreported.delete(m[1]!.trim());
+        }
         if (!Array.isArray(content)) break;
         for (const block of content) {
           if (block?.type !== "tool_result") continue;
@@ -798,6 +827,7 @@ export class StreamJsonParser {
           const task = this.taskCalls.get(callId);
           const inBackground = (task !== undefined && this.backgrounded.has(task)) || ASYNC_LAUNCH.test(text) || IN_BACKGROUND.test(text);
           if (task && !subagentId && !inBackground) this.runningTasks.delete(task);
+          if (task && !subagentId && inBackground) this.backgrounded.add(task);
           if (!subagentId && !block.is_error && UNFINISHING_TOOLS.has(name)) this.finished = false;
           // A finishing call that failed (refused, invalid input) didn't finish anything.
           if (!subagentId && block.is_error && FINISHING_TOOLS.has(name)) this.finished = false;
@@ -1187,6 +1217,13 @@ export class ClaudeCodeDriver implements Driver {
     let waitedOut = false;
     const exitGraceMs = this.opts.exitGraceMs ?? DEFAULT_EXIT_GRACE_MS;
     let exitTimer: ReturnType<typeof setTimeout> | null = null;
+    const handbackWaitMs = this.opts.handbackWaitMs ?? DEFAULT_HANDBACK_WAIT_MS;
+    /** Closes stdin if the turn that hands the agent its finished tasks never starts */
+    let handbackTimer: ReturnType<typeof setTimeout> | null = null;
+    const clearHandback = () => {
+      if (handbackTimer) clearTimeout(handbackTimer);
+      handbackTimer = null;
+    };
     /** Background tasks still running when the CLI had to be stopped after its run ended */
     let heldOpenBy: string[] | null = null;
     const writeUser = (content: string | unknown[], uuid: string) => {
@@ -1205,6 +1242,7 @@ export class ClaudeCodeDriver implements Driver {
     const closeStdin = () => {
       if (waitTimer) clearTimeout(waitTimer);
       waitTimer = null;
+      clearHandback();
       // The run takes no more messages once the session started and stdin is closing (a failed
       // --resume keeps them for the fresh attempt). Refused messages become a queued run.
       if (!resume || parser.sawInit) req.input?.close();
@@ -1243,6 +1281,7 @@ export class ClaudeCodeDriver implements Driver {
           req.input?.delivered(msg.uuid);
         }
         const events = parser.handle(msg);
+        if (msg?.type === "system" && msg.subtype === "init") clearHandback();
         // Resuming a session whose last process ended with background tasks still running, the
         // CLI first reports them stopped and ends an empty turn (num_turns 0) before it reads the
         // prompt (claude 2.1.286). That result isn't the end of this run's turn: closing stdin
@@ -1255,13 +1294,21 @@ export class ClaudeCodeDriver implements Driver {
           // starts the next turn. A finished run, an error or a turn with nothing left ends it;
           // an unseen message then becomes a queued run. There's no wait limit unless
           // backgroundWaitMs sets one (counted from the latest turn's end).
+          // A task that finished during the turn hasn't reached the agent yet: the CLI starts
+          // the next turn with it, which may start more work (HARNESS-509).
           const waiting = [...parser.runningTasks.values()];
+          const unreported = [...parser.unreported.values()];
           if (parser.finished || parser.result?.isError) closeStdin();
           else if (req.input?.pending) {
             if (waitTimer) clearTimeout(waitTimer);
             waitTimer = null;
-          } else if (!waiting.length) closeStdin();
-          else {
+          } else if (!waiting.length && !unreported.length) closeStdin();
+          else if (!waiting.length) {
+            events.push({ type: "status", text: `Waiting for the agent to hear that ${unreported.length === 1 ? "a background task" : `${unreported.length} background tasks`} finished (${unreported.join("; ")}).` });
+            clearHandback();
+            handbackTimer = setTimeout(closeStdin, handbackWaitMs);
+            handbackTimer.unref?.();
+          } else {
             events.push({
               type: "status",
               text: `Waiting for ${waiting.length === 1 ? "a background task" : `${waiting.length} background tasks`} to finish (${waiting.join("; ")})${waitMs === undefined ? "" : `, up to ${formatWait(waitMs)}`}.`,

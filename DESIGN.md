@@ -1258,6 +1258,17 @@ Code's own prompt asks for bare `file_path:line_number` references; the section 
   to wait on a background test run was cut short, and the orchestrator auto-submitted the
   "I'll be notified…" text (HARNESS-81).
 
+  A turn that ends with nothing running isn't over when a background task finished during it
+  and the agent hasn't heard yet. The CLI hands a finished task's `<task-notification>` to the
+  agent at the next tool boundary (a replayed user message naming its `<task-id>`), or, when the
+  turn ends first, in a turn of its own that starts with an `init` (claude 2.1.299). The driver
+  counts a background task's `task_notification` as unreported until one of those, and keeps
+  stdin open for that turn with a "Waiting for the agent to hear…" status. `handbackWaitMs`
+  (default 30s) closes stdin if the turn never starts. Before this, HARNESS-493's last audit
+  agent finished while the agent wrote a text-only turn: stdin closed at that turn's end, the
+  CLI still ran the turn that reported the agent, which started a verify agent, and 15s later
+  the exit grace stopped both and the ticket was auto-submitted (HARNESS-509).
+
   A resumed session whose last process ended with background tasks still running (a submit
   with a dev server up, say) opens differently (claude 2.1.286): the CLI reports those tasks
   `stopped` ("didn't finish before the previous session ended"), then emits an `init` and an
