@@ -231,18 +231,20 @@ struct DockHoldHost: UIViewRepresentable {
     }
 
     var ghost: some View {
-        GhostLayer(hold: hold, title: title).environment(\.palette, palette)
+        GhostLayer(hold: hold, title: title).modifier(ConcentricScreenReader()).environment(\.palette, palette)
     }
 
     private struct GhostLayer: View {
         let hold: DockHold
         let title: String
 
+        @Environment(\.concentricScreen) private var screen
+
         var body: some View {
             VStack {
                 Spacer()
                 DockGhostCard(title: title, armed: hold.armed)
-                    .padding(.horizontal, DockMetrics.phoneSides)
+                    .padding(.horizontal, DockMetrics.phoneSides(screen: screen))
                     .padding(.bottom, DockMetrics.phoneBottomGap)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)

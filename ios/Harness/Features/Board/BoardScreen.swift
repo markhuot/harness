@@ -363,7 +363,7 @@ private struct BoardBottomBar<Filter: View, NewSession: View>: View {
     @Environment(DockedSheetInset.self) private var dockInset: DockedSheetInset?
 
     /// The search capsule's height, the bar's row
-    private let fieldHeight: CGFloat = 50
+    private let fieldHeight: CGFloat = DockMetrics.barHeight
 
     var body: some View {
         let searching = focused.wrappedValue
@@ -393,11 +393,9 @@ private struct BoardBottomBar<Filter: View, NewSession: View>: View {
         }
         .padding(.top, 6)
         // Concentric with the phone's corners, like Calendar's bar; over the keyboard while searching.
-        // Over a docked ticket sheet, as far from the sides as the system floats it, so they line up,
-        // and the same gap above it on every phone.
-        .concentricBottomPadding(barHeight: fieldHeight, raised: searching, horizontal: 16, bottom: 4,
-                                 sides: router.showsDock ? dockInset?.sides : nil,
-                                 above: router.showsDock && dockInset?.sides != nil ? TicketDock.barGap : nil)
+        // Over the docked cards, which share its sides, the same gap above them on every phone.
+        .concentricBottomPadding(barHeight: fieldHeight, raised: searching, horizontal: DockMetrics.fallbackSides, bottom: 4,
+                                 above: router.showsDock && dockInset?.top != nil ? TicketDock.barGap : nil)
         .animation(.snappy, value: searching)
         .animation(.snappy, value: router.showsDock)
     }

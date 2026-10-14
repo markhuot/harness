@@ -149,12 +149,10 @@ extension EnvironmentValues {
     @Entry var ticketPanelTitleInset: CGFloat = 0
 }
 
-/// Where the system floats the docked ticket sheet, as last measured docked: how far from the
-/// screen's sides, and its top edge in the window. The sheet is presented, so this reaches the
+/// Where the docked cards float, as last measured docked: the bottom card's top edge in the window. The sheet is presented, so this reaches the
 /// sections (DockClearance) and the board's bottom bar through the environment (RootView) rather
 /// than a preference; the bar lines up with the dock while `Router.showsDock`.
 @Observable final class DockedSheetInset {
-    var sides: CGFloat?
     var top: CGFloat?
     /// The iPad: how much of the board's bottom the docked card stack takes (DockedCardStack); 0
     /// without one.
@@ -236,6 +234,7 @@ extension View {
 struct DockedCardsOverlay: View {
     @Environment(Router.self) private var router
     @Environment(DockedSheetInset.self) private var dockInset
+    @Environment(\.concentricScreen) private var screen
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var expanded = false
     @AccessibilityFocusState private var focused: Bool
@@ -270,7 +269,7 @@ struct DockedCardsOverlay: View {
                         }
                         primary(top)
                     }
-                    .padding(.horizontal, DockMetrics.phoneSides)
+                    .padding(.horizontal, DockMetrics.phoneSides(screen: screen))
                     .padding(.bottom, DockMetrics.phoneBottomGap)
                     .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
                 }
@@ -278,7 +277,6 @@ struct DockedCardsOverlay: View {
             .frame(width: geo.size.width, height: geo.size.height, alignment: .bottom)
             // Where the bottom card sits, for the sections' clearance and the board's bar.
             .onChange(of: geo.frame(in: .global).maxY, initial: true) { _, maxY in
-                dockInset.sides = DockMetrics.phoneSides
                 dockInset.top = maxY - DockMetrics.phoneBottomGap - DockedCardMetrics.height
             }
         }

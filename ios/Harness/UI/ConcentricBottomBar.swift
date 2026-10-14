@@ -35,15 +35,13 @@ struct ConcentricScreenReader: ViewModifier {
 
 /// A bottom bar's horizontal and bottom padding: concentric with the phone's corners at rest, and
 /// `horizontal`/`bottom` while `raised` (over the keyboard, where there are no corners to follow)
-/// or where the screen has none. At rest, `sides` and `above` (when given) replace the concentric
-/// gaps: to the sides, and below, where the bar sits `above` over whatever its slot ends at (a
-/// docked ticket sheet).
+/// or where the screen has none. At rest, `above` (when given) replaces the concentric gap below,
+/// where the bar sits `above` over whatever its slot ends at (the docked cards).
 private struct ConcentricBottomPadding: ViewModifier {
     let barHeight: CGFloat
     let raised: Bool
     let horizontal: CGFloat
     let bottom: CGFloat
-    let sides: CGFloat?
     let above: CGFloat?
     @Environment(\.concentricScreen) private var screen
     @Environment(\.concentricBottomGap) private var bottomGap
@@ -52,7 +50,7 @@ private struct ConcentricBottomPadding: ViewModifier {
         let p = (raised ? nil : ConcentricBar.padding(screen, barHeight: barHeight, bottomGap: bottomGap))
             ?? ConcentricBar.Padding(horizontal: horizontal, bottom: bottom)
         content
-            .padding(.horizontal, raised ? p.horizontal : sides ?? p.horizontal)
+            .padding(.horizontal, p.horizontal)
             .padding(.bottom, raised ? p.bottom : above ?? p.bottom)
     }
 }
@@ -61,8 +59,8 @@ extension View {
     /// Pads a bottom bar `barHeight` tall (its single row) so its ends are concentric with the
     /// phone's corners; see ConcentricBottomPadding.
     func concentricBottomPadding(barHeight: CGFloat, raised: Bool, horizontal: CGFloat, bottom: CGFloat,
-                                 sides: CGFloat? = nil, above: CGFloat? = nil) -> some View {
+                                 above: CGFloat? = nil) -> some View {
         modifier(ConcentricBottomPadding(barHeight: barHeight, raised: raised, horizontal: horizontal, bottom: bottom,
-                                         sides: sides, above: above))
+                                         above: above))
     }
 }

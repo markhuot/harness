@@ -1599,7 +1599,7 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
     const newSession = await findElement(udid, (x) => x === "New session");
     if (bar && newSession && newSession.frame.y + newSession.frame.height > bar.frame.y)
       throw new Error(`New session (bottom ${Math.round(newSession.frame.y + newSession.frame.height)}) runs under the dock (top ${Math.round(bar.frame.y)})`);
-    // And as far from the screen's sides as that bar: Projects at its left end, New session at its right.
+    // And as far from the screen's sides as that bar, which keeps its resting inset while docked: Projects at its left end, New session at its right.
     const projects = await findElement(udid, (x) => x === "Projects");
     if (bar && projects && newSession) {
       const left = bar.frame.x - projects.frame.x;
@@ -1894,6 +1894,15 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
     if (!newSession) throw new Error("no New session button on the board");
     if (newSession.frame.y + newSession.frame.height > dockTop)
       throw new Error(`New session (bottom ${Math.round(newSession.frame.y + newSession.frame.height)}) runs under the dock (top ${Math.round(dockTop)})`);
+    // Every card shares the bar's left and right edges: Projects at its left end, New session at its right.
+    const projects = await findElement(udid, (x) => x === "Projects");
+    if (!projects) throw new Error("no Projects button on the board");
+    const barLeft = projects.frame.x, barRight = newSession.frame.x + newSession.frame.width;
+    for (const n of [...cards, ...(more ? [more] : [])]) {
+      const right = n.frame.x + n.frame.width;
+      if (Math.abs(n.frame.x - barLeft) > 2 || Math.abs(right - barRight) > 2)
+        throw new Error(`"${n.AXLabel}" (${Math.round(n.frame.x)}–${Math.round(right)}) isn't as wide as the bar (${Math.round(barLeft)}–${Math.round(barRight)})`);
+    }
     await shootBoth(udid, "dock-stack");
     await appearance(udid, "light");
     return `${keyOf(cards[0]!.AXLabel!)} over ${keyOf(label)}`;

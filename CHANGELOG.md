@@ -9,6 +9,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Changed
+
+- On iPhone, docked ticket cards are now as wide as the board's bottom bar, inset from the screen's sides to follow the device's corner curve. The bar keeps that width while a ticket is docked instead of narrowing to match the card.
+
 ### Added
 
 - For people working on Harness: `sim-check` writes `sim-check-profile.json` next to `timings.json` and prints where a run went: phases, spawns by program (AXe, simctl, ffmpeg), fixed sleeps by source line, poll iterations, waits that gave up, and board resets, per chain and check, then how the run differs from the last one. Counts stay steady when the Mac is busy, so they rank the costs better than seconds do.

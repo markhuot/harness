@@ -9,10 +9,18 @@ public enum DockMetrics {
     public static let spacing: CGFloat = 8
     /// How far the board's bottom bar sits above the docked cards, the same on every phone.
     public static let barGap: CGFloat = 11
-    /// The iPhone's docked cards float this far from the screen's sides, and from the bottom safe
-    /// area (the home indicator), as the system floated the docked sheet.
-    public static let phoneSides: CGFloat = 8
+    /// The iPhone's docked cards float this far from the bottom safe area (the home indicator).
     public static let phoneBottomGap: CGFloat = 8
+    /// The board's bottom bar's height, and its side gap where the screen has no corners to follow
+    /// (landscape, not yet measured): the docked cards take the bar's sides.
+    public static let barHeight: CGFloat = 50
+    public static let fallbackSides: CGFloat = 16
+
+    /// How far the iPhone's docked cards sit from the screen's sides: the board's bottom bar's
+    /// concentric inset (ConcentricBar), so the cards and the bar share their left and right edges.
+    public static func phoneSides(screen: ConcentricBar.Screen?) -> CGFloat {
+        ConcentricBar.padding(screen, barHeight: barHeight)?.horizontal ?? fallbackSides
+    }
 
     /// The iPad's cards keep this far from the board column's trailing and bottom edges.
     public static let cornerMargin: CGFloat = 16

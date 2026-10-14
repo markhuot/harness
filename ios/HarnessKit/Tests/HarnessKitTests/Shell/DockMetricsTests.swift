@@ -11,6 +11,22 @@ struct DockMetricsTests {
         #expect(DockMetrics.stackHeight(rows: 5) == CGFloat(292))
     }
 
+    @Test func dockedCardsShareTheBarsSides() {
+        for (width, radius) in [(393, 55), (375, 39), (402, 62)] as [(CGFloat, CGFloat)] {
+            let screen = ConcentricBar.Screen(width: width, height: 852, homeIndicator: 34)
+            let bar = ConcentricBar.padding(screen, barHeight: 50)
+            #expect(DockMetrics.phoneSides(screen: screen) == bar?.horizontal)
+            #expect(DockMetrics.phoneSides(screen: screen) == radius - 25)
+        }
+    }
+
+    @Test func dockedCardsFallBackToTheBarsConstantWithoutCorners() {
+        #expect(DockMetrics.phoneSides(screen: nil) == 16)
+        // Landscape and a Home-button phone have no concentric inset.
+        #expect(DockMetrics.phoneSides(screen: .init(width: 852, height: 393, homeIndicator: 21)) == 16)
+        #expect(DockMetrics.phoneSides(screen: .init(width: 375, height: 667, homeIndicator: 0)) == 16)
+    }
+
     @Test func theOverflowCardCountsWhatItHides() {
         #expect(DockMetrics.moreLabel(count: 10, all: false) == "10 more docked tickets")
         #expect(DockMetrics.moreLabel(count: 12, all: true) == "12 docked tickets")

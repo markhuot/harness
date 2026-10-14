@@ -98,7 +98,7 @@ final class ScreenSnapshotTests: XCTestCase {
 
     private func ghost(phase: Double, reduceMotion: Bool = false) -> some View {
         DockGhostCard(title: "HAR-7 Add the pulse", armed: true, pulsePhase: phase, forceReduceMotion: reduceMotion)
-            .padding(.horizontal, DockMetrics.phoneSides)
+            .padding(.horizontal, DockMetrics.phoneSides(screen: nil))
             .padding(.vertical, 40)
             .frame(maxWidth: .infinity, maxHeight: 200)
     }
