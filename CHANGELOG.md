@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261014.1831](https://github.com/markhuot/harness/releases/tag/app-20261014.1831) - 2026-10-14
+
 ### Added
 
 - The Transcript tab on Mac and iPhone/iPad labels a tool call by its `description` when the agent wrote one (Bash, Agent), with the raw command faint after it so you still see what ran. Read, Edit and Write rows show the file name and line range, like `Format.swift:100–175`, instead of the full path. Calls with no description look as before.
