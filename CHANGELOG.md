@@ -16,6 +16,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 ### Changed
 
 - On iPhone, the dock's cards are the only way to switch or close docked tickets, since they now show over the ticket detail: the swipe along the top card (sideways to step, down to close), its VoiceOver Next/Previous docked ticket actions, and the long-press menu on the ticket's title are gone. A card's ✕ now asks about unsaved file edits on iPad too, as it already did on iPhone. The long-press title menu stays on iPad.
+- On iPhone and iPad, the docked card ghost's glow and bob pulse slowly now, one pulse every 4.8 seconds instead of every 1.6.
 - For people working on Harness: iPhone and iPad now draw docked cards with one shared container (`DockedCardsContainer`) with a layout per platform; the iPhone's lives in its own passthrough window (`DockWindow`). Snapshot tests composite that window over the screen, and sim-check checks the dock over an open sheet, that switching cards leaves the dock mounted once (`dockMounts` in the debug state), and the composer above the keyboard with a ticket docked.
 
 ### Fixed
