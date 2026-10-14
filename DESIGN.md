@@ -1095,11 +1095,11 @@ client state, not service state.
 | Board | a ticket's sub-agents and their transcripts, and its background tasks and their output (Agents & tasks tab, filtered to agents or tasks) | `get_ticket` (`include_agents`), `get_ticket_agent` (a sub-agent's transcript tail, a task's output tail) | the filter is a client view |
 | Local | appearance and themes, layout (sidebar, panes), board project filter, show or hide children, last-used project | none | client preferences, not service state |
 
-`service/src/orchestrator/generic-watcher-e2e.test.ts` walks the headline scenario with the
-dummy driver: a work run creates a looping `zsh -lc` watcher around
-`__fixtures__/events-api.ts` (a stand-in for `curl` against an events API) after an approval,
-each event becomes an Inbox item carrying the watcher's prompt, and triage dispatches or
-declines it by that prompt. `service/scripts/claude-code-watcher-check.ts` runs the same
+`next/orchestrator/generic-watcher-e2e.test.ts` walks the headline scenario with the
+dummy driver: a work run creates a looping `zsh -lc` curl watcher after an approval (the loop
+is a fake process the test prints the events of `__fixtures__/events-api.ts` into), each event
+becomes an Inbox item carrying the watcher's prompt, and triage dispatches or declines it by
+that prompt. `service/scripts/claude-code-watcher-check.ts` runs the same
 scenario by hand with the real claude-code driver for both the setup and triage, against a
 throwaway `HARNESS_HOME`.
 
