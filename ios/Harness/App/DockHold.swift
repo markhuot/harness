@@ -133,13 +133,22 @@ struct DockGhostCard: View {
         }
         .padding(.horizontal, 22)
         .frame(height: DockMetrics.height)
-        .glassEffect(.regular.tint(c.accent.opacity(0.06 + 0.10 * wave)), in: .capsule)
+        .glassEffect(.regular.tint(c.accent.opacity(0.06)), in: .capsule)
+        // The breathing is opacity only: a glass tint or blur radius that changes every frame is
+        // re-rendered in steps, which read as the purple stuttering around the card.
+        .overlay {
+            Capsule()
+                .fill(c.accent.opacity(0.10 * wave))
+                .allowsHitTesting(false)
+        }
         // A soft accent glow behind the glass, breathing with the pulse.
         .background {
             Capsule()
-                .fill(c.accent.opacity(0.14 + 0.20 * wave))
-                .blur(radius: 10 + 6 * wave)
+                .fill(c.accent)
+                .opacity(0.14 + 0.20 * wave)
+                .blur(radius: 13)
                 .padding(.horizontal, 6)
+                .drawingGroup()
         }
         // A light that circles the rim once per pulse. The gradient is angular and fades to clear at
         // both ends, so a full turn (phase 1) draws exactly what rest (phase 0) does: no jump at the loop.

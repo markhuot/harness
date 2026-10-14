@@ -9,6 +9,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- The dock ghost card's purple glow no longer stutters around the card while it pulses; the glow and tint now fade smoothly in place instead of re-drawing in steps.
+
 ## [app-20261014.1831](https://github.com/markhuot/harness/releases/tag/app-20261014.1831) - 2026-10-14
 
 ### Added
