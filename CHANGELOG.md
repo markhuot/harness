@@ -12,6 +12,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 ### Added
 
 - A new in-process test suite under `next/` with `bun run test:next`: the whole service (orchestrator, HTTP routes, MCP and websocket) runs inside one bun process with no daemon, ports or Chrome. For people working on Harness, it starts with the ticket run path and will grow to replace the per-file test processes. `bun run test:next` now runs the tests in random order (it prints the seed), fails any test that spawns a process, opens a socket, launches Chrome, runs real git or sleeps (the error names the fake to use instead), caps each test's CPU, and prints wall time, CPU and the slowest tests without ever failing on them. Git runs in memory by default, and a contract tier runs the same assertions against real git so the fake can't drift. A recorder and replayer for Chrome DevTools traffic is in place for the fake browser.
+- Internal, for people working on Harness: `bun run report` writes `next/REPORT.md`, a list of every old test and every sim-check and Mac-check check with where it went (new test, walkthrough screen, accepted loss, kept, or still open), a progress table per area, and the accepted losses grouped for sign-off. A test fails when the committed file is stale, so it is regenerated whenever a test is added, moved or deleted.
 - `bun run verify` runs the new suite when it, or the orchestrator, browser or test-fake code it drives, changes.
 
 ### Changed

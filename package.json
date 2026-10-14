@@ -8,6 +8,7 @@
     "service": "bun run service/src/daemon.ts",
     "app": "bun run --cwd app dev",
     "test:next": "bun next/run.ts",
+    "report": "bun scripts/report.ts",
     "typecheck": "bun scripts/typecheck.ts",
     "verify": "bun scripts/verify.ts",
     "nightly": "bun scripts/nightly.ts",
