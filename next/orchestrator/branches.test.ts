@@ -325,24 +325,12 @@ describe("update_branch", () => {
 });
 
 describe("GET /projects/:id/branches", () => {
-  test("most recent first, filtered by substring then in-order letters, with where each is checked out", async () => {
+  // Ordering, checked-out paths and substring-then-fuzzy matching are the GitPort contract's (next/support/git-contract.ts).
+  test("passes the query and limit to git, matches case-insensitively, and a project outside git has none", async () => {
     const h = await setup();
     h.git.createBranch(h.repo, "medl-1223-ai-app");
-    h.git.createBranch(h.repo, "feature/login");
-    // Each commit is newer than the last, so the order is certain.
-    await h.git.commitAt(h.repo);
-    const herdr = join(h.home, "herdr");
-    h.git.addWorktree(h.repo, herdr, "feature/login");
-    await h.git.commitAt(herdr);
-    const all = await h.orch.projectBranches(h.project.id, "");
-    expect(all[0]!.name).toBe("feature/login");
-    expect(realpathSync(all[0]!.checkedOutAt!)).toBe(realpathSync(herdr));
-    expect(all.find((b) => b.name === "main")!.checkedOutAt).not.toBeNull();
-    expect(all.find((b) => b.name === "medl-1223-ai-app")!.checkedOutAt).toBeNull();
-    expect(all.every((b, i) => i === 0 || all[i - 1]!.lastCommitAt >= b.lastCommitAt)).toBe(true);
     expect((await h.orch.projectBranches(h.project.id, "MEDL")).map((b) => b.name)).toEqual(["medl-1223-ai-app"]);
-    // "fl" isn't a substring of anything, but f…l appears in order in feature/login.
-    expect((await h.orch.projectBranches(h.project.id, "fl")).map((b) => b.name)).toEqual(["feature/login"]);
+    expect((await h.orch.projectBranches(h.project.id, "")).length).toBeGreaterThan(1);
     expect(await h.orch.projectBranches(h.project.id, "", 1)).toHaveLength(1);
     const dir = join(h.home, "plain");
     mkdirSync(dir);

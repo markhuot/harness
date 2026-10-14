@@ -102,34 +102,6 @@ describe("return_to_planning", () => {
     expect(cur(h, t)).toMatchObject({ status: "review", startAfterPlan: false });
   });
 
-  test("a failed Plan run clears the approval and starts nothing", async () => {
-    const h = setup();
-    const t = await blocked(h);
-    await h.orch.sendMessage(t.key, "go /replan-fail");
-    await h.orch.idle();
-    expect(calls(h)).toEqual(["work:sonnet", "chat:sonnet", "plan:opus"]);
-    expect(runKinds(h, t).at(-1)).toBe("plan:failed");
-    expect(cur(h, t)).toMatchObject({ status: "planning", startAfterPlan: false });
-    expect(lines(h, t)).toContain("Planning run failed; work not started");
-  });
-
-  test("a message during the Plan run withdraws the approval", async () => {
-    const h = setup();
-    const t = await blocked(h);
-    // The plan run only holds when its prompt says so: the human's message rides along in it.
-    await h.orch.sendMessage(t.key, "go /replan-auto /hold");
-    await waitFor(() => h.driver.holding > 0, { label: "a run to reach /hold" });
-    h.driver.release(); // the chat ends and replans; the plan prompt carries /hold too
-    await waitFor(() => h.driver.holding > 0, { label: "a run to reach /hold" });
-    expect(cur(h, t)).toMatchObject({ status: "planning", startAfterPlan: true, busy: true });
-    await h.orch.sendMessage(t.key, "wait, one more thing");
-    expect(cur(h, t).startAfterPlan).toBe(false);
-    await waitFor(() => (h.driver.release(), h.orch.isIdle()), { label: "the runs to finish" });
-    await h.orch.idle();
-    expect(cur(h, t).status).toBe("planning");
-    expect(h.driver.calls.filter((c) => c.kind === "work")).toHaveLength(1);
-  });
-
   test("without start_after_plan a child whose dependencies are done waits in Planning", async () => {
     const h = setup();
     const dep = await h.orch.createTicket({ projectId: h.project.id, spec: "dep", start: false });

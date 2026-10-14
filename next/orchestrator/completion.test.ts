@@ -598,29 +598,31 @@ describe("children land on their parent's branch", () => {
 
 describe("merge locks", () => {
   test("jobs sharing a lock never run at once; different locks and no lock do", async () => {
-    const running = new Set<string>();
-    let overlap = 0;
     const order: string[] = [];
+    const gates = new Map<string, () => void>();
     const q = new RunQueue({
       limit: () => 4,
       execute: async (job) => {
-        if (job.lock && [...running].some((r) => r === job.lock)) overlap++;
-        if (job.lock) running.add(job.lock);
         order.push(`start ${job.runId}`);
-        await Bun.sleep(20);
+        await new Promise<void>((resolve) => gates.set(job.runId, resolve));
         order.push(`end ${job.runId}`);
-        if (job.lock) running.delete(job.lock);
       },
     });
     q.enqueue({ runId: "a", sessionId: "s1", kind: "complete", lock: "merge:p" });
     q.enqueue({ runId: "b", sessionId: "s2", kind: "complete", lock: "merge:p" });
     q.enqueue({ runId: "c", sessionId: "s3", kind: "complete", lock: "merge:q" });
     q.enqueue({ runId: "d", sessionId: "s4", kind: "complete" });
-    await Bun.sleep(5);
-    expect(q.runningCount).toBe(3); // a, c and d; b waits for a
-    await q.idle();
-    expect(overlap).toBe(0);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(order).toEqual(["start a", "start c", "start d"]); // b waits for a's lock
+    expect(q.runningCount).toBe(3);
+    gates.get("a")!();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(order).toContain("start b");
     expect(order.indexOf("start b")).toBeGreaterThan(order.indexOf("end a"));
-    expect(order.indexOf("start c")).toBeLessThan(order.indexOf("end a"));
+    for (const g of gates.values()) g();
+    await q.idle();
   });
 });
