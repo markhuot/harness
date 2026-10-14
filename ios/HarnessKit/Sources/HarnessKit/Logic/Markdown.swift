@@ -415,9 +415,9 @@ public enum Markdown {
             if participated(m, 1) {
                 out.append(.code(inner(1)))
             } else if participated(m, 2) {
-                out.append(.strong(inner(2)))
+                out.append(contentsOf: emphasis(inner(2), strong: true))
             } else if participated(m, 3) {
-                out.append(.em(inner(1)))
+                out.append(contentsOf: emphasis(inner(1), strong: false))
             } else if participated(m, 4) {
                 let mm = Pattern.linkParts.exec(s)!
                 let label = mm[1]!, url = mm[2]!
@@ -438,6 +438,22 @@ public enum Markdown {
         }
         if last < ns.length { out.append(.text(ns.substring(from: last))) }
         return out
+    }
+
+    /// Bold or italic text. A link inside it stays a link, with the text around it emphasized, rather
+    /// than showing its brackets and URL (`emphasis` in markdown.ts).
+    private static func emphasis(_ inner: String, strong: Bool) -> [InlineToken] {
+        let parts = inlineTokens(inner)
+        let linked = parts.contains { p in
+            switch p {
+            case .link: true
+            case let .ticket(_, text): text != nil
+            default: false
+            }
+        }
+        func wrap(_ s: String) -> InlineToken { strong ? .strong(s) : .em(s) }
+        guard linked else { return [wrap(inner)] }
+        return parts.map { if case let .text(s) = $0 { wrap(s) } else { $0 } }
     }
 
     // MARK: Media

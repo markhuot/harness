@@ -290,6 +290,16 @@ function image(alt: string, src: string, title?: string): InlineToken {
 }
 
 /**
+ * Bold or italic text. A link inside it (`**[a.ts:1](harness://file/a.ts)**`) stays a link, with
+ * the text around it emphasized, rather than showing its brackets and URL.
+ */
+function emphasis(t: "strong" | "em", inner: string): InlineToken[] {
+  const parts = inlineTokens(inner);
+  if (!parts.some((p) => p.t === "link" || (p.t === "ticket" && p.text !== undefined))) return [{ t, text: inner }];
+  return parts.map((p) => (p.t === "text" ? { t, text: p.text } : p));
+}
+
+/**
  * Inline markup of one line. [label](x) is a link when x is http(s) or a file link (`harness://file/…`,
  * or a path with no scheme; see parseFileLink); other targets (javascript:, data:, anchors) keep only
  * the label. Bare URLs are autolinked only for http(s).
@@ -308,8 +318,8 @@ export function inlineTokens(text: string): InlineToken[] {
     if (idx > last) out.push({ t: "text", text: text.slice(last, idx) });
     const s = m[0];
     if (m[1]) out.push({ t: "code", text: s.slice(1, -1) });
-    else if (m[2]) out.push({ t: "strong", text: s.slice(2, -2) });
-    else if (m[3]) out.push({ t: "em", text: s.slice(1, -1) });
+    else if (m[2]) out.push(...emphasis("strong", s.slice(2, -2)));
+    else if (m[3]) out.push(...emphasis("em", s.slice(1, -1)));
     else if (m[4]) {
       const mm = /^\[([^\]]+)\]\(([^)\s]+)\)$/.exec(s)!;
       const [, label, url] = mm as unknown as [string, string, string];

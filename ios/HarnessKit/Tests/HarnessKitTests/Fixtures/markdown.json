@@ -253,6 +253,62 @@
       ]
     },
     {
+      "name": "link inside strong",
+      "input": "**[a.ts:1](harness://file/a.ts#L1)** and **see [b](https://x.test) now**",
+      "output": [
+        {
+          "t": "link",
+          "text": "a.ts:1",
+          "url": "harness://file/a.ts#L1"
+        },
+        {
+          "t": "text",
+          "text": " and "
+        },
+        {
+          "t": "strong",
+          "text": "see "
+        },
+        {
+          "t": "link",
+          "text": "b",
+          "url": "https://x.test"
+        },
+        {
+          "t": "strong",
+          "text": " now"
+        }
+      ]
+    },
+    {
+      "name": "link inside em",
+      "input": "*[a](harness://file/a.ts)* then *a [b](RFA-1) c*",
+      "output": [
+        {
+          "t": "link",
+          "text": "a",
+          "url": "harness://file/a.ts"
+        },
+        {
+          "t": "text",
+          "text": " then "
+        },
+        {
+          "t": "em",
+          "text": "a "
+        },
+        {
+          "t": "ticket",
+          "key": "RFA-1",
+          "text": "b"
+        },
+        {
+          "t": "em",
+          "text": " c"
+        }
+      ]
+    },
+    {
       "name": "strong with star inside fails",
       "input": "**a*b**",
       "output": [
@@ -7007,6 +7063,16 @@
       "name": "strong",
       "input": "**bold** text",
       "output": "bold text"
+    },
+    {
+      "name": "link inside strong",
+      "input": "**[a.ts:1](harness://file/a.ts#L1)** and **see [b](https://x.test) now**",
+      "output": "a.ts:1 and see b now"
+    },
+    {
+      "name": "link inside em",
+      "input": "*[a](harness://file/a.ts)* then *a [b](RFA-1) c*",
+      "output": "*a* then *a b c*"
     },
     {
       "name": "strong with star inside fails",

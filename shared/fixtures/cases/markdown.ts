@@ -167,6 +167,8 @@ const inlineCorpus: Record<string, string> = {
   "empty code span": "a `` b",
   "unclosed code": "a `b c",
   strong: "**bold** text",
+  "link inside strong": "**[a.ts:1](harness://file/a.ts#L1)** and **see [b](https://x.test) now**",
+  "link inside em": "*[a](harness://file/a.ts)* then *a [b](RFA-1) c*",
   "strong with star inside fails": "**a*b**",
   "unclosed strong": "**bold",
   em: "*it* and _also_",

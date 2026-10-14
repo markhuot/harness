@@ -9,6 +9,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- A file link written inside bold or italic text (`**[DockHold.swift:76](harness://file/…)**`) now shows as a link on the Mac and iPhone, instead of its literal brackets and URL.
+
 ### Changed
 
 - For people working on Harness: the iPhone dock check now measures the gap between the board's bottom bar and the docked cards (one card, two cards, after a relaunch, after the palette closes), so a bar that sits too low fails the check instead of only a bar that runs under the cards.

@@ -53,3 +53,9 @@ test('"thumb" images on a line form one row of thumbnails, each labelled with it
   expect(html).toContain('<figcaption title="After">After</figcaption>');
   expect(html).not.toContain("md-figure");
 });
+
+test("a file link inside bold text renders as a link, not as its brackets and URL", () => {
+  const html = render("**[DockHold.swift:76](harness://file/ios/DockHold.swift#L76)** drives it");
+  expect(html).toContain('href="harness://file/ios/DockHold.swift#L76"');
+  expect(html).not.toContain("](");
+});
