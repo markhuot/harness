@@ -5,6 +5,7 @@ import {
   looksLikePath,
   matchLabel,
   paletteFileRoot,
+  paletteSources,
   parseFileQuery,
   parsePaletteQuery,
   pushRecent,
@@ -154,6 +155,22 @@ describe("parsePaletteQuery", () => {
   test("a prefix only counts at the start", () => {
     expect(parsePaletteQuery("fix #12")).toEqual({ kind: "all", q: "fix #12" });
     expect(parsePaletteQuery("a > b")).toEqual({ kind: "all", q: "a > b" });
+  });
+});
+
+describe("paletteSources", () => {
+  test("> asks for commands only, however the rest reads: no ticket search, no files", () => {
+    for (const raw of [">src/app.ts", "> HAR-12 fix the login", ">settings.json:12", ">   a/b.c"]) {
+      expect(paletteSources(raw)).toMatchObject({ commands: true, tickets: false, files: false });
+    }
+  });
+  test("the same text without the prefix searches tickets and, when it reads as a path, files", () => {
+    expect(paletteSources("src/app.ts")).toMatchObject({ commands: true, tickets: true, files: true });
+    expect(paletteSources("fix the login")).toMatchObject({ commands: true, tickets: true, files: false });
+  });
+  test("# is tickets only and @ is files only", () => {
+    expect(paletteSources("#login")).toMatchObject({ commands: false, tickets: true, files: false });
+    expect(paletteSources("@login")).toMatchObject({ commands: false, tickets: false, files: true });
   });
 });
 

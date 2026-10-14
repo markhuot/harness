@@ -154,6 +154,7 @@ export function BoardPane() {
       return () => focusPaneBy(scope, (s) => openTicketInNewSplit(s, key));
     },
     "board.search": () => searchRef.current?.focus(),
+    "board.children": { run: toggleHideChildren, label: hideChildren ? "Show child tickets" : "Hide child tickets" },
   });
   /** Escape in the search box clears it, then (empty) goes back to the cards; never on to close the pane. */
   const searchKeys = (e: KeyboardEvent) => {

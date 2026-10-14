@@ -97,6 +97,8 @@ export const COMMANDS: CommandSpec[] = [
   // Shares ⇧⌘↩ with pane.zoom: the board's scope is innermost, so on a card this wins.
   { id: "board.openSplit", label: "Open the card in a new split", group: "Board", scope: "board", keys: [cmd("Enter", { shift: true })], palette: false },
   { id: "board.search", label: "Search tickets", group: "Board", scope: "board", keys: [k("Slash")] },
+  // Palette only; the handler's label follows the setting ("Show child tickets" / "Hide child tickets").
+  { id: "board.children", label: "Show child tickets", group: "Board", scope: "board", keys: [], keywords: ["children", "hide", "show", "child tickets"] },
 
   // Lists (the sidebar, the inbox, a conductor's Tickets tab)
   { id: "list.next", label: "Next item", group: "Lists", scope: "list", keys: [k("KeyJ"), k("ArrowDown")], palette: false },

@@ -116,6 +116,21 @@ export function parsePaletteQuery(raw: string): { kind: PaletteKind; q: string }
   return { kind: "all", q: s.trim() };
 }
 
+/**
+ * Which results a palette query asks for. A leading ">" is commands only: no ticket search and no
+ * files, however the rest reads ("> src/app.ts" doesn't go looking for the file).
+ */
+export function paletteSources(raw: string): { kind: PaletteKind; q: string; commands: boolean; tickets: boolean; files: boolean } {
+  const { kind, q } = parsePaletteQuery(raw);
+  return {
+    kind,
+    q,
+    commands: kind === "all" || kind === "commands",
+    tickets: kind === "tickets" || (kind === "all" && !!q),
+    files: kind === "files" || (kind === "all" && looksLikePath(parseFileQuery(q).search)),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Files
 // ---------------------------------------------------------------------------

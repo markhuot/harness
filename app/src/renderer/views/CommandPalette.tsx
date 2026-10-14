@@ -22,11 +22,10 @@ import { findLeaf, getPanes, openTicket } from "../state/panes";
 import { paneScopeOf } from "../state/route";
 import {
   fileItemId,
-  looksLikePath,
   matchLabel,
   paletteFileRoot,
   parseFileQuery,
-  parsePaletteQuery,
+  paletteSources,
   pushRecent,
   rankCommands,
   readRecents,
@@ -129,10 +128,8 @@ export function CommandPalette({ origin, initial = "", onClose, onShortcuts }: {
   const [searchingFiles, setSearchingFiles] = useState(false);
   const listId = useId();
   const listRef = useRef<HTMLDivElement>(null);
-  const { kind, q } = parsePaletteQuery(raw);
-  const wantTickets = kind === "tickets" || (kind === "all" && !!q);
+  const { kind, q, commands: wantCommands, tickets: wantTickets, files: wantFiles } = paletteSources(raw);
   const fileQuery = parseFileQuery(q);
-  const wantFiles = kind === "files" || (kind === "all" && looksLikePath(fileQuery.search));
 
   // The pane the palette was opened over (on a board), and the folder its file browser searches.
   const [where] = useState(() => {
@@ -213,7 +210,7 @@ export function CommandPalette({ origin, initial = "", onClose, onShortcuts }: {
   const entries = useMemo((): Entry[] => {
     const ranks = recentRanks(recents);
     const out: Entry[] = [];
-    if (kind !== "tickets" && kind !== "files") {
+    if (wantCommands) {
       const commands = availableCommands(origin);
       const have = new Set(commands.map((c) => c.spec.id));
       for (const { spec, label, keywords } of commands) {
@@ -255,7 +252,7 @@ export function CommandPalette({ origin, initial = "", onClose, onShortcuts }: {
     }
     return out.map((e) => ({ ...e, recentRank: ranks.get(e.id) }));
     // origin's handlers are read when the palette opens and again as the query changes.
-  }, [kind, wantTickets, q, origin, state, remote, recents, route, navigate, onShortcuts]);
+  }, [wantCommands, wantTickets, q, origin, state, remote, recents, route, navigate, onShortcuts]);
 
   // File rows, in the server's order (it ranks them); the recently opened ones for an empty query.
   const fileRows = useMemo((): Ranked<Entry>[] => {
