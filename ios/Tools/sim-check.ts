@@ -2,8 +2,8 @@
 //   1. boots service/src/daemon.ts (temp home, random port, dummy driver, HARNESS_DUMMY_DELAY_MS=1)
 //   2. seeds a project and only the tickets the run's selection needs (a conductor with children, a
 //      /browse ticket, an approval, a blocked question, a plan-first ticket, a git-worktree ticket
-//      with changes, sub-agents, a background task, a draft…), while it builds the Release app for
-//      the simulator with `bun ios/Tools/build.ts sim` (XcodeGen, then a Release simulator build
+//      with changes, sub-agents, a background task, a draft…), while it builds the app for
+//      the simulator with `bun ios/Tools/build.ts sim` (XcodeGen, then an unoptimized simulator build
 //      into ios/build/dd; skip with --no-build, override with --app=)
 //   3. on the shared simulator ("harness-shared", see ios/Tools/sim.ts and CLAUDE.md → Simulators),
 //      held under its lock for the whole run so other agents wait rather than install over it,
@@ -132,7 +132,9 @@
 //   It stops before starting when the disk has less than 5 GiB free, and removes its temp dirs
 //   ($TMPDIR/harness-sim-home-*, harness-sim-projects-*) however it ends, unless --keep.
 //
-//   Every run prints its slowest steps and writes them all to timings.json in its screens folder.
+//   Every run prints its slowest steps and writes them all to timings.json in its screens folder. It also
+//      writes sim-check-profile.json there (spawns by program, fixed sleeps by line, poll iterations and
+//      stalled waits, per chain and check), prints the heaviest, and says how it differs from the last run.
 //
 //   DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer bun ios/Tools/sim-check.ts [--no-build] [--app=path] [--shards=N] [--udid=…,…] [--keep | --reuse [--rebuild]] [--grep=pattern] [--help] [--screens | --only=name,name | --shot=link [--prepare=…]] [--themes=id,id] [--paging] [--stick] [--keyboard] [--mentions] [--drafts] [--attachments] [--sheets] [--memory] [--usage] [--ipad]
 import { AsyncLocalStorage } from "node:async_hooks";

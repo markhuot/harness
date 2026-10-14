@@ -39,7 +39,7 @@ bun run sim with-lock -- sh -c 'xcrun simctl install "$SIM_UDID" ios/build/dd/Bu
 Or open `Harness.xcodeproj` in Xcode and press Run.
 
 `bun ios/Tools/build.ts sim` (from the repo root) runs XcodeGen and builds the Release
-configuration for the simulator, ad-hoc signed (the simulator only grants the Keychain to a signed app) and arm64 only, into
+configuration for the simulator without optimization (`-Onone`, one file at a time: a clean build takes about 40 s instead of 120 s; `--optimized` turns it back on, and `sim-check --memory` does), ad-hoc signed (the simulator only grants the Keychain to a signed app) and arm64 only, into
 `ios/build/dd/Build/Products/Release-iphonesimulator/Harness.app`. That's the build sim-check
 will drive. Install it with `simctl` and launch `com.markhuot.harness`.
 
@@ -51,7 +51,7 @@ The path of what it built is the only line on stdout.
 
 | Command | Builds |
 | --- | --- |
-| `sim` | Release, iphonesimulator, ad-hoc signed, arm64 |
+| `sim [--optimized]` | Release settings (unoptimized unless `--optimized`), iphonesimulator, ad-hoc signed, arm64 |
 | `device --device <name or UDID> [--launch]` | Debug, installed with `xcrun devicectl` |
 | `archive --build-number N` | Release archive for devices at `ios/build/Harness.xcarchive`, `CFBundleVersion` N |
 | `export --method dev` | development-signed `ios/build/ipa-dev/Harness.ipa` (`ExportOptions.plist`) |

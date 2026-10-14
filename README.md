@@ -71,15 +71,15 @@ desktop agree on keys, reducers, themes and markdown. See [ios/README.md](ios/RE
   a GitHub release and redeploys the page from `release/Install/`.
 - **Pair:** on the Mac, set Settings → Network to Tailscale and scan the QR code with the iPhone
   or iPad camera (or use Scan QR code / manual entry in the app). The token is stored in the Keychain.
-- **Build:** `bun ios/Tools/build.ts` builds the app: `sim` (an ad-hoc signed Release build for
-  the simulator, into `ios/build/dd`), `device --device <name|udid> [--launch]` (a Debug build
+- **Build:** `bun ios/Tools/build.ts` builds the app: `sim` (an ad-hoc signed build for
+  the simulator, compiled unoptimized unless `--optimized`, into `ios/build/dd`), `device --device <name|udid> [--launch]` (a Debug build
   installed with devicectl), `archive --build-number N`, `export --method dev|testflight` and
   `verify`. Every configuration uses the bundle id `com.markhuot.harness`, so a Debug build
   replaces a TestFlight or release install on the same device. Use
   `DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer` when `xcode-select` points
   at the Command Line Tools.
 - **Check on the simulator:** `bun ios/Tools/sim-check.ts` (or `bun run --cwd ios sim-check`)
-  builds a Release app for the simulator, runs it against a throwaway daemon and validates what
+  builds the app for the simulator, runs it against a throwaway daemon and validates what
   needs a simulator by real taps (via [AXe](https://github.com/cameroncooke/AXe)): gestures,
   sheets and docking, the keyboard, scrolling, a relaunch, crashes. It takes no screenshots; logic
   such as routing and request bodies lives in `swift test` and the service's `bun test`.
