@@ -82,6 +82,27 @@ final class ScreenSnapshotTests: XCTestCase {
         }
     }
 
+    func testDockGhostRest() async throws {
+        try await snapshot("dock-ghost-rest") { ghost(phase: 0) }
+    }
+
+    func testDockGhostPeak() async throws {
+        try await snapshot("dock-ghost-peak") { ghost(phase: 0.5) }
+    }
+
+    func testDockGhostReduceMotion() async throws {
+        try await snapshot("dock-ghost-reduce-motion") {
+            ghost(phase: 0.5, reduceMotion: true)
+        }
+    }
+
+    private func ghost(phase: Double, reduceMotion: Bool = false) -> some View {
+        DockGhostCard(title: "HAR-7 Add the pulse", armed: true, pulsePhase: phase, forceReduceMotion: reduceMotion)
+            .padding(.horizontal, DockMetrics.phoneSides)
+            .padding(.vertical, 40)
+            .frame(maxWidth: .infinity, maxHeight: 200)
+    }
+
     func testDock() async throws {
         try await snapshot("dock", router: {
             let router = Router()

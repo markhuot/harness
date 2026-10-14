@@ -76,11 +76,48 @@ import UIKit
 struct DockGhostCard: View {
     let title: String
     var armed: Bool
+    /// Pins the pulse at a point in its loop (0...1) instead of running it; snapshots use this.
+    var pulsePhase: Double?
+    /// Snapshots can't set the system's Reduce Motion, so they ask for it here.
+    var forceReduceMotion = false
     @Environment(\.palette) private var c
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+
+    private var reduceMotion: Bool { forceReduceMotion || systemReduceMotion }
+
+    /// Seconds for one pulse.
+    static let pulsePeriod = 1.6
+    /// How far the card rises at the top of the pulse.
+    static let bounce: CGFloat = 3
+
+    /// 0 at rest, 1 at the top of the pulse, easing both ways.
+    static func wave(phase: Double) -> Double {
+        0.5 - 0.5 * cos(2 * .pi * phase)
+    }
 
     var body: some View {
-        HStack(spacing: 10) {
+        TimelineView(.animation(paused: !armed || pulsePhase != nil)) { context in
+            let phase = pulsePhase
+                ?? context.date.timeIntervalSinceReferenceDate
+                    .truncatingRemainder(dividingBy: Self.pulsePeriod) / Self.pulsePeriod
+            card(phase: phase)
+        }
+        .opacity(armed ? 1 : 0)
+        .offset(y: armed || reduceMotion ? 0 : DockMetrics.height)
+        .animation(.snappy(duration: 0.2), value: armed)
+        .allowsHitTesting(false)
+        // Only there while armed; sim-check reads it to see the hold arm.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Dock card, \(title)")
+        .accessibilityHidden(!armed)
+        .accessibilityIdentifier("dock-ghost")
+    }
+
+    private func card(phase: Double) -> some View {
+        let wave = Self.wave(phase: phase)
+        // Reduce Motion keeps only a soft breathe of the glow: nothing travels, rises or scales.
+        let lift = reduceMotion || !armed ? 0 : wave
+        return HStack(spacing: 10) {
             Image(systemName: "arrow.down.to.line")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(c.accent)
@@ -96,16 +133,31 @@ struct DockGhostCard: View {
         }
         .padding(.horizontal, 22)
         .frame(height: DockMetrics.height)
-        .glassEffect(.regular, in: .capsule)
-        .opacity(armed ? 1 : 0)
-        .offset(y: armed || reduceMotion ? 0 : DockMetrics.height)
-        .animation(.snappy(duration: 0.2), value: armed)
-        .allowsHitTesting(false)
-        // Only there while armed; sim-check reads it to see the hold arm.
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Dock card, \(title)")
-        .accessibilityHidden(!armed)
-        .accessibilityIdentifier("dock-ghost")
+        .glassEffect(.regular.tint(c.accent.opacity(0.06 + 0.10 * wave)), in: .capsule)
+        // A soft accent glow behind the glass, breathing with the pulse.
+        .background {
+            Capsule()
+                .fill(c.accent.opacity(0.14 + 0.20 * wave))
+                .blur(radius: 10 + 6 * wave)
+                .padding(.horizontal, 6)
+        }
+        // A light that flows along the rim, left to right once per pulse.
+        .overlay {
+            if !reduceMotion {
+                Capsule()
+                    .strokeBorder(
+                        LinearGradient(
+                            stops: [
+                                .init(color: .clear, location: max(0, phase - 0.3)),
+                                .init(color: c.accent.opacity(0.7), location: phase),
+                                .init(color: .clear, location: min(1, phase + 0.3)),
+                            ],
+                            startPoint: .leading, endPoint: .trailing),
+                        lineWidth: 1.5)
+            }
+        }
+        .scaleEffect(1 + 0.01 * lift)
+        .offset(y: -Self.bounce * lift)
     }
 }
 
