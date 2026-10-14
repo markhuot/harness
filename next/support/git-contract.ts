@@ -51,6 +51,8 @@ export function gitPortContract(label: string, make: () => GitFixture) {
       expect(head).toBeTruthy();
       expect(await f.port.resolveCommit(repo, "main")).toBe(head);
       expect(await f.port.resolveCommit(repo, "nope")).toBeNull();
+      // An abbreviated sha resolves to the full one.
+      expect(await f.port.resolveCommit(repo, head!.slice(0, 10))).toBe(head);
       const plain = await f.plainDir();
       expect(await f.port.headCommit(plain)).toBeNull();
       expect(await f.port.currentBranch(plain)).toBeNull();

@@ -36,7 +36,8 @@ export function createMemoryGit() {
 
   const norm = (p: string) => resolve(p);
   const repoOf = (path: string) => repos.find((r) => r.worktrees.has(norm(path)));
-  const sha = () => (++counter).toString(16).padStart(40, "0");
+  // Hashed, so an abbreviated sha names one commit as it does in git.
+  const sha = () => new Bun.CryptoHasher("sha1").update(`commit ${++counter}`).digest("hex");
 
   function commit(repo: Repo, parents: string[], files?: string[]): string {
     const id = sha();
@@ -112,7 +113,12 @@ export function createMemoryGit() {
     },
     async resolveCommit(cwd, ref) {
       const r = repoOf(cwd);
-      return r ? tipOf(r, ref) : null;
+      if (!r) return null;
+      const tip = tipOf(r, ref);
+      if (tip || !/^[0-9a-f]{4,39}$/.test(ref)) return tip;
+      // An abbreviated sha: the one commit it starts, or nothing when it's ambiguous.
+      const matches = [...r.commits.keys()].filter((c) => c.startsWith(ref));
+      return matches.length === 1 ? matches[0]! : null;
     },
     async checkedOutElsewhere(repo, branch, except) {
       const r = repoOf(repo);
