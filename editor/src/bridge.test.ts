@@ -25,7 +25,7 @@ function fakeHandle(options: EditorOptions): EditorHandle {
     setSelection: () => {},
     getSelectionLines: () => null,
     scrollToCursor: () => void calls.push("scrollToCursor"),
-    probe: () => ({ markedLines: ["b"], selection: { anchor: 1, head: 2 }, dirty, scrollY: 0, lineCount: 4 }),
+    probe: () => ({ markedLines: ["b"], selection: { anchor: 1, head: 2 }, dirty, scrollY: 0, lineCount: 4, colors: 3 }),
     onChange: (fn) => (listeners.change = fn, none()),
     onDirty: (fn) => (listeners.dirty = fn, none()),
     onSave: (fn) => (listeners.save = fn, none()),

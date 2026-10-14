@@ -3,7 +3,7 @@ import Observation
 import SwiftUI
 import UIKit
 
-/// The open file's editors and what ties them together: the file editor and the merge view (each its
+/// The open file's editors and what ties them together: the file editor and the side-by-side diff (each its
 /// own web view, so switching tabs never drops edits), the loader, the edit model, and the rules in
 /// HarnessKit's FileEditRules deciding when a change is written. Last write wins.
 @MainActor

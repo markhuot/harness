@@ -63,7 +63,7 @@ targets:
             exit 1
           fi
           "$BUN" "$SRCROOT/Tools/build-highlighter.ts" --out "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/highlighter.js"
-      # The file editor's CodeMirror bundle (editor/, built by editor/scripts/build.ts) goes in the
+      # The file editor's @pierre/diffs bundle (editor/, built by editor/scripts/build.ts) goes in the
       # same way, beside Resources/editor.html, which loads it (ARCHITECTURE.md § File viewer).
       - name: Bundle editor
         inputFileLists: [build/bundle-editor.xcfilelist]

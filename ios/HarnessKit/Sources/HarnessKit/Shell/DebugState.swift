@@ -18,7 +18,7 @@ import Foundation
 ///   },
 ///   "editor": {
 ///     "markedLines": ["let x = 1"], "selection": {"anchor": 0, "head": 0}, "dirty": false,
-///     "scrollY": 0, "lineCount": 12
+///     "scrollY": 0, "lineCount": 12, "colors": 5
 ///   }
 /// }
 /// ```
@@ -69,7 +69,7 @@ public struct DebugState: Codable, Equatable, Sendable {
     }
 
     public struct EditorState: Codable, Equatable, Sendable {
-        /// The text of each line the editor marks for a linked range (`.cm-revealed-line`).
+        /// The text of each line the editor marks for a linked range (`data-selected-line` rows).
         public var markedLines: [String]
         public var selection: Selection
         /// The editor holds edits that aren't saved.
@@ -77,6 +77,8 @@ public struct DebugState: Codable, Equatable, Sendable {
         /// The page's scroll offset in points, so a scroll in flight keeps the state moving.
         public var scrollY: Int
         public var lineCount: Int
+        /// How many colors the drawn code carries: 0 is plain text (an unknown language, a huge file).
+        public var colors: Int
 
         public struct Selection: Codable, Equatable, Sendable {
             public var anchor: Int

@@ -4421,10 +4421,12 @@ function interactionChains(s: Seeded): Chain[] {
         });
         // Its folder is the ticket's worktree (main's commit): the file is there, clean, and it has no Diff tab.
         if (l.includes("Modified") || l.some((x) => x.startsWith("Diff"))) throw new Error("a clean file shows as modified");
-        // The code is CodeMirror in a web view, which AXe can't see into: the probe reads the lines
+        // The code is a web view, which AXe can't see into: the probe reads the lines
         // the page marked (it scrolls and marks after the screen is up, so wait for them).
         const marked = await probeUntil(udid, "the linked lines marked in the editor", (x) => (x.editor?.markedLines.length ?? 0) > 0).then((x) => x.editor!.markedLines).catch(() => [] as string[]);
         await atRest(udid, 600);
+        const colors = (await probe(udid))?.editor?.colors ?? 0;
+        if (colors < 3) throw new Error(`the file's code isn't syntax colored in the editor: ${colors} colors`);
         await shot(udid, "file-link-tap-light");
         if (!marked[0]?.startsWith("export function greetingFor")) throw new Error(`the linked lines aren't marked in the editor: ${JSON.stringify(marked)}`);
         const want = GREETING_FOR[1] - GREETING_FOR[0] + 1;
@@ -4472,6 +4474,22 @@ function interactionChains(s: Seeded): Chain[] {
       });
     }),
     chain("file-edit", ["fileLink"], 25, async (udid) => {
+      await check("a Terraform file opens highlighted, like the Changes tab shows it", async () => {
+        // The old editor had no HCL grammar and showed .tf files as plain text.
+        const wd = (await ticketOf(s.fileLink.key)).workdir!;
+        mkdirSync(join(wd, "infra"), { recursive: true });
+        writeFileSync(join(wd, "infra/main.tf"), 'resource "aws_s3_bucket" "logs" {\n  bucket = "harness-logs"\n  tags   = { Name = "logs" }\n}\n');
+        try {
+          await goto(udid, `harness://file/infra/main.tf?ticket=${k(s.fileLink)}`, (l) => l.includes("infra/main.tf"));
+          const state = await probeUntil(udid, "the Terraform file colored", (x) => (x.editor?.colors ?? 0) >= 3, 15000).catch(() => probe(udid));
+          await atRest(udid, 400);
+          await shot(udid, "file-terraform-light");
+          if ((state?.editor?.colors ?? 0) < 3) throw new Error(`main.tf shows ${state?.editor?.colors ?? 0} colors in the editor, expected its HCL tokens colored`);
+          return `${state!.editor!.colors} colors`;
+        } finally {
+          rmSync(join(wd, "infra"), { recursive: true, force: true });
+        }
+      });
       await check("the file editor edits, shows the unsaved dot and writes the file with Save", async () => {
         const dot = async () => (await labels(udid)).includes("Unsaved changes");
         await goto(udid, `harness://file/${GREETINGS_PATH}?ticket=${k(s.fileLink)}`, (l) => l.includes(GREETINGS_PATH));

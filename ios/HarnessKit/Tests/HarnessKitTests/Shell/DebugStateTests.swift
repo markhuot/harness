@@ -46,14 +46,14 @@ struct DebugStateTests {
 
     @Test func jsonRoundTripsAndKeepsKeysStable() throws {
         let editor = DebugState.EditorState(
-            markedLines: ["let x = 1"], selection: .init(anchor: 2, head: 5), dirty: true, scrollY: 40, lineCount: 9)
+            markedLines: ["let x = 1"], selection: .init(anchor: 2, head: 5), dirty: true, scrollY: 40, lineCount: 9, colors: 4)
         let original = state(editor: editor)
         let data = try original.json()
         #expect(try DebugState.decode(data) == original)
         let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
         #expect(Set(object.keys) == ["version", "seq", "settled", "quietMs", "busy", "router", "editor"])
         let e = try #require(object["editor"] as? [String: Any])
-        #expect(Set(e.keys) == ["markedLines", "selection", "dirty", "scrollY", "lineCount"])
+        #expect(Set(e.keys) == ["markedLines", "selection", "dirty", "scrollY", "lineCount", "colors"])
         // Sorted keys: equal states are equal bytes.
         #expect(try original.json() == state(editor: editor).json())
     }

@@ -3,8 +3,8 @@ import SwiftUI
 import UIKit
 
 /// The file a chat link points at (opened from a harness://file/… link in any markdown): the file
-/// in a CodeMirror editor (a WKWebView, EditorWebHost) with line numbers, opened at and marking the
-/// linked lines, plus a Diff tab (the editor's merge view) with its uncommitted changes when git
+/// in the @pierre/diffs editor (a WKWebView, EditorWebHost) with line numbers, opened at and marking the
+/// linked lines, plus a Diff tab (the editor package's side-by-side diff view) with its uncommitted changes when git
 /// says it has some. The file is editable: Save writes it back, and Save on blur (Settings →
 /// General) writes whenever the editor loses focus. The decisions are HarnessKit's FileViewerRules,
 /// FileEditRules and FileEditorModel; FileEditorSession ties them to the editors.
@@ -456,7 +456,7 @@ private struct FileBody: View {
     }
 }
 
-/// The uncommitted changes: the editor's merge view, the last commit beside the file as it is.
+/// The uncommitted changes: the side-by-side diff view, the last commit beside the file as it is.
 private struct FileDiffBody: View {
     let path: String
     let diff: FileLoad<FileDiff>?

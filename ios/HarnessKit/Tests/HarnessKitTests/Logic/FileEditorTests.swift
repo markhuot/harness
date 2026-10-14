@@ -25,8 +25,23 @@ import Testing
         #expect(o["range"] == .object(["start": .number(3), "end": .number(9)]))
         guard case let .object(theme)? = o["theme"], case let .object(tokens)? = theme["tokens"] else { Issue.record("no theme"); return }
         #expect(theme["appearance"] == .string("dark"))
+        #expect(theme["syntaxTheme"] == .string("pierre-dark"))
         #expect(tokens.count == ThemeToken.allCases.count)
         #expect(tokens["bg"] == .string(Self.theme.tokens.bg))
+    }
+
+    @Test func theCodeIsColoredWithTheAppThemesShikiThemeElsePierres() throws {
+        let tokens = Themes.find(Themes.defaultDarkTheme)!.tokens
+        let named = FileEditorTheme(appearance: .dark, tokens: tokens, syntaxTheme: "dracula")
+        #expect(named.syntaxTheme == "dracula")
+        #expect(FileEditorTheme(appearance: .light, tokens: tokens, syntaxTheme: nil).syntaxTheme == "pierre-light")
+        // Not a plausible Shiki name: Pierre's default for the appearance.
+        #expect(FileEditorTheme(appearance: .dark, tokens: tokens, syntaxTheme: "Not A Theme!").syntaxTheme == "pierre-dark")
+        let o = try Self.payload(.theme(named))
+        guard case let .object(theme)? = o["theme"] else { Issue.record("no theme"); return }
+        #expect(theme["syntaxTheme"] == .string("dracula"))
+        // A theme that changes only its Shiki theme is a different theme, so the page redraws.
+        #expect(named != FileEditorTheme(appearance: .dark, tokens: tokens))
     }
 
     @Test func openWithoutARangeOmitsIt() throws {

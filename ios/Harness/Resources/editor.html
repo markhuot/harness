@@ -12,11 +12,9 @@
      sheet drags down from the top of the file and the keyboard insets it natively. */
   html, body { height: auto; min-height: 100%; }
   body { overflow: visible; }
-  .cm-editor, .cm-mergeView { height: auto !important; }
-  .cm-scroller { overflow: visible !important; }
-  .cm-mergeView { overflow: visible !important; }
-  /* The merge view's two panes are each half the width: each scrolls its long lines sideways. */
-  .cm-mergeView .cm-scroller { overflow-x: auto !important; overflow-y: hidden !important; }
+  /* The editor draws the file only where it shows (the virtualizer reads the page's scroll), and the
+     code scrolls sideways inside its own lines. */
+  diffs-container { display: block; }
 </style>
 </head>
 <body>

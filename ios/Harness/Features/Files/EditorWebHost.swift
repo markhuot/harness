@@ -3,7 +3,7 @@ import SwiftUI
 import UIKit
 import WebKit
 
-/// One CodeMirror editor in a WKWebView: the bundled editor.html (which runs editor/src/bridge.ts's
+/// One @pierre/diffs editor in a WKWebView: the bundled editor.html (which runs editor/src/bridge.ts's
 /// `mount`) and the native end of its bridge. The page document scrolls (not an inner scroller), so
 /// the web view's own scroll view is what UIKit sees: a sheet drags down from its top and the
 /// keyboard insets it natively.

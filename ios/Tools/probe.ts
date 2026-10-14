@@ -26,6 +26,8 @@ export interface DebugState {
     dirty: boolean;
     scrollY: number;
     lineCount: number;
+    /** How many colors the drawn code carries: 0 is plain text. */
+    colors: number;
   };
 }
 

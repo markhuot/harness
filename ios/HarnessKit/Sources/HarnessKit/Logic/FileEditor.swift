@@ -1,29 +1,34 @@
 import Foundation
 
-// The file viewer's editor: CodeMirror in a web view (editor/ in the repo, bundled as editor.html +
-// editor.js). The page runs editor/src/bridge.ts's `mount`; this file is the native end of that
+// The file viewer's editor: @pierre/diffs' editor in a web view (editor/ in the repo, bundled as
+// editor.html + editor.js). The page runs editor/src/bridge.ts's `mount`; this file is the native end of that
 // bridge, kept free of WebKit so `swift test` covers it.
 //
 //   host → page: `window.harnessEditor.receive(<command>)` through evaluateJavaScript
 //   page → host: the page's `post` stringifies each event to the `editor` WKScriptMessage handler
 
-/// The app theme as the editor takes it: `{appearance, tokens}`, every token (editor's `ThemeInput`).
+/// The app theme as the editor takes it: `{appearance, tokens, syntaxTheme}`, every token plus the Shiki
+/// theme the code is colored with (editor's `ThemeInput`). The tokens color the chrome (background,
+/// selection, the revealed lines); `syntaxTheme` is the one the Changes tab's code blocks use too.
 public struct FileEditorTheme: Equatable, Sendable {
     public var appearance: ThemeAppearance
     public var tokens: ThemeTokens
+    /// The Shiki theme for `appearance`: the app theme's, else Pierre's own (`SyntaxTheme.name`).
+    public var syntaxTheme: String
 
-    public init(appearance: ThemeAppearance, tokens: ThemeTokens) {
+    public init(appearance: ThemeAppearance, tokens: ThemeTokens, syntaxTheme: String? = nil) {
         self.appearance = appearance
         self.tokens = tokens
+        self.syntaxTheme = SyntaxTheme.name(appearance, syntaxTheme)
     }
 
     public init(_ info: PluginThemeInfo) {
-        self.init(appearance: info.appearance, tokens: info.tokens)
+        self.init(appearance: info.appearance, tokens: info.tokens, syntaxTheme: info.syntaxTheme)
     }
 
     var json: JSONValue {
         let tokens = Dictionary(uniqueKeysWithValues: ThemeToken.allCases.map { ($0.rawValue, JSONValue.string(self.tokens[keyPath: $0.keyPath])) })
-        return .object(["appearance": .string(appearance.rawValue), "tokens": .object(tokens)])
+        return .object(["appearance": .string(appearance.rawValue), "tokens": .object(tokens), "syntaxTheme": .string(syntaxTheme)])
     }
 }
 
@@ -32,7 +37,7 @@ public enum FileEditorCommand: Equatable, Sendable {
     /// Opens a fresh editor. `language` is the file's path or name (the editor resolves it).
     /// `saved` is what's on disk when the editor reopens with unsaved edits (it opens dirty).
     case open(contents: String, language: String, theme: FileEditorTheme, range: ClosedRange<Int>?, readOnly: Bool, saved: String?)
-    /// Opens the merge view, the original on the left.
+    /// Opens the side-by-side diff, the original on the left.
     case diff(original: String, modified: String, language: String, theme: FileEditorTheme)
     case theme(FileEditorTheme)
     case reveal(ClosedRange<Int>)

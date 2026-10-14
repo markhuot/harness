@@ -61,6 +61,8 @@ export interface EditorProbe {
   dirty: boolean;
   scrollY: number;
   lineCount: number;
+  /** How many colors the drawn code carries: 0 for plain text (an unknown language, or a huge file) */
+  colors: number;
 }
 
 function emitter<A extends unknown[]>() {
@@ -315,6 +317,7 @@ export function createEditor(parent: HTMLElement, options: EditorOptions): Edito
         dirty: base.dirty,
         scrollY: Math.round(scrollEl().scrollTop || 0),
         lineCount: countLines(t),
+        colors: new Set(Array.from(root?.querySelectorAll("[style*='--diffs-token']") ?? [], (el) => el.getAttribute("style"))).size,
       };
     },
     onChange: change.on,
