@@ -7,6 +7,9 @@ import { handleMcpRequest } from "../../service/src/api/mcp";
 import type { WsData } from "../../service/src/api/ws";
 import { makeOrchestrator } from "../../service/src/testing/fakes";
 import { toolsForRun } from "../../service/src/tools";
+import { clearPullRequestTargets } from "../../service/src/store/projects";
+import { useRuntime } from "../../service/src/store/util";
+import { onTempCleanup } from "@harness/shared/testing";
 
 type Options = Parameters<typeof makeOrchestrator>[0];
 
@@ -18,6 +21,17 @@ const TOKEN = "test-token";
  * the MCP handler. Everything it owns is created here, so nothing leaks to the next test.
  */
 export function createService(opts: Options = {}) {
+  // A fixed clock and counting ids, so stamps and ids repeat from one run to the next; the module-level
+  // caches the audit found (service/src store/projects.ts) start empty.
+  let clock = 1_700_000_000_000;
+  let counter = 0;
+  const restore = useRuntime({
+    now: () => clock,
+    newId: () => `id-${++counter}`,
+    newToken: (bytes) => String(++counter).padStart(bytes * 2, "0"),
+  });
+  clearPullRequestTargets();
+  onTempCleanup(restore);
   const h = makeOrchestrator({ tools: toolsForRun, ...opts });
   const http = createHttpHandler({
     orchestrator: h.orch,
@@ -57,5 +71,5 @@ export function createService(opts: Options = {}) {
     return dir;
   }
 
-  return { ...h, http, request, connect, projectDir, token: TOKEN };
+  return { ...h, http, request, connect, projectDir, token: TOKEN, tick: (ms: number) => void (clock += ms) };
 }

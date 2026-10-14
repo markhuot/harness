@@ -1,12 +1,12 @@
 // SQLite schema + migrations (tracked with PRAGMA user_version).
 
 import { Database } from "bun:sqlite";
-import { randomUUID } from "node:crypto";
 import { basename, dirname, join } from "node:path";
 import type { Attachment, AttachmentKind, AttachmentSource } from "@harness/shared";
 import { builtinCompleteChoice, builtinPhaseModels, FALLBACK_DRIVER } from "@harness/shared";
 import { attachmentPath, describeFile } from "./attachments";
 import { isUploadPath } from "./attachment-lists";
+import { newId, now } from "./store/util";
 
 export const MIGRATIONS: string[] = [
   // 1: initial schema
@@ -875,7 +875,7 @@ function backfillAttachments(db: Database, paths: Required<MigrationPaths>) {
     `INSERT INTO attachments (id, ticket_id, path, name, source, kind, mime_type, size, width, height, created_at)
      VALUES ($id, NULL, $path, $name, $source, $kind, $mimeType, $size, $width, $height, $t)`,
   );
-  const t = Date.now();
+  const t = now();
   type Row = { id: string; path: string; name: string; source: string; kind: string; mime_type: string; size: number | null; width: number | null; height: number | null };
   const record = (r: Row): Attachment => ({
     id: r.id,
@@ -896,7 +896,7 @@ function backfillAttachments(db: Database, paths: Required<MigrationPaths>) {
     if (!row) {
       const d = describeFile(path) ?? { kind: "file" as const, mimeType: "" };
       row = {
-        id: randomUUID(),
+        id: newId(),
         path,
         name: basename(path),
         source,

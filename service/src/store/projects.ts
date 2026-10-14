@@ -36,7 +36,7 @@ const prTargets = new Map<string, { at: number; target: PullRequestTarget | null
 
 export function cachedPullRequestTarget(path: string): PullRequestTarget | null {
   const hit = prTargets.get(path);
-  const t = Date.now();
+  const t = now();
   if (hit && t - hit.at < PR_TARGET_TTL_MS) return hit.target;
   const target = pullRequestTarget(path);
   prTargets.set(path, { at: t, target });

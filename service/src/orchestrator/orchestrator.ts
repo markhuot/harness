@@ -3,7 +3,8 @@
 
 import { existsSync, rmSync, statSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash } from "node:crypto";
+import { newId, newToken, now } from "../store/util";
 import { fetchPullRequestTitle, PULL_REQUEST_URL } from "../pull-requests";
 
 /** gh processes that run at once for pull request titles, across all tickets */
@@ -131,22 +132,8 @@ import * as prompts from "./prompts";
 import { PROMPTS, promptTemplateError } from "./prompt-templates";
 import { findKeys, toOutput, WatcherRunner, type WatcherOutput } from "./watchers";
 import { RunQueue, type QueuedJob } from "./queue";
-import {
-  branchExists,
-  branchForKey,
-  checkedOutElsewhere,
-  commitsNotIn,
-  currentBranch,
-  ensureWorktree,
-  git,
-  headCommit,
-  hasChangesToLand,
-  isAncestor,
-  isGitRepo,
-  isInside,
-  listBranches,
-  switchBranch,
-} from "./worktree";
+import { branchForKey, isInside } from "./worktree";
+import { realGit, type GitPort } from "./git-port";
 import { readFileDiff, readFileView, writeFileContents } from "./file-view";
 import { attachMentions, searchPaths, type SearchOptions } from "./files";
 import { compactNotes } from "../annotations";
@@ -236,6 +223,8 @@ export interface OrchestratorOptions {
   reconcileIntervalMs?: number;
   /** The clock for usage-limit restarts (default Date.now) */
   now?: () => number;
+  /** Answers every git question about projects, branches and worktrees (default: the git binary) */
+  git?: GitPort;
   /** A pull request's title from GitHub, or null (default: gh pr view; tests stub it) */
   fetchPullRequestTitle?: (url: string) => Promise<string | null>;
 }
@@ -529,6 +518,7 @@ export class Orchestrator {
   /** Fires at the earliest blocked ticket's resumeAt (armResume) */
   private resumeTimer: ReturnType<typeof setTimeout> | null = null;
   private now: () => number;
+  private git: GitPort;
   private fetchTitle: (url: string) => Promise<string | null>;
   /** Title lookups running now, and the ones waiting for a slot (withTitleSlot) */
   private titleSlotsInUse = 0;
@@ -585,7 +575,8 @@ export class Orchestrator {
       },
     });
     this.reconcileIntervalMs = opts.reconcileIntervalMs ?? 60_000;
-    this.now = opts.now ?? Date.now;
+    this.now = opts.now ?? now;
+    this.git = opts.git ?? realGit;
     this.fetchTitle = opts.fetchPullRequestTitle ?? fetchPullRequestTitle;
     this.planUsage = new PlanUsageTracker(() => this.driverList(), this.bus, () => this.now());
     const handlers = {
@@ -1160,7 +1151,7 @@ export class Orchestrator {
   projectBranches(projectId: string, q: string, limit?: number | string | null): Promise<BranchInfo[]> {
     const project = this.store.projects.get(projectId);
     if (!project) throw notFound(`Unknown project: ${projectId}`);
-    return listBranches(project.path, q, clampLimit(limit, 50));
+    return this.git.listBranches(project.path, q, clampLimit(limit, 50));
   }
 
   /** The @-mention autocomplete for a follow-up: paths where the ticket's next run works (its worktree once it has one). */
@@ -1331,7 +1322,7 @@ export class Orchestrator {
    * are over a day old. "file" sources are only forgotten, never deleted. Returns the upload
    * folders removed.
    */
-  sweepUploads(at = Date.now()): string[] {
+  sweepUploads(at = this.now()): string[] {
     const referenced = this.referencedAttachments();
     const removed = sweepUploads(this.paths.uploadsDir, referenced.paths, ORPHAN_UPLOAD_AGE_MS, at);
     const forget = this.store.attachments
@@ -2021,9 +2012,9 @@ export class Orchestrator {
     const branch = t.branch ?? t.requestedBranch ?? branchForKey(t.key);
     const base = (await this.refreshBaseBranch(t, project)).branch;
     const reviewed = kind === "review" ? this.lastReviewedCommit(t) : null;
-    const exists = await branchExists(repo, branch);
+    const exists = await this.git.branchExists(repo, branch);
     const tip = exists ? branch : reviewed;
-    const landed = !!tip && (await isAncestor(repo, tip, base));
+    const landed = !!tip && (await this.git.isMerged(repo, tip, base));
     const lines = [
       `this ticket's worktree at ${t.workdir} is missing, so this run started in ${cwd}, the project checkout.`,
       `Branch \`${branch}\` ${exists ? "still exists" : "no longer exists"}${tip ? `, and ${exists ? "it" : `commit ${tip}`} ${landed ? "is already" : "isn't"} in the base branch \`${base}\`` : ""}.`,
@@ -2299,7 +2290,7 @@ export class Orchestrator {
     const left: string[] = [];
     if (t.workdir && isInside(t.workdir, this.paths.worktreesDir) && existsSync(t.workdir)) left.push(`the worktree at ${t.workdir}`);
     const branch = t.branch ?? branchForKey(t.key);
-    if (project && branch === branchForKey(t.key) && (await branchExists(project.path, branch))) left.push(`the branch ${branch}`);
+    if (project && branch === branchForKey(t.key) && (await this.git.branchExists(project.path, branch))) left.push(`the branch ${branch}`);
     return left;
   }
 
@@ -2311,8 +2302,8 @@ export class Orchestrator {
     if (project) spots.push([project.path, `refs/heads/${branch}`]);
     if (t.workdir && existsSync(t.workdir)) spots.push([t.workdir, "HEAD"]);
     for (const [cwd, ref] of spots) {
-      const r = await git(["rev-parse", "--verify", "--quiet", `${ref}^{commit}`], cwd);
-      if (r.code === 0 && r.stdout) return r.stdout;
+      const sha = await this.git.resolveCommit(cwd, ref);
+      if (sha) return sha;
     }
     return null;
   }
@@ -2322,8 +2313,7 @@ export class Orchestrator {
     const project = this.store.projects.get(t.projectId);
     if (!project || !existsSync(project.path)) return true;
     const base = this.baseBranchFor(t).branch;
-    const r = await git(["merge-base", "--is-ancestor", sha, base], project.path);
-    return r.code === 0;
+    return this.git.isMerged(project.path, sha, base);
   }
 
   private completeLock(t: Ticket): string | undefined {
@@ -2959,7 +2949,7 @@ ${numberLines(r.body)}`;
     if (a?.decided) throw new Error("A review decision was already recorded for this run");
     if (a) a.decided = true;
     // The round and the commit it judged, so the next review can look at just what changed since.
-    const meta: ActivityMeta = { by: "agent", round: this.reviewRounds(t).length + 1, commit: t.workdir ? await headCommit(t.workdir) : null };
+    const meta: ActivityMeta = { by: "agent", round: this.reviewRounds(t).length + 1, commit: t.workdir ? await this.git.headCommit(t.workdir) : null };
     // The adviser's findings go under their own heading, exactly as the reviewer received them.
     const findings = adviserFindings?.trim();
     const text = [notes?.trim() ?? "", findings ? `### Adviser review\n${findings}` : ""].filter(Boolean).join("\n\n");
@@ -3512,21 +3502,21 @@ ${numberLines(r.body)}`;
     const h = String(head ?? "").trim();
     if (!/^[0-9a-f]{7,64}$/i.test(h)) throw new Error("head must be the hash of the commit you pushed (`git rev-parse HEAD` in the worktree), not a branch or ref name");
     const repo = [t.workdir, this.store.projects.get(t.projectId)?.path].find((d): d is string => !!d && existsSync(d));
-    const resolved = repo ? await git(["rev-parse", "--verify", "--quiet", `${h}^{commit}`], repo) : null;
-    if (!resolved || resolved.code !== 0 || !resolved.stdout) throw new Error(`head ${h} isn't a commit in this ticket's repository`);
+    const resolved = repo ? await this.git.resolveCommit(repo, h) : null;
+    if (!resolved) throw new Error(`head ${h} isn't a commit in this ticket's repository`);
     // Appends the link, or moves a link the ticket already has to the end, so the last link is the one
     // whose head is pinned (pullRequestUrl mirrors the last link). Any link still without a title is
     // fetched again, since its earlier fetch may have failed.
     const urls = t.pullRequests.map((pr) => pr.url).filter((url) => url !== u);
     const change = this.store.tickets.setPullRequestUrls(t.id, [...urls, u])!;
     const untitled = change.ticket.pullRequests.filter((pr) => pr.title === null).map((pr) => pr.url);
-    const updated = this.store.tickets.update(t.id, { pullRequestHead: resolved.stdout })!;
+    const updated = this.store.tickets.update(t.id, { pullRequestHead: resolved })!;
     this.bus.emit({ kind: "ticket.upserted", ticket: updated });
     this.fetchPullRequestTitles(t.id, [...new Set([...change.added, ...untitled])]);
     this.appendStatus(t.sessionId, ctx.runId, `Pull request: ${u}`);
     const a = this.ctxActive(ctx);
     if (a) a.pullRequest = true;
-    return `Recorded ${u} at ${resolved.stdout.slice(0, 8)} on ${t.key}.`;
+    return `Recorded ${u} at ${resolved.slice(0, 8)} on ${t.key}.`;
   }
 
   /** `more`: a dispatch may follow earlier dispatches (one output can hold several items). */
@@ -3826,7 +3816,7 @@ ${numberLines(r.body)}`;
    * A chat's approval leaves the ticket in its column: the card shows wherever the ticket is.
    */
   private openApproval(t: Ticket, runId: string, toolName: string, input: unknown, meta: ApprovalMeta) {
-    const pending: PendingApproval = { id: crypto.randomUUID(), runId, toolName, input, requestedAt: Date.now() };
+    const pending: PendingApproval = { id: newId(), runId, toolName, input, requestedAt: this.now() };
     if (meta.reason) pending.reason = meta.reason;
     if (meta.source) pending.source = meta.source;
     if (meta.summary) pending.summary = meta.summary;
@@ -3958,7 +3948,7 @@ ${numberLines(r.body)}`;
     // Only the inherited setting can fall back; a folder outside git has nothing to ask.
     if (r.source === "settings" && p && p.isGit !== false) {
       // Outside a repo branchExists fails and currentBranch gives null: no fallback.
-      const head = (await branchExists(p.path, r.branch)) ? null : await currentBranch(p.path);
+      const head = (await this.git.branchExists(p.path, r.branch)) ? null : await this.git.currentBranch(p.path);
       const key = `${p.path}\u0000${r.branch}`;
       if (head) this.baseFallback.set(key, head);
       else this.baseFallback.delete(key);
@@ -4014,8 +4004,8 @@ ${numberLines(r.body)}`;
       if (branch === from) {
         done.push(`${t.key} is already on ${branch} in ${workdir}; nothing changed.`);
       } else {
-        const holder = await checkedOutElsewhere(workdir, branch, workdir);
-        const unmerged = await commitsNotIn(workdir, from, branch, (await this.refreshBaseBranch(t)).branch);
+        const holder = await this.git.checkedOutElsewhere(workdir, branch, workdir);
+        const unmerged = await this.git.aheadCount(workdir, from, branch, (await this.refreshBaseBranch(t)).branch);
         const pending =
           unmerged > 0
             ? ` ${unmerged} commit${unmerged === 1 ? "" : "s"} on ${from} ${unmerged === 1 ? "isn't" : "aren't"} on ${branch}: integrate ${unmerged === 1 ? "it" : "them"}${holder ? ` in ${holder.path} (git -C ${holder.path} cherry-pick or merge ${from})` : ` (git cherry-pick or git merge ${from})`} before you finish, since completion merges ${branch}, not ${from}.`
@@ -4029,7 +4019,7 @@ ${numberLines(r.body)}`;
             `${t.key} now uses branch ${branch} in the worktree at ${holder.path}, where it is checked out. Your next run starts there; for the rest of this run, work in that directory (git -C ${holder.path}, absolute paths).${pending} The old worktree at ${workdir} and branch ${from} are left in place for cleanup; nothing was deleted.`,
           );
         } else {
-          const { created } = await this.asTool(() => switchBranch(workdir, branch));
+          const { created } = await this.asTool(() => this.git.switchBranch(workdir, branch));
           patch.branch = branch;
           patch.requestedBranch = branch;
           done.push(
@@ -4228,9 +4218,9 @@ ${numberLines(r.body)}`;
   private async workdirFor(ticket: Ticket): Promise<{ workdir: string; branch: string | null } | string> {
     if (ticket.workdir && !(ticket.branch && !existsSync(ticket.workdir))) return { workdir: ticket.workdir, branch: ticket.branch };
     const project = this.store.projects.get(ticket.projectId)!;
-    if (!((ticket.useWorktree ?? project.useWorktrees) && (await isGitRepo(project.path)))) return { workdir: project.path, branch: null };
+    if (!((ticket.useWorktree ?? project.useWorktrees) && (await this.git.isRepo(project.path)))) return { workdir: project.path, branch: null };
     try {
-      return await ensureWorktree({
+      return await this.git.ensureWorktree({
         repo: project.path,
         worktreesDir: this.paths.worktreesDir,
         key: ticket.key,
@@ -4494,7 +4484,7 @@ ${numberLines(r.body)}`;
   private async refreshHasChanges(ticket: Ticket): Promise<void> {
     const t = this.store.tickets.get(ticket.id);
     if (!t) return;
-    const has = t.branch && t.workdir ? await hasChangesToLand(t.workdir, t.branch, (await this.refreshBaseBranch(t)).branch) : null;
+    const has = t.branch && t.workdir ? await this.git.hasChangesToLand(t.workdir, t.branch, (await this.refreshBaseBranch(t)).branch) : null;
     const current = this.store.tickets.get(t.id);
     if (!current || (current.hasChanges ?? null) === has) return;
     this.store.tickets.update(current.id, { hasChanges: has });
@@ -4785,7 +4775,7 @@ ${numberLines(r.body)}`;
         signal: controller.signal,
       };
       const tools = this.tools(run.kind, driver, ticket);
-      const token = randomBytes(24).toString("hex");
+      const token = newToken(24);
       this.mcpRuns.set(token, { tools, ctx });
       active.mcpToken = token;
       try {

@@ -1,7 +1,37 @@
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 
-export const newId = () => randomUUID();
-export const now = () => Date.now();
+/**
+ * Where the service gets "the time" and "a new id". Production uses the real clock and random ids;
+ * a test installs fixed ones with `useRuntime` so timestamps and ids are reproducible. Everything
+ * that stamps or identifies stored data goes through `now()`, `newId()` and `newToken()`.
+ */
+export interface Runtime {
+  now(): number;
+  newId(): string;
+  /** A random hex secret of `bytes` bytes (MCP tokens, auth tokens). */
+  newToken(bytes: number): string;
+}
+
+const realRuntime: Runtime = {
+  now: () => Date.now(),
+  newId: () => randomUUID(),
+  newToken: (bytes) => randomBytes(bytes).toString("hex"),
+};
+
+let runtime: Runtime = realRuntime;
+
+/** Replace the clock and id source (any part); returns a function that puts the previous one back. */
+export function useRuntime(next: Partial<Runtime>): () => void {
+  const prev = runtime;
+  runtime = { ...prev, ...next };
+  return () => {
+    runtime = prev;
+  };
+}
+
+export const newId = () => runtime.newId();
+export const now = () => runtime.now();
+export const newToken = (bytes: number) => runtime.newToken(bytes);
 
 export function toJson(value: unknown): string | null {
   return value === undefined || value === null ? null : JSON.stringify(value);

@@ -590,6 +590,7 @@ export function makeOrchestrator(opts: Partial<OrchestratorOptions> & { driver?:
     // Tests drive reconcileRuns() directly unless they ask for the timer.
     reconcileIntervalMs: opts.reconcileIntervalMs ?? 0,
     now: opts.now,
+    git: opts.git,
   });
   store.settings.set({ defaultDriver: driver.id });
   onTempCleanup(async () => {

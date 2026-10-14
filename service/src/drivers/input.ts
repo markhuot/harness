@@ -4,6 +4,7 @@
 
 import type { Attachment } from "@harness/shared";
 import type { RunImage } from "../attachment-lists";
+import { newId } from "../store/util";
 
 export interface SteerMessage {
   /** Unique per message (claude-code sends it as the stream-json uuid and matches the CLI's replay) */
@@ -33,7 +34,7 @@ export class RunInput {
    */
   push(text: string, original: SentMessage = { text, attachments: [] }, images?: RunImage[]): boolean {
     if (this.closed) return false;
-    this.entries.push({ id: crypto.randomUUID(), text, ...(images?.length ? { images } : {}), original, taken: false });
+    this.entries.push({ id: newId(), text, ...(images?.length ? { images } : {}), original, taken: false });
     for (const cb of this.listeners) cb();
     return true;
   }

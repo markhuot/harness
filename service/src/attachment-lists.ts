@@ -6,10 +6,9 @@
 
 import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { randomUUID } from "node:crypto";
 import { MAX_PROMPT_ATTACHMENTS, type Attachment, type AttachmentInput, type AttachmentSource } from "@harness/shared";
 import { describeFile } from "./attachments";
-import { newId } from "./store/util";
+import { newId, now } from "./store/util";
 import { HarnessError } from "./orchestrator/errors";
 import { ANNOTATIONS_INTRO, annotationLines, normalizeAnnotation } from "./annotations";
 
@@ -78,7 +77,7 @@ export function storeUpload(uploadsDir: string, bytes: Uint8Array, rawName: stri
   if (bytes.byteLength === 0) throw new HarnessError(400, "The upload is empty");
   if (bytes.byteLength > MAX_UPLOAD_BYTES) throw new HarnessError(413, `The upload is over ${MAX_UPLOAD_BYTES / 1024 / 1024} MB`);
   const name = safeUploadName(rawName, mimeType);
-  const dir = join(uploadsDir, randomUUID());
+  const dir = join(uploadsDir, newId());
   mkdirSync(dir, { recursive: true });
   const path = join(dir, name);
   writeFileSync(path, bytes);
@@ -210,7 +209,7 @@ export function removeUploadDirs(dirs: readonly string[]): void {
  * out of a draft, or a draft discarded before its first save). Young ones are left alone: a
  * client may have just uploaded one and not saved the draft yet. Returns the folders removed.
  */
-export function sweepUploads(uploadsDir: string, referenced: ReadonlySet<string>, maxAgeMs = ORPHAN_UPLOAD_AGE_MS, at = Date.now()): string[] {
+export function sweepUploads(uploadsDir: string, referenced: ReadonlySet<string>, maxAgeMs = ORPHAN_UPLOAD_AGE_MS, at = now()): string[] {
   let entries: string[];
   try {
     entries = readdirSync(uploadsDir);
