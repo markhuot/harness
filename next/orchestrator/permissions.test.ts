@@ -2,13 +2,14 @@
 // behind the dummy driver's /bash (real native bash tool), classifier routing, approvals.
 
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { PermissionDecisionLog, PermissionMode, TranscriptEntry } from "@harness/shared";
 import { DummyDriver } from "../../service/src/drivers/dummy";
 import type { Classifier, ClassifierDecision, ClassifierRequest } from "../../service/src/permissions/classifier";
 import { makeOrchestrator } from "../../service/src/testing/fakes";
 import { toolsForRun } from "../../service/src/tools/index";
+import type { ToolDefinition } from "../../service/src/tools/types";
 import { CLASSIFIER_DENIED, CLASSIFIER_DENIED_NEXT } from "../../service/src/permissions/gate";
 
 function fakeClassifier(answer: ClassifierDecision | (() => Promise<ClassifierDecision>)) {
@@ -26,9 +27,21 @@ function fakeClassifier(answer: ClassifierDecision | (() => Promise<ClassifierDe
 
 function setup(opts: { classifier?: Classifier | null; mode?: PermissionMode; timeoutMs?: number } = {}) {
   const driver = new DummyDriver({ delayMs: 0 });
+  // The gate is ours; running a shell is the OS's (tools/native.test.ts covers it). This bash asks
+  // the same gate the native one does and records what it was allowed to run, so no process spawns.
+  const ran: string[] = [];
+  const fakeBash = (real: ToolDefinition): ToolDefinition<{ command: string }> => ({
+    ...real,
+    async execute({ command }, ctx) {
+      const decision = await ctx.ops.checkPermission(ctx, "bash", { command });
+      if (decision.behavior !== "allow") return { content: [{ type: "text", text: decision.message }], isError: true };
+      ran.push(command);
+      return { content: [{ type: "text", text: "ok" }] };
+    },
+  });
   const h = makeOrchestrator({
     drivers: [driver],
-    tools: (kind, d) => toolsForRun(kind, d),
+    tools: (kind, d, t) => toolsForRun(kind, d, t).map((x) => (x.name === "bash" ? fakeBash(x) : x)),
     classifier: opts.classifier ?? null,
     classifierTimeoutMs: opts.timeoutMs,
   });
@@ -36,7 +49,7 @@ function setup(opts: { classifier?: Classifier | null; mode?: PermissionMode; ti
   const dir = join(h.home, "proj");
   mkdirSync(dir, { recursive: true });
   const project = h.orch.createProject({ path: dir, useWorktrees: false });
-  return { ...h, project, dir };
+  return { ...h, project, dir, ran };
 }
 
 const permissionLogs = (entries: TranscriptEntry[]) =>
@@ -109,6 +122,18 @@ describe("permission mode resolution", () => {
 });
 
 describe("native tools behind the PermissionGate (dummy /bash)", () => {
+  test("auto: classifier allow lets the command run and logs an audit entry", async () => {
+    const c = fakeClassifier({ decision: "allow", reason: "creating a repo in the workdir is routine" });
+    const h = setup({ classifier: c });
+    const t = await h.orch.createTicket({ projectId: h.project.id, spec: "/bash git init -q && touch made.txt" });
+    await h.orch.idle();
+    expect(h.ran).toEqual(["git init -q && touch made.txt"]);
+    expect(c.calls[0]).toMatchObject({ tool: "bash", input: { command: "git init -q && touch made.txt" }, ticket: { key: t.key } });
+    expect(permissionLogs(h.store.transcript.list(t.sessionId))).toEqual([
+      expect.objectContaining({ decision: "allow", source: "classifier", backend: "fake", mode: "auto", summary: "git init -q && touch made.txt" }),
+    ]);
+  });
+
   test("auto: soft_deny is the agent's to work around; a run that ends stuck on it gets the card; allow_once reruns it via the grant", async () => {
     const c = fakeClassifier({ decision: "soft_deny", reason: "writes outside the project" });
     const h = setup({ classifier: c });
@@ -117,7 +142,7 @@ describe("native tools behind the PermissionGate (dummy /bash)", () => {
     let cur = h.orch.ticketDetail(t.key).ticket;
     expect(cur.status).toBe("blocked");
     expect(cur.pendingApproval).toMatchObject({ toolName: "bash", input: { command: "touch approved.txt" }, reason: "writes outside the project", source: "classifier" });
-    expect(existsSync(join(h.dir, "approved.txt"))).toBe(false);
+    expect(h.ran).toEqual([]);
     // The agent was told why and to rethink, not to stop for a human.
     expect(bashResult(h.store.transcript.list(t.sessionId))).toEqual({
       isError: true,
@@ -146,7 +171,7 @@ describe("native tools behind the PermissionGate (dummy /bash)", () => {
     const cur = h.orch.ticketDetail(t.key).ticket;
     expect(cur.pendingApproval).toBeNull();
     expect(cur.status).not.toBe("blocked");
-    expect(existsSync(join(h.dir, "nope.txt"))).toBe(false);
+    expect(h.ran).toEqual([]);
     const r = bashResult(h.store.transcript.list(t.sessionId))!;
     expect(r.isError).toBe(true);
     expect(r.text).toContain("sends secrets off the machine");
@@ -159,7 +184,7 @@ describe("native tools behind the PermissionGate (dummy /bash)", () => {
     const pa = h.orch.ticketDetail(t.key).ticket.pendingApproval!;
     expect(pa.source).toBe("policy");
     expect(pa.reason).toMatch(/^The classifier couldn't decide \(no answer within/);
-    expect(existsSync(join(h.dir, "slow.txt"))).toBe(false);
+    expect(h.ran).toEqual([]);
   });
 
   test("auto: read-only commands never reach the classifier", async () => {
@@ -186,7 +211,7 @@ describe("native tools behind the PermissionGate (dummy /bash)", () => {
     await h.orch.idle();
     const cur = h.orch.ticketDetail(t.key).ticket;
     expect(cur.pendingApproval).toBeNull();
-    expect(existsSync(join(h.dir, "ro.txt"))).toBe(false);
+    expect(h.ran).toEqual([]);
     expect(bashResult(h.store.transcript.list(t.sessionId))!.text).toMatch(/^Read-only mode/);
   });
 

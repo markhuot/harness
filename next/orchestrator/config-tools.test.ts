@@ -11,6 +11,8 @@ import { FakeDriver, makeOrchestrator } from "../../service/src/testing/fakes";
 import { toolsForRun } from "../../service/src/tools/index";
 import type { ToolResult } from "../../service/src/tools/types";
 import { APPROVAL_PENDING_MESSAGE } from "../../service/src/orchestrator/orchestrator";
+import { waitFor } from "../support/wait";
+import { WatcherRunner } from "../../service/src/orchestrator/watchers";
 
 function setup(opts: { mode?: "auto" | "ask" | "read_only" } = {}) {
   const driver = new DummyDriver({ delayMs: 0 });
@@ -412,5 +414,62 @@ describe("config tools behind human approval", () => {
     await h.orch.idle();
     expect(h.orch.listWatchers()[0]!.models).toEqual({});
     expect(JSON.parse(out.at(-1)!)[0]).toMatchObject({ name: "status", models: {} });
+  });
+});
+
+describe("a watcher created through the tools", () => {
+  test("runs through the login shell, and its output and prompt reach triage", async () => {
+    const driver = new FakeDriver("fake");
+    const spawned: { cmd: string; args: string[] }[] = [];
+    const h = makeOrchestrator({
+      driver,
+      tools: (kind, d) => toolsForRun(kind, d),
+      watchers: (handlers) =>
+        new WatcherRunner({
+          ...handlers,
+          shell: "/bin/test-shell",
+          timing: { batchIdleMs: 5, batchMaxMs: 20, minIntervalMs: 10 },
+          // The process itself is the OS's: a stand-in that prints one line and exits
+          spawn: (cmd, args) => {
+            spawned.push({ cmd, args });
+            return {
+              stdout: new ReadableStream<Uint8Array>({
+                start(c) {
+                  c.enqueue(new TextEncoder().encode("ACME-7 FIX THE FOOTER (ASSIGNED TO MARK)\n"));
+                  c.close();
+                },
+              }),
+              exited: Promise.resolve(0),
+              kill() {},
+            };
+          },
+        }),
+    });
+    const dir = join(h.home, "site");
+    mkdirSync(dir);
+    const project = h.orch.createProject({ path: dir, key: "SITE", useWorktrees: false });
+    // A shell command line (pipe included), the way create_watcher teaches it
+    const input = { name: "fake", command: "watch-fake mark | tr a-z A-Z", mode: "interval", interval_sec: 600, prompt: "File footer bugs in SITE." };
+    let done = false;
+    const worker = driver.run.bind(driver);
+    driver.run = async function* (req) {
+      if (req.kind !== "work") return yield* worker(req);
+      if (!done) done = !(await executeTool(req.tools, "create_watcher", input, req.toolContext)).isError;
+    };
+    const t = await h.orch.createTicket({ projectId: project.id, spec: "add the fake watcher" });
+    await h.orch.idle();
+    expect(h.orch.listWatchers()).toEqual([]);
+    expect(spawned).toEqual([]);
+    await h.orch.answerApproval(t.key, { decision: "allow_once" });
+    await h.orch.idle();
+    await waitFor(() => h.orch.listSessions("triage").length > 0, { label: "the triage session" });
+    await h.orch.idle();
+    // The command line goes to the login shell whole, so the pipe is the shell's to run
+    expect(spawned[0]).toEqual({ cmd: "/bin/test-shell", args: ["-lc", input.command] });
+    const triage = driver.calls.find((c) => c.kind === "triage")!;
+    expect(triage.prompt).toContain("ACME-7 FIX THE FOOTER (ASSIGNED TO MARK)");
+    expect(triage.prompt).toContain("File footer bugs in SITE.");
+    expect(h.orch.listWatchers()[0]!.lastError).toBeNull();
+    await h.orch.stop();
   });
 });
