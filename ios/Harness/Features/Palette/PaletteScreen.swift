@@ -13,6 +13,8 @@ struct PaletteScreen: View {
     let startInFiles: Bool
     /// What the field starts with (snapshots).
     var initialText = ""
+    /// Snapshots turn it off: a blinking caret and the keyboard would differ from run to run.
+    var autofocus = true
 
     @Environment(BoardStore.self) private var store
     @Environment(AppModel.self) private var app
@@ -94,7 +96,6 @@ struct PaletteScreen: View {
         .background(c.bg)
         .environment(runner)
         .modifier(TicketActionHost(runner: runner))
-        .navigationTitle("Command palette")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             guard !opened else { return }
@@ -102,7 +103,7 @@ struct PaletteScreen: View {
             raw = startInFiles ? "@" : initialText
             root = PaletteFileRoot.pick(focusedTicket: focusedTicket?.key, project: WindowShortcuts.boardProject(store.state, app.prefs))
             rootLabel = describe(root)
-            focused = true
+            focused = autofocus
         }
         // The board's loader searches the service for the ticket rows (and keeps what's loaded), so
         // there's no second request; the board itself ignores it (BoardContext).

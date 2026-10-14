@@ -25,7 +25,7 @@ final class ScreenSnapshotTests: XCTestCase {
     /// last real session on this simulator, left behind.
     static func resetPersistedState() {
         let defaults = UserDefaults.standard
-        for key in [Router.persistedDockKey, "planUsageFilter", "planUsageMode", "browserSizeRowOpen", "harness.git.viewed", "harness.git.diffStyle"] {
+        for key in [Router.persistedDockKey, "planUsageFilter", "planUsageMode", "browserSizeRowOpen", "harness.git.viewed", "harness.git.diffStyle", PaletteCommandRecents.key, PaletteRecents.filesKey] {
             defaults.removeObject(forKey: key)
         }
     }
@@ -58,15 +58,15 @@ final class ScreenSnapshotTests: XCTestCase {
     /// The palette's rows: its commands, then tickets matching a query, and the focused ticket's actions
     /// when a ticket sheet is open; and the commands at an accessibility text size.
     func testPaletteCommands() async throws {
-        try await snapshot("palette-commands") { NavigationStack { PaletteScreen(startInFiles: false) } }
+        try await snapshot("palette-commands") { NavigationStack { PaletteScreen(startInFiles: false, autofocus: false) } }
     }
 
     func testPaletteTickets() async throws {
-        try await snapshot("palette-tickets") { NavigationStack { PaletteScreen(startInFiles: false, initialText: "har") } }
+        try await snapshot("palette-tickets") { NavigationStack { PaletteScreen(startInFiles: false, initialText: "har", autofocus: false) } }
     }
 
     func testPaletteCommandsOnly() async throws {
-        try await snapshot("palette-commands-only") { NavigationStack { PaletteScreen(startInFiles: false, initialText: "> set") } }
+        try await snapshot("palette-commands-only") { NavigationStack { PaletteScreen(startInFiles: false, initialText: "> set", autofocus: false) } }
     }
 
     func testPaletteTicketActions() async throws {
@@ -74,12 +74,12 @@ final class ScreenSnapshotTests: XCTestCase {
             let router = Router()
             router.openTicket(key: "HAR-7", tab: .spec)
             return router
-        }) { NavigationStack { PaletteScreen(startInFiles: false) } }
+        }) { NavigationStack { PaletteScreen(startInFiles: false, autofocus: false) } }
     }
 
     func testPaletteLargeType() async throws {
         try await snapshot("palette-large-type") {
-            NavigationStack { PaletteScreen(startInFiles: false) }.dynamicTypeSize(.accessibility2)
+            NavigationStack { PaletteScreen(startInFiles: false, autofocus: false) }.dynamicTypeSize(.accessibility2)
         }
     }
 
