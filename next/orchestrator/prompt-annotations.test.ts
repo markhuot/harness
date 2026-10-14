@@ -2,14 +2,13 @@
 // "Annotations"): checked on create and on a draft's PATCH, saved or cleared per attachment, and
 // listed under their file in the first run's <attachments> block and by get_ticket.
 
-import { afterEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { HarnessApiError, HarnessClient, type Attachment, type AttachmentAnnotation, type Ticket } from "@harness/shared";
+import { HarnessApiError, type Attachment, type AttachmentAnnotation, type Ticket } from "@harness/shared";
 import { createService } from "../support/service";
-import { DummyDriver } from "../../service/src/drivers/dummy";
 import { executeTool } from "../../service/src/drivers/types";
-import { makeOrchestrator, stubBrowser, tempHome } from "../../service/src/testing/fakes";
+import { makeOrchestrator } from "../../service/src/testing/fakes";
 import { png } from "../../service/src/testing/media";
 import { toolsForRun } from "../../service/src/tools";
 import { fakeContext, fakeSession } from "../../service/src/tools/fakes";

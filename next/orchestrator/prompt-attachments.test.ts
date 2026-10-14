@@ -2,14 +2,13 @@
 // creating and editing a draft's list, what the first run gets, missing files, uploads and their
 // cleanup, and the agent tools.
 
-import { afterEach, describe, expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { HarnessApiError, HarnessClient, type Ticket } from "@harness/shared";
+import { HarnessApiError, type Ticket } from "@harness/shared";
 import { createService } from "../support/service";
-import { DummyDriver } from "../../service/src/drivers/dummy";
 import { executeTool } from "../../service/src/drivers/types";
-import { makeOrchestrator, stubBrowser, tempHome } from "../../service/src/testing/fakes";
+import { makeOrchestrator } from "../../service/src/testing/fakes";
 import { png } from "../../service/src/testing/media";
 import { toolsForRun } from "../../service/src/tools";
 import { fakeContext, fakeSession } from "../../service/src/tools/fakes";
