@@ -70,6 +70,7 @@ struct SheetHost: View {
         case let .watcher(id): RequireStore { WatcherFormScreen(id: id) }
         case .connect: ConnectScreen()
         case let .pair(url, token): PairScreen(url: url, token: token)
+        case let .palette(files): RequireStore { PaletteScreen(startInFiles: files) }
         }
     }
 }

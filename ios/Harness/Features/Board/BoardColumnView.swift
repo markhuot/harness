@@ -96,7 +96,7 @@ struct BoardColumnFrame<Content: View>: View {
     }
 }
 
-/// One column's page: its cards with pull to refresh, Done's older pages (and search results') as
+/// One column's page: its cards with pull to refresh, Done's older pages as
 /// it nears the end, and the empty and footer states.
 struct BoardColumnView: View {
     let status: TicketStatus
@@ -128,9 +128,7 @@ struct BoardColumnView: View {
     }
 
     private func onEnd() {
-        if ctx.searching {
-            store.loader.loadMoreSearch()
-        } else if status == .done {
+        if status == .done {
             store.loader.loadMoreDone(ctx.filter)
         }
     }
@@ -138,15 +136,13 @@ struct BoardColumnView: View {
     @ViewBuilder private var empty: some View {
         let p = ctx.paging
         Group {
-            if ctx.total == 0 && status == .planning && !ctx.searching {
+            if ctx.total == 0 && status == .planning {
                 EmptyState(title: "No sessions yet", message: "Start one with the pencil button in the bottom right.",
                            systemImage: BoardScreen.newSessionSymbol)
-            } else if ctx.searching && ctx.pending {
-                emptyText("Searching…")
-            } else if !ctx.searching && status == .done && !store.loader.legacy && (p == nil || p!.loading || store.loader.canLoadMoreDone(ctx.filter)) && p?.error == nil {
+            } else if status == .done && !store.loader.legacy && (p == nil || p!.loading || store.loader.canLoadMoreDone(ctx.filter)) && p?.error == nil {
                 Spinner()
             } else {
-                emptyText(ctx.searching ? "No matches" : Format.columnEmptyText[status] ?? "")
+                emptyText(Format.columnEmptyText[status] ?? "")
             }
         }
         .frame(maxWidth: .infinity)
@@ -161,12 +157,7 @@ struct BoardColumnView: View {
 
     /// Under the cards: the next page loading, or a failed Done page with Retry.
     @ViewBuilder private var footer: some View {
-        if ctx.searching {
-            // Search pages are shared by every column; the status line above carries errors.
-            if let s = ctx.search, s.loading, s.ids != nil {
-                Spinner().padding(.vertical, 16)
-            }
-        } else if status == .done, let p = ctx.paging {
+        if status == .done, let p = ctx.paging {
             if p.error != nil {
                 Button { store.loader.retryDone(ctx.filter) } label: {
                     Text("Couldn't load older tickets. \(Text("Retry").fontWeight(.semibold).foregroundStyle(c.accentText))")

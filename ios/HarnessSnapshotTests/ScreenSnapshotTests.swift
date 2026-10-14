@@ -55,6 +55,34 @@ final class ScreenSnapshotTests: XCTestCase {
         try await snapshot("board") { RootView() }
     }
 
+    /// The palette's rows: its commands, then tickets matching a query, and the focused ticket's actions
+    /// when a ticket sheet is open; and the commands at an accessibility text size.
+    func testPaletteCommands() async throws {
+        try await snapshot("palette-commands") { NavigationStack { PaletteScreen(startInFiles: false) } }
+    }
+
+    func testPaletteTickets() async throws {
+        try await snapshot("palette-tickets") { NavigationStack { PaletteScreen(startInFiles: false, initialText: "har") } }
+    }
+
+    func testPaletteCommandsOnly() async throws {
+        try await snapshot("palette-commands-only") { NavigationStack { PaletteScreen(startInFiles: false, initialText: "> set") } }
+    }
+
+    func testPaletteTicketActions() async throws {
+        try await snapshot("palette-ticket-actions", router: {
+            let router = Router()
+            router.openTicket(key: "HAR-7", tab: .spec)
+            return router
+        }) { NavigationStack { PaletteScreen(startInFiles: false) } }
+    }
+
+    func testPaletteLargeType() async throws {
+        try await snapshot("palette-large-type") {
+            NavigationStack { PaletteScreen(startInFiles: false) }.dynamicTypeSize(.accessibility2)
+        }
+    }
+
     func testTicketSpec() async throws {
         try await snapshot("ticket-spec", router: {
             let router = Router()

@@ -20,7 +20,10 @@ import SwiftUI
 //   before the system's menu in the responder chain, so they win on both.
 // - While a sheet is up the window's chords don't fire, as the desktop's don't over a modal; the
 //   Projects sheet answers ⌃⌘S itself to close.
-// The desktop's other chords have nothing to act on here: no command palette (⌘K, ⌘P), panes
+// - The command palette's ⌘K and ⌘P (PaletteShortcuts) are also registered in the ticket sheet
+//   (TicketSheetHost), which is where the window's don't fire; the palette sheet itself isn't a
+//   ticket sheet, so ⌘K there does nothing (it's already open).
+// The desktop's other chords have nothing to act on here: panes
 // (⌥⌘ arrows, ⌘W, ⇧⌘↩, ⇧⌘O, ⌘=) or terminals (⌘T), and iPadOS lists the shortcuts itself when
 // ⌘ is held (⌘/).
 
@@ -81,6 +84,18 @@ extension EnvironmentValues {
     @Entry var shortcutTargets: ShortcutTargets?
 }
 
+/// ⌘K opens the command palette and ⌘P opens it in file mode (the Mac's chords).
+struct PaletteShortcuts: View {
+    let router: Router
+
+    var body: some View {
+        Button("Command Palette") { router.present(.palette(files: false)) }
+            .keyboardShortcut("k")
+        Button("Open File") { router.present(.palette(files: true)) }
+            .keyboardShortcut("p")
+    }
+}
+
 /// The window-wide chords, for a main or a ticket window: New Session (⌘N), All Projects (⌘1),
 /// Inbox (⌘2), Settings (⌘,), and Next Tab (⇧⌘]) and Previous Tab (⇧⌘[) on the ticket showing.
 /// In a ticket window the sections open in a main window (Router.onSectionLink), and New session
@@ -98,6 +113,7 @@ struct WindowShortcuts: View {
         Button("Previous Tab") { targets.stepTab(-1) }
             .keyboardShortcut("[", modifiers: [.command, .shift])
         if app.active != nil {
+            PaletteShortcuts(router: router)
             Button("New Session") {
                 guard let store = app.store else { return }
                 router.present(.newSession(projectId: Self.boardProject(store.state, app.prefs), key: nil))

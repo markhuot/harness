@@ -26,22 +26,6 @@ struct BoardScreenRulesTests {
         #expect(BoardScreenRules.landingColumn(Columns()) == nil)
     }
 
-    @Test func searchJumpsOnlyWhenTheCurrentColumnIsEmpty() {
-        let cols = Columns(review: [Self.t("c", .review)], done: [Self.t("d", .done)])
-        #expect(BoardScreenRules.columnWithResults(cols, current: .review) == nil)
-        #expect(BoardScreenRules.columnWithResults(cols, current: .planning) == .review)
-        #expect(BoardScreenRules.columnWithResults(Columns(), current: .planning) == nil)
-    }
-
-    @Test func sideBySideSearchStaysWhileAnyVisibleColumnHasResults() {
-        let cols = Columns(review: [Self.t("c", .review)], done: [Self.t("d", .done)])
-        #expect(BoardScreenRules.columnWithResults(cols, visible: [.planning, .inProgress, .review]) == nil)
-        #expect(BoardScreenRules.columnWithResults(cols, visible: [.planning, .inProgress, .blocked]) == .review)
-        // Before any column reports itself on screen there's nothing to judge by.
-        #expect(BoardScreenRules.columnWithResults(cols, visible: []) == nil)
-        #expect(BoardScreenRules.columnWithResults(Columns(), visible: [.planning]) == nil)
-    }
-
     // MARK: side-by-side columns
 
     @Test func columnsShareTheWidthWhenFiveFit() {

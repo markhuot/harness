@@ -12,18 +12,6 @@ public enum BoardScreenRules {
         [TicketStatus.blocked, .review, .inProgress, .planning].first { !shown[$0].isEmpty }
     }
 
-    /// When search results land and `current` has none, the first column that does (nil: stay).
-    public static func columnWithResults(_ shown: Columns, current: TicketStatus) -> TicketStatus? {
-        columnWithResults(shown, visible: [current])
-    }
-
-    /// The same for the iPad's side-by-side columns: stay while any column on screen has results
-    /// (or nothing is known to be on screen yet).
-    public static func columnWithResults(_ shown: Columns, visible: Set<TicketStatus>) -> TicketStatus? {
-        if visible.isEmpty || visible.contains(where: { !shown[$0].isEmpty }) { return nil }
-        return TicketStatus.allKnown.first { !shown[$0].isEmpty }
-    }
-
     // MARK: Layout
 
     /// How the board lays out its columns: the phone's one-column pager, or every column side by

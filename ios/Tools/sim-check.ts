@@ -1380,11 +1380,11 @@ async function pagingChecks(udid: string, p: Awaited<ReturnType<typeof seedPagin
   });
   await shootBoth(udid, "paging-done-scrolled");
   await check("search finds a done ticket that isn't loaded", async () => {
-    // The search field is always in the board's bottom bar, between Projects and New session;
-    // its placeholder is the board's scope ("All projects" here).
+    // The command palette's field is always in the board's bottom bar, between Projects and New
+    // session. Tapping it opens the palette, whose ticket rows come from the service's search.
     await goto(udid, BOARD);
     await atRest(udid, 500);
-    await tapHeader(udid, "All projects", { x: 192, y: 811 });
+    await tapHeader(udid, "Command palette", { x: 192, y: 811 });
     await atRest(udid, 500);
     await axe("type", "haystack", "--udid", udid);
     await until(`${p.needle.key} in the results`, () => has(`${p.needle.key} `), 10000);
@@ -4432,6 +4432,57 @@ function interactionChains(s: Seeded): Chain[] {
         const want = GREETING_FOR[1] - GREETING_FOR[0] + 1;
         if (marked.length !== want) throw new Error(`${range} marks ${marked.length} lines in the editor, expected ${want}: ${JSON.stringify(marked)}`);
         return `${GREETINGS_PATH}, ${range}`;
+      });
+    }),
+    chain("palette", ["fileLink"], 8, async (udid) => {
+      const PALETTE = (l: string[]) => l.includes("New Session…, General") || l.some((x) => x.startsWith("New Session…"));
+      const row = (prefix: string) => (l: string) => l.startsWith(prefix);
+      await check("the bottom bar's field opens the palette; Show child tickets runs and its label flips", async () => {
+        await goto(udid, BOARD);
+        await atRest(udid, 500);
+        await tapHeader(udid, "Command palette", { x: 192, y: 811 });
+        await until("the palette's commands", async () => PALETTE(await labels(udid)), 8000);
+        await tapWhere(udid, row("Show child tickets"));
+        await until("the palette closed", async () => (await probe(udid))?.router.sheet == null, 8000);
+        await tapHeader(udid, "Command palette", { x: 192, y: 811 });
+        await until("the flipped label", async () => (await labels(udid)).some(row("Hide child tickets")), 8000);
+        await tapWhere(udid, row("Hide child tickets")); // back to the default
+        await until("the palette closed", async () => (await probe(udid))?.router.sheet == null, 8000);
+        return "Show child tickets → Hide child tickets";
+      });
+      await check("a leading > shows only commands, not the ticket that matches", async () => {
+        await goto(udid, BOARD);
+        await atRest(udid, 500);
+        await tapHeader(udid, "Command palette", { x: 192, y: 811 });
+        await until("the palette", async () => PALETTE(await labels(udid)), 8000);
+        await axe("type", ">greeting", "--udid", udid);
+        await atRest(udid, 1500); // past the search's pause
+        const l = await labels(udid);
+        if (l.some((x) => x.startsWith(`${k(s.fileLink)} `))) throw new Error(`a > query lists a ticket: ${l.join(" | ")}`);
+        await tapHeaderCancel(udid);
+        return "no ticket rows";
+      });
+      await check("⌘K over a ticket sheet lists its actions; Copy ticket key copies it", async () => {
+        await goto(udid, `harness://ticket/${k(s.fileLink)}?tab=spec`, (l) => l.includes("greetingFor fallback"));
+        await axe("key-combo", "--modifiers", "227", "--key", "14", "--udid", udid);
+        await until("the ticket's commands", async () => (await labels(udid)).some(row("Copy ticket key")), 8000);
+        await tapWhere(udid, row("Copy ticket key"));
+        await until("the palette closed", async () => (await probe(udid))?.router.sheet == null, 8000);
+        const copied = (await simctl("pbpaste", udid)).trim();
+        if (copied !== k(s.fileLink)) throw new Error(`copied "${copied}", expected ${k(s.fileLink)}`);
+        return copied;
+      });
+      await check("Open file… (⌘P) finds a file in the ticket's folder and opens it at the typed lines", async () => {
+        await goto(udid, `harness://ticket/${k(s.fileLink)}?tab=spec`, (l) => l.includes("greetingFor fallback"));
+        await axe("key-combo", "--modifiers", "227", "--key", "19", "--udid", udid);
+        await until("the palette in file mode", async () => (await probe(udid))?.router.sheet === "palette:files", 8000);
+        await axe("type", `greetings:${GREETING_FOR[0]}-${GREETING_FOR[1]}`, "--udid", udid);
+        await until("the file row", async () => (await labels(udid)).some((x) => x.includes(GREETINGS_PATH)), 10000);
+        await tapWhere(udid, (x) => x.includes(GREETINGS_PATH));
+        const marked = await probeUntil(udid, "the lines marked in the editor", (x) => (x.editor?.markedLines.length ?? 0) > 0).then((x) => x.editor!.markedLines);
+        const want = GREETING_FOR[1] - GREETING_FOR[0] + 1;
+        if (marked.length !== want) throw new Error(`marked ${marked.length} lines, expected ${want}`);
+        return `${GREETINGS_PATH}:${GREETING_FOR[0]}-${GREETING_FOR[1]}`;
       });
     }),
     chain("save-on-blur", ["watchers"], 25, async (udid) => {

@@ -42,6 +42,8 @@ public enum SheetRoute: Hashable, Sendable, Identifiable {
     case connect
     /// harness://pair?url=…&token=… (the raw, already-decoded params; PairScreen validates them).
     case pair(url: String?, token: String?)
+    /// The command palette (the board's bottom-bar field, ⌘K); `files` opens it in file mode (⌘P).
+    case palette(files: Bool)
 
     public var id: Self { self }
 }

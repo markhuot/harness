@@ -60,6 +60,8 @@ struct TicketSheetHost: View {
         // Switching tickets mustn't leave the keyboard up for the one now hidden.
         .onChange(of: current?.id) { resignFirstResponder() }
         .presentationDragIndicator(.visible)
+        // The window's chords don't fire under a sheet: the palette's are here too.
+        .hiddenShortcuts { PaletteShortcuts(router: router) }
         .sheet(item: Binding(get: { router.sheet }, set: { router.sheet = $0 })) { sheet in
             SheetHost(sheet: sheet)
                 .fullScreenCover(item: coverBinding(whenSheet: true)) { CoverHost(cover: $0) }

@@ -130,6 +130,7 @@ public struct DebugState: Codable, Equatable, Sendable {
         case let .watcher(id): id.map { "watcher:\($0)" } ?? "watcher"
         case .connect: "connect"
         case .pair: "pair"
+        case let .palette(files): files ? "palette:files" : "palette"
         }
     }
 
