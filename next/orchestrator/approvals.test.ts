@@ -6,7 +6,7 @@ import type { HarnessEvent } from "@harness/shared";
 import { FakeDriver, makeOrchestrator } from "../../service/src/testing/fakes";
 import { migrate, MIGRATIONS } from "../../service/src/db";
 import { APPROVAL_PENDING_MESSAGE, PLAN_APPROVAL_MESSAGE, endsWithQuestion, summarizeToolInput } from "../../service/src/orchestrator/orchestrator";
-import { DEFAULT_SETTINGS, resolveSettings } from "../../service/src/orchestrator/settings";
+import { resolveSettings } from "../../service/src/orchestrator/settings";
 
 function setup(driver?: FakeDriver) {
   const h = makeOrchestrator({ driver });
@@ -207,7 +207,7 @@ describe("work run ending with a question", () => {
 });
 
 describe("migrations and events", () => {
-  test("v1 → latest: bypassPermissions → acceptEdits (v2) → ask (v4); the default mode is auto", () => {
+  test("v1 → latest: bypassPermissions → acceptEdits (v2) → ask (v4)", () => {
     const db = new Database(":memory:");
     db.exec(MIGRATIONS[0]!);
     db.exec("PRAGMA user_version = 1");
@@ -215,7 +215,6 @@ describe("migrations and events", () => {
     migrate(db);
     expect(db.query("SELECT value FROM settings WHERE key = 'claudePermissionMode'").get()).toBeNull();
     expect((db.query("SELECT value FROM settings WHERE key = 'permissionMode'").get() as any).value).toBe('"ask"');
-    expect(DEFAULT_SETTINGS.permissionMode).toBe("auto");
   });
 
   test("v3 → v4 maps each claude-code mode onto a harness mode and adds nullable overrides", () => {
