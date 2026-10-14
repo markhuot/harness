@@ -3,8 +3,9 @@
 // `window.harnessEditor`). The native side decides how `post` travels, for example
 // webkit.messageHandlers.<name>.postMessage, and how commands arrive.
 
-import { EditorView } from "@codemirror/view";
-import { createDiffEditor, createEditor, type DiffEditorHandle, type EditorHandle, type LineRange } from "./editor";
+import { createDiffEditor, type DiffEditorHandle } from "./diff";
+import { createEditor, type EditorHandle, type EditorProbe, type LineRange } from "./editor";
+import { BUNDLED_LANGUAGES } from "./language";
 import type { ThemeInput } from "./theme";
 
 export type BridgeCommand =
@@ -28,13 +29,10 @@ export type BridgeEvent =
   | { type: "contents"; id?: string; contents: string };
 
 /** What the debug state probe reads from the page (ios/HarnessKit DebugState.EditorState). */
-export interface BridgeProbe {
-  markedLines: string[];
-  selection: { anchor: number; head: number };
-  dirty: boolean;
-  scrollY: number;
-  lineCount: number;
-}
+export type BridgeProbe = EditorProbe;
+
+/** The iOS bundle carries only these grammars; a file in another language shows as plain text. */
+const LANGUAGES = new Set(BUNDLED_LANGUAGES);
 
 export interface Mounted {
   receive(command: BridgeCommand): void;
@@ -68,17 +66,7 @@ export function mount(win: Window, post: (event: BridgeEvent) => void, parent?: 
         post({ type: "error", message: error instanceof Error ? error.message : String(error) });
       }
     },
-    probe() {
-      if (!editor) return null;
-      const { selection, doc } = editor.view.state;
-      return {
-        markedLines: Array.from(root.querySelectorAll(".cm-revealed-line"), (el) => el.textContent ?? ""),
-        selection: { anchor: selection.main.anchor, head: selection.main.head },
-        dirty: editor.isDirty(),
-        scrollY: Math.round(win.scrollY || 0),
-        lineCount: doc.lines,
-      };
-    },
+    probe: () => editor?.probe() ?? null,
     destroy: clear,
   };
   const dispatch = (cmd: BridgeCommand) => {
@@ -86,7 +74,7 @@ export function mount(win: Window, post: (event: BridgeEvent) => void, parent?: 
         case "open": {
           if (cmd.theme) lastTheme = cmd.theme;
           clear();
-          const e = createEditor(root, { ...cmd, theme: cmd.theme ?? lastTheme });
+          const e = createEditor(root, { ...cmd, theme: cmd.theme ?? lastTheme, scroller: "page", languages: LANGUAGES });
           editor = e;
           offs.push(
             e.onChange((contents) => post({ type: "change", contents, dirty: e.isDirty() })),
@@ -99,7 +87,7 @@ export function mount(win: Window, post: (event: BridgeEvent) => void, parent?: 
         case "diff":
           if (cmd.theme) lastTheme = cmd.theme;
           clear();
-          diff = createDiffEditor(root, { ...cmd, theme: cmd.theme ?? lastTheme });
+          diff = createDiffEditor(root, { ...cmd, theme: cmd.theme ?? lastTheme, languages: LANGUAGES });
           break;
         case "theme":
           lastTheme = cmd.theme;
@@ -120,7 +108,7 @@ export function mount(win: Window, post: (event: BridgeEvent) => void, parent?: 
           break;
         case "scrollToCursor":
           // The keyboard came up over the caret.
-          if (editor) editor.view.dispatch({ effects: EditorView.scrollIntoView(editor.view.state.selection.main.head, { y: "nearest", yMargin: 24 }) });
+          editor?.scrollToCursor();
           break;
         case "getContents":
           post({ type: "contents", id: cmd.id, contents: editor?.getContents() ?? diff?.getContents() ?? "" });

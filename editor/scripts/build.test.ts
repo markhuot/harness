@@ -14,6 +14,8 @@ test("the web view bundle is one IIFE that exposes mount and the editors", async
     expect(typeof g.createEditor).toBe("function");
     expect(typeof g.createDiffEditor).toBe("function");
     expect(code).not.toMatch(/^import |^export /m);
+    // Trimmed: every Shiki grammar would be about 10 MB; the listed ones come to a few.
+    expect(code.length).toBeLessThan(5_000_000);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -32,3 +34,17 @@ test("--out writes the bundle to the given file", async () => {
     rmSync(dir, { recursive: true, force: true });
   }
 }, 60000);
+
+test("the bundle carries the grammars and themes it lists, and leaves the rest out", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "editor-build-langs-"));
+  try {
+    const code = readFileSync(await build(join(dir, "editor.js")), "utf8");
+    // Terraform: the grammar HARNESS-477 found missing (a .tf file showed no color).
+    expect(code).toContain("Terraform");
+    // A grammar nobody listed (Zig) is an empty module, and so is the WASM engine's binary.
+    expect(code).not.toContain("source.zig");
+    expect(code).not.toContain("onig_");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}, 30000);

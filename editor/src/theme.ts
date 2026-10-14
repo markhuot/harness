@@ -1,100 +1,61 @@
-// The editor's look, built from the app's theme tokens as CSS custom properties (CSS_VAR), so
-// changing the variables on the page re-themes a live editor without a reload. Where there are no
-// page variables (iOS web view), setTheme() writes a token map onto the editor's own element.
+// The editor's look. Code colors come from a Shiki theme (the one the Changes tab uses, picked by
+// the app theme's `syntaxTheme`); the chrome around it (background, selection, the revealed lines)
+// comes from the app's theme tokens as CSS custom properties. On the Mac those are already on the
+// page; where there are none (iOS web view) setTheme() writes a token map onto the editor's element.
 
-import { EditorView } from "@codemirror/view";
-import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
-import { tags as t } from "@lezer/highlight";
-import type { Extension } from "@codemirror/state";
 import { CSS_VAR, type ThemeAppearance, type ThemeToken, type ThemeTokens } from "@harness/shared/themes/types";
+import { PIERRE_DEFAULT, syntaxThemeName, viewerThemes } from "@harness/shared/themes/syntax";
 
 export type TokenMap = Partial<ThemeTokens>;
 
-/** What a caller passes as the theme: a token map, with the appearance when it isn't "light". */
+/** What a caller passes as the theme: a token map, with the appearance when it isn't "light" and the Shiki theme's name. */
 export interface EditorTheme {
   appearance?: ThemeAppearance;
   tokens?: TokenMap;
+  /** The Shiki theme for the appearance (the app theme's `syntaxTheme`); Pierre's own when absent. */
+  syntaxTheme?: string | null;
 }
 
-/** `setTheme` takes an EditorTheme or a bare token map (what iOS receives as `harness:theme`). */
+/** `setTheme` takes an EditorTheme or a bare token map. */
 export type ThemeInput = EditorTheme | TokenMap;
 
 export function normalizeTheme(input: ThemeInput | undefined): EditorTheme {
   if (!input) return {};
-  if ("tokens" in input || "appearance" in input) return input as EditorTheme;
+  if ("tokens" in input || "appearance" in input || "syntaxTheme" in input) return input as EditorTheme;
   return { tokens: input as TokenMap };
 }
 
+/** @pierre/diffs' `theme` and `themeType` for an editor theme. */
+export function shikiThemes(theme: EditorTheme, failed?: ReadonlySet<string>) {
+  const appearance = theme.appearance ?? "light";
+  return { theme: viewerThemes(appearance, syntaxThemeName(appearance, theme.syntaxTheme, failed)), themeType: appearance };
+}
+
+export { PIERRE_DEFAULT };
+
 const v = (token: ThemeToken, fallback: string) => `var(${CSS_VAR[token]}, ${fallback})`;
 
-const buildTheme = (dark: boolean): Extension =>
-  EditorView.theme(
-    {
-      "&": {
-        color: v("text", "#222"),
-        backgroundColor: v("bg", "#fff"),
-        height: "100%",
-        fontSize: "13px",
-      },
-      "&.cm-focused": { outline: "none" },
-      ".cm-scroller": { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", lineHeight: "1.55" },
-      ".cm-content": { caretColor: v("accent", "#06f") },
-      ".cm-cursor, .cm-dropCursor": { borderLeftColor: v("accent", "#06f") },
-      "&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection": {
-        backgroundColor: v("selection", "rgba(0,100,255,.25)"),
-      },
-      ".cm-gutters": {
-        backgroundColor: v("bg", "#fff"),
-        color: v("text3", "#888"),
-        border: "none",
-      },
-      ".cm-activeLine": { backgroundColor: v("bgHover", "rgba(0,0,0,.04)") },
-      ".cm-activeLineGutter": { backgroundColor: v("bgHover", "rgba(0,0,0,.04)"), color: v("text2", "#555") },
-      ".cm-matchingBracket, &.cm-focused .cm-matchingBracket": { backgroundColor: v("bgActive", "rgba(0,0,0,.1)") },
-      ".cm-panels": { backgroundColor: v("bgElev", "#f6f6f6"), color: v("text", "#222") },
-      ".cm-tooltip": { backgroundColor: v("bgElev", "#f6f6f6"), border: `1px solid ${v("border", "#ddd")}`, color: v("text", "#222") },
-      ".cm-revealed-line": {
-        backgroundColor: v("accentSoft", "rgba(0,100,255,.15)"),
-        boxShadow: `inset 2px 0 0 ${v("accent", "#06f")}`,
-      },
-      // Merge view
-      // Side by side, a is the original (deletions) and b the modified (additions); the merge
-      // view's own rules are `&.cm-merge-a/b`-qualified, so these must be too to win.
-      "&.cm-merge-a .cm-changedLine, &.cm-merge-a .cm-changedLineGutter": { backgroundColor: v("diffDelSoft", "rgba(220,0,0,.1)") },
-      "&.cm-merge-b .cm-changedLine, &.cm-merge-b .cm-changedLineGutter": { backgroundColor: v("diffAddSoft", "rgba(0,160,0,.1)") },
-      "&.cm-merge-a .cm-changedText, &.cm-merge-a .cm-deletedLine": { backgroundColor: v("diffDelSoft", "rgba(220,0,0,.25)") },
-      "&.cm-merge-b .cm-changedText, &.cm-merge-b .cm-insertedLine": { backgroundColor: v("diffAddSoft", "rgba(0,160,0,.25)") },
-    },
-    { dark },
-  );
-
-const LIGHT = buildTheme(false);
-const DARK = buildTheme(true);
-
-/** The shared light or dark theme extension (one stylesheet each, however often the theme changes). */
-export const editorTheme = (dark: boolean): Extension => (dark ? DARK : LIGHT);
-
-// Syntax colors come from the same tokens: violet for keywords, green for strings, amber for
-// numbers and types, the accent for functions, and the muted text for comments.
-export const highlightStyle = HighlightStyle.define([
-  { tag: [t.keyword, t.modifier, t.operatorKeyword, t.controlKeyword], color: v("violet", "#708") },
-  { tag: [t.string, t.special(t.string), t.regexp], color: v("green", "#170") },
-  { tag: [t.number, t.bool, t.null, t.atom], color: v("amber", "#a50") },
-  { tag: [t.typeName, t.className, t.namespace], color: v("amber", "#a50") },
-  { tag: [t.function(t.variableName), t.function(t.propertyName), t.labelName], color: v("accentText", "#05c") },
-  { tag: [t.propertyName, t.attributeName], color: v("accentText", "#05c") },
-  { tag: [t.tagName, t.heading], color: v("red", "#c00"), fontWeight: "bold" },
-  { tag: [t.comment, t.lineComment, t.blockComment, t.docComment], color: v("text3", "#888"), fontStyle: "italic" },
-  { tag: [t.operator, t.punctuation, t.bracket, t.meta], color: v("text2", "#555") },
-  { tag: [t.link, t.url], color: v("accentText", "#05c"), textDecoration: "underline" },
-  { tag: t.emphasis, fontStyle: "italic" },
-  { tag: t.strong, fontWeight: "bold" },
-  { tag: t.inserted, color: v("diffAdd", "#0a0") },
-  { tag: t.deleted, color: v("diffDel", "#c00") },
-  { tag: t.invalid, color: v("red", "#c00") },
-]);
-
-export const highlighting = syntaxHighlighting(highlightStyle);
+/**
+ * The editor's chrome on top of Pierre's own: the page background and text for the code surface, the
+ * app's selection color, and the lines a link revealed.
+ */
+export const chromeCSS = `
+:host {
+  --diffs-light-bg: ${v("bg", "#fff")};
+  --diffs-dark-bg: ${v("bg", "#111")};
+  --diffs-light: ${v("text", "#222")};
+  --diffs-dark: ${v("text", "#ddd")};
+  --diffs-font-size: 13px;
+  --diffs-line-height: 1.55;
+  --diffs-selection-base: ${v("accent", "#06f")};
+  --diffs-bg-selection-override: ${v("accentSoft", "rgba(0,100,255,.15)")};
+  --diffs-fg-number-override: ${v("text3", "#888")};
+  caret-color: ${v("accent", "#06f")};
+}
+[data-line][data-selected-line] {
+  box-shadow: inset 2px 0 0 ${v("accent", "#06f")};
+}
+`;
 
 /** Writes a token map onto `el` as CSS custom properties, clearing any it set before that `next` omits. */
 export function applyTokens(el: HTMLElement, next: TokenMap | undefined, prev: TokenMap | undefined): void {

@@ -1,87 +1,30 @@
-// Picks a CodeMirror language from a file name. Lezer languages where one ships, legacy stream modes
-// for the rest; an unknown extension gets plain text (no language, no highlighting).
+// Which Shiki language a file is highlighted in: the same mapping the Changes tab uses
+// (@harness/shared langForPath / codeLanguage), so a file reads the same in both places.
 
-import type { Extension } from "@codemirror/state";
-import { StreamLanguage } from "@codemirror/language";
-import { javascript } from "@codemirror/lang-javascript";
-import { json } from "@codemirror/lang-json";
-import { css } from "@codemirror/lang-css";
-import { html } from "@codemirror/lang-html";
-import { markdown } from "@codemirror/lang-markdown";
-import { python } from "@codemirror/lang-python";
-import { rust } from "@codemirror/lang-rust";
-import { go } from "@codemirror/lang-go";
-import { yaml } from "@codemirror/lang-yaml";
-import { php } from "@codemirror/lang-php";
-import { xml } from "@codemirror/lang-xml";
-import { sql } from "@codemirror/lang-sql";
-import { swift } from "@codemirror/legacy-modes/mode/swift";
-import { shell } from "@codemirror/legacy-modes/mode/shell";
-import { ruby } from "@codemirror/legacy-modes/mode/ruby";
-import { toml } from "@codemirror/legacy-modes/mode/toml";
-import { c, cpp, java, kotlin } from "@codemirror/legacy-modes/mode/clike";
+import { langForPath } from "@harness/shared/diff";
 
-export const PLAIN = "plain";
+export const PLAIN = "text";
 
-const stream = (mode: Parameters<typeof StreamLanguage.define>[0]) => () => StreamLanguage.define(mode);
+/**
+ * The grammars the iOS bundle carries (an IIFE can't split code, so every grammar is listed up front
+ * and the rest of Shiki's are left out; a file in another language shows as plain text there). The
+ * iOS build reads this list, and the page passes it to resolveLanguage. The Mac loads any grammar on demand.
+ */
+export const BUNDLED_LANGUAGES: readonly string[] = [
+  "typescript", "tsx", "javascript", "jsx", "json", "jsonc", "shellscript", "shellsession", "yaml", "toml", "ini",
+  "dotenv", "php", "blade", "ruby", "python", "go", "rust", "swift", "kotlin", "java", "c", "cpp", "csharp", "css",
+  "scss", "less", "html", "xml", "markdown", "sql", "graphql", "docker", "makefile", "diff", "hcl", "terraform",
+  "lua", "dart", "scala",
+];
 
-const LANGUAGES: Record<string, () => Extension> = {
-  javascript: () => javascript({ jsx: true }),
-  typescript: () => javascript({ typescript: true, jsx: true }),
-  json: () => json(),
-  css: () => css(),
-  html: () => html(),
-  markdown: () => markdown(),
-  python: () => python(),
-  rust: () => rust(),
-  go: () => go(),
-  yaml: () => yaml(),
-  php: () => php(),
-  xml: () => xml(),
-  sql: () => sql(),
-  swift: stream(swift),
-  shell: stream(shell),
-  ruby: stream(ruby),
-  toml: stream(toml),
-  c: stream(c),
-  cpp: stream(cpp),
-  java: stream(java),
-  kotlin: stream(kotlin),
-};
-
-const BY_EXTENSION: Record<string, string> = {
-  js: "javascript", mjs: "javascript", cjs: "javascript", jsx: "javascript",
-  ts: "typescript", mts: "typescript", cts: "typescript", tsx: "typescript",
-  json: "json", jsonc: "json", css: "css", html: "html", htm: "html",
-  md: "markdown", markdown: "markdown", mdx: "markdown",
-  py: "python", rs: "rust", go: "go", swift: "swift",
-  yaml: "yaml", yml: "yaml", php: "php", xml: "xml", svg: "xml", plist: "xml",
-  sql: "sql", sh: "shell", bash: "shell", zsh: "shell", rb: "ruby", toml: "toml",
-  c: "c", h: "c", cc: "cpp", cpp: "cpp", hpp: "cpp", java: "java", kt: "kotlin",
-};
-
-const BY_NAME: Record<string, string> = {
-  ".zshrc": "shell", ".bashrc": "shell", ".bash_profile": "shell", ".zprofile": "shell",
-  Gemfile: "ruby", Rakefile: "ruby",
-};
-
-/** The language name for a path or file name ("plain" when unknown). `language` may also be a name already. */
-export function languageName(file: string): string {
-  const base = file.split(/[\\/]/).pop() ?? file;
-  if (BY_NAME[base]) return BY_NAME[base];
-  const dot = base.lastIndexOf(".");
-  if (dot < 0) return LANGUAGES[base] ? base : PLAIN;
-  return BY_EXTENSION[base.slice(dot + 1).toLowerCase()] ?? PLAIN;
-}
-
-/** The CodeMirror extension for a language name, or none for plain text. */
-export function languageExtension(name: string): Extension {
-  return LANGUAGES[name]?.() ?? [];
-}
-
-/** `language` as callers pass it: a file name/extension ("a.ts", "ts") or a language name ("typescript"). */
-export function resolveLanguage(language: string | undefined): string {
+/**
+ * The Shiki language for what a caller passes: a file path or name ("app/main.tf", "Dockerfile"), an
+ * extension or fence name ("ts"), or a language name ("typescript"). `supported` narrows it to a set
+ * (iOS); text when the language is unknown or outside it.
+ */
+export function resolveLanguage(language: string | undefined, supported?: ReadonlySet<string>): string {
   if (!language) return PLAIN;
-  if (LANGUAGES[language]) return language;
-  return languageName(language.includes(".") ? language : `x.${language}`);
+  const name = langForPath(language) ?? langForPath(`x.${language}`);
+  if (!name || name === PLAIN) return PLAIN;
+  return supported && !supported.has(name) ? PLAIN : name;
 }
