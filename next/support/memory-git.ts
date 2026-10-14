@@ -296,6 +296,9 @@ export function createMemoryGit() {
       const id = commit(repo, [head], file ? [file] : undefined);
       if (w.branch) repo.branches.set(w.branch, id);
       else w.detached = id;
+      // Like `git add -A && git commit`: the uncommitted changes go into the commit.
+      w.dirty = false;
+      w.dirtyFiles?.clear();
     },
     /** Leave uncommitted changes in the checkout at `dir` (to `file`, by default dirty.txt). */
     makeDirty(dir: string, file = "dirty.txt") {

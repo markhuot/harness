@@ -100,6 +100,10 @@ export function gitPortContract(label: string, make: () => GitFixture) {
       expect(await f.port.hasChangesToLand(workdir, "harness/web-1", "main")).toBe(true);
       expect(await f.port.hasChangesToLand(`${worktrees}/gone`, "harness/web-1", "main")).toBeNull();
       expect(await f.port.hasChangesToLand(repo, "harness/web-1", "no-such-base")).toBeNull();
+      // Committing takes the uncommitted changes with it: once merged, nothing is left to land.
+      await f.commit(workdir);
+      await f.merge(repo, "harness/web-1");
+      expect(await f.port.hasChangesToLand(workdir, "harness/web-1", "main")).toBe(false);
     });
 
     test("isMerged and aheadCount follow the commits, and count nothing for a missing branch", async () => {
