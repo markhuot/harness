@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261014.0849](https://github.com/markhuot/harness/releases/tag/app-20261014.0849) - 2026-10-14
+
 ### Changed
 
 - On iPhone and iPad, the board's bottom-bar search field is now the command palette, like the Mac's ⌘K. Tap it (or press ⌘K or ⌘F) to find tickets as you type, or run a command: New Session, Go to a project, Inbox or Settings, Show or Hide child tickets, and Open file…. The filter menu is gone from the field, since "Show child tickets" is now a palette command, and the board no longer filters its columns while you search (that stays on the Mac). Start a query with `>` to see only commands, `#` for only tickets or `@` for only files, as on the Mac.
@@ -64,6 +66,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
+- The file viewer and editor keep your scroll position when they redraw, such as after a theme change.
 - For people working on Harness: `bun run typecheck` passes again; the seed library's settings test no longer fails `tsc -p service` and `tsc -p app`.
 - For people working on Harness: `sim-check` now runs every Xcode tool it spawns (including the `simctl` video recording) against Xcode 27.0 even when `DEVELOPER_DIR` is not exported in your shell, instead of failing a check with "unable to find utility simctl". `build.ts` and `dev-sim.ts` share the same resolver.
 - For people working on Harness: `bun run sim snapshots` (and `bun run verify`'s snapshot layer) now takes any free simulator of the pool, or the one a parent `sim with-lock` already holds, instead of always waiting on `harness-shared` while `harness-shared-2` sits idle.
