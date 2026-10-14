@@ -44,7 +44,7 @@ async function rejects(p: Promise<unknown>): Promise<number | undefined> {
 }
 
 describe("resolveFile", () => {
-  test("refuses paths that leave the root, .git internals and the root itself", () => {
+  test("refuses paths that leave the root, .git internals and the root itself; an absolute path inside the root becomes relative", () => {
     const root = tree({ "src/a.ts": "x" });
     const outside = join(root, "..", "secret.txt");
     writeFileSync(outside, "s");
@@ -60,10 +60,7 @@ describe("resolveFile", () => {
     }
     expect(resolveFile(root, "src//a.ts").rel).toBe("src/a.ts");
     expect(resolveFile(root, "./src/a.ts").rel).toBe("src/a.ts");
-  });
-
-  test("an absolute path inside the root becomes relative", () => {
-    const root = tree({ "src/a.ts": "x" });
+    // An absolute path inside the root becomes relative.
     expect(resolveFile(root, join(root, "src", "a.ts"))).toEqual({ rel: "src/a.ts", abs: join(root, "src", "a.ts") });
   });
 });
@@ -186,16 +183,12 @@ describe("writeFileContents", () => {
     expect(read(root, "a.txt").toString()).toBe("héllo\n");
   });
 
-  test("keeps CRLF line endings when the editor's text came back with bare LFs", async () => {
-    const root = tree({ "a.txt": "one\r\ntwo\r\n" });
+  test("keeps CRLF line endings when the editor's text came back with bare LFs, leaves a CRLF already in the text alone, and never adds CR to an LF file", async () => {
+    const root = tree({ "a.txt": "one\r\ntwo\r\n", "crlf.txt": "a\r\nb\r\n", "lf.txt": "a\nb\n" });
     await writeFileContents(root, "a.txt", "one\ntwo\nthree\n");
-    expect(read(root, "a.txt").toString()).toBe("one\r\ntwo\r\nthree\r\n");
-  });
-
-  test("leaves a CRLF already in the text alone, and never adds CR to an LF file", async () => {
-    const root = tree({ "crlf.txt": "a\r\nb\r\n", "lf.txt": "a\nb\n" });
     await writeFileContents(root, "crlf.txt", "a\r\nb\r\nc\r\n");
     await writeFileContents(root, "lf.txt", "a\nb\nc\n");
+    expect(read(root, "a.txt").toString()).toBe("one\r\ntwo\r\nthree\r\n");
     expect(read(root, "crlf.txt").toString()).toBe("a\r\nb\r\nc\r\n");
     expect(read(root, "lf.txt").toString()).toBe("a\nb\nc\n");
   });
@@ -261,12 +254,13 @@ describe("writeFileContents", () => {
     expect(statSync(join(root, "link.txt")).isFile()).toBe(true);
   });
 
-  test("refuses paths that leave the root, .git, and folders", async () => {
+  test("refuses paths that leave the root, .git in any case, a symlink into .git, and folders", async () => {
     const root = tree({ "a.txt": "x", ".git/config": "c", "d/x": "x" });
     const outside = tree({ "secret.txt": "s" });
     symlinkSync(outside, join(root, "escape"));
     symlinkSync(join(outside, "secret.txt"), join(root, "out.txt"));
-    for (const p of ["../x.txt", join(outside, "x.txt"), ".git/config", ".git/new", "d", "", "a.txt/.."]) {
+    symlinkSync(join(root, ".git", "config"), join(root, "cfg"));
+    for (const p of ["../x.txt", join(outside, "x.txt"), ".git/config", ".git/new", ".GIT/config", ".Git/hooks/pre-commit", "cfg", "d", "", "a.txt/.."]) {
       expect(await rejects(writeFileContents(root, p, "z"))).toBe(400);
     }
     // A symlinked parent, with a target that doesn't exist yet (safeJoin lets that one through).
@@ -297,15 +291,6 @@ describe("writeFileContents", () => {
     expect([...read(root, "bin.dat")]).toEqual([1, 0, 2]);
   });
 
-  test("refuses .git in any case, and a symlink into .git", async () => {
-    const root = tree({ ".git/config": "[core]\n", "a.txt": "x\n" });
-    symlinkSync(join(root, ".git", "config"), join(root, "cfg"));
-    expect(await rejects(writeFileContents(root, ".GIT/config", "evil\n"))).toBe(400);
-    expect(await rejects(writeFileContents(root, ".Git/hooks/pre-commit", "evil\n"))).toBe(400);
-    expect(await rejects(writeFileContents(root, "cfg", "evil\n"))).toBe(400);
-    expect(read(root, ".git/config").toString()).toBe("[core]\n");
-  });
-
   test("answers 409 for a file that isn't valid UTF-8 rather than writing U+FFFD", async () => {
     const root = tree({ "latin.txt": new Uint8Array([0x63, 0x61, 0x66, 0xe9, 0x0a]) });
     expect(await rejects(writeFileContents(root, "latin.txt", "café\n"))).toBe(409);
@@ -327,7 +312,6 @@ describe("writeFileContents", () => {
     expect(await rejects(writeFileContents(root, "ro.txt", "new\n"))).toBe(403);
     expect(read(root, "ro.txt").toString()).toBe("keep\n");
   });
-
 
   test("a created file shows up in the path index at once", async () => {
     const root = tree({ "a.txt": "x\n" });

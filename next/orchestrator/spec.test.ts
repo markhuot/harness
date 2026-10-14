@@ -275,10 +275,12 @@ describe("review runs", () => {
     return { h, t, reviews };
   }
 
-  test("round 2 gets round 1's commit and notes and is told to diff from it; round 1 isn't", async () => {
+  test("round 2 gets round 1's commit and notes and is told to diff from it; round 1 isn't; an untouched spec says it is still the approved revision", async () => {
     const { h, t, reviews } = await reviewRounds({ edit: false });
     expect(reviews).toHaveLength(2);
     const [first, second] = reviews as [string, string];
+    expect(first).toContain("It is unchanged since the human approved it.");
+    expect(first).not.toContain("```diff");
     expect(first).not.toContain("## Earlier review rounds");
     expect(first).not.toContain("git diff");
     const round1 = h.orch.activity(t.key).find((e) => e.kind === "changes_requested")!;
@@ -302,42 +304,23 @@ describe("review runs", () => {
     expect(reviews[1]).not.toContain("+* Round 2");
   });
 
-  test("an untouched spec says it is still the approved revision", async () => {
-    const { reviews } = await reviewRounds({ edit: false });
-    expect(reviews[0]).toContain("It is unchanged since the human approved it.");
-    expect(reviews[0]).not.toContain("```diff");
-  });
 });
 
 describe("messages and Activity", () => {
-  async function chatSetup() {
+  test.each([
+    ["blocked", "chat"],
+    ["planning", "plan"],
+  ] as const)("a message to a %s ticket and the agent's %s answer stay out of Activity; the message still reaches the agent", async (status, kind) => {
     const h = await setup();
     h.driver.script = async function* (req: RunRequest): AsyncGenerator<DriverEvent> {
-      if (req.kind === "chat") yield { type: "text", text: "The answer is 42." };
+      if (req.kind === kind) yield { type: "text", text: "The answer is 42." };
     };
-    const t = await h.make("blocked");
-    return { h, t };
-  }
-
-  test("a message and the agent's answer stay out of Activity; the message still reaches the agent", async () => {
-    const { h, t } = await chatSetup();
+    const t = await h.make(status);
     await h.orch.sendMessage(t.key, "What's the answer?");
     await h.orch.idle();
     expect(h.orch.activity(t.key)).toEqual([]);
-    expect(h.driver.calls.at(-1)).toMatchObject({ kind: "chat" });
+    expect(h.driver.calls.at(-1)).toMatchObject({ kind });
     expect(h.driver.calls.at(-1)!.prompt).toContain("What's the answer?");
-  });
-
-  test("a message to a planning ticket gets its answer in the transcript, not Activity", async () => {
-    const h = await setup();
-    h.driver.script = async function* (req: RunRequest): AsyncGenerator<DriverEvent> {
-      if (req.kind === "plan") yield { type: "text", text: "Revised the plan." };
-    };
-    const t = await h.make("planning");
-    await h.orch.sendMessage(t.key, "Plan for mobile too");
-    await h.orch.idle();
-    expect(h.orch.activity(t.key)).toEqual([]);
-    expect(h.driver.calls.at(-1)).toMatchObject({ kind: "plan" });
   });
 });
 

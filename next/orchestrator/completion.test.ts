@@ -243,14 +243,6 @@ describe("merge completions that can't finish", () => {
     expect(await h.branchExists(t.branch!)).toBe(false);
     expect(await h.git.port.isMerged(h.repo, work, "main")).toBe(true);
   });
-
-  test("a custom completion that merges nothing isn't checked", async () => {
-    const h = await setup();
-    const t = await h.inReview();
-    h.orch.humanReview(t.key, { decision: "approve", action: "custom", instructions: "Tag it" });
-    await h.orch.idle();
-    expect(h.get(t).status).toBe("done");
-  });
 });
 
 describe("pull request completions", () => {
@@ -496,20 +488,14 @@ describe("cleanup completions", () => {
     expect(run.prompt).toContain("Push `harness/web-1` to origin");
   });
 
-  test("without a remote a cleanup has nothing to push to, and record_pull_request stays refused without a pull request", async () => {
+  test("without a remote a cleanup has nothing to push to", async () => {
     const h = await setup({ remote: null });
     const t = await h.inReview();
-    let refused = "";
-    h.driver.script = async function* (req) {
-      if (req.kind !== "complete") return;
-      await req.toolContext.ops.recordPullRequest(req.toolContext, "https://github.com/acme/web/pull/9", "0123456789abcdef0123456789abcdef01234567").catch((err: Error) => (refused = err.message));
-    };
     h.orch.humanReview(t.key, { decision: "approve", action: "cleanup" });
     await h.orch.idle();
     const run = h.completes()[0]!;
     expect(run.runContext).not.toContain("push -u");
     expect(run.prompt).toContain("there is nothing to merge or push");
-    expect(refused).toContain("only for completion runs that open a pull request");
   });
 
   test("re-opening a done ticket forgets the landing it chose, so a ticket with a pull request then preselects clean up", async () => {

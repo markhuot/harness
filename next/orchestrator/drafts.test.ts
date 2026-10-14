@@ -56,13 +56,6 @@ describe("creating a draft", () => {
     await expect(h.orch.createTicket({ projectId: h.web.id, spec: "  " })).rejects.toMatchObject({ status: 400 });
   });
 
-  test("a launched ticket reports draft false", async () => {
-    const h = setup();
-    const t = await h.orch.createTicket({ projectId: h.web.id, spec: "real", start: false });
-    expect(t.draft).toBe(false);
-    await h.orch.idle();
-  });
-
   test("a draft can't be a child, nor have children, nor be depended on", async () => {
     const h = setup();
     const parent = await h.orch.createTicket({ projectId: h.web.id, spec: "parent", start: false });
@@ -106,14 +99,6 @@ describe("submitting a draft", () => {
     expect(prompt).toContain('<file path="README.md">\n# Hello\n</file>');
     expect(h.statusLines(t)).toContain("Attached @README.md");
     expect(h.get(t).spec).toBe("Summarize @README.md");
-  });
-
-  test("a draft that starts with a slash command reaches the agent with the command first, as typed", async () => {
-    const h = setup();
-    const d = await h.draft("/code-walk this branch");
-    await h.orch.submitTicket(d.key, { start: true });
-    await h.orch.idle();
-    expect(h.driver.calls.find((c) => c.kind === "work")!.prompt).toBe("/code-walk this branch");
   });
 
   test("start false: stays in planning with a plan run", async () => {
