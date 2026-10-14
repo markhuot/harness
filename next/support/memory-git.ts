@@ -61,7 +61,8 @@ export function createMemoryGit() {
 
   /** Turn an existing directory into a repository on `branch` with one commit, like `git init` plus a commit. */
   function initRepo(dir: string, branch = "main"): string {
-    mkdirSync(dir, { recursive: true });
+    // An empty .git on disk too: the project store decides isGit by looking for one (insideGitCheckout).
+    mkdirSync(join(dir, ".git"), { recursive: true });
     const repo: Repo = { root: norm(dir), commits: new Map(), branches: new Map(), worktrees: new Map() };
     const first = commit(repo, []);
     repo.branches.set(branch, first);
