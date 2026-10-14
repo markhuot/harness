@@ -14,6 +14,10 @@ final class DebugProbe {
     static let shared = DebugProbe()
 
     private weak var router: Router?
+    /// How many times a dock container has appeared (`DockedCardsContainer`), for `DebugState.dockMounts`.
+    private(set) var dockMounts = 0
+
+    func dockMounted() { dockMounts += 1 }
     private var hosts: [WeakHost] = []
     private var settle = DebugSettle()
     private var loop: Task<Void, Never>?
@@ -86,6 +90,7 @@ final class DebugProbe {
         // The editor on screen: a file's host has a window, the hidden diff host and parked ones don't.
         let onScreen = hosts.compactMap(\.host).filter { $0.webView.window != nil }
         var state = DebugState(router: DebugState.router(router))
+        state.dockMounts = dockMounts
         if onScreen.contains(where: { !$0.ready }) { state.busy.append("editor") }
         state.busy += motion()
         for host in onScreen where host.ready {

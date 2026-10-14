@@ -25,10 +25,11 @@ public enum DockCards {
         return s.cards + (s.more > 0 ? 1 : 0)
     }
 
-    /// Whether the phone's dock is on screen: there are cards to draw and nothing is over the ticket
-    /// that the cards would sit on top of wrongly. A keyboard, a sheet (a picker, the palette), a
-    /// full-screen cover or a dialog hides it; it comes back when they go.
-    public static func isShown(count: Int, sheetUp: Bool, coverUp: Bool, keyboardUp: Bool, dialogUp: Bool) -> Bool {
-        count > 0 && !sheetUp && !coverUp && !keyboardUp && !dialogUp
+    /// Whether the phone's dock is on screen: there are cards to draw (or the hold-to-dock ghost, which
+    /// takes a slot of its own) and nothing is over the ticket that the cards would sit on top of
+    /// wrongly. A keyboard, a sheet (a picker, the palette), a full-screen cover or a dialog hides it;
+    /// it comes back when they go.
+    public static func isShown(count: Int, ghost: Bool = false, sheetUp: Bool, coverUp: Bool, keyboardUp: Bool, dialogUp: Bool) -> Bool {
+        (count > 0 || ghost) && !sheetUp && !coverUp && !keyboardUp && !dialogUp
     }
 }

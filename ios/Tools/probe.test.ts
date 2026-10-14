@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { type Clock, type DebugState, parseState, settled, waitFor } from "./probe";
 
 const state = (o: Partial<DebugState> = {}): DebugState => ({
-  version: 1, seq: 1, settled: true, quietMs: 1000, busy: [],
+  version: 1, seq: 1, settled: true, quietMs: 1000, busy: [], dockMounts: 1,
   router: { selectedTab: "board", path: [], sheet: null, cover: null, ticketSheet: "gone", dock: [] },
   ...o,
 });

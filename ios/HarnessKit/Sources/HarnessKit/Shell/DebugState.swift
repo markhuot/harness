@@ -38,6 +38,9 @@ public struct DebugState: Codable, Equatable, Sendable {
     /// dragged or coasting).
     public var busy: [String] = []
     public var router: RouterState
+    /// How many times the phone's dock has been mounted since launch: one, however many tickets open,
+    /// switch or dock. A second mount means the dock was torn down and redrawn.
+    public var dockMounts = 0
     /// The editor on screen, nil when none is.
     public var editor: EditorState?
 

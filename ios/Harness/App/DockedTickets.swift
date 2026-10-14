@@ -502,6 +502,11 @@ struct DockedCardsContainer: View {
         }
         .onChange(of: docked) { _, docked in if docked { focused = sheets.first?.id } }
         .onChange(of: report, initial: true) { _, report in onReport(report) }
+        .onAppear {
+            #if SIM_CHECK
+            DebugProbe.shared.dockMounted()
+            #endif
+        }
     }
 
     private var report: DockedCardsReport {

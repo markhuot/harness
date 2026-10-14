@@ -54,5 +54,8 @@ struct DockLabelsTests {
         #expect(!shown(keyboard: true))
         #expect(!shown(dialog: true))
         #expect(!shown(1, keyboard: true, dialog: true))
+        // The ghost card shows with nothing else docked, and under the same covers as the cards.
+        #expect(DockCards.isShown(count: 0, ghost: true, sheetUp: false, coverUp: false, keyboardUp: false, dialogUp: false))
+        #expect(!DockCards.isShown(count: 0, ghost: true, sheetUp: false, coverUp: false, keyboardUp: true, dialogUp: false))
     }
 }

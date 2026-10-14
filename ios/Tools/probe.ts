@@ -20,6 +20,8 @@ export interface DebugState {
     ticketSheet: "presented" | "docked" | "gone";
     dock: { id: number; kind: "ticket" | "newSession" | "file"; title: string; path: string[] }[];
   };
+  /** How many times the dock has mounted since launch: 1, however tickets open, switch or dock. */
+  dockMounts: number;
   editor?: {
     markedLines: string[];
     selection: { anchor: number; head: number };

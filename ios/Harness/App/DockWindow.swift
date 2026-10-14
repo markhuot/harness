@@ -147,7 +147,7 @@ private struct PhoneDock: View {
     @Environment(\.concentricScreen) private var screen
 
     private var shown: Bool {
-        DockCards.isShown(count: router.waitingSheets.count, sheetUp: router.sheet != nil, coverUp: router.cover != nil,
+        DockCards.isShown(count: router.waitingSheets.count, ghost: hold.armed, sheetUp: router.sheet != nil, coverUp: router.cover != nil,
                           keyboardUp: state.keyboardUp, dialogUp: state.dialogUp)
     }
 

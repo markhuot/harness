@@ -1468,15 +1468,6 @@ async function barClearsDock(udid: string, dockTop?: number) {
   throw new Error(`the bar sits ${Math.round(gap)}pt above the dock (top ${Math.round(dockTop)}), not 11`);
 }
 
-/** Swipes the docked ticket sheet down once: it closes the ticket on top. */
-async function swipeDockDown(udid: string, dock: AXNode) {
-  // From near the card's top: AXe stops a drag at the screen's edge, and from a card's middle
-  // (now that the dock grows with its cards) too little of it is left to throw the sheet away.
-  const x = String(Math.round(dock.frame.x + dock.frame.width / 2));
-  const y = Math.round(dock.frame.y + 4);
-  await axe("swipe", "--start-x", x, "--start-y", String(y), "--end-x", x, "--end-y", String(y + 160), "--duration", "0.1", "--udid", udid);
-}
-
 /**
  * Swipes docked ticket sheets away until none is left (each swipe closes the one on top), so a
  * shot of a tab doesn't carry them.
@@ -1489,12 +1480,13 @@ async function clearDock(udid: string) {
   await until("the Projects sheet", async () => (await labels(udid)).includes("Inbox"), 5000);
   await goto(udid, BOARD);
 }
+/** Closes the docked cards one at a time with their ✕ until none is left. */
 async function undock(udid: string) {
   for (let i = 0; i < 20; i++) {
-    const dock = await findElement(udid, isDock);
-    if (!dock) return;
+    const close = (await nodes(udid)).find((n) => n.AXUniqueId === "ticket-dock-close");
+    if (!close) return;
     const before = dockCount(await labels(udid));
-    await swipeDockDown(udid, dock);
+    await axe("tap", "-x", String(Math.round(close.frame.x + close.frame.width / 2)), "-y", String(Math.round(close.frame.y + close.frame.height / 2)), "--udid", udid);
     await until("one fewer docked", async () => dockCount(await labels(udid)) < before, 6000);
   }
   throw new Error("the dock never emptied");
@@ -1503,8 +1495,8 @@ async function undock(udid: string) {
 /**
  * The iPhone's ticket sheet (TicketSheetHost): a board card (`column`, the card's column chip) or
  * else a link opens it, a conductor's child pushes in it and the back swipe returns, it docks
- * under the board when dragged to the bottom, the bar restores it as it was, a swipe on the bar
- * sends it away, and New session docks as "New session".
+ * under the board when dragged to the bottom, its card restores it as it was, the card's ✕ sends it
+ * away, and New session docks as "New session".
  */
 async function sheetChecks(udid: string, p: { project: Project; conductor: Ticket }, column?: string) {
   selector.sequence("declared");
@@ -1550,7 +1542,7 @@ async function sheetChecks(udid: string, p: { project: Project; conductor: Ticke
       await goto(udid, `harness://ticket/${encodeURIComponent(key)}?tab=children`);
     }
     await until("the children", async () => onConductor(await labels(udid)), 8000);
-    if ((await labels(udid)).some(isDock)) throw new Error("a dock is showing under the presented sheet");
+    if ((await labels(udid)).some(isDock)) throw new Error("a dock is showing over a presented sheet with no other ticket docked");
     // The Tickets tab collapses the hero, and a collapsed hero hides its actions, the […] too; with no
     // navigation bar, the hero's title is the top of the sheet.
     const rootLabels = await labels(udid);
@@ -1852,12 +1844,13 @@ async function seedDockable(projectId: string, n: number): Promise<Ticket[]> {
 }
 
 /**
- * The iPhone's dock with several tickets (TicketDock, DockedCard): a second ticket joins the dock as
- * a second card rather than replacing it, the newest at the bottom with its ref and title; tapping a
- * card opens it (keeping its path and composer); a long press on the ticket's title lists the other
- * docked tickets; a swipe along the dock walks them; three show two cards and "1 more…", which
- * expands into the list of all three, whose oldest (parked) opens at its saved path; a card's ✕
- * and a swipe down close only the top; the dock comes back after a relaunch; Projects closes them all.
+ * The iPhone's dock with several tickets (DockedCardsContainer in DockWindow): a second ticket joins
+ * the dock as a second card rather than replacing it, the newest at the bottom with its ref and
+ * title; tapping a card opens it (keeping its path and composer) and the other cards stay over the
+ * sheet, with the composer above them; switching cards or docking never remounts the dock; three
+ * show two cards and "1 more…", which expands into the list of all three, whose oldest (parked)
+ * opens at its saved path; a card's ✕ closes only that ticket; the dock comes back after a
+ * relaunch; Projects closes them all.
  */
 async function dockStackChecks(udid: string, p: { project: Project; conductor: Ticket }) {
   selector.sequence("declared");
@@ -1879,12 +1872,11 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
   let composerBefore: AXNode["frame"] | null = null;
   // Each check but the first picks up the dock the one before left, so it needs that one (see check()).
   const JOINS = "a second ticket joins the dock as a second card, the newest at the bottom with its ref and title";
-  const MENU = "a long press on the ticket's title lists the other docked tickets and switches";
-  const SWIPE = "a swipe along the dock moves to the next ticket and back";
+  const OVER = "with a ticket open and another docked, the card shows over the sheet and the composer sits above it";
   const MORE = "with 3 docked, two cards and \"1 more…\" expand into the list, whose oldest opens at its saved path";
   const CLOSE = "a card's ✕ closes only that ticket";
+  const STABLE = "switching cards while a ticket is open keeps the dock mounted: only the swapped card changes";
   const AWAY = "a swipe away from the presented sheet closes it and leaves the next as the docked card, no sheet";
-  const DOWN = "a swipe down on the dock closes one and leaves the rest docked";
   const RELAUNCH = "the dock comes back after the app is quit and relaunched";
 
   await check(JOINS, async () => {
@@ -1897,13 +1889,13 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
     composerBefore = (await findElement(udid, (x) => x === "Send"))?.frame ?? null;
     await dockSheet(udid);
     await barClearsDock(udid); // one card
-    await goto(udid, `harness://ticket/${encodeURIComponent(b.key)}`, (l) => ticketShown(l, b.key) && !l.some(isDock));
+    await goto(udid, `harness://ticket/${encodeURIComponent(b.key)}`, (l) => ticketShown(l, b.key));
     const label = await dockSheet(udid);
     if (label !== `${b.key}, ${b.title}, docked`) throw new Error(`the bottom card reads "${label}"`);
     const cards = (await nodes(udid)).filter((n) => n.AXLabel && isDock(n.AXLabel));
     if (cards.length !== 2 || !card(kid.key)(cards[0]!.AXLabel!)) throw new Error(`the cards read ${cards.map((n) => `"${n.AXLabel}"`).join(", ")}`);
     if (cards[1]!.frame.y <= cards[0]!.frame.y) throw new Error("the newest card isn't at the bottom");
-    // Every card is an overlay in the main window: all the same size, so their text is too.
+    // Every card is in the dock window: all the same size, so their text is too.
     const [hTop, hBottom] = [cards[0]!.frame.height, cards[1]!.frame.height];
     if (Math.abs(hTop - hBottom) > 1) throw new Error(`the cards differ in height: ${hTop} over ${hBottom}`);
     // Docked it opens with a tap, not a drag: no grabber.
@@ -1931,51 +1923,30 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
     await appearance(udid, "light");
     return `${keyOf(cards[0]!.AXLabel!)} over ${keyOf(label)}`;
   });
-  await check(MENU, async () => {
+  await check(OVER, async () => {
     // Tapping the first card opens its ticket (the sheet check covers keeping its path and composer).
     await tapWhere(udid, card(kid.key));
     moved(udid);
-    await until("the child again", async () => {
+    await until("the child again over the dock", async () => {
       const l = await labels(udid);
-      return onChild(l) && !l.some(isDock);
+      return onChild(l) && l.includes("Sheet Grabber");
     }, 8000);
-    await tapWhere(udid, (l) => l.startsWith(kid.title), { longPress: 1.2 });
-    await until("the menu", async () => (await labels(udid)).some(row(b.key)), 5000).catch(async (e) => {
-      await say("after a long press on the title");
+    // The ticket on screen is the sheet, not a card; the other one waits over it.
+    const waiting = await until(`${b.key}'s card over the sheet`, async () => (await nodes(udid)).find((n) => n.AXLabel && card(b.key)(n.AXLabel)) ?? null, 5000).catch(async (e) => {
+      await say("after opening the card");
       throw e;
     });
-    await shot(udid, "dock-title-menu-light");
-    if ((await labels(udid)).some(row(kid.key))) throw new Error(`the menu lists ${kid.key}, the ticket on screen`);
-    await tapWhere(udid, row(b.key));
-    moved(udid);
-    await until(`${b.key} in the sheet`, async () => {
-      const l = await labels(udid);
-      return l.some((x) => x.startsWith(b.title.slice(0, 24))) && !l.some((x) => x.startsWith("Part of ")) && !l.some(isDock);
-    }, 8000).catch(async (e) => {
-      await say("after choosing it from the menu");
-      throw e;
-    });
-    return `${kid.key} → ${b.key}, still presented`;
+    if ((await labels(udid)).some((l) => card(kid.key)(l))) throw new Error(`${kid.key} is a card while it is the open sheet`);
+    // The composer sits above the card with the board's gap (DockMetrics.barGap, 11pt) plus the
+    // little the attach button sits in from its row's edge.
+    const attach = await findElement(udid, (x) => x === "Attach");
+    if (!attach) throw new Error("no composer in the sheet");
+    const gap = waiting.frame.y - (attach.frame.y + attach.frame.height);
+    if (gap < 8 || gap > 24) throw new Error(`the composer's attach button sits ${Math.round(gap)}pt above the dock card (expected about 11 plus its inset in the row)`);
+    await shootBoth(udid, "dock-over-sheet");
+    await appearance(udid, "light");
+    return `${b.key}'s card over ${kid.key}'s sheet, composer ${Math.round(gap)}pt above it`;
   }, CHECK_CAP_MS, [JOINS]);
-  await check(SWIPE, async () => {
-    const first = await dockSheet(udid);
-    const bar = (await findElement(udid, (l) => l === first))!;
-    const y = String(Math.round(bar.frame.y + bar.frame.height / 2));
-    const swipe = (from: number, to: number) =>
-      axe("swipe", "--start-x", String(Math.round(from)), "--start-y", y, "--end-x", String(Math.round(to)), "--end-y", y, "--duration", "0.25", "--udid", udid);
-    await swipe(W * 0.6, W * 0.1);
-    const second = await until("the next ticket on top", async () => {
-      const t = await top();
-      return t && t !== first ? t : null;
-    }, 5000).catch(async (e) => {
-      await say("after a swipe left");
-      throw e;
-    });
-    if ((await count()) !== 2) throw new Error("the swipe changed the count");
-    await swipe(W * 0.15, W * 0.65);
-    await until("the first back on top", async () => (await top()) === first, 5000);
-    return `${keyOf(first)} → ${keyOf(second)} → back`;
-  }, CHECK_CAP_MS, [MENU]);
   await check(MORE, async () => {
     // b on top, so the conductor's sheet (with the child pushed) is the oldest.
     if (!(await top())?.startsWith(`${b.key}, `)) {
@@ -2004,9 +1975,10 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
       throw e;
     });
     await shot(udid, "dock-list-light");
-    // The most recent at the bottom, as in the dock: the conductor's sheet, the oldest, first.
-    if (!card(kid.key)(listed[0]!)) throw new Error(`the list starts with "${listed[0]}", not ${kid.key}`);
-    // It opens scrolled to the bottom: scroll up to the oldest.
+    // The most recent at the bottom, as in the dock; the ticket opened first (b) is the oldest, the
+    // conductor's sheet (with the child pushed) in between.
+    if (!card(b.key)(listed[0]!) || !card(kid.key)(listed[1]!)) throw new Error(`the list reads ${listed.map((x) => `"${keyOf(x)}"`).join(", ")}, not ${b.key} then ${kid.key} first`);
+    // It opens scrolled to the bottom: scroll up until the conductor's card is in view.
     const { height: Hs } = (await tree(udid))[0]!.frame;
     for (let i = 0; i < 3; i++) {
       const n = await findElement(udid, card(kid.key));
@@ -2017,13 +1989,40 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
     moved(udid);
     await until("the child, mounted again at its path", async () => {
       const x = await labels(udid);
-      return onChild(x) && !x.some(isDock);
+      return onChild(x) && x.includes("Sheet Grabber") && !x.some(card(kid.key));
     }, 10000).catch(async (e) => {
       await say(`after ${kid.key} from the list`);
       throw e;
     });
     return `2 cards and 1 more; the list of 3; ${kid.key} came back on its pushed screen`;
-  }, CHECK_CAP_MS, [SWIPE]);
+  }, CHECK_CAP_MS, [OVER]);
+  await check(STABLE, async () => {
+    // Kid's sheet is open and two tickets wait over it: tapping the lower card swaps it with the
+    // sheet, so the upper card is the one that must not move, and the dock must not have mounted again.
+    await atRest(udid, 1200); // the list that just closed has to be gone for the cards to be where they stay
+    const cards = await until("two cards over the sheet", async () => {
+      const found = (await nodes(udid)).filter((n) => n.AXLabel && isDock(n.AXLabel)).sort((x, y) => x.frame.y - y.frame.y);
+      return found.length === 2 ? found : null;
+    }, 6000);
+    const [upper, lower] = [cards[0]!, cards[1]!];
+    const sheetKey = keyOf(lower.AXLabel!);
+    const was = (await labels(udid)).find((l) => l.startsWith("Part of ")) ? "the child" : "a ticket";
+    await tapWhere(udid, (l) => l === lower.AXLabel);
+    moved(udid);
+    await until(`${sheetKey} open and the old sheet a card`, async () => {
+      const l = await labels(udid);
+      return l.includes("Sheet Grabber") && !l.some((x) => x === lower.AXLabel) && l.some((x) => x === upper.AXLabel) && l.filter(isDock).length === 2;
+    }, 8000).catch(async (e) => {
+      await say(`after tapping ${sheetKey}'s card`);
+      throw e;
+    });
+    await atRest(udid, 800);
+    const after = (await nodes(udid)).find((n) => n.AXLabel === upper.AXLabel);
+    if (!after || Math.abs(after.frame.y - upper.frame.y) > 1) throw new Error(`the card that didn't change moved from ${Math.round(upper.frame.y)} to ${after ? Math.round(after.frame.y) : "(gone)"}`);
+    const mounts = (await probe(udid))?.dockMounts;
+    if (mounts !== 1) throw new Error(`the dock mounted ${mounts} times since launch, not once`);
+    return `${sheetKey} swapped in over ${was}; the other card stayed at ${Math.round(upper.frame.y)}; one mount`;
+  }, CHECK_CAP_MS, [MORE]);
   await check(CLOSE, async () => {
     const before = await dockSheet(udid);
     const n = await count();
@@ -2034,14 +2033,17 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
     }, 6000);
     if ((await count()) !== n - 1) throw new Error(`${await count()} docked after ✕, not ${n - 1}`);
     return `${n} → ${n - 1}`;
-  }, CHECK_CAP_MS, [MORE]);
+  }, CHECK_CAP_MS, [STABLE]);
   await check(AWAY, async () => {
     // Open the top card's ticket, then swipe it away fast: the system dismissal closes it.
     const before = (await top())!;
     const n = await count();
     await tapWhere(udid, card(keyOf(before)));
     moved(udid);
-    await until("the sheet up", async () => !(await labels(udid)).some(isDock) && (await labels(udid)).includes("Sheet Grabber"), 8000);
+    await until("the sheet up, its card gone", async () => {
+      const l = await labels(udid);
+      return l.includes("Sheet Grabber") && !l.some(card(keyOf(before)));
+    }, 8000);
     const x = String(Math.round(W / 2));
     await axe("swipe", "--start-x", x, "--start-y", "90", "--end-x", x, "--end-y", String(Math.round(H - 110)), "--duration", "0.1", "--delta", "100", "--udid", udid);
     const after = await until("the next card", async () => {
@@ -2055,27 +2057,11 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
     if ((await labels(udid)).includes("Sheet Grabber")) throw new Error("a sheet is showing after the swipe away");
     // Put the closed ticket back on the dock for the checks that follow.
     const closed = keyOf(before);
-    await goto(udid, `harness://ticket/${encodeURIComponent(closed)}`, (l) => ticketShown(l, closed) && !l.some(isDock));
+    await goto(udid, `harness://ticket/${encodeURIComponent(closed)}`, (l) => ticketShown(l, closed));
     await dockSheet(udid);
     if ((await count()) !== n) throw new Error(`${await count()} docked after docking ${closed} again, not ${n}`);
     return `${keyOf(before)} closed, ${keyOf(after)} docked`;
   }, CHECK_CAP_MS, [CLOSE]);
-  await check(DOWN, async () => {
-    const before = (await top())!;
-    const n = await count();
-    await swipeDockDown(udid, (await findElement(udid, (l) => l === before))!);
-    const after = await until("the next one docked", async () => {
-      const t = await top();
-      return t && t !== before ? t : null;
-    }, 8000).catch(async (e) => {
-      await say("after the swipe down");
-      throw e;
-    });
-    if ((await count()) !== n - 1) throw new Error(`${await count()} docked after the swipe, not ${n - 1}`);
-    if (!onBoard(await labels(udid))) throw new Error("the board isn't showing over the dock");
-    await shot(udid, "dock-after-swipe-light");
-    return `${keyOf(before)} closed, ${keyOf(after)} on top, ${n - 1} left`;
-  }, CHECK_CAP_MS, [AWAY]);
   await check(RELAUNCH, async () => {
     const before = (await top())!;
     const n = await count();
@@ -2095,7 +2081,7 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
     lastUrl.set(udid, BOARD);
     await shot(udid, "dock-relaunched-light");
     return `${keyOf(after)} on top of ${n}`;
-  }, CHECK_CAP_MS, [DOWN]);
+  }, CHECK_CAP_MS, [AWAY]);
   const PALETTE_BAR = "the bar keeps its place above the dock after the palette's keyboard comes and goes";
   await check(PALETTE_BAR, async () => {
     await tapWhere(udid, "Command palette");
@@ -2116,14 +2102,13 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
 
 /**
  * A file docks like a ticket (`TicketSheet.Root.file`): opened from a link it is its own card next
- * to the ticket's, a swipe along the dock (iPhone) or a tap on the card (iPad's corner stack)
+ * to the ticket's, a tap on a card (the iPhone's dock over the sheet, the iPad's corner stack)
  * switches between them, opening it again focuses the card it has, and its ✕ closes only it.
  */
 async function fileDockChecks(udid: string, p: { project: Project; conductor: Ticket }, ipad: boolean) {
   selector.sequence("declared");
   const key = p.conductor.key;
   const link = `harness://file/${DOCK_FILE}?project=${encodeURIComponent(p.project.id)}`;
-  const { width: W } = (await tree(udid)).reduce((a, b) => (b.frame.height > a.frame.height ? b : a)).frame;
   const editorUp = async () => !!(await probe(udid))?.editor;
   const fileCard = (l: string) => l.startsWith(`${DOCK_FILE}, `) && isDock(l);
   const ticketCard = (l: string) => l.startsWith(`${key}, `) && isDock(l);
@@ -2150,7 +2135,7 @@ async function fileDockChecks(udid: string, p: { project: Project; conductor: Ti
   };
   // Checks that pick up the cards the first ones left name them in `needs` (see check()); the rest start with their own goto.
   const OPENED = "a file opened from a link is its own card next to the ticket's";
-  const SWITCH = ipad ? "tapping the ticket's card and the file's card switches between them" : "a swipe along the dock walks from the file to the ticket and back";
+  const SWITCH = "tapping the ticket's card and the file's card switches between them";
   const RELINK = "linking other lines of the docked file scrolls its editor there";
   await check(OPENED, async () => {
     await goto(udid, BOARD);
@@ -2192,19 +2177,22 @@ async function fileDockChecks(udid: string, p: { project: Project; conductor: Ti
       await until("the file in the panel", async () => (await labels(udid)).includes(`Close ${DOCK_FILE}`) && (await editorUp()), 8000);
       return "ticket ↔ file";
     }
-    const first = (await labels(udid)).filter(isDock).at(-1)!;
-    const bar = (await findElement(udid, (l) => l === first))!;
-    const y = String(Math.round(bar.frame.y + bar.frame.height / 2));
-    const swipe = (from: number, to: number) =>
-      axe("swipe", "--start-x", String(Math.round(from)), "--start-y", y, "--end-x", String(Math.round(to)), "--end-y", y, "--duration", "0.25", "--udid", udid);
-    await swipe(W * 0.6, W * 0.1);
-    await until("the ticket on top", async () => ((await labels(udid)).filter(isDock).at(-1) ?? "").startsWith(`${key}, `), 5000).catch(async (e) => {
-      await say("after a swipe left");
+    // The sheet stays up and the other ticket waits as a card over it.
+    const sheetUp = (l: string[]) => l.includes("Sheet Grabber");
+    await tapWhere(udid, ticketCard);
+    await until("the ticket in the sheet, the file a card", async () => {
+      const l = await labels(udid);
+      return sheetUp(l) && !l.some(ticketCard) && l.some(fileCard);
+    }, 8000).catch(async (e) => {
+      await say("after the ticket's card");
       throw e;
     });
-    await swipe(W * 0.15, W * 0.65);
-    await until("the file back on top", async () => ((await labels(udid)).filter(isDock).at(-1) ?? "").startsWith(`${DOCK_FILE}, `), 5000);
-    return "file → ticket → file";
+    await tapWhere(udid, fileCard);
+    await until("the file in the sheet, the ticket a card", async () => {
+      const l = await labels(udid);
+      return sheetUp(l) && !l.some(fileCard) && l.some(ticketCard) && (await editorUp());
+    }, 8000);
+    return "file ↔ ticket over the sheet";
   }, CHECK_CAP_MS, [OPENED]);
   await check("opening the docked file again focuses it instead of adding a card", async () => {
     await goto(udid, link);
@@ -3285,6 +3273,28 @@ async function keyboardChecksWithSoftwareKeyboard(udid: string, p: Awaited<Retur
     if (gap < 0) throw new Error(`the composer's field ends ${-gap}pt behind the keyboard (field ends at ${Math.round(bottomOf(field))}, keyboard at ${Math.round(top)})`);
     if (gap > 40) throw new Error(`${gap}pt gap between the composer and the keyboard`);
     return `field ends ${gap}pt above the keyboard`;
+  });
+
+  // The dock hides under the keyboard and the composer gives its room back, so the field still sits on the keys.
+  await check("the composer sits on the keyboard with another ticket docked, and the dock steps aside", async () => {
+    const other = await api<Ticket>("POST", "/tickets", { projectId: p.project.id, spec: "Docked while another ticket is typed in", driver: "dummy", start: false });
+    await goto(udid, `harness://ticket/${encodeURIComponent(other.key)}`, (l) => ticketShown(l, other.key));
+    await dockSheet(udid);
+    await goto(udid, `harness://ticket/${encodeURIComponent(p.ticket.key)}?tab=transcript`, (l) => l.some((x) => x.startsWith("Message the agent")));
+    if (!(await labels(udid)).some(isDock)) throw new Error("no docked card over the open ticket before the keyboard came up");
+    await tapWhere(udid, (l) => l.startsWith("Message the agent"));
+    const top = await until("keyboard up", keyboardTop, 8000);
+    await atRest(udid, 600);
+    const field = (await nodes(udid)).find((n) => n.AXLabel?.startsWith("Message the agent"));
+    await shot(udid, "keyboard-composer-docked");
+    if (!field) throw new Error("the composer is gone from the screen (behind the keyboard)");
+    const gap = Math.round(top - bottomOf(field));
+    if (gap < 0) throw new Error(`the composer's field ends ${-gap}pt behind the keyboard`);
+    if (gap > 40) throw new Error(`${gap}pt gap between the composer and the keyboard: it kept room for the hidden dock`);
+    if ((await labels(udid)).some(isDock)) throw new Error("the dock is still showing over the keyboard");
+    await goto(udid, BOARD);
+    await clearDock(udid);
+    return `field ends ${gap}pt above the keyboard; the dock stepped aside`;
   });
 
   // The editor is a growing multiline field inside a scroll view; typing at its end has to keep
