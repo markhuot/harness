@@ -4097,7 +4097,12 @@ async function oneShot(udid: string, url: string) {
 type Chain = Entry & { kind: "chain"; seconds: number; run: (udid: string) => Promise<void> };
 function interactionChains(s: Seeded): Chain[] {
   const k = (t: Ticket) => encodeURIComponent(t.key);
-  const chain = (name: string, needs: SeedName[], seconds: number, run: (udid: string) => Promise<void>, optIn = false): Chain => ({ name, kind: "chain", needs, seconds, run: (udid) => (selector.sequence(), run(udid)), optIn });
+  const chain = (name: string, needs: SeedName[], seconds: number, run: (udid: string) => Promise<void>, optIn = false): Chain => ({ name, kind: "chain", needs, seconds, run: async (udid) => {
+      selector.sequence();
+      await run(udid);
+      // A ticket link opened over another docks it. Cards left docked cover the next chain's taps (the probe says whether any are, with no tree read).
+      if ((await probe(udid))?.router.dock.length) await clearDock(udid).catch(() => {});
+    }, optIn });
   return [
     // --sheets owns these (the iPhone's ticket sheet and the dock), and they run here only when named.
     chain("sheet-checks", ["conductor"], 40, (udid) => sheetChecks(udid, s), true),
@@ -4207,9 +4212,11 @@ function interactionChains(s: Seeded): Chain[] {
         await axe("type", "Z", "--udid", udid);
         await atRest(udid, 300);
         await tapSave();
-        const changed = async () => ((v) => (v !== seeded ? v : null))(await override("run.review"));
-        // A tap right after the keyboard's last key can be swallowed. Save leaves the editor open, so tapping it again is harmless.
-        const saved = await until("override saved", changed, 3000).catch(async () => (await tapSave(), until("override saved (second tap)", changed, 8000)));
+        const saved = await until("override saved", async () => ((v) => (v !== seeded ? v : null))(await override("run.review")), 8000).catch(async (e) => {
+          await shot(udid, "prompt-variable-failed");
+          const f = (await nodes(udid)).find((n) => n.AXLabel === "Agent review prompt");
+          throw new Error(`${(e as Error).message}; the field reads ${JSON.stringify(f?.AXValue?.slice(-60))}; on screen: ${(await labels(udid)).slice(0, 12).join(" | ")}`);
+        });
         await api("PATCH", "/settings", { prompts: { "run.review": seeded } });
         moved(udid);
         if (!saved?.endsWith("then the diff.{{key}}Z")) throw new Error(`expected the text to end "then the diff.{{key}}Z", got ${JSON.stringify(saved)}`);
@@ -4313,7 +4320,10 @@ function interactionChains(s: Seeded): Chain[] {
         });
         await shot(udid, "gauge-limit-light");
         // Left open it covers the next deep link, which then waits out whenShown's 12 s and a board reset.
-        await tapWhere(udid, "dismiss popup"); // the sheet's Cancel isn't in AXe's tree; a tap outside the sheet closes it
+        // The sheet's Cancel isn't in AXe's tree (a tap outside docks the ticket sheet beneath it, over every later chain):
+        // it sits at the leading edge, 86 pt above the field's centre.
+        const field = await until("the limit field", async () => (await nodes(udid)).find((n) => n.AXUniqueId === "context-limit-field"), 5000);
+        await axe("tap", "-x", "61", "-y", String(Math.round(field.frame.y + field.frame.height / 2 - 86)), "--udid", udid);
         await until("the limit sheet closed", async () => !(await labels(udid)).some((x) => x.startsWith("How many tokens the gauge counts up to")), 5000);
         return "confirmed and cancelled; limit sheet open";
       });
