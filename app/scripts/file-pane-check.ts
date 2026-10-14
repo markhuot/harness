@@ -162,6 +162,17 @@ try {
   check("still one file pane", tail.panes === 1);
   check("line 100 scrolled into view", tail.top >= 0 && tail.top < tail.height, `top=${tail.top}`);
   check("still no selection", tail.empty);
+  // A theme change redraws the editor; it keeps its place and its highlighted lines.
+  const other = theme === "dark" ? "light" : "dark";
+  await js(`harness.setTheme({ preference: ${JSON.stringify(other)} })`);
+  await until("theme flipped under the file", () => js<boolean>(`document.documentElement.dataset.theme === ${JSON.stringify(other)}`), 5000);
+  const kept = await until("tail still in view after the theme change", async () => {
+    const s = await fileState(100);
+    return s && s.revealed.length === 5 && s.top >= 0 && s.top < s.height && s;
+  }, 8000).catch(() => null);
+  check("a theme change keeps the scroll position and the highlighted lines", !!kept, JSON.stringify(kept && { top: kept.top, revealed: kept.revealed.length }));
+  await js(`harness.setTheme({ preference: ${JSON.stringify(theme)} })`);
+  await until("theme restored under the file", () => js<boolean>(`document.documentElement.dataset.theme === ${JSON.stringify(theme)}`), 5000);
 
   // 3. Editing: typing marks the pane dirty, Cmd+S writes the file (and only then).
   const before = onDisk("src/app.ts");

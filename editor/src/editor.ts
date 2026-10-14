@@ -201,7 +201,7 @@ export function createEditor(parent: HTMLElement, options: EditorOptions): Edito
         });
       }
     }
-    if (view) scrollEl().scrollTop = view.scrollTop;
+    if (view) holdScroll(() => void (scrollEl().scrollTop = view.scrollTop));
     if (marked && file) file.setSelectedLines(marked);
   };
 
@@ -235,25 +235,32 @@ export function createEditor(parent: HTMLElement, options: EditorOptions): Edito
     else if (pos.top + pos.height > top + view - 24) el.scrollTop = pos.top + pos.height - view + 24;
   };
 
+  /**
+   * Runs `apply` now and again over the next frames, until the reader moves the view or `stale` says it
+   * no longer applies. The virtualizer keeps the view anchored while the file lays out (its first measure can
+   * shift it a whole file's height, and a redrawn file starts at the top), so a scroll position set once is lost.
+   */
+  const holdScroll = (apply: () => void, stale: () => boolean = () => false) => {
+    const mine = generation;
+    let frames = 0;
+    let moved = false;
+    const stop = () => (moved = true);
+    for (const type of ["wheel", "touchstart", "keydown", "pointerdown"]) parent.addEventListener(type, stop, { once: true, capture: true });
+    const again = () => {
+      if (moved || mine !== generation || stale() || ++frames > SETTLE_FRAMES) return;
+      apply();
+      requestAnimationFrame(again);
+    };
+    apply();
+    requestAnimationFrame(again);
+  };
+
   const revealLines = (range: LineRange) => {
     const { start, end } = clampRange(range, countLines(text()));
     marked = { start, end };
     file?.setSelectedLines(marked);
     const middle = Math.floor((start + end) / 2);
-    scrollTo(middle, "center");
-    // The virtualizer keeps the view anchored while the file lays out (its first measure can shift it a
-    // whole file's height), so the scroll is asserted again over the next frames, until the reader moves it.
-    let frames = 0;
-    let moved = false;
-    const stop = () => (moved = true);
-    for (const type of ["wheel", "touchstart", "keydown", "pointerdown"]) parent.addEventListener(type, stop, { once: true, capture: true });
-    const settle = () => {
-      if (moved || mine !== generation || marked?.start !== start || ++frames > SETTLE_FRAMES) return;
-      scrollTo(middle, "center");
-      requestAnimationFrame(settle);
-    };
-    const mine = generation;
-    requestAnimationFrame(settle);
+    holdScroll(() => scrollTo(middle, "center"), () => marked?.start !== start);
   };
 
   // Cmd/Ctrl+S inside the editor (the keystroke is composed through the shadow root to the parent).
