@@ -12,7 +12,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 ### Changed
 
 - Opening Projects on iPhone no longer closes your docked ticket cards. They hide while Projects is open and come back, in the same order, when you close it. A ticket sheet that was open docks instead of closing, and the dock still survives a relaunch.
-- For people working on Harness: sim-check clears the dock with a reset file the debug probe watches instead of opening Projects, and its Projects check now asserts the dock survives.
+- For people working on Harness: sim-check clears the dock with a reset file the debug probe watches instead of opening Projects, and its Projects check now asserts the dock survives. The dock ghost snapshot references (peak, quarter, reduce motion) are re-recorded for the smoother glow, so the snapshot tests pass again.
 
 ## [app-20261014.2127](https://github.com/markhuot/harness/releases/tag/app-20261014.2127) - 2026-10-14
 
