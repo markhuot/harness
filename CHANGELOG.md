@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261015.1934](https://github.com/markhuot/harness/releases/tag/app-20261015.1934) - 2026-10-15
+
 ### Fixed
 
 - On the iPhone, a docked ticket card no longer sits on top of the board's bottom bar: the bar always keeps clear of the card stack, even when the stack's position hasn't been measured correctly yet.
