@@ -97,9 +97,8 @@ const wire = (v: unknown): unknown => (v === page ? { page: true } : v instanceo
 
 expect.extend(
   Object.fromEntries(
-    PAGE_MATCHERS.map((name) => [
-      name,
-      async function (this: { isNot: boolean }, received: unknown, ...args: unknown[]) {
+    PAGE_MATCHERS.map((name) => {
+      const matcher = async function (this: { isNot: boolean }, received: unknown, ...args: unknown[]) {
         const isNot = this.isNot;
         try {
           await call("expect", [wire(received), name, args.map(wire), isNot]);
@@ -107,8 +106,11 @@ expect.extend(
         } catch (e) {
           return { pass: isNot, message: () => (e as Error).message };
         }
-      },
-    ]),
+      };
+      // Bun 1.3+ names a failure after the function, not the key it was registered under.
+      Object.defineProperty(matcher, "name", { value: name });
+      return [name, matcher];
+    }),
   ),
 );
 
@@ -213,8 +215,9 @@ try {
   send({
     type: "done",
     ok: false,
-    // Bun starts a custom matcher's message with blank lines.
-    error: String(err?.message ?? e).replace(/^\n+/, ""),
+    // Bun starts a custom matcher's message with blank lines (and, from 1.3, with a header naming the
+    // matcher function, which is ours, not the script's).
+    error: String(err?.message ?? e).replace(/^\s*expect\(received\)\.matcher\(\.\.\.args\)\n/, "").replace(/^\n+/, ""),
     ...(typeof err?.stack === "string" ? { stack: err.stack } : {}),
     // A page call's step, or a value expectation's (logged()).
     ...(typeof err?.step === "string" ? { step: err.step } : {}),

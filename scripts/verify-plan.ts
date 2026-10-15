@@ -6,6 +6,9 @@
 // typecheck" for the whole diff, so a new directory is never silently unchecked. A rule with no
 // layers (docs) claims a file on purpose.
 
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+
 export type LayerKind = "light" | "app" | "sim";
 
 export interface Layer {
@@ -125,7 +128,9 @@ export const RULES: Rule[] = [
   {
     name: "app check script",
     match: /^app\/scripts\/[^/]+-check\.ts$|^app\/scripts\/(smoke|spec-activity|changes|shoot|ticket-header|browser-tabs)\.ts$/,
-    layers: (f) => [bunIn("app"), typecheck, appBuild, appCheck(f.replace(/^app\/scripts\/|\.ts$/g, ""))],
+    // A check that was deleted has nothing to run.
+    layers: (f) =>
+      existsSync(join(import.meta.dir, "..", f)) ? [bunIn("app"), typecheck, appBuild, appCheck(f.replace(/^app\/scripts\/|\.ts$/g, ""))] : [bunIn("app"), typecheck],
   },
   { name: "app build and packaging scripts", match: /^app\/(scripts|package\.json|vite|tsconfig)/, layers: () => [bunIn("app"), typecheck] },
   { name: "HarnessKit tests", match: /^ios\/HarnessKit\/Tests\//, layers: () => [swiftTest] },

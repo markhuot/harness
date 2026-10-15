@@ -272,6 +272,7 @@ try {
 
   // 9. A terminal made elsewhere (the iPhone's New Terminal) opens a pane on its project's board.
   await go("#/board/all");
+  await Bun.sleep(1500); // this window's presence (platform mac) has to reach the service before it can be asked to open a pane
   const made = await api<{ id: string }>("POST", "/terminals", { projectId: project.id, deviceId: "iphone-test", openOnMac: true, cols: 62, rows: 18 });
   await go(`#/board/${project.id}`);
   await until("the pane opened for the iPhone's terminal", async () => (await shown()).includes(made.id), 10000);
