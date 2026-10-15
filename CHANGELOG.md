@@ -9,6 +9,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- Starting the service with `HARNESS_CHROME_HEADLESS=0` now opens the integrated browser's Chrome with a visible window. The variable was ignored before, so you couldn't watch a page that a bot check ("verify you are human") keeps looping on.
+
 ### Changed
 
 - Agents can now see draft tickets: `list_tickets`, `search_tickets` and `get_ticket` include them (marked `draft: true`), so an agent can find and read a draft instead of duplicating it. `list_tickets` and `search_tickets` take `include_drafts: false` to leave them out. Agents still can't message, start, move or update a draft, and now get an error saying it's a draft.
