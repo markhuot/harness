@@ -760,6 +760,9 @@ describe("work-run conduct rules", () => {
 
   test("a small follow-up (reopen, bot feedback) still updates the spec before submitting", () => {
     expect(sys("work")).toMatch(/holds for a small follow-up too[^\n]*re-read Status, rewrite any statement the fix made stale/);
+    // the rewrite states the current result, not the change or a recorded decision
+    expect(sys("work")).toContain("with no history of the change");
+    expect(sys("work")).not.toContain("record the decision and its reason");
     // a review run doesn't edit the spec, so it isn't told to
     expect(sys("review")).not.toContain("holds for a small follow-up too");
   });
