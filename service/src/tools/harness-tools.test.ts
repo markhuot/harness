@@ -67,10 +67,10 @@ describe("tool catalogue", () => {
     expect(props("complete_ticket")).toEqual(["action", "instructions", "key"]);
     expect(props("review_ticket")).toEqual(["action", "decision", "key", "notes"]);
     expect(props("record_pull_request")).toEqual(["head", "url"]);
-    expect(props("list_tickets")).toEqual(["limit", "project_key", "scope", "status"]);
+    expect(props("list_tickets")).toEqual(["include_drafts", "limit", "project_key", "scope", "status"]);
     expect(props("get_ticket")).toEqual(["include_agents", "include_transcript", "key"]);
     expect(props("get_ticket_agent")).toEqual(["id", "include_transcript", "key"]);
-    expect(props("search_tickets")).toEqual(["cursor", "limit", "project_key", "query"]);
+    expect(props("search_tickets")).toEqual(["cursor", "include_drafts", "limit", "project_key", "query"]);
   });
 });
 
@@ -527,9 +527,9 @@ describe("board tools → HarnessOps", () => {
     const hit = { ticket: { ...fakeTicket({ key: "WEB-3", title: "Nav", status: "done", spec: "long brief" }), projectKey: "WEB" }, snippet: "…the nav…" };
     const ops = fakeOps({ searchTickets: async () => ({ hits: [hit], nextCursor: "abc", total: 7 }) });
     const ctx = fakeContext({ ops, runKind: "triage", ticket: null });
-    const r = JSON.parse(text(await tool("search_tickets").execute({ query: "nav", project_key: "WEB", limit: 1, cursor: "prev" }, ctx)));
-    expect(ops.calls).toEqual([{ method: "searchTickets", args: [{ query: "nav", projectKey: "WEB", limit: 1, cursor: "prev" }] }]);
-    expect(r).toEqual({ total: 7, hits: [{ key: "WEB-3", title: "Nav", status: "done", project: "WEB", snippet: "…the nav…" }], nextCursor: "abc" });
+    const r = JSON.parse(text(await tool("search_tickets").execute({ query: "nav", project_key: "WEB", limit: 1, cursor: "prev", include_drafts: false }, ctx)));
+    expect(ops.calls).toEqual([{ method: "searchTickets", args: [{ query: "nav", projectKey: "WEB", limit: 1, cursor: "prev", includeDrafts: false }] }]);
+    expect(r).toEqual({ total: 7, hits: [{ key: "WEB-3", title: "Nav", status: "done", draft: false, project: "WEB", snippet: "…the nav…" }], nextCursor: "abc" });
     const none = fakeOps();
     expect(text(await tool("search_tickets").execute({ query: "x", cursor: "c" }, fakeContext({ ops: none })))).toBe("No more matches.");
     const blank = await tool("search_tickets").execute({ query: "  " }, fakeContext({ ops: none }));

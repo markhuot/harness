@@ -285,7 +285,7 @@ describe("board tools over the real orchestrator", () => {
     const found = JSON.parse(text(await tool("search_tickets").execute({ query: "dark" }, ctx)));
     expect(found).toEqual({
       total: 1,
-      hits: [{ key: t.key, title: "Dark mode toggle", status: "planning", project: "WEB", snippet: "Dark mode toggle" }],
+      hits: [{ key: t.key, title: "Dark mode toggle", status: "planning", draft: false, project: "WEB", snippet: "Dark mode toggle" }],
       nextCursor: null,
     });
     expect(text(await tool("search_tickets").execute({ query: "zebra" }, ctx))).toBe('No tickets match "zebra".');

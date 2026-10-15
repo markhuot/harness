@@ -1079,10 +1079,17 @@ export class Orchestrator {
     if (t.draft) throw conflict(`${t.key} is a draft: it can't be ${what} until it's submitted (POST /tickets/${t.key}/submit)`);
   }
 
-  /** The ticket an agent (tool) names, or null: drafts don't exist for agents until they're submitted. */
-  private agentLookup(key: string): { ticket: Ticket; alias: string | null } | null {
+  /** The ticket an agent (tool) names, or null. Drafts are left out unless `drafts: true` (agents can read them, never act on them). */
+  private agentLookup(key: string, opts: { drafts?: boolean } = {}): { ticket: Ticket; alias: string | null } | null {
     const found = this.store.tickets.lookup(key);
-    return found && !found.ticket.draft ? found : null;
+    return found && (opts.drafts || !found.ticket.draft) ? found : null;
+  }
+
+  /** The ticket an agent's write tool acts on, or null when none has the key; a draft is refused by name. */
+  private agentTarget(key: string): Ticket | null {
+    const t = this.agentLookup(key, { drafts: true })?.ticket ?? null;
+    if (t?.draft) throw new Error(`${t.key} is a draft: agents can't act on it until the human submits it.`);
+    return t;
   }
 
   /**
@@ -3009,18 +3016,20 @@ ${numberLines(r.body)}`;
     const statuses = filter.statuses?.length ? filter.statuses : undefined;
     const bad = statuses?.find((st) => !(TICKET_STATUSES as readonly string[]).includes(st));
     if (bad) throw new Error(`Unknown status: ${bad}`);
+    // The store includes drafts unless told otherwise; include_drafts: false leaves them out.
+    const drafts = filter.includeDrafts === false ? { drafts: false } : {};
     let tickets: Ticket[];
     if (scope === "children") {
       if (!own) throw new Error('scope "children" needs a ticket run; use "project" with project_key, or "all"');
       const projectId = filter.projectKey ? this.boardProject(filter.projectKey).id : undefined;
-      tickets = this.store.tickets.list({ parentId: own.id, drafts: false, ...(projectId ? { projectId } : {}), ...(statuses ? { statuses } : {}) });
+      tickets = this.store.tickets.list({ parentId: own.id, ...drafts, ...(projectId ? { projectId } : {}), ...(statuses ? { statuses } : {}) });
     } else if (scope === "project") {
       const projectId = filter.projectKey ? this.boardProject(filter.projectKey).id : own?.projectId;
       if (!projectId) throw new Error('project_key is required for scope "project" in a run without a ticket');
-      tickets = this.store.tickets.list({ projectId, drafts: false, ...(statuses ? { statuses } : {}) });
+      tickets = this.store.tickets.list({ projectId, ...drafts, ...(statuses ? { statuses } : {}) });
     } else if (scope === "all") {
       if (filter.projectKey) throw new Error('scope "all" spans every project; drop project_key or use scope "project"');
-      tickets = this.store.tickets.list({ drafts: false, ...(statuses ? { statuses } : {}) });
+      tickets = this.store.tickets.list({ ...drafts, ...(statuses ? { statuses } : {}) });
     } else {
       throw new Error(`Unknown scope: ${scope}`);
     }
@@ -3040,10 +3049,10 @@ ${numberLines(r.body)}`;
   }
 
   async getTicket_(_ctx: ToolContext, key: string, opts: { transcript?: number; agents?: boolean } = {}): Promise<BoardTicketDetail> {
-    const found = this.agentLookup(key);
+    const found = this.agentLookup(key, { drafts: true });
     if (!found) {
       const requested = String(key ?? "").trim().toUpperCase();
-      const related = requested ? this.relatedTickets(requested, null, { drafts: false }) : [];
+      const related = requested ? this.relatedTickets(requested, null) : [];
       if (!related.length) {
         const item = requested ? this.store.sessions.list("triage").find((s) => s.key.toUpperCase() === requested) : undefined;
         if (item) {
@@ -3061,10 +3070,10 @@ ${numberLines(r.body)}`;
     const t = found.ticket;
     const detail: BoardTicketDetail = {
       ticket: this.boardTicket(t),
-      relatedTickets: this.relatedTickets(found.alias ?? t.key, t, { drafts: false }).map((r) => this.boardRelated(r)),
+      relatedTickets: this.relatedTickets(found.alias ?? t.key, t).map((r) => this.boardRelated(r)),
       resolvedFrom: found.alias,
       parent: t.parentId ? (this.store.tickets.get(t.parentId)?.key ?? null) : null,
-      children: this.store.tickets.list({ parentId: t.id, drafts: false }).map((c) => c.key),
+      children: this.store.tickets.list({ parentId: t.id }).map((c) => c.key),
       base: await this.refreshBaseBranch(t),
       specRevision: t.specRevision ?? 1,
       specBaselineRevision: t.specBaselineRevision ?? null,
@@ -3090,7 +3099,7 @@ ${numberLines(r.body)}`;
   }
 
   async getTicketAgent_(_ctx: ToolContext, key: string, id: string, opts: { transcript?: number } = {}): Promise<BoardAgentDetail> {
-    const t = this.agentLookup(key)?.ticket;
+    const t = this.agentTarget(key);
     if (!t) throw new Error(`Unknown ticket: ${key}`);
     const s = this.store.subagents.get(t.sessionId, id);
     if (!s) throw new Error(`${t.key} has no sub-agent or task ${id}. get_ticket { key: "${t.key}", include_agents: true } lists them.`);
@@ -3111,7 +3120,7 @@ ${numberLines(r.body)}`;
     const projectId = input.projectKey ? this.boardProject(input.projectKey).id : undefined;
     let page: TicketPage;
     try {
-      page = this.searchTickets({ q: input.query, projectId, limit: input.limit ?? BOARD_SEARCH_LIMIT, cursor: input.cursor ?? null, drafts: false });
+      page = this.searchTickets({ q: input.query, projectId, limit: input.limit ?? BOARD_SEARCH_LIMIT, cursor: input.cursor ?? null, ...(input.includeDrafts === false ? { drafts: false } : {}) });
     } catch (err) {
       throw new Error(errMsg(err));
     }
@@ -3166,7 +3175,7 @@ ${numberLines(r.body)}`;
   /** A plan run's update_ticket target: its own ticket, and no other. */
   private ownPlanTarget(ctx: ToolContext, key: string): Ticket {
     const own = this.ctxTicket(ctx);
-    const target = this.agentLookup(String(key ?? "").trim())?.ticket;
+    const target = this.agentTarget(String(key ?? "").trim());
     if (target?.id !== own.id) throw new Error(`In a planning run, update_ticket only edits your own ticket (${own.key}).`);
     return own;
   }
@@ -3174,7 +3183,7 @@ ${numberLines(r.body)}`;
   /** Another ticket the caller may act on: never its own (block / submit_for_review cover that). */
   private boardTarget(ctx: ToolContext, key: string, tool: string): { actor: Ticket; target: Ticket } {
     const actor = this.boardActor(ctx, tool);
-    const target = this.agentLookup(String(key ?? "").trim())?.ticket;
+    const target = this.agentTarget(String(key ?? "").trim());
     if (!target) throw new Error(`Unknown ticket: ${key}`);
     if (target.id === actor.id) {
       throw new Error(`${target.key} is your own ticket. ${tool} acts on other tickets; use ${actor.kind === "conductor" ? "submit_for_review" : "block or submit_for_review"} to change your own.`);
@@ -3303,7 +3312,7 @@ ${numberLines(r.body)}`;
     if (ctx.runKind !== "work" || fields.length !== 1 || fields[0] !== "pullRequestUrls") return null;
     const own = this.ctxTicket(ctx);
     // Resolved like ownPlanTarget does, so an earlier key (alias) of this ticket counts too. A remote ID never identifies a ticket.
-    const target = this.agentLookup(String(key ?? "").trim())?.ticket;
+    const target = this.agentTarget(String(key ?? "").trim());
     return target?.id === own.id ? own : null;
   }
 
@@ -3468,7 +3477,7 @@ ${numberLines(r.body)}`;
   }
 
   private childOf(conductor: Ticket, key: string): Ticket {
-    const t = this.agentLookup(key)?.ticket;
+    const t = this.agentTarget(key);
     if (!t) throw new Error(`Unknown ticket: ${key}`);
     if (t.parentId !== conductor.id) throw new Error(`${t.key} is not a child of ${conductor.key}`);
     return t;
@@ -3556,8 +3565,8 @@ ${numberLines(r.body)}`;
     const url = input.url?.trim() || null;
     const ticketKey = input.ticketKey?.trim() || null;
     if (ticketKey) {
-      // A draft isn't there for triage.
-      const existing = this.agentLookup(ticketKey)?.ticket ?? null;
+      // A draft can't be routed to.
+      const existing = this.agentTarget(ticketKey);
       if (!existing) {
         const related = this.relatedTickets(ticketKey, null, { drafts: false });
         throw new Error(
@@ -3762,7 +3771,7 @@ ${numberLines(r.body)}`;
 
   async deleteTicket_(ctx: ToolContext, key: string, dryRun = false): Promise<Ticket> {
     const own = this.configWriter(ctx);
-    const t = this.agentLookup(String(key ?? "").trim().toUpperCase())?.ticket;
+    const t = this.agentTarget(String(key ?? "").trim().toUpperCase());
     if (!t) throw new Error(`Unknown ticket: ${key}`);
     if (this.lineage(own).some((a) => a.id === t.id)) {
       throw new Error(t.id === own.id ? `You can't delete your own ticket (${t.key}).` : `You can't delete ${t.key}: it is an ancestor of your ticket ${own.key}.`);
