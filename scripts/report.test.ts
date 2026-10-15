@@ -108,8 +108,10 @@ describe("dispositions", () => {
 
   test("a restore is not a relaunch, and the usage filter is a walkthrough screen", () => {
     const reason = (name: string, group: string) => (dispositionOf(sim(group, name)) as { reason: string }).reason;
-    expect(reason("docking stashes the panel as a card in the bottom-right corner, and the card restores its path", "panelChecks")).toMatch(/^iPad-only layout/);
-    expect(reason("holding the dragged panel in the trailing 40% shows the ghost card and docks it on release; the card restores it at its root", "panelChecks")).toMatch(/^iPad-only layout/);
+    expect(reason("docking stashes the panel as a card in the bottom-right corner, and the card restores its path", "panelChecks")).toMatch(/^dropped \(human decision\): the iPad's corner cards/);
+    expect(reason("holding the dragged panel in the trailing 40% shows the ghost card and docks it on release; the card restores it at its root", "panelChecks")).toMatch(/^dropped \(human decision\): the iPad's corner cards/);
+    // The five the human kept are carried by a walkthrough screen, whatever their function's loss reason says.
+    expect(dispositionOf(sim("panelChecks", "a board card opens its ticket in the side panel against the trailing edge"))).toEqual({ status: "walkthrough", ref: "next/walkthrough/ios.ts › ipad side panel" });
     expect(reason("state survives a relaunch", "interactionChains")).toMatch(/quit-and-relaunch/);
     expect(dispositionOf(sim("usageChecks", "usage: the filter shows one driver, and the choice survives a relaunch"))).toEqual({
       status: "walkthrough",

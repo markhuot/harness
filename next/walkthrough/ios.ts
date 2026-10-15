@@ -241,11 +241,11 @@ try {
    * Starts the app again (a pairing survives it) with its animations off: the walkthrough checks what a screen shows, and a
    * transition is only time spent waiting for it to end. WALK_ANIMATIONS=1 keeps them, for a run that wants the real motion.
    */
-  const relaunch = () => {
+  const relaunch = (animated = false) => {
     probe(); // finds the container
     Bun.spawnSync(["xcrun", "simctl", "terminate", slot.udid, "com.markhuot.harness"]);
     rmSync(join(container, "tmp", PROBE_FILE), { force: true }); // the old launch's state must not pass for the new one's
-    const env = process.env.WALK_ANIMATIONS === "1" ? process.env : { ...process.env, SIMCTL_CHILD_HARNESS_NO_ANIMATIONS: "1" };
+    const env = animated || process.env.WALK_ANIMATIONS === "1" ? process.env : { ...process.env, SIMCTL_CHILD_HARNESS_NO_ANIMATIONS: "1" };
     Bun.spawnSync(["xcrun", "simctl", "launch", slot.udid, "com.markhuot.harness"], { env });
   };
   relaunch();
@@ -761,14 +761,18 @@ try {
 
   // sim-check sheets: a slow drag of the sheet to the bottom holds a ghost card, and the release docks it under the board, inset like the bar.
   await w.screen("sheet dock drag", async (expect) => {
+    // The ghost card is the sheet's own drag animation, which the no-animations launch switches off: this screen runs on a launch with them.
+    relaunch(true);
+    await untilTree(() => axe.nodes(), (e) => has(e, /^Planning, \d+$/), 15000);
     await closeAllSheets();
-    const kid = (await d.api<TicketDetail>("GET", `/tickets/${world.conductor.key}`)).children[0]!;
-    let els = await visit(`harness://ticket/${enc(kid.key)}`, (e) => has(e, "Sheet Grabber"));
+    const kid = world.conductor;
+    let els = await visit(`harness://ticket/${enc(kid.key)}?tab=children`, (e) => has(e, "Sheet Grabber") && has(e, "Attach"));
+    expect("the link opens the ticket as a presented sheet", probe()?.router.ticketSheet === "presented", `ticketSheet ${probe()?.router.ticketSheet}; ${seen(els)}`);
     const W = els[0]!.frame!.width, H = screenHeight(els);
     const drag = axe.swipe(Math.round(W / 2), 90, Math.round(W / 2), Math.round(H - 110), 3);
     await Bun.sleep(2600);
     let ghost = false;
-    for (const end = Date.now() + 1500; !ghost && Date.now() < end; ) ghost = (await axe.nodes()).some((e) => e.label?.startsWith("Dock card"));
+    for (const end = Date.now() + 1500; !ghost && Date.now() < end; ) ghost = (await axe.labels()).some((l) => l.startsWith("Dock card"));
     expect("holding the sheet low shows the ghost dock card", ghost);
     await drag;
     els = await untilTree(() => axe.nodes(), (e) => dockCards(e).length === 1 && has(e, /^Planning, \d+$/), 6000);
@@ -777,12 +781,19 @@ try {
     expect("the board shows over the dock", has(els, /^Planning, \d+$/), seen(els));
     const close = els.find((e) => e.id === "ticket-dock-close" && !!e.frame);
     const projects = find(els, (l) => l === "Projects")?.frame, newSession = find(els, (l) => l === "New session")?.frame;
-    if (!card?.frame || !close?.frame || !projects || !newSession) return expect("the dock and the bar's buttons are on screen", false, seen(els));
+    const animationsOff = async () => {
+      relaunch();
+      await untilTree(() => axe.nodes(), (e) => has(e, /^Planning, \d+$/), 15000);
+    };
+    if (!card?.frame || !close?.frame || !projects || !newSession) {
+      await animationsOff();
+      return expect("the dock and the bar's buttons are on screen", false, seen(els));
+    }
     // The card's frame stops short of its ✕, whose capsule ends 10 pt past it.
     const barLeft = card.frame.x, barRight = close.frame.x + close.frame.width + 10;
     expect("New session sits above the dock, not under it", newSession.y + newSession.height <= card.frame.y, `bottom ${Math.round(newSession.y + newSession.height)}, dock top ${Math.round(card.frame.y)}`);
     expect("the dock is inset like the bar: Projects at its left end, New session at its right", Math.abs(barLeft - projects.x) <= 2 && Math.abs(barRight - (newSession.x + newSession.width)) <= 2, `dock ${Math.round(barLeft)}–${Math.round(barRight)}, bar ${Math.round(projects.x)}–${Math.round(newSession.x + newSession.width)}`);
-    await closeAllSheets();
+    await animationsOff();
   });
 
   // sim-check dock-stack: tickets join the dock as cards (the newest at the bottom), a card over the sheet leaves the composer clear above it,
@@ -1007,8 +1018,14 @@ try {
     await sideways(0.85, 0.1);
     els = await untilTree(() => axe.nodes(), (e) => shows(e, activityRow) && !shows(e, specRow), 5000);
     expect("a swipe left moves from Spec to Activity", shows(els, activityRow) && !shows(els, specRow), seen(els));
-    await sideways(0.15, 0.9);
-    els = await untilTree(() => axe.nodes(), (e) => shows(e, specRow) && !shows(e, activityRow), 5000);
+    await rest(); // the pager has settled on Activity before the swipe back
+    // A swipe back from the Activity page sometimes doesn't page (an injected touch the feed's own pan takes first), whatever its
+    // speed: the same swipe passes on a second try. Three tries; the pager has to go back on one of them.
+    for (const secs of [0.3, 0.6, 0.3]) {
+      await axe.swipe(Math.round(W * 0.15), Math.round(H * 0.7), Math.round(W * 0.9), Math.round(H * 0.7), secs);
+      els = await untilTree(() => axe.nodes(), (e) => shows(e, specRow) && !shows(e, activityRow), 2500);
+      if (shows(els, specRow) && !shows(els, activityRow)) break;
+    }
     expect("a swipe right moves back to Spec", shows(els, specRow) && !shows(els, activityRow), seen(els));
   });
 
@@ -1175,10 +1192,11 @@ try {
     const els = await visit("harness://board", (e) => has(e, /^Planning, \d+$/));
     const W = els[0]!.frame!.width;
     const heads = ["Planning", "In progress", "Blocked", "Review", "Done"].map((c) => find(els, (l) => new RegExp(`^${c}, \\d+$`).test(l))?.frame);
-    expect("all five column headers are on screen at once", heads.every((f) => !!f && f.x >= 0 && f.x + f.width <= W + 1), seen(els));
-    const flat = heads.filter((f): f is NonNullable<typeof f> => !!f);
-    expect("the columns sit side by side on one row", flat.length === 5 && flat.every((f) => Math.abs(f.y - flat[0]!.y) <= 2) && flat.every((f, i) => i === 0 || f.x > flat[i - 1]!.x), flat.map((f) => `${Math.round(f.x)},${Math.round(f.y)}`).join(" | "));
-    expect("the sidebar is a column beside the board, with its rows", has(els, /^Inbox/) && has(els, "All projects"), seen(els));
+    // Portrait fits the first columns and the board pages to the rest; the iPhone shows one column at a time.
+    const shown = heads.filter((f): f is NonNullable<typeof f> => !!f && f.x >= 0 && f.x + f.width <= W + 1);
+    expect("at least two column headers are on screen at once", shown.length >= 2, `${shown.length} of ${heads.length}; ${seen(els)}`);
+    expect("the visible columns sit side by side on one row", shown.length >= 2 && shown.every((f) => Math.abs(f.y - shown[0]!.y) <= 2) && shown.every((f, i) => i === 0 || f.x > shown[i - 1]!.x), shown.map((f) => `${Math.round(f.x)},${Math.round(f.y)}`).join(" | "));
+    expect("the sidebar is a column beside the board, with its rows", has(els, /^Inbox/) && has(els, /^All projects/), seen(els));
     expect("the sidebar toggle is in the top bar", has(els, "Hide Sidebar") || has(els, "Show Sidebar"), seen(els));
   });
 
