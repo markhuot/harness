@@ -174,21 +174,6 @@ try {
   };
   /** The field's text, as VoiceOver reads it. */
   const valueOf = (els: AXElement[], match: (label: string) => boolean) => find(els, match)?.value ?? "";
-  /** Swipes until the element is in the middle of the screen and the scroll has stopped: up when it's below, down when it's above. */
-  const scrollToId = async (id: string) => {
-    const root = (await axe.nodes())[0]!.frame!;
-    const where = (e: AXElement[]) => {
-      const f = e.find((x) => x.id === id)?.frame;
-      return !f || f.y > root.height * 0.8 ? "below" : f.y + f.height < root.height * 0.2 ? "above" : "in view";
-    };
-    let els = await axe.nodes();
-    for (let i = 0; i < 40 && where(els) !== "in view"; i++) {
-      const [from, to] = where(els) === "below" ? [0.7, 0.3] : [0.3, 0.7];
-      await axe.swipe(root.width / 2, root.height * from, root.width / 2, root.height * to);
-      els = await quiet();
-    }
-    if (where(els) !== "in view") throw new Error(`${id} never scrolled into view; ${seen(els)}`);
-  };
   const ticketOf = async (key: string) => (await d.api<TicketDetail>("GET", `/tickets/${key}`)).ticket;
   const prompts = async () => d.api<{ id: string; override: string | null }[]>("GET", "/prompts");
   const override = async (id: string) => (await prompts()).find((p) => p.id === id)!.override;
@@ -509,7 +494,8 @@ try {
     const saved = await until("override saved", async () => ((v) => (v?.includes("x{{branch}}") ? v : null))(await override("system.work")), 8000, 100).catch(() => null);
     expect("Save stores the fixed override", !!saved, `override ${JSON.stringify(await override("system.work"))}`);
     await untilTree(() => axe.nodes(), (e) => e.some((x) => x.id === "prompt-reset"));
-    await scrollToId("prompt-reset"); // typing left the editor scrolled to the end of the long prompt, above the button
+    // Typing left the editor scrolled to the end of the long prompt, past the button: the section link opens it at the buttons.
+    await visit("harness://prompt/system.work?section=actions", (e) => e.some((x) => x.id === "prompt-reset" && !!x.frame && x.frame.y < 400));
     await tapId("prompt-reset");
     await tapLabel("Reset"); // the confirmation alert; `settled` waits out its presentation
     const cleared = await until("override cleared", async () => ((await override("system.work")) === null ? true : null), 8000, 100).catch(() => null);

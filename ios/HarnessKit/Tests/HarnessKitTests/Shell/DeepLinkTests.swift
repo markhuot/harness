@@ -91,6 +91,12 @@ struct DeepLinkTests {
         #expect(DeepLink.parse("harness://settings?section=general&theme=dark") == .tab(.settings, themes: ThemePicker.ThemePrefsPatch(theme: .dark), section: .general))
     }
 
+    @Test func promptLinksCarryAKnownSection() {
+        #expect(DeepLink.parse("harness://prompt/system.work?section=actions") == .push(.prompt(id: "system.work", section: .actions)))
+        // An unknown section is dropped; the prompt still opens at the top.
+        #expect(DeepLink.parse("harness://prompt/system.work?section=nope") == .push(.prompt(id: "system.work")))
+    }
+
     @Test func pairLinksDecodeTheirParams() {
         let url = Pairing.buildPairUrl(baseUrl: "http://100.64.0.2:7717", token: "a+b/c=&d")
         #expect(DeepLink.parse(url) == .sheet(.pair(url: "http://100.64.0.2:7717", token: "a+b/c=&d")))

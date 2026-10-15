@@ -126,7 +126,7 @@ public struct DebugState: Codable, Equatable, Sendable {
         case let .driver(id): "driver:\(id)"
         case .prompts: "prompts"
         case .extensions: "extensions"
-        case let .prompt(id): "prompt:\(id)"
+        case let .prompt(id, _): "prompt:\(id)"
         }
     }
 

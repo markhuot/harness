@@ -7,6 +7,8 @@ import SwiftUI
 /// something to cancel, Cancel stands in for Back (and the swipe back is off), so edits aren't lost.
 struct PromptDetailScreen: View {
     let id: String
+    /// Open scrolled to this part (harness://prompt/<id>?section=…).
+    var section: PromptSection?
 
     @Environment(\.palette) private var c
     @State private var catalog = PromptCatalog()
@@ -15,7 +17,7 @@ struct PromptDetailScreen: View {
         ZStack {
             if let prompts = catalog.prompts {
                 if let entry = prompts.first(where: { $0.id.rawValue == id }) {
-                    PromptDetailView(entry: entry, catalog: catalog).id(entry.id)
+                    PromptDetailView(entry: entry, catalog: catalog, section: section).id(entry.id)
                 } else {
                     EmptyState(icon: "fileText", title: "This prompt doesn't exist in this version of Harness")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -33,6 +35,7 @@ struct PromptDetailScreen: View {
 private struct PromptDetailView: View {
     let entry: PromptEntry
     let catalog: PromptCatalog
+    let section: PromptSection?
 
     @Environment(BoardStore.self) private var store
     @Environment(\.palette) private var c
@@ -45,9 +48,10 @@ private struct PromptDetailView: View {
     @State private var confirm: Confirmation?
     @State private var handle = PromptEditorHandle()
 
-    init(entry: PromptEntry, catalog: PromptCatalog) {
+    init(entry: PromptEntry, catalog: PromptCatalog, section: PromptSection?) {
         self.entry = entry
         self.catalog = catalog
+        self.section = section
         _draft = State(initialValue: entry.override)
         let handle = PromptEditorHandle()
         handle.resetSelection(to: entry.override)
@@ -64,6 +68,7 @@ private struct PromptDetailView: View {
         let cancellable = dirty || (editing && entry.override == nil)
         let insertable = editing && !compare
 
+        ScrollViewReader { proxy in
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 6) {
@@ -91,6 +96,7 @@ private struct PromptDetailView: View {
                                 .accessibilityIdentifier("prompt-reset")
                         }
                     }
+                    .id(PromptSection.actions)
                 }
 
                 if editing {
@@ -137,6 +143,11 @@ private struct PromptDetailView: View {
             }
             .padding(16)
             .padding(.bottom, 24)
+        }
+        .task {
+            // A link to a section opens the screen already there (no animation).
+            if let section { proxy.scrollTo(section, anchor: .top) }
+        }
         }
         .scrollDismissesKeyboard(.interactively)
         .background(c.bg)

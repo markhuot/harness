@@ -19,7 +19,7 @@ struct RouteScreen: View {
             case let .driver(id): DriverSettingsScreen(driverId: id)
             case .prompts: PromptsScreen()
             case .extensions: ExtensionSettingsScreen()
-            case let .prompt(id): PromptDetailScreen(id: id)
+            case let .prompt(id, section): PromptDetailScreen(id: id, section: section)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

@@ -26,8 +26,8 @@ public enum Route: Hashable, Sendable, Codable {
     case prompts
     /// harness://extensions: the browser's extensions
     case extensions
-    /// harness://prompt/<id>
-    case prompt(id: String)
+    /// harness://prompt/<id>, optionally `?section=actions` to open it scrolled there.
+    case prompt(id: String, section: PromptSection? = nil)
 }
 
 /// A modal sheet (RN `presentation: "modal" | "formSheet"`).
@@ -122,7 +122,7 @@ public enum DeepLink: Equatable, Sendable {
         case "extensions": return .push(.extensions)
         case "prompt":
             guard let id = tail.first, !id.isEmpty else { return nil }
-            return .push(.prompt(id: id))
+            return .push(.prompt(id: id, section: param("section").flatMap(PromptSection.init(rawValue:))))
         case "projects": return .sheet(.projects)
         case "new": return .sheet(.newSession(projectId: param("projectId"), key: param("key")))
         case "watcher": return .sheet(.watcher(id: param("id")))
