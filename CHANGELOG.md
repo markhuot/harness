@@ -16,6 +16,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
+- Agents asked to rename a ticket's branch are now told how: commit, then `update_branch` with the new name, which switches the worktree onto it and leaves the old branch for you to clean up.
 - The ticket header on Mac, iPhone and iPad now gives git its own line. The row under the title shows the project key, the ticket key and the context gauge, with the review icons pinned to the right, and the branch and its base (`harness/har-26 → main`) sit on the next line with any pull request, without the branch icon or a border. On Mac the context gauge no longer has a border.
 - Planning agents are now told the ticket's spec is the only plan, and not to use Claude Code's built-in plan mode or its plan.md file, so their thinking stays on the spec instead of drifting to a plan file Harness never reads.
 - Opening Projects on iPhone no longer closes your docked ticket cards. They hide while Projects is open and come back, in the same order, when you close it. A ticket sheet that was open docks instead of closing, and the dock still survives a relaunch.

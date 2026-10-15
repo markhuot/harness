@@ -417,6 +417,7 @@ This ticket conducts child tickets. You are re-invoked with a message whenever o
 The work is on \`{{branch}}\` and lands on \`{{baseBranch}}\`. When the human asks to move it to another branch X, use \`update_branch\` { branch }:
 * If X is checked out in another worktree (\`git worktree list\`), first integrate your commits there with \`git -C <its path>\` (\`cherry-pick\` the commits of \`{{branch}}\` not on \`{{baseBranch}}\`, or \`merge {{branch}}\`), then call \`update_branch\` and do the rest of this run in that worktree.
 * Otherwise it switches this worktree to X (created at your commit if new). Commit first.
+To rename the branch ("call it X"): commit, then \`update_branch\` { branch: X }: a new name is created at your commit and this worktree switches to it; the old branch is left for the human to clean up. Don't \`git branch -m\` it yourself.
 \`update_branch\` { base_branch } changes where the work lands. Never delete branches or worktrees; the human cleans up old ones.`,
   },
 

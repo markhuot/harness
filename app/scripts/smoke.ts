@@ -550,7 +550,7 @@ try {
   // 5. New session (DESIGN.md "Drafts"): ⌘N opens a New session pane beside the board; nothing is
   // saved until it has something in it, then it's a draft ticket (planning, no run) edited in the
   // same pane; Close asks Save / Discard; ⌘↩ starts it, ⇧⌘↩ plans it first.
-  type DT = { key: string; title: string; status: string; draft?: boolean; driver: string; model: string | null; permissionMode: string | null; useWorktree: boolean | null; spec: string };
+  type DT = { key: string; title: string; status: string; draft?: boolean; driver: string; model: string | null; permissionMode: string | null; useWorktree: boolean | null; requestedBranch?: string | null; spec: string };
   const allTickets = () => api<DT[]>("GET", "/tickets");
   const draftList = async () => (await allTickets()).filter((t) => t.draft);
   const cmdN = () => app!.key("n", "KeyN", 78, 4);
@@ -779,6 +779,17 @@ try {
   check("…and the hint says it works in the project directory", coHint.includes("with no worktree"), coHint);
   const coRows = await settingsRows(inPane(coId, ".draft-options"));
   check("without a worktree there's no Base branch row", coRows.join(",") === "Models,Permissions,Agent review,Human review,Branch,Depends on", coRows.join(","));
+  // A name the repo doesn't have yet offers a "Create" row, and picking it stores it as the requested branch.
+  const branchBtn = inPane(coId, "[data-testid=ticket-settings] [data-testid=branch-select] button");
+  await js(`document.querySelector('${branchBtn}').click()`);
+  await until("branch search", () => exists(".branch-combo .model-combo-search"));
+  await type(".branch-combo .model-combo-search", "fix/update-field-mapping");
+  await until("create row", () => js<boolean>(`[...document.querySelectorAll(".branch-combo .model-combo-option")].some(o => o.textContent.startsWith("Create") && o.textContent.includes("fix/update-field-mapping"))`));
+  await js(`[...document.querySelectorAll(".branch-combo .model-combo-option")].find(o => o.textContent.startsWith("Create") && o.textContent.includes("fix/update-field-mapping")).click()`);
+  const newStored = await until("requestedBranch saved", async () => (await api<{ ticket: DT }>("GET", `/tickets/${co.key}`)).ticket.requestedBranch === "fix/update-field-mapping");
+  check("typing a new branch name and picking its Create row stores it", newStored);
+  const newLabel = await js<string>(`document.querySelector('${branchBtn}').textContent`);
+  check("…and the Branch row shows the typed name", newLabel === "fix/update-field-mapping", newLabel);
   // Moving a saved draft to another project re-keys it; its pane follows the new key.
   await pickProjectKey("HARNESS", coId);
   const moved = await until("draft moved", async () => (await draftList()).find((t) => t.title.includes("right in the checkout") && t.key.startsWith("HARNESS-")));
