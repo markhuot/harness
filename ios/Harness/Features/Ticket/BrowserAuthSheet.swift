@@ -46,7 +46,6 @@ struct BrowserAuthSheet: View {
                     .font(.scaled(size: 12.5)).foregroundStyle(c.text3)
             }
         }
-        .onAppear { focus = .username }
         .interactiveDismissDisabled()
     }
 

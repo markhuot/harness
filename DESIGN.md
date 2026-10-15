@@ -2023,9 +2023,9 @@ A page behind HTTP Basic Auth shows viewers a sign-in sheet; an agent is told th
 - **Credentials stay out.** Never persisted (`StoredBrowserTab`, `browser_tabs` table), logged,
   put in tool results, or broadcast. A password typed into a URL (`https://user:pw@host/`) still
   works and is stripped (`stripUserinfo`) from every state, tab list, stored tab and request URL.
-  They reach the service over the app WebSocket, which is TLS only through a tunnel: on the plain
-  LAN link they cross in the clear, as the rest of the session does. The sheet also warns on
-  `http:` origins, where Basic itself sends the password unencrypted.
+  They reach the service over the app WebSocket, the same link as the rest of the session, so
+  they are as private as that link is. The sheet also warns on `http:` origins, where Basic itself
+  sends the password unencrypted.
 - **Agents.** `browser_open` and `browser_tabs` say the page needs Basic Auth and that the human can
   enter credentials (use `wait_for`, or `block`). There is no password argument: it would sit in the
   model transcript.

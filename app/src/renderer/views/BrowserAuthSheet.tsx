@@ -25,7 +25,7 @@ export function BrowserAuthSheet({ auth, onSubmit, onCancel }: { auth: BrowserAu
         <div className="modal-body">
           {auth.realm && <p className="dim" style={{ margin: "0 0 12px" }}>“{auth.realm}”</p>}
           {auth.failed && (
-            <p data-testid="browser-auth-failed" style={{ margin: "0 0 12px", color: "var(--danger, #d33)" }}>
+            <p data-testid="browser-auth-failed" style={{ margin: "0 0 12px", color: "var(--red)" }}>
               Incorrect username or password.
             </p>
           )}

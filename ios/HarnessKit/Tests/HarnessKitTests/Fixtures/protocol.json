@@ -592,6 +592,14 @@
     },
     {
       "type": "closeTab"
+    },
+    {
+      "type": "auth",
+      "username": "alice",
+      "password": "p@ss wörd"
+    },
+    {
+      "type": "authCancel"
     }
   ],
   "BrowserScreenshot": [
@@ -654,6 +662,41 @@
       "url": "about:blank",
       "title": "",
       "loading": true
+    },
+    {
+      "sessionId": "ses_31",
+      "tabId": 1,
+      "url": "https://staging.example.com/",
+      "title": "",
+      "loading": false,
+      "auth": {
+        "origin": "https://staging.example.com",
+        "realm": "Staging"
+      },
+      "tabs": [
+        {
+          "id": 1,
+          "url": "https://staging.example.com/",
+          "title": "",
+          "loading": false,
+          "auth": {
+            "origin": "https://staging.example.com",
+            "realm": "Staging"
+          }
+        }
+      ]
+    },
+    {
+      "sessionId": "ses_31",
+      "tabId": 1,
+      "url": "https://staging.example.com/",
+      "title": "",
+      "loading": false,
+      "auth": {
+        "origin": "https://staging.example.com",
+        "realm": "Staging",
+        "failed": true
+      }
     },
     {
       "sessionId": "ses_31",
@@ -5161,7 +5204,9 @@
       "size",
       "responsive",
       "newTab",
-      "closeTab"
+      "closeTab",
+      "auth",
+      "authCancel"
     ],
     "PluginHostMessage": [
       "harness:init",

@@ -38,7 +38,7 @@ withChrome("BrowserManager HTTP Basic Auth (real Chrome)", () => {
   afterAll(async () => {
     await browser?.shutdown();
     for (const server of servers) void server.stop(true);
-  });
+  }, 30_000);
 
   const auth = async (session: string, tab?: number) => (await browser.state(session, { tab }))?.auth;
   const body = (session: string, selector = "h1") => browser.content(session, { selector });
