@@ -285,3 +285,12 @@
 .browser-tab.torn .browser-tab-select {
   opacity: 0.75;
 }
+
+.browser-tab-auth {
+  flex: none;
+  font-size: 10.5px;
+  padding: 0 5px;
+  border-radius: 8px;
+  background: var(--accent-soft, rgba(80, 120, 255, 0.18));
+  color: var(--text-2);
+}

@@ -18,10 +18,12 @@ public struct BrowserState: Codable, Sendable, Equatable {
     /// True only in the state sent to the viewer whose pane the tab follows (`size.responsive`):
     /// that viewer sends its stage size as `resize` input; everyone else's `resize` is dropped.
     public var sizeOwner: Bool?
+    /// The page is waiting for HTTP Basic credentials (answer with `BrowserInput.auth`). nil: nothing pending.
+    public var auth: BrowserAuth?
 
     public init(
         sessionId: String, tabId: Int? = nil, url: String, title: String, loading: Bool, suspended: Bool? = nil, tabs: [BrowserTab]? = nil,
-        size: BrowserSize? = nil, sizeOwner: Bool? = nil
+        size: BrowserSize? = nil, sizeOwner: Bool? = nil, auth: BrowserAuth? = nil
     ) {
         self.sessionId = sessionId
         self.tabId = tabId
@@ -32,6 +34,7 @@ public struct BrowserState: Codable, Sendable, Equatable {
         self.tabs = tabs
         self.size = size
         self.sizeOwner = sizeOwner
+        self.auth = auth
     }
 
     /// Whether this viewer's stage size drives the tab (an older service never sends it).
@@ -69,6 +72,26 @@ public struct BrowserSize: Codable, Sendable, Equatable {
     }
 }
 
+/// A page's pending HTTP Basic Auth challenge. `origin` is the server's (from the request, not the
+/// page); `realm` is its own text. `failed`: the last credentials were refused. The credentials
+/// never appear in state.
+public struct BrowserAuth: Codable, Sendable, Equatable {
+    public var origin: String
+    public var realm: String
+    public var failed: Bool?
+
+    public init(origin: String, realm: String, failed: Bool? = nil) {
+        self.origin = origin
+        self.realm = realm
+        self.failed = failed
+    }
+
+    /// Whether the last credentials were refused.
+    public var wasRefused: Bool { failed ?? false }
+    /// Basic sends the password in the clear over `http:`.
+    public var isPlainText: Bool { origin.lowercased().hasPrefix("http:") }
+}
+
 /// One tab of a session's browser. Ids count up from 1 per session and are never reused.
 public struct BrowserTab: Codable, Sendable, Equatable, Identifiable {
     public var id: Int
@@ -79,14 +102,17 @@ public struct BrowserTab: Codable, Sendable, Equatable, Identifiable {
     public var suspended: Bool?
     /// Its input mode and viewport. Services from before per-tab sizes omit it.
     public var size: BrowserSize?
+    /// Its page is waiting for HTTP Basic credentials.
+    public var auth: BrowserAuth?
 
-    public init(id: Int, url: String, title: String, loading: Bool, suspended: Bool? = nil, size: BrowserSize? = nil) {
+    public init(id: Int, url: String, title: String, loading: Bool, suspended: Bool? = nil, size: BrowserSize? = nil, auth: BrowserAuth? = nil) {
         self.id = id
         self.url = url
         self.title = title
         self.loading = loading
         self.suspended = suspended
         self.size = size
+        self.auth = auth
     }
 
     /// Whether its page is closed (an older service never sends it).
@@ -158,6 +184,11 @@ public enum BrowserInput: Codable, Sendable, Equatable {
     /// Close the input's tab (ClientMessage `browserInput`'s `tabId`); closing the last one
     /// leaves a blank tab in its place.
     case closeTab
+    /// Answer the tab's pending HTTP Basic Auth challenge (BrowserState.auth). The service keeps the
+    /// credentials in memory only and reloads the page.
+    case auth(username: String, password: String)
+    /// Cancel the pending challenge.
+    case authCancel
     case unknown(type: String, raw: JSONValue)
 
     public var type: String {
@@ -175,6 +206,8 @@ public enum BrowserInput: Codable, Sendable, Equatable {
         case .responsive: "responsive"
         case .newTab: "newTab"
         case .closeTab: "closeTab"
+        case .auth: "auth"
+        case .authCancel: "authCancel"
         case let .unknown(type, _): type
         }
     }
@@ -199,6 +232,8 @@ public enum BrowserInput: Codable, Sendable, Equatable {
                 height: try c.decodeIfPresent(Int.self, forKey: "height"))
         case "newTab": self = .newTab(url: try c.decodeIfPresent(String.self, forKey: "url"))
         case "closeTab": self = .closeTab
+        case "auth": self = .auth(username: try c.decode(String.self, forKey: "username"), password: try c.decode(String.self, forKey: "password"))
+        case "authCancel": self = .authCancel
         default: self = .unknown(type: type, raw: try JSONValue(from: decoder))
         }
     }
@@ -224,6 +259,9 @@ public enum BrowserInput: Codable, Sendable, Equatable {
             try c.encodeIfPresent(width, forKey: "width")
             try c.encodeIfPresent(height, forKey: "height")
         case let .newTab(url): try c.encodeIfPresent(url, forKey: "url")
+        case let .auth(username, password):
+            try c.encode(username, forKey: "username")
+            try c.encode(password, forKey: "password")
         default: break
         }
     }

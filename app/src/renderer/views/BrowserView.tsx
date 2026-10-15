@@ -20,6 +20,7 @@ import { drivesSize, keepOwner, responsiveInput, responsiveLook, sideInput, take
 import { toggleBrowserSizeRow, useLayout } from "../state/layout";
 import { Icon } from "../components/Icon";
 import { MenuButton } from "../components/bits";
+import { BrowserAuthSheet } from "./BrowserAuthSheet";
 import { runnableExtensions } from "@harness/shared/state";
 import { useAnnotate } from "../components/Annotator";
 import { browserShotName } from "../state/annotator";
@@ -731,6 +732,7 @@ export function BrowserView({
                   >
                     {tab.loading ? <span className="spinner browser-tab-spinner" /> : <Icon name="globe" size={11} className="browser-tab-icon" />}
                     <span className="truncate">{label}</span>
+                    {tab.auth && <span className="browser-tab-auth" title={`Needs sign-in to ${tab.auth.origin}`}>Sign in</span>}
                     {torn && <TornMark torn={torn} />}
                   </button>
                   <button className="browser-tab-close" title="Close tab" aria-label={`Close ${label}`} onClick={() => closeTab(tab)}>
@@ -923,6 +925,7 @@ export function BrowserView({
             <span>Waiting for the first frame…</span>
           </div>
         )}
+        {state?.auth && !tornShown && <BrowserAuthSheet auth={state.auth} onSubmit={(username, password) => send({ type: "auth", username, password })} onCancel={() => send({ type: "authCancel" })} />}
         {tornShown && tear && (
           <div className="browser-empty browser-torn">
             <TornPlaceholder name={state?.title ? `“${tabLabel({ title: state.title, url: state.url ?? "" })}”` : "This tab"} torn={tornShown} onReturn={() => returnTabPane(tear.boardScope, tear.ticketKey, `browser:${tornShown.content.browserTab}`)} />

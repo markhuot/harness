@@ -801,6 +801,24 @@ export const Health: P.Health[] = [
 export const BrowserState: P.BrowserState[] = [
   { sessionId: "ses_31", url: "http://localhost:3000/login", title: "Log in", loading: false },
   { sessionId: "ses_31", url: "about:blank", title: "", loading: true },
+  // A page waiting for HTTP Basic credentials, and the same after a refused attempt.
+  {
+    sessionId: "ses_31",
+    tabId: 1,
+    url: "https://staging.example.com/",
+    title: "",
+    loading: false,
+    auth: { origin: "https://staging.example.com", realm: "Staging" },
+    tabs: [{ id: 1, url: "https://staging.example.com/", title: "", loading: false, auth: { origin: "https://staging.example.com", realm: "Staging" } }],
+  },
+  {
+    sessionId: "ses_31",
+    tabId: 1,
+    url: "https://staging.example.com/",
+    title: "",
+    loading: false,
+    auth: { origin: "https://staging.example.com", realm: "Staging", failed: true },
+  },
   {
     sessionId: "ses_31",
     tabId: 3,
@@ -974,7 +992,7 @@ export const HarnessEvent: P.HarnessEvent[] = [
   { kind: "browser.frame", sessionId: "ses_31", data: "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBD", width: 1280, height: 800 },
   { kind: "browser.frame", sessionId: "ses_31", tabId: 3, data: "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBD", width: 1024, height: 768 },
   { kind: "browser.state", sessionId: "ses_31", state: BrowserState[0]! },
-  { kind: "browser.state", sessionId: "ses_31", state: BrowserState[2]! },
+  { kind: "browser.state", sessionId: "ses_31", state: BrowserState[4]! },
   { kind: "browser.frame", sessionId: "ses_31", tabId: 2, data: "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBD", width: 1024, height: 768, viewerId: "v:spec-2" },
   { kind: "browser.state", sessionId: "ses_31", state: BrowserState[0]!, viewerId: "v:spec-2" },
   { kind: "service.status", status: ServiceStatus[0]! },
@@ -1002,6 +1020,8 @@ export const BrowserInput: P.BrowserInput[] = [
   { type: "newTab", url: "http://localhost:3000/docs" },
   { type: "newTab" },
   { type: "closeTab" },
+  { type: "auth", username: "alice", password: "p@ss wörd" },
+  { type: "authCancel" },
 ];
 
 export const ClientMessage: P.ClientMessage[] = [
@@ -1237,7 +1257,7 @@ export const discriminators: Record<string, string[]> = {
   ToolResultContent: all<P.ToolResultContent["type"]>({ text: true, image: true }),
   ClientMessage: all<P.ClientMessage["type"]>({ hello: true, "browser.subscribe": true, "browser.unsubscribe": true, "browser.input": true, presence: true, ping: true }),
   ServerMessage: all<P.ServerMessage["type"]>({ welcome: true, event: true, pong: true, error: true }),
-  BrowserInput: all<P.BrowserInput["type"]>({ mouse: true, key: true, text: true, navigate: true, back: true, forward: true, reload: true, resize: true, device: true, size: true, responsive: true, newTab: true, closeTab: true }),
+  BrowserInput: all<P.BrowserInput["type"]>({ mouse: true, key: true, text: true, navigate: true, back: true, forward: true, reload: true, resize: true, device: true, size: true, responsive: true, newTab: true, closeTab: true, auth: true, authCancel: true }),
   PluginHostMessage: all<P.PluginHostMessage["type"]>({ "harness:init": true, "harness:theme": true, "harness:ticket": true }),
   PluginFrameMessage: all<P.PluginFrameMessage["type"]>({ "harness:ready": true, "harness:openExternal": true, "harness:navigate": true }),
 };

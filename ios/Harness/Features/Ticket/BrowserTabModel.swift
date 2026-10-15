@@ -135,6 +135,18 @@ final class BrowserTabModel {
         pinch.cancel()
     }
 
+    // MARK: HTTP Basic Auth
+
+    /// Answer the page's pending challenge. The service reloads the page and clears `state.auth`.
+    func answerAuth(username: String, password: String) {
+        send(.auth(username: username, password: password))
+    }
+
+    /// Cancel the pending challenge.
+    func cancelAuth() {
+        send(.authCancel)
+    }
+
     // MARK: Tabs
 
     /// Show tab `id`: the socket switches to it and the service answers with its state and frame.

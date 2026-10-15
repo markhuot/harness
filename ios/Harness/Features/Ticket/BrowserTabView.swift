@@ -52,6 +52,12 @@ struct BrowserTabView: View {
 
     private enum SizeField: Hashable { case width, height }
 
+    /// A pending challenge as a sheet item: a refused attempt is a new item, so the sheet starts over.
+    private struct AuthChallenge: Identifiable {
+        let auth: BrowserAuth
+        var id: String { "\(auth.origin)\n\(auth.realm)\n\(auth.wasRefused)" }
+    }
+
     init(ticket: Ticket, pinnedTab: Int? = nil) {
         self.ticket = ticket
         self.pinnedTab = pinnedTab
@@ -111,6 +117,10 @@ struct BrowserTabView: View {
             } else if let size = model.state?.size {
                 showSize(size)
             }
+        }
+        // One sheet per challenge: it closes when anyone answers (state.auth clears), here or on the Mac.
+        .sheet(item: Binding(get: { model.state?.auth.map(AuthChallenge.init) }, set: { if $0 == nil, model.state?.auth != nil { model.cancelAuth() } })) { challenge in
+            BrowserAuthSheet(auth: challenge.auth, submit: model.answerAuth)
         }
         .toolbar {
             if sizeField != nil {
@@ -526,6 +536,10 @@ struct BrowserTabChip: View {
                 .opacity(dimmed ? 0.55 : 1)
                 .lineLimit(1)
                 .truncationMode(.tail)
+            if tab.auth != nil {
+                Text("Sign in").font(.scaled(size: 10.5)).foregroundStyle(c.text2)
+                    .padding(.horizontal, 5).background(c.accentSoft, in: .capsule)
+            }
             Button {
                 haptic(.tap)
                 close()

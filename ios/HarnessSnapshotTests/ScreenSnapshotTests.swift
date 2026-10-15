@@ -99,6 +99,17 @@ final class ScreenSnapshotTests: XCTestCase {
         }) { RootView() }
     }
 
+    /// The sheet a page's HTTP Basic Auth challenge opens over the Browser tab: first ask, a refused
+    /// attempt, and an unencrypted origin.
+    func testBrowserAuthSheet() async throws {
+        try await snapshot("browser-auth") {
+            BrowserAuthSheet(auth: BrowserAuth(origin: "https://staging.example.com", realm: "Staging"), submit: { _, _ in })
+        }
+        try await snapshot("browser-auth-refused-plain") {
+            BrowserAuthSheet(auth: BrowserAuth(origin: "http://192.168.1.20:8080", realm: "Admin", failed: true), submit: { _, _ in })
+        }
+    }
+
     func testSheetFrame() async throws {
         try await snapshot("sheet-request-changes") {
             TicketDetailSheetFrame(title: "Request changes", subtitle: "HAR-7") {
