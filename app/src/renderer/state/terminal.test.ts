@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { ALL_SCOPE, groupScope } from "@harness/shared/state";
 import { THEMES } from "@harness/shared/themes";
-import type { TerminalExit, TerminalSession } from "../../main/types";
-import { appOwnsKey, createAttach, exitLabel, menuKey, terminalColors, terminalCwd, terminalScope } from "./terminal";
+import type { TerminalInfo } from "@harness/shared";
+import { appOwnsKey, applyTerminalEvent, exitLabel, menuKey, terminalColors, terminalCwd, terminalOpenScope, terminalRow, terminalScope, tildePath } from "./terminal";
 
 describe("terminalCwd", () => {
   const projects = { p1: { path: "/Users/me/Sites/harness" }, p2: { path: "" } };
@@ -47,109 +47,55 @@ describe("terminalScope", () => {
   });
 });
 
-describe("createAttach", () => {
-  const session = (over: Partial<TerminalSession> = {}): TerminalSession => ({
-    id: "t:1",
-    pid: 1,
-    shell: "/bin/zsh",
-    cwd: "/",
-    cols: 80,
-    rows: 24,
-    created: true,
-    scrollback: "",
-    end: 0,
-    exit: null,
-    ...over,
-  });
-  function harness() {
-    const log: string[] = [];
-    const attach = createAttach({
-      write: (d) => log.push(`write ${d}`),
-      resizePty: (c, r) => log.push(`resize ${c}x${r}`),
-      exited: (e) => log.push(`exit ${e.exitCode}`),
-    });
-    return { log, attach };
-  }
-  const exit0: TerminalExit = { exitCode: 0, signal: null };
-  const size = { cols: 80, rows: 24 };
+const info = (over: Partial<TerminalInfo> = {}): TerminalInfo => ({ id: "t-1", cwd: "/Users/me/Sites", title: "", process: "zsh", projectId: null, state: "running", exitCode: null, createdAt: 0, createdBy: "", cols: 80, rows: 24, ...over });
 
-  test("a chunk the scrollback already holds is skipped, whichever side of ensure's reply it arrives", () => {
-    // Output so far: "ab" (ends at 2) then "cd" (ends at 4). ensure() snapshotted after both.
-    const before = harness();
-    before.attach.data("ab", 2); // sent and received before the reply
-    before.attach.attached(session({ scrollback: "abcd", end: 4 }), size);
-    before.attach.data("cd", 4); // sent before the reply, received after it
-    before.attach.data("ef", 6);
-    expect(before.log).toEqual(["write abcd", "write ef"]);
-  });
-
-  test("a chunk sent after the reply but received before it is held, not lost", () => {
-    const { log, attach } = harness();
-    attach.data("ef", 6);
-    attach.attached(session({ scrollback: "abcd", end: 4 }), size);
-    attach.data("gh", 8);
-    expect(log).toEqual(["write abcd", "write ef", "write gh"]);
-  });
-
-  test("a chunk straddling the scrollback's end writes only its new part", () => {
-    const { log, attach } = harness();
-    attach.attached(session({ scrollback: "abc", end: 3 }), size);
-    attach.data("bcdef", 6);
-    attach.data("def", 6); // a repeat of what's written
-    expect(log).toEqual(["write abc", "write def"]);
-  });
-
-  test("a trimmed scrollback still lines up: offsets count all output, not what's kept", () => {
-    const { log, attach } = harness();
-    attach.attached(session({ scrollback: "6789", end: 10 }), size);
-    attach.data("89xy", 12);
-    expect(log).toEqual(["write 6789", "write xy"]);
-  });
-
-  test("a re-attached pane resizes the PTY to itself (ensure ignores cols/rows for an existing shell)", () => {
-    const { log, attach } = harness();
-    attach.attached(session({ created: false, cols: 80, rows: 24 }), { cols: 132, rows: 40 });
-    expect(log).toEqual(["resize 132x40"]);
-  });
-
-  test("a fresh shell spawned at the pane's size isn't resized again; one the pane outgrew meanwhile is", () => {
-    const fresh = harness();
-    fresh.attach.attached(session(), size);
-    expect(fresh.log).toEqual([]);
-    const grew = harness();
-    grew.attach.attached(session(), { cols: 100, rows: 24 });
-    expect(grew.log).toEqual(["resize 100x24"]);
-  });
-
-  test("an empty scrollback writes nothing (ghostty-web throws on write(''))", () => {
-    const { log, attach } = harness();
-    attach.attached(session(), size);
-    attach.data("", 0);
-    expect(log).toEqual([]);
-  });
-
-  test("a shell that exited while no pane showed it reports the exit on attach", () => {
-    const { log, attach } = harness();
-    attach.attached(session({ created: false, scrollback: "bye\r\n", end: 5, exit: { exitCode: 3, signal: null } }), size);
-    expect(log).toEqual(["write bye\r\n", "resize 80x24", "exit 3"]);
-  });
-
-  test("an exit that arrives before the reply is held until attach; one after is reported as it comes", () => {
-    const early = harness();
-    early.attach.exit(exit0);
-    expect(early.log).toEqual([]);
-    early.attach.attached(session(), size);
-    expect(early.log).toEqual(["exit 0"]);
-    const late = harness();
-    late.attach.attached(session(), size);
-    late.attach.exit({ exitCode: 7, signal: null });
-    expect(late.log).toEqual(["exit 7"]);
+describe("applyTerminalEvent", () => {
+  test("created adds, updated replaces in place, removed drops; an unknown id or event changes nothing", () => {
+    const a = info({ id: "t-a" });
+    const b = info({ id: "t-b" });
+    let list = applyTerminalEvent([], { kind: "terminal.created", terminal: a });
+    list = applyTerminalEvent(list, { kind: "terminal.created", terminal: b });
+    expect(list.map((t) => t.id)).toEqual(["t-a", "t-b"]);
+    list = applyTerminalEvent(list, { kind: "terminal.updated", terminal: { ...a, title: "vim" } });
+    expect(list.map((t) => t.title)).toEqual(["vim", ""]);
+    // an update that arrives before its created (a reconnect gap) still lists it
+    expect(applyTerminalEvent(list, { kind: "terminal.updated", terminal: info({ id: "t-c" }) })).toHaveLength(3);
+    const same = applyTerminalEvent(list, { kind: "terminal.removed", id: "t-zzz" });
+    expect(same).toBe(list);
+    expect(applyTerminalEvent(list, { kind: "terminal.removed", id: "t-a" }).map((t) => t.id)).toEqual(["t-b"]);
+    expect(applyTerminalEvent(list, { kind: "devices.changed" })).toBe(list);
   });
 });
 
-test("exitLabel names the code, or the signal that killed the shell", () => {
-  expect(exitLabel({ exitCode: 1, signal: null })).toBe("Process exited (code 1)");
-  expect(exitLabel({ exitCode: 0, signal: 9 })).toBe("Process exited (signal 9)");
+describe("terminalRow", () => {
+  test("label is the title, else the program; the subtitle says where it is and what runs", () => {
+    expect(terminalRow(info({ title: "npm run dev", process: "node" }))).toEqual({
+      label: "npm run dev",
+      subtitle: "~/Sites · node",
+      keywords: ["/Users/me/Sites", "node", "npm run dev"],
+    });
+    expect(terminalRow(info()).label).toBe("zsh");
+    expect(terminalRow(info({ state: "exited", cwd: "/tmp/x" })).subtitle).toBe("/tmp/x · ended");
+  });
+  test("tildePath only shortens inside the home folder", () => {
+    expect(tildePath("/Users/me")).toBe("~");
+    expect(tildePath("/Users/me/Sites/harness")).toBe("~/Sites/harness");
+    expect(tildePath("/home/me/x")).toBe("~/x");
+    expect(tildePath("/var/Users/me")).toBe("/var/Users/me");
+  });
+});
+
+describe("terminalOpenScope", () => {
+  test("the terminal's project when it is loaded, else All projects", () => {
+    expect(terminalOpenScope({ projectId: "p1" }, { p1: {} })).toBe("p1");
+    expect(terminalOpenScope({ projectId: "gone" }, { p1: {} })).toBe(ALL_SCOPE);
+    expect(terminalOpenScope({ projectId: null }, { p1: {} })).toBe(ALL_SCOPE);
+  });
+});
+
+test("exitLabel names the code; a terminal the service lost has none", () => {
+  expect(exitLabel(1)).toBe("Process exited (code 1)");
+  expect(exitLabel(null)).toBe("This terminal has ended");
 });
 
 test("⌘ shortcuts stay with the app, except ⌘C/⌘V; ⌃ and plain keys go to the shell", () => {

@@ -38,6 +38,7 @@ import {
   type PaletteItem,
   type Ranked,
 } from "../state/palette";
+import { terminalRow } from "../state/terminal";
 import { StatusDot, STATUS_LABEL } from "../components/bits";
 import { SETTINGS_SECTIONS } from "./Settings";
 
@@ -50,7 +51,7 @@ const FILE_LIMIT_ALL = 5;
 const MAX_ROWS = 60;
 
 interface Entry extends PaletteItem {
-  kind: "command" | "nav" | "ticket" | "file";
+  kind: "command" | "nav" | "ticket" | "file" | "terminal";
   group: string;
   /** Shortcut hint ("⇧⌘]"). */
   keys?: string;
@@ -117,7 +118,7 @@ function FileLabel({ path, ranges }: { path: string; ranges: MatchRange[] }) {
 const rootKey = (root: PaletteFileRoot | null) => (!root ? "" : "ticketKey" in root ? `t:${root.ticketKey}` : `p:${root.projectId}`);
 
 export function CommandPalette({ origin, initial = "", onClose, onShortcuts }: { origin: Element; initial?: string; onClose: () => void; onShortcuts: () => void }) {
-  const { state, client, route, navigate, openFile } = useStore();
+  const { state, client, route, navigate, openFile, terminals, showTerminal } = useStore();
   const [raw, setRaw] = useState(initial);
   const [active, setActive] = useState(0);
   const [recents] = useState(readRecents);
@@ -238,6 +239,11 @@ export function CommandPalette({ origin, initial = "", onClose, onShortcuts }: {
       for (const [id, label] of SETTINGS_SECTIONS) nav(`settings:${id}`, `Settings: ${label}`, () => navigate({ view: "settings", section: id }));
       if (!have.has("new-session")) nav("new-session", "New Session…", () => runCommand("new-session", origin));
       if (!have.has("shortcuts")) nav("shortcuts", "Keyboard Shortcuts", onShortcuts);
+      // The service's terminals (this Mac's panes and the iPhone's), matched by title, program and folder.
+      for (const t of terminals) {
+        const { label, subtitle, keywords } = terminalRow(t);
+        out.push({ id: `terminal:${t.id}`, kind: "terminal", label, subtitle, group: "Terminal", keywords: ["terminal", ...keywords], run: () => showTerminal(t) });
+      }
     }
     if (wantTickets) {
       const seen = new Set<string>();
@@ -252,7 +258,7 @@ export function CommandPalette({ origin, initial = "", onClose, onShortcuts }: {
     }
     return out.map((e) => ({ ...e, recentRank: ranks.get(e.id) }));
     // origin's handlers are read when the palette opens and again as the query changes.
-  }, [wantCommands, wantTickets, q, origin, state, remote, recents, route, navigate, onShortcuts]);
+  }, [wantCommands, wantTickets, q, origin, state, remote, recents, route, navigate, onShortcuts, terminals, showTerminal]);
 
   // File rows, in the server's order (it ranks them); the recently opened ones for an empty query.
   const fileRows = useMemo((): Ranked<Entry>[] => {
@@ -415,6 +421,7 @@ export function CommandPalette({ origin, initial = "", onClose, onShortcuts }: {
                     <span className="palette-label">
                       <Highlighted text={item.label} ranges={ranges} />
                     </span>
+                    {item.subtitle && <span className="palette-subtitle truncate mono">{item.subtitle}</span>}
                     <span className="palette-group">{item.group}</span>
                     {item.keys && <span className="kbd">{item.keys}</span>}
                   </>

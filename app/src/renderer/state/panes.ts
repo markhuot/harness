@@ -596,21 +596,9 @@ function appendAtRightEdge(state: PaneState, content: PaneContent, share: (root:
   return normalize({ root: next, focusedId: leaf.id, zoomedId: null });
 }
 
-/**
- * A new terminal pane's content: a shell in `cwd` under a fresh, collision-proof session id (two
- * windows can mint the same pane id before either sees the other's write, but never the same UUID).
- */
-export function newTerminalContent(cwd: string, uuid: () => string = () => crypto.randomUUID()): TerminalContent {
-  return { kind: "terminal", sessionId: `${TERMINAL_SESSION_PREFIX}${uuid()}`, cwd };
-}
-
-/** Every terminal pane's session id starts with this; shells with other ids aren't a pane's to clean up. */
-export const TERMINAL_SESSION_PREFIX = "t:";
-
-/** Of the shells the main process has, the ones a pane made that no scope shows any more (left over from before a reload). */
-export function orphanSessions(running: readonly string[], store: PaneStore): string[] {
-  const open = terminalSessions(store);
-  return running.filter((id) => id.startsWith(TERMINAL_SESSION_PREFIX) && !open.has(id));
+/** A terminal pane's content: a view of the service's terminal `id` (a shell the service hosts, shared with the iPhone). */
+export function terminalContent(terminal: { id: string; cwd: string; title?: string }): TerminalContent {
+  return { kind: "terminal", sessionId: terminal.id, cwd: terminal.cwd, ...(terminal.title ? { title: terminal.title } : {}) };
 }
 
 /**
@@ -1634,6 +1622,12 @@ export function retainPopouts(store: PaneStore, keep: (id: string) => boolean): 
 export function retainScopes(store: PaneStore, keep: (scope: string) => boolean): PaneStore {
   const scopes = Object.fromEntries(Object.entries(store.scopes).filter(([scope]) => keep(scope)));
   return Object.keys(scopes).length === Object.keys(store.scopes).length ? store : { scopes };
+}
+
+/** The scope whose panes show terminal `id`, or null when this device shows it nowhere. */
+export function terminalScopeOf(store: PaneStore, id: string): string | null {
+  for (const [scope, s] of Object.entries(store.scopes)) if (terminalLeafBySession(s.root, id)) return scope;
+  return null;
 }
 
 /** Every terminal session open in any scope: the shells that must stay alive. */

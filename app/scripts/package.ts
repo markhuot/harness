@@ -1,9 +1,6 @@
 // Package the built app into out/Harness-darwin-<arch>/Harness.app (run `bun run build` first;
 // `bun run package` does both). Only package.json, dist/ and resources/ ship: main, preload and
-// renderer are fully bundled. The exception is node-pty (terminals), a native addon: its JS, its
-// package.json and this platform's prebuilt pty.node + spawn-helper are copied into
-// node_modules/node-pty and unpacked beside app.asar, where native code has to live (sign-mac.ts
-// signs them with the rest of the bundle).
+// renderer are fully bundled (terminals run in the service, so the app carries no native addon).
 //
 // The service ships inside the app (service/scripts/compile.ts): the compiled executable in
 // Contents/MacOS/harness-service and the prebuilt builtin plugins in Contents/Resources/plugins,
@@ -40,20 +37,6 @@ const electronPkg = [join(appDir, "node_modules/electron/package.json"), join(re
 if (!electronPkg) throw new Error("electron is not installed; run `bun install` at the repo root.");
 const electronVersion = JSON.parse(readFileSync(electronPkg, "utf8")).version as string;
 const icon = join(appDir, "resources", "icon.icns");
-
-const ptyDir = dirname(createRequire(join(appDir, "package.json")).resolve("node-pty/package.json"));
-const ptyPrebuild = `prebuilds/darwin-${process.arch}`;
-if (!existsSync(join(ptyDir, ptyPrebuild, "pty.node"))) throw new Error(`node-pty has no ${ptyPrebuild}/pty.node; run \`bun install\`.`);
-
-function copyNodePty(buildPath: string) {
-  const dest = join(buildPath, "node_modules", "node-pty");
-  mkdirSync(dest, { recursive: true });
-  for (const f of ["package.json", "LICENSE", "lib", ptyPrebuild]) {
-    cpSync(join(ptyDir, f), join(dest, f), { recursive: true, filter: (src) => !/\.(test\.js|map)$/.test(src) });
-  }
-  // The tarball ships spawn-helper without its executable bit, and without it every spawn fails.
-  chmodSync(join(dest, ptyPrebuild, "spawn-helper"), 0o755);
-}
 
 // Compiled before packaging, so a failed compile leaves the last app alone.
 const serviceOut = join(appDir, "out", "service");
@@ -110,11 +93,10 @@ const paths = await packager({
   electronVersion,
   out: join(appDir, "out"),
   overwrite: true,
-  asar: { unpackDir: "node_modules/node-pty" },
+  asar: true,
   afterCopy: [
     (buildPath, _electronVersion, _platform, _arch, done) => {
       try {
-        copyNodePty(buildPath);
         if (compiled) {
           const json = { executable: SERVICE_EXECUTABLE, builtAt: new Date().toISOString() };
           writeFileSync(join(buildPath, "resources", "harness.json"), JSON.stringify(json, null, 2) + "\n");

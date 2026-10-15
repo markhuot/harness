@@ -4,10 +4,9 @@
 // content and its placement live with the other pane operations in panes.ts. Tested in
 // terminal.test.ts.
 
-import type { Project, Ticket } from "@harness/shared";
+import type { HarnessEvent, Project, TerminalInfo, Ticket } from "@harness/shared";
 import { ALL_SCOPE, type ResolvedTheme } from "@harness/shared/state";
 import { over, toHex, type ThemeTokens } from "@harness/shared/themes";
-import type { TerminalExit, TerminalSession } from "../../main/types";
 import { paneScopeOf, type Route } from "./route";
 
 /**
@@ -37,78 +36,47 @@ export function terminalScope(route: Route, lastBoardScope: string | null): stri
 }
 
 // ---------------------------------------------------------------------------
-// Attaching to a shell
+// The service's terminals
 // ---------------------------------------------------------------------------
 
-/** Where an attach sends things: the screen (`write`, `exited`) and the PTY (`resizePty`). */
-export interface AttachSink {
-  write(data: string): void;
-  resizePty(cols: number, rows: number): void;
-  exited(exit: TerminalExit): void;
+/** The list after a terminal.created / updated / removed event (any other event leaves it as it is). */
+export function applyTerminalEvent(list: readonly TerminalInfo[], event: HarnessEvent): readonly TerminalInfo[] {
+  switch (event.kind) {
+    case "terminal.created":
+    case "terminal.updated": {
+      const i = list.findIndex((t) => t.id === event.terminal.id);
+      if (i === -1) return [...list, event.terminal];
+      const next = list.slice();
+      next[i] = event.terminal;
+      return next;
+    }
+    case "terminal.removed":
+      return list.some((t) => t.id === event.id) ? list.filter((t) => t.id !== event.id) : list;
+    default:
+      return list;
+  }
 }
 
-export interface Attach {
-  /** An onData event for this pane's session; `end` is the output offset just past `data`. */
-  data(data: string, end: number): void;
-  /** An onExit event for this pane's session. */
-  exit(exit: TerminalExit): void;
-  /** ensure() resolved with `session`, while the pane is `size`. */
-  attached(session: TerminalSession, size: { cols: number; rows: number }): void;
-  readonly isAttached: boolean;
+/** A home folder (macOS or Linux layout) shortened to `~` for display. */
+export function tildePath(path: string): string {
+  return path.replace(/^\/(?:Users|home)\/[^/]+(?=\/|$)/, "~");
 }
 
-/**
- * The bridge's attach contract. ensure() returns the scrollback and the output offset it ends at,
- * and every data event carries the offset it ends at. Data events and ensure()'s reply travel
- * separately, so they can arrive in either order: events before the reply are held, and once the
- * scrollback is written only output past its end is (a chunk the scrollback already holds is
- * skipped, one that straddles its end is trimmed). ensure() ignores cols/rows for a shell that
- * already exists, so a re-attached pane (which may have remounted at another size) resizes the PTY
- * to itself; a fresh shell was spawned at the size asked for, so it's only resized if the pane
- * changed meanwhile. A shell that exited while nothing showed it reports the exit in the session.
- */
-export function createAttach(sink: AttachSink): Attach {
-  let attached = false;
-  /** The output offset written up to. */
-  let seen = 0;
-  let held: [string, number][] = [];
-  let heldExit: TerminalExit | null = null;
-  const apply = (data: string, end: number) => {
-    if (end <= seen) return;
-    const start = end - data.length;
-    const fresh = start < seen ? data.slice(seen - start) : data;
-    seen = end;
-    if (fresh) sink.write(fresh);
-  };
-  return {
-    data(data, end) {
-      if (attached) apply(data, end);
-      else held.push([data, end]);
-    },
-    exit(exit) {
-      if (attached) sink.exited(exit);
-      else heldExit = exit;
-    },
-    attached(session, size) {
-      if (session.scrollback) sink.write(session.scrollback);
-      seen = session.end;
-      attached = true;
-      for (const [data, end] of held) apply(data, end);
-      held = [];
-      if (!session.created || session.cols !== size.cols || session.rows !== size.rows) sink.resizePty(size.cols, size.rows);
-      const exit = session.exit ?? heldExit;
-      heldExit = null;
-      if (exit) sink.exited(exit);
-    },
-    get isAttached() {
-      return attached;
-    },
-  };
+/** A terminal's palette row: what it is (its title, else the program), and where it is and what runs. */
+export function terminalRow(t: Pick<TerminalInfo, "title" | "process" | "cwd" | "state">): { label: string; subtitle: string; keywords: string[] } {
+  const label = t.title.trim() || t.process || "Terminal";
+  const subtitle = [tildePath(t.cwd), t.state === "exited" ? "ended" : t.process].filter(Boolean).join(" · ");
+  return { label, subtitle, keywords: [t.cwd, t.process, t.title].filter(Boolean) };
 }
 
-/** "Process exited (code 1)", or the signal that killed it. */
-export function exitLabel(exit: TerminalExit): string {
-  return exit.signal ? `Process exited (signal ${exit.signal})` : `Process exited (code ${exit.exitCode})`;
+/** The project scope a terminal opens in on this Mac: its project's board, All projects when it has none or the project is gone. */
+export function terminalOpenScope(t: Pick<TerminalInfo, "projectId">, projects: Readonly<Record<string, unknown>>): string {
+  return t.projectId && projects[t.projectId] ? t.projectId : ALL_SCOPE;
+}
+
+/** "Process exited (code 1)"; a terminal the service no longer has (it restarted) has no code. */
+export function exitLabel(exitCode: number | null): string {
+  return exitCode === null ? "This terminal has ended" : `Process exited (code ${exitCode})`;
 }
 
 // ---------------------------------------------------------------------------

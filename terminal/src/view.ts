@@ -4,7 +4,7 @@
 // show, which is what the service sizes by. When the shell is smaller than the container the rest
 // stays empty; for the instant before a change is confirmed the container clips what overflows.
 
-import type { Terminal } from "ghostty-web";
+import type { ITheme, Terminal } from "ghostty-web";
 import { viewportFor, type CellSize } from "./layout";
 import { TerminalFeed, type TerminalMessage, type TerminalSink } from "./session";
 
@@ -14,8 +14,8 @@ export type GhosttyModule = typeof import("ghostty-web");
 let loaded: Promise<GhosttyModule> | null = null;
 export const loadGhostty = (): Promise<GhosttyModule> => (loaded ??= import("ghostty-web").then(async (m) => (await m.init(), m)));
 
-/** ghostty-web's ITheme subset we set, all #rrggbb. */
-export type TerminalTheme = Record<string, string>;
+/** ghostty-web's colors (all #rrggbb: its VT core only parses hex and rgb()). */
+export type TerminalTheme = ITheme;
 
 export interface ViewOptions {
   /** The viewport the terminal is centered in; the view makes it a flex box and clips it. */
