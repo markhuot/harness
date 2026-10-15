@@ -104,6 +104,8 @@ export function axeFor(udid: string, developerDir: string, { strict = false }: {
     tapAt: (x: number, y: number) => run("tap", "-x", String(Math.round(x)), "-y", String(Math.round(y))),
     /** A press held for a moment: a Toggle ignores the instantaneous tap `tap` sends. */
     press: (x: number, y: number) => run("touch", "-x", String(Math.round(x)), "-y", String(Math.round(y)), "--down", "--up", "--delay", "0.15"),
+    /** A touch and hold, for a context menu (about 1.2 s lifts a card's preview). */
+    hold: (x: number, y: number, seconds = 1.2) => run("touch", "-x", String(Math.round(x)), "-y", String(Math.round(y)), "--down", "--up", "--delay", String(seconds)),
   };
 }
 

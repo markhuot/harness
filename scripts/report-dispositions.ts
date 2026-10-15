@@ -128,6 +128,11 @@ const SIM_WALKTHROUGH: { name: RegExp; screen: string }[] = [
   { name: /^composer: @src\/a lists src\/app\.ts/, screen: "mentions and commands" },
   { name: /^New session: \/co lists the agent's commands/, screen: "mentions and commands" },
   { name: /^composer: moving the caret keeps what's typed/, screen: "composer draft" },
+  { name: /^touch and hold on a card previews its ticket/, screen: "card preview" },
+  { name: /^tapping an inline image opens the viewer on it/, screen: "attachments" },
+  { name: /^an image smaller than the screen opens centred/, screen: "attachments" },
+  { name: /^swiping down closes the viewer/, screen: "attachments" },
+  { name: /^the video page plays and swiping down closes it too/, screen: "attachments" },
 ];
 
 export function dispositionOf(row: Row): Disposition {

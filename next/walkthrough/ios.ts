@@ -9,7 +9,7 @@ import { join, resolve } from "node:path";
 import { buildPairUrl, type TicketDetail } from "@harness/shared";
 import { axeFor, hasAxe, type AXElement } from "../../ios/Tools/axe";
 import { installAndPair, seed, startDaemon, stopDaemon, buildApp } from "../../ios/Tools/dev-sim";
-import { GREETINGS_PATH, GREETING_FOR } from "../../ios/Tools/fixtures";
+import { GREETINGS_PATH, GREETING_FOR, SMALL_IMAGE, litBox } from "../../ios/Tools/fixtures";
 import { parseState, PROBE_FILE, settled as probeSettled, type DebugState } from "../../ios/Tools/probe";
 import { acquireReady, exportDeveloperDir } from "../../ios/Tools/sim";
 import { until } from "@harness/shared/testing/daemon";
@@ -520,6 +520,88 @@ try {
     const saved = await until("override saved", async () => ((v) => (v !== REVIEW_PROMPT ? v : null))(await override(REVIEW_PROMPT_ID)), 8000, 100).catch(() => null);
     expect("Save stores the text with the variable", !!saved?.endsWith("then the diff.{{key}}Z"), `override ${JSON.stringify(saved?.slice(-30))}`);
     await d.api("PATCH", "/settings", { prompts: { [REVIEW_PROMPT_ID]: REVIEW_PROMPT } });
+  });
+  // sim-check card-preview: touch and hold on a review card previews its ticket and offers its actions.
+  await w.screen("card preview", async (expect) => {
+    await clearDock();
+    await visit("harness://board", (e) => has(e, /^Review, /));
+    await tapWhere((l) => l.startsWith("Review,"));
+    const card = (e: AXElement[]) => find(e, (l) => l.startsWith(`${seeded.review.key} `));
+    // The column scrolls the card in from the right: wait for it to come to rest.
+    const at = await settled((e) => ((x) => (x?.frame && x.frame.x < 100 ? x : undefined))(card(e)), "the review card");
+    await axe.hold(at.frame!.x + at.frame!.width / 2, at.frame!.y + at.frame!.height / 2);
+    const menu = (e: AXElement[]) => has(e, "Copy key");
+    const els = await untilTree(() => axe.nodes(), menu);
+    const labels = els.map((e) => e.label ?? "");
+    expect("the menu has no moves", menu(els) && !labels.some((l) => l.startsWith("Move to")), seen(els));
+    // AXe sees the lifted preview as one "Preview" element, not the screen inside it. A crash in the preview drops to SpringBoard, whose Preview app has the label too, but no Copy key.
+    expect("the ticket is previewed over the menu", labels.includes("Preview"), seen(els));
+    for (const want of ["Approve", "Request changes", "Delete ticket"]) {
+      expect(`the review card's menu offers ${want}`, labels.some((l) => l === want || l.startsWith(`${want} `)), seen(els));
+    }
+    // Request changes needs notes: it opens the same sheet the ticket screen's button does. A tap right after the menu's lift can be swallowed: tap again if the menu is still up.
+    const sheet = (e: AXElement[]) => has(e, "What should the agent change?");
+    let up = false;
+    for (let attempt = 1; attempt <= 3 && !up; attempt++) {
+      await tapLabel("Request changes");
+      up = sheet(await untilTree(() => axe.nodes(), sheet, 3000));
+    }
+    expect("Request changes opens the notes sheet", up);
+    if (up) await tapLabel("Cancel");
+  });
+  // sim-check attachments: an inline image opens the viewer on it; swiping pages, Close closes; a small image opens centred at its own size; swiping down closes it, a video page too.
+  await w.screen("attachments", async (expect) => {
+    await clearDock();
+    await visit(`harness://ticket/${world.media.key}?tab=spec`, (e) => has(e, "Image phone.png") && has(e, "Image wide.png") && has(e, "Image small.png"));
+    const counter = (n: number) => (e: AXElement[]) => has(e, new RegExp(`^${n} of 5`));
+    const closed = (e: AXElement[]) => !has(e, / of 5/);
+    // The viewer's fade-in swallows gestures for a moment, so each step waits for rest.
+    const swipeLeft = () => axe.swipe(340, 450, 40, 450, 0.3);
+    const swipeDown = () => axe.swipe(200, 330, 205, 760, 0.25);
+    const openOn = async (label: string, n: number) => {
+      await tapLabel(label);
+      await untilTree(() => axe.nodes(), counter(n));
+      await rest();
+    };
+    const page = async (n: number) => {
+      await swipeLeft();
+      return untilTree(() => axe.nodes(), counter(n));
+    };
+    const shut = async () => untilTree(() => axe.nodes(), closed);
+
+    await openOn("Image wide.png", 2);
+    expect("a tap on an inline image opens the viewer on it", has(await axe.nodes(), /^2 of 5/));
+    let els = await page(3);
+    expect("a swipe pages to the next image", has(els, /^3 of 5/), seen(els));
+    await page(4);
+    els = await page(5);
+    expect("the missing attachment's page is the last", has(els, /^5 of 5/), seen(els));
+    await tapLabel("Close");
+    expect("Close closes the viewer", closed(await shut()));
+
+    // A 300 × 652 image used to open with its top-left corner in the middle of the page: it already had its fitted size, so its scroll view's content size was never set.
+    await openOn("Image small.png", 3);
+    const file = join(d.scratch, "viewer-small.png");
+    const shot = Bun.spawnSync(["xcrun", "simctl", "io", slot.udid, "screenshot", file], { env: process.env });
+    if (shot.exitCode !== 0) throw new Error(`simctl screenshot: ${shot.stderr.toString().trim()}`);
+    const screen = (await axe.nodes())[0]!.frame!;
+    // Below the header (✕ and the file name) and above the home indicator, the page is black but for the image.
+    const box = await litBox(file, screen.width, 130, 40);
+    const shown = `${Math.round(box.width)}×${Math.round(box.height)} at ${Math.round(box.x)},${Math.round(box.y)} on a ${screen.width}×${screen.height} screen`;
+    expect("an image smaller than the screen opens at its own size", Math.abs(box.width - SMALL_IMAGE.width) <= 3 && Math.abs(box.height - SMALL_IMAGE.height) <= 3, shown);
+    expect("and centred across", Math.abs(box.x + box.width / 2 - screen.width / 2) <= 3, shown);
+    await tapLabel("Close");
+    await shut();
+
+    await openOn("Image phone.png", 1);
+    await swipeDown();
+    expect("swiping down closes the viewer", closed(await shut()));
+
+    await openOn("Image small.png", 3);
+    await page(4);
+    await rest(); // the video's first frames
+    await swipeDown();
+    expect("swiping down closes the video page too", closed(await shut()));
   });
   // sim-check models-picker: a tap on a model in the Models picker saves it to the phase.
   await w.screen("models picker", async (expect) => {

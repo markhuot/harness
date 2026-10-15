@@ -7,14 +7,14 @@ import { until } from "@harness/shared/testing/daemon";
 import { setSessionContext, startCompactRun } from "@harness/shared/testing/seed";
 import type { Project, Ticket, TicketDetail } from "@harness/shared";
 import { startDaemonProxy } from "@harness/shared/testing/proxy";
-import { GREETINGS_PATH, GREETING_FOR, SLASH_COMMANDS, greetings, usageFixture } from "../../ios/Tools/fixtures";
+import { GREETINGS_PATH, GREETING_FOR, SLASH_COMMANDS, greetings, usageFixture, MEDIA_FILES, MEDIA_SPEC, writeMedia } from "../../ios/Tools/fixtures";
 import type { Daemon, Seeded } from "../../ios/Tools/dev-sim";
 
 /** The file the linked ticket's spec points into; pass it to dev-sim's `seed` so it's committed on main. */
 export const WORLD_FILES = { [GREETINGS_PATH]: greetings(false) };
 
 export type World = {
-  tasks: Ticket; fileLink: Ticket; gauge: Ticket; gaugeMiss: Ticket; gaugeCompact: Ticket;
+  media: Ticket; tasks: Ticket; fileLink: Ticket; gauge: Ticket; gaugeMiss: Ticket; gaugeCompact: Ticket;
   conductor: Ticket; approval: Ticket; changes: Ticket; approvable: Ticket; messaging: Ticket; drafting: Ticket; branchPlan: Ticket; code: Ticket; slash: Project;
   nestedAgent: NonNullable<TicketDetail["subagents"]>[number];
 };
@@ -91,9 +91,23 @@ export async function seedWorld(d: Daemon, seeded: Seeded): Promise<World> {
   mkdirSync(slashDir, { recursive: true });
   const slash = await api<Project>("POST", "/projects", { path: slashDir, name: "slash", key: "SLSH", defaultDriver: "claude-code" });
 
+  // A ticket whose spec shows real images and a video inline, and one attachment that won't load. The dummy's /tools directive
+  // calls update_spec on the fresh ticket's revision 1 with markdown images of local files (relative to the project folder),
+  // which the service stores and rewrites to attachment:<id>; attachment: srcs are kept as written.
+  const mediaDir = join(d.scratch, "media");
+  await writeMedia(mediaDir);
+  const mediaProject = await api<Project>("POST", "/projects", { path: mediaDir, name: "media", key: "MEDIA", defaultDriver: "dummy" });
+  const call = { name: "update_spec", input: { spec: MEDIA_SPEC, note: "Screenshots and a recording of the greeting screen", base_revision: 1 } };
+  const media = await api<Ticket>("POST", "/tickets", { projectId: mediaProject.id, spec: `Show the greeting screen\n/tools ${JSON.stringify([call])}`, driver: "dummy", start: true, skipAgentReview: true });
+  await settle(media);
+  const srcs = [...(await detail(media.key)).ticket.spec.matchAll(/!\[([^\]]*)\]\(attachment:([^)\s]+)(?: "[^"]*")?\)/g)].map((m) => ({ alt: m[1]!, id: m[2]! }));
+  if (MEDIA_FILES.some((f) => !srcs.some((s) => s.alt === f && s.id !== "att_missing")) || !srcs.some((s) => s.alt === "broken.png" && s.id === "att_missing")) {
+    throw new Error(`the media spec doesn't show its ${MEDIA_FILES.length} stored attachments and the missing one: ${JSON.stringify(srcs)}`);
+  }
+
   // A customized review message for the prompt editor to change.
   await api("PATCH", "/settings", { prompts: { [REVIEW_PROMPT_ID]: REVIEW_PROMPT } });
-  return { tasks, fileLink, gauge, gaugeMiss, gaugeCompact, conductor, approval, changes, approvable, nestedAgent, messaging, drafting, branchPlan, code, slash };
+  return { media, tasks, fileLink, gauge, gaugeMiss, gaugeCompact, conductor, approval, changes, approvable, nestedAgent, messaging, drafting, branchPlan, code, slash };
 }
 
 /** The daemon's env for the fake claude CLI, which answers the slash-command listing from SLASH_COMMANDS. */

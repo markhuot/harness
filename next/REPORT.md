@@ -14,7 +14,7 @@ Names generated at runtime (loops, helpers, `test.each`) appear as their templat
 
 ## Progress
 
-6083 rows: 3905 open, 753 new, 28 walkthrough, 65 accepted loss, 1332 kept.
+6086 rows: 3900 open, 753 new, 33 walkthrough, 65 accepted loss, 1335 kept.
 
 | Area | Rows | Open | New | Walkthrough | Loss | Kept | Deletable |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | :---: |
@@ -25,9 +25,9 @@ Names generated at runtime (loops, helpers, `test.each`) appear as their templat
 | app/src/renderer | 689 | 689 | 0 | 0 | 0 | 0 |  |
 | editor/scripts | 3 | 3 | 0 | 0 | 0 | 0 |  |
 | editor/src | 31 | 31 | 0 | 0 | 0 | 0 |  |
-| ios sim-check | 92 | 5 | 0 | 28 | 58 | 1 |  |
+| ios sim-check | 92 | 0 | 0 | 33 | 58 | 1 | yes |
 | ios snapshot tests | 30 | 26 | 0 | 0 | 4 | 0 |  |
-| ios/HarnessKit (swift) | 1331 | 0 | 0 | 0 | 0 | 1331 | yes |
+| ios/HarnessKit (swift) | 1334 | 0 | 0 | 0 | 0 | 1334 | yes |
 | ios/Tools | 153 | 153 | 0 | 0 | 0 | 0 |  |
 | ios/Tools/highlighter | 14 | 14 | 0 | 0 | 0 | 0 |  |
 | plugins/git | 15 | 15 | 0 | 0 | 0 | 0 |  |
@@ -2525,10 +2525,10 @@ Signed off by the human. They stay listed here so each can be brought back at th
 - usageChecks › usage: Projected at reset shows pace, the tick and too-early (walkthrough: next/walkthrough/ios.ts › plan usage)
 - usageChecks › usage: the filter shows one driver, and the choice survives a relaunch
 - usageChecks › usage: Hide collapses the section to its header (walkthrough: next/walkthrough/ios.ts › plan usage)
-- attachmentChecks › tapping an inline image opens the viewer on it; swiping pages; Close closes (open)
-- attachmentChecks › an image smaller than the screen opens centred at its own size (open)
-- attachmentChecks › swiping down closes the viewer (open)
-- attachmentChecks › the video page plays and swiping down closes it too (open)
+- attachmentChecks › tapping an inline image opens the viewer on it; swiping pages; Close closes (walkthrough: next/walkthrough/ios.ts › attachments)
+- attachmentChecks › an image smaller than the screen opens centred at its own size (walkthrough: next/walkthrough/ios.ts › attachments)
+- attachmentChecks › swiping down closes the viewer (walkthrough: next/walkthrough/ios.ts › attachments)
+- attachmentChecks › the video page plays and swiping down closes it too (walkthrough: next/walkthrough/ios.ts › attachments)
 - visitScreens › ${list.length} routes open without crashing the app (walkthrough: next/walkthrough/ios.ts › routes)
 - interactionChains › ticket details: agent notes start collapsed, and a tap on the header opens and closes them (walkthrough: next/walkthrough/ios.ts › ticket details)
 - interactionChains › composer answers a blocked ticket (walkthrough: next/walkthrough/ios.ts › blocked composer)
@@ -2541,7 +2541,7 @@ Signed off by the human. They stay listed here so each can be brought back at th
 - interactionChains › New session asks first, and Limit… opens the limit sheet (walkthrough: next/walkthrough/ios.ts › context gauge limit)
 - interactionChains › the misses row in the gauge menu opens its explanation (walkthrough: next/walkthrough/ios.ts › context gauge states)
 - interactionChains › a compacting session shows the spinner gauge and a Compacting… composer (walkthrough: next/walkthrough/ios.ts › context gauge states)
-- interactionChains › touch and hold on a card previews its ticket on the Spec tab, with no moves in the menu, and offers the ticket's actions (open)
+- interactionChains › touch and hold on a card previews its ticket on the Spec tab, with no moves in the menu, and offers the ticket's actions (walkthrough: next/walkthrough/ios.ts › card preview)
 - interactionChains › a relative file link in a spec opens the file viewer in the ticket's folder, at its lines (walkthrough: next/walkthrough/ios.ts › file link)
 - interactionChains › the bottom bar's field opens the palette; Show child tickets runs and its label flips (walkthrough: next/walkthrough/ios.ts › command palette)
 - interactionChains › a leading > shows only commands, not the ticket that matches (kept)
@@ -3471,12 +3471,14 @@ Signed off by the human. They stay listed here so each can be brought back at th
 - DebugStateTests › busyBlocksSettledHoweverQuiet
 - DebugStateTests › seqCountsWritesAndNeverCountsAsAChange
 
-#### ios/HarnessKit/Tests/HarnessKitTests/Shell/DeepLinkTests.swift: 6 rows, mostly kept
+#### ios/HarnessKit/Tests/HarnessKitTests/Shell/DeepLinkTests.swift: 8 rows, mostly kept
 
 - DeepLinkTests › routes
 - DeepLinkTests › ticketLinks
 - DeepLinkTests › fileLinksKeepTheLineAnchor
 - DeepLinkTests › settingsLinksCarryOnlyValidThemePicks
+- DeepLinkTests › settingsLinksCarryAKnownSection
+- DeepLinkTests › promptLinksCarryAKnownSection
 - DeepLinkTests › pairLinksDecodeTheirParams
 - DeepLinkTests › ignores
 
@@ -3596,13 +3598,14 @@ Signed off by the human. They stay listed here so each can be brought back at th
 - RouterSheetTests › aTicketWindowHasNoTicketSheet
 - RouterSheetTests › twentyDockedTicketsKeepAtMostFiveLive
 
-#### ios/HarnessKit/Tests/HarnessKitTests/Shell/RouterTests.swift: 6 rows, mostly kept
+#### ios/HarnessKit/Tests/HarnessKitTests/Shell/RouterTests.swift: 7 rows, mostly kept
 
 - RouterTests › aTabLinkDismissesModalsAndPopsThatTab
 - RouterTests › aTabLinkLeavesOtherTabsStacksAlone
 - RouterTests › aPushStacksOnTheSelectedTabAndATicketOpensTheSheet
 - RouterTests › aPushDismissesModals
 - RouterTests › aSheetReplacesTheSheetAndClosesTheScanner
+- RouterTests › aSettingsSectionLinkIsANewJumpEachTime
 - RouterTests › settingsThemesAreHandedBack
 
 #### ios/HarnessKit/Tests/HarnessKitTests/Shell/RouterWindowTests.swift: 22 rows, mostly kept
