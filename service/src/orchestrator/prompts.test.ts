@@ -284,7 +284,12 @@ describe("systemPrompt context and kind-specific rules", () => {
 
   test("plan runs are told the human approves with Start, never ExitPlanMode", () => {
     expect(sys("plan")).toContain("the human approves the spec on the board by pressing Start");
-    expect(sys("plan")).toContain("Don't call ExitPlanMode");
+    expect(sys("plan")).toContain("don't call EnterPlanMode or ExitPlanMode");
+  });
+
+  test("plan runs are told the spec is the only plan, not Claude's plan file", () => {
+    expect(sys("plan")).toContain("The spec is the only plan that exists here");
+    expect(sys("plan")).toContain("plan.md under ~/.claude/plans");
   });
 
   test("plan runs are read-only", () => {
