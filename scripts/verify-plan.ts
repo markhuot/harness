@@ -76,6 +76,7 @@ export const RENDERER_FALLBACK = "smoke";
 export const IOS_FEATURE_CHECKS: [RegExp, string[], string][] = [
   [/^ios\/Harness\/(App\/(TicketSheetHost|DockedTickets|DockHold|TicketSidePanel)|Features\/Ticket\/TearOff)/, ["--sheets"], "--sheets (the ticket sheet and dock)"],
   [/^ios\/Harness\/Features\/Files\//, ["--only=file-link,save-on-blur,file-edit"], "--only=file-link,save-on-blur,file-edit"],
+  [/^ios\/Harness\/Features\/(Terminal|Palette)\/|^ios\/Harness\/Resources\/terminal\.html$/, ["--only=terminal"], "--only=terminal"],
   [/^ios\/Harness\/Features\/Prompts\//, ["--only=prompt-editor"], "--only=prompt-editor"],
   [/^ios\/Harness\/Features\/NewSession\//, ["--mentions"], "--mentions"],
   [/^ios\/Harness\/Features\/Pickers\/ModelPicker/, ["--only=models-picker"], "--only=models-picker"],
