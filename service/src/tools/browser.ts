@@ -3,7 +3,7 @@
 
 import { closeSync, existsSync, lstatSync, mkdirSync, openSync, readSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
-import { BROWSER_DESKTOP, BROWSER_MAX_SIDE, BROWSER_MIN_SIDE, BROWSER_MOBILE, type BrowserDevice, type BrowserSize, type ToolResultContent } from "@harness/shared";
+import { BROWSER_DESKTOP, BROWSER_MAX_SIDE, BROWSER_MIN_SIDE, BROWSER_MOBILE, type BrowserAuth, type BrowserDevice, type BrowserSize, type ToolResultContent } from "@harness/shared";
 import { type FrameError, frameChain, frameLabel } from "../browser/frames";
 import { SNAPSHOT_DEFAULT_MAX_NODES } from "../browser/snapshot";
 import { MAX_SCREENSHOT_HEIGHT, type BrowserTabInfo, type BrowserTabSummary, type ElementTarget, type FrameSpec } from "../browser/types";
@@ -27,6 +27,10 @@ const sizeText = (size: BrowserSize | undefined) => (size ? `${size.device} ${si
 
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
 
+/** What an agent is told when a page needs HTTP Basic credentials only a human can type. */
+export const authNote = (auth: BrowserAuth) =>
+  `${auth.failed ? "The credentials were refused: the page" : "The page"} requires HTTP Basic Auth for ${auth.origin} (realm "${auth.realm}"). The human can enter credentials in the browser tab; there is no way to pass a password through a tool. Use wait_for (for example a selector or text only the real page shows) to wait for them, or ask the human (block).`;
+
 const tabLine = (tabs: BrowserTabSummary[]) =>
   tabs
     .map((t) => {
@@ -38,6 +42,7 @@ const tabLine = (tabs: BrowserTabSummary[]) =>
         `Tab ${t.id}: ${t.title || "(untitled)"} — ${t.url}` +
         (t.size ? ` [${sizeText(t.size)}${t.size.responsive ? ", responsive" : ""}]` : "") +
         (t.loading ? " (loading)" : "") +
+        (t.auth ? ` (needs HTTP Basic credentials for ${t.auth.origin}; the human can enter them)` : "") +
         (t.suspended ? " (suspended: reloads when you use it)" : "") +
         (issues.length ? ` (${issues.join(", ")})` : "")
       );
@@ -157,6 +162,7 @@ function tabReport(t: BrowserTabInfo): string {
   const lines = [`Tab ${t.id}: ${t.title || "(untitled)"} — ${t.url}`];
   const state = t.suspended ? "suspended (its page is closed; it reloads when you use it)" : t.loading ? "loading" : "loaded";
   lines.push(`State: ${state}`);
+  if (t.auth) lines.push(authNote(t.auth));
   lines.push(
     `Size: ${sizeText(t.size)} (${t.size.device === "mobile" ? "touch, iPhone user agent" : "mouse"})` +
       (t.size.responsive
@@ -200,7 +206,9 @@ export const browserOpen = defineTool<{ url: string; tab?: number; new_tab?: boo
     const state = await ctx.browser.open(ctx.session.id, url, { tab, newTab: new_tab ?? false, ...(change ? { size: change } : {}) });
     const waited = await waitOn(ctx, wait.condition, state.tabId);
     const opened = `Opened ${waited?.url ?? state.url} in tab ${state.tabId}\nTitle: ${state.title || "(untitled)"}${state.size ? `\nSize: ${sizeText(state.size)}` : ""}`;
-    return withWait(text(opened), waited, "after");
+    // Read after the wait: the human may have answered the challenge while it ran.
+    const auth = waited ? (await ctx.browser.state(ctx.session.id, { tab: state.tabId }))?.auth : state.auth;
+    return withWait(text(auth ? `${opened}\n${authNote(auth)}` : opened), waited, "after");
   },
 });
 

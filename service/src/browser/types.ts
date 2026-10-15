@@ -13,7 +13,7 @@ import type { FrameSpec } from "./frames";
 import type { WaitCondition, WaitResult } from "./wait";
 
 export type { FrameSpec };
-import type { AddBrowserExtensionBody, BrowserExtension, BrowserExtensionActionResult, BrowserExtensionList, BrowserDevice, BrowserElement, BrowserElementQuery, BrowserInput, BrowserScreenshot, BrowserSize, BrowserState, BrowserTab } from "@harness/shared";
+import type { AddBrowserExtensionBody, BrowserExtension, BrowserExtensionActionResult, BrowserExtensionList, BrowserDevice, BrowserElement, BrowserElementQuery, BrowserAuth, BrowserInput, BrowserScreenshot, BrowserSize, BrowserState, BrowserTab } from "@harness/shared";
 
 export interface BrowserFrame {
   sessionId: string;
@@ -79,6 +79,8 @@ export interface BrowserTabInfo {
   loading: boolean;
   suspended?: boolean;
   size: BrowserSize;
+  /** The page is waiting for HTTP Basic credentials. */
+  auth?: BrowserAuth;
   /** With size.responsive: a viewer has the tab open and it follows that viewer's pane. */
   following?: boolean;
   /** The page's scroll position in CSS px; absent for a suspended tab or a page that didn't answer. */

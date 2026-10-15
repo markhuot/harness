@@ -6,6 +6,7 @@ import {
   BROWSER_MIN_SIDE,
   BROWSER_MOBILE,
   BROWSER_MOBILE_UA,
+  type BrowserAuth,
   type BrowserDevice,
   type BrowserElement,
   type BrowserElementQuery,
@@ -16,6 +17,7 @@ import {
 } from "@harness/shared";
 import type { AddBrowserExtensionBody, BrowserExtension, BrowserExtensionActionResult, BrowserExtensionList } from "@harness/shared";
 import { imageSize } from "../attachments.ts";
+import { authKey, basicRealm, headerOf, originOf, stripUserinfo, type BasicCredentials } from "./auth.ts";
 import { HarnessError } from "../orchestrator/errors.ts";
 import { ExtensionHost } from "./extension-host.ts";
 import { findElementExpression, sameView, type PageElementReport } from "./element.ts";
@@ -110,6 +112,8 @@ interface Entry {
   saveTimer?: ReturnType<typeof setTimeout>;
   /** What was last written to the store, so unchanged state isn't written again. */
   savedKey?: string;
+  /** HTTP Basic credentials a viewer gave, by authKey(origin, realm). In memory only: never stored, listed or broadcast. */
+  credentials: Map<string, BasicCredentials>;
   /** Tab 1 (or the next default tab) while it is being created, so concurrent calls share it. */
   creating?: Promise<Tab>;
   /** Who follows the session's page events (watch): browser_run jobs, waits that may time out. */
@@ -132,6 +136,14 @@ interface Tab {
    * won't emulate a viewport or device for it, so its size is measured, not set.
    */
   popup?: boolean;
+  /** An HTTP Basic challenge a viewer hasn't answered (or whose credentials were refused). */
+  auth?: BrowserAuth;
+  /** The main-frame URL whose challenge is pending: Chrome's error page for it can't be reloaded, so answering navigates to it again. */
+  authDocument?: string;
+  /** Fetch interception is on, to answer Basic challenges (answerAuth). On for the rest of the page's life. */
+  intercept: boolean;
+  /** Challenges already answered with credentials (Fetch request id + authKey): a second one for the same request means they were refused. */
+  authTried: Set<string>;
   /** The input mode and viewport it should have (what states report and the store keeps). */
   size: BrowserSize;
   /**
@@ -251,7 +263,7 @@ function tabList(entry: Entry): BrowserTabSummary[] {
     const t = liveTab(entry, id);
     if (t) {
       const failedRequests = [...t.requests.values()].filter(failed).length;
-      return { id, url: t.url, title: t.title, loading: t.loading, size: { ...t.size }, failedRequests, consoleErrors: t.console.length };
+      return { id, url: stripUserinfo(t.url), title: t.title, loading: t.loading, size: { ...t.size }, failedRequests, consoleErrors: t.console.length, ...(t.auth ? { auth: { ...t.auth } } : {}) };
     }
     const s = entry.suspended.get(id)!;
     return { id, url: s.url, title: s.title, loading: false, suspended: true, size: storedSize(s.size) };
@@ -264,7 +276,16 @@ function protocolTabs(entry: Entry) {
 }
 
 function stateOf(tab: Tab): BrowserState {
-  return { sessionId: tab.entry.sessionId, tabId: tab.id, url: tab.url, title: tab.title, loading: tab.loading, size: { ...tab.size }, tabs: protocolTabs(tab.entry) };
+  return {
+    sessionId: tab.entry.sessionId,
+    tabId: tab.id,
+    url: stripUserinfo(tab.url),
+    title: tab.title,
+    loading: tab.loading,
+    size: { ...tab.size },
+    tabs: protocolTabs(tab.entry),
+    ...(tab.auth ? { auth: { ...tab.auth } } : {}),
+  };
 }
 
 function suspendedStateOf(entry: Entry, id: number): BrowserState {
@@ -275,7 +296,7 @@ function suspendedStateOf(entry: Entry, id: number): BrowserState {
 /** A tab as stored (its owner, a live viewer, isn't). */
 function record(tab: Tab): StoredBrowserTab {
   const { device, width, height, responsive } = tab.size;
-  return { id: tab.id, url: tab.url, title: tab.title, size: { device, width, height, responsive } };
+  return { id: tab.id, url: stripUserinfo(tab.url), title: tab.title, size: { device, width, height, responsive } };
 }
 
 /** A new tab's size: desktop, following the pane of whoever watches it (Responsive), 1280×800 until someone does. */
@@ -422,13 +443,14 @@ export class BrowserManager implements BrowserService {
     const scroll = (await this.evalValue(tab, "[window.scrollX, window.scrollY]").catch(() => undefined)) as [number, number] | undefined;
     return {
       id,
-      url: tab.url,
+      url: stripUserinfo(tab.url),
       title: tab.title,
       loading: tab.loading,
       size: { ...tab.size },
+      ...(tab.auth ? { auth: { ...tab.auth } } : {}),
       ...(tab.size.responsive ? { following: tab.sizeOwner !== undefined } : {}),
       ...(scroll ? { scroll: { x: Math.round(scroll[0]), y: Math.round(scroll[1]) } } : {}),
-      requests: [...tab.requests.values()].map(({ started: _s, ...r }) => r),
+      requests: [...tab.requests.values()].map(({ started: _s, ...r }) => ({ ...r, url: stripUserinfo(r.url) })),
       console: [...tab.console],
     };
   }
@@ -842,7 +864,7 @@ export class BrowserManager implements BrowserService {
       }
       if (input.url) {
         const res = await tab.session.send("Page.navigate", { url: normalizeUrl(input.url) });
-        if (res.errorText) throw new Error(`Navigation failed: ${res.errorText}`);
+        if (res.errorText && !this.challenged(tab, res.errorText)) throw new Error(`Navigation failed: ${res.errorText}`);
       }
       return;
     }
@@ -930,7 +952,7 @@ export class BrowserManager implements BrowserService {
         return;
       case "navigate": {
         const res = await s.send("Page.navigate", { url: normalizeUrl(input.url) });
-        if (res.errorText) throw new Error(`Navigation failed: ${res.errorText}`);
+        if (res.errorText && !this.challenged(tab, res.errorText)) throw new Error(`Navigation failed: ${res.errorText}`);
         return;
       }
       case "back":
@@ -944,6 +966,10 @@ export class BrowserManager implements BrowserService {
       case "reload":
         await s.send("Page.reload", {});
         return;
+      case "auth":
+        return this.answerAuth(tab, { username: String(input.username), password: String(input.password) });
+      case "authCancel":
+        return this.answerAuth(tab, null);
     }
   }
 
@@ -1408,6 +1434,7 @@ export class BrowserManager implements BrowserService {
       reviving: new Map(),
       nextTabId: Math.max(stored?.nextTabId ?? 1, ...(stored?.tabs ?? []).map((t) => t.id + 1)),
       retired: false,
+      credentials: new Map(),
       listeners: new Set(),
     };
     e.savedKey = this.saveKey(e);
@@ -1546,6 +1573,8 @@ export class BrowserManager implements BrowserService {
       // A fresh page: no size applied yet, Chrome's own input and user agent.
       viewport: { width: 0, height: 0 },
       device: "desktop",
+      intercept: false,
+      authTried: new Set(),
       requests: new Map(),
       console: [],
       screencasting: false,
@@ -1618,6 +1647,8 @@ export class BrowserManager implements BrowserService {
         tab.frameId = p.frame.id;
         tab.console = [];
         tab.url = p.frame.url + (p.frame.urlFragment ?? "");
+        // Chrome's error page for the unanswered challenge is not leaving the origin.
+        if (tab.auth && !tab.url.startsWith("chrome-error:") && originOf(tab.url) !== tab.auth.origin) tab.auth = undefined;
         this.emitState(tab);
         this.emitPage(tab, { kind: "navigated", url: tab.url });
       }),
@@ -1684,7 +1715,8 @@ export class BrowserManager implements BrowserService {
         const r = tab.requests.get(p.requestId);
         if (r && typeof p.response?.status === "number") {
           r.status = p.response.status as number;
-          if (p.response.status >= 400) this.emitPage(tab, { kind: "request-failed", method: r.method, url: r.url, status: r.status });
+          if (p.response.status >= 400) this.emitPage(tab, { kind: "request-failed", method: r.method, url: stripUserinfo(r.url), status: r.status });
+          this.noteResponse(tab, p, r.status);
         }
       }),
       s.on("Network.loadingFinished", (p) => {
@@ -1696,7 +1728,7 @@ export class BrowserManager implements BrowserService {
         if (!r) return;
         r.failure = p.canceled ? "canceled" : p.blockedReason ? `blocked (${p.blockedReason})` : p.errorText || "failed";
         r.durationMs = Math.max(0, Math.round((p.timestamp - r.started) * 1000));
-        if (!p.canceled) this.emitPage(tab, { kind: "request-failed", method: r.method, url: r.url, failure: r.failure });
+        if (!p.canceled) this.emitPage(tab, { kind: "request-failed", method: r.method, url: stripUserinfo(r.url), failure: r.failure });
       }),
       s.on("Runtime.consoleAPICalled", (p) => {
         const frame = p.stackTrace?.callFrames?.[0];
@@ -1719,6 +1751,114 @@ export class BrowserManager implements BrowserService {
         this.browser?.cdp.send("Target.closeTarget", { targetId: tab.targetId }).catch(() => {});
       }),
     );
+  }
+
+  // -------------------------------------------------------------------------
+  // HTTP Basic Auth
+  // -------------------------------------------------------------------------
+  //
+  // A 401 with a Basic challenge is noticed passively (noteResponse) and shown to viewers as the tab's
+  // `auth`. Interception (Fetch) is turned on for a tab only once credentials exist for it, because
+  // it pauses every request of the page; then each challenge is answered from the session's
+  // credentials and a refused answer is never retried.
+
+  private noteResponse(tab: Tab, p: { response?: { url?: string; headers?: Record<string, unknown> }; type?: string; frameId?: string }, status: number): void {
+    const origin = originOf(p.response?.url ?? "");
+    if (!origin) return;
+    if (status < 400) {
+      if (tab.auth && p.type === "Document" && p.frameId === tab.frameId && origin === tab.auth.origin) {
+        tab.auth = undefined;
+        this.emitState(tab);
+      }
+      return;
+    }
+    // With interception on, Chrome reports every challenge to authRequired instead.
+    if (status !== 401 || tab.intercept) return;
+    const realm = basicRealm(headerOf(p.response?.headers, "www-authenticate"));
+    if (realm === null) return;
+    const document = p.type === "Document" && p.frameId === tab.frameId ? (p.response?.url ?? "") : undefined;
+    if (tab.entry.credentials.has(authKey(origin, realm))) {
+      // Credentials a viewer gave earlier (in another tab, or before this page was reopened).
+      void this.interceptAuth(tab)
+        .then(() => this.retryPage(tab, document))
+        .catch(() => {});
+      return;
+    }
+    this.askForAuth(tab, origin, realm, false, document);
+  }
+
+  /**
+   * Headless Chrome fails a navigation its Basic challenge went unanswered with this error, after
+   * its 401 response was reported: that is a prompt for the viewer (tab.auth), not a failed page.
+   */
+  private challenged(tab: Tab, errorText: string): boolean {
+    return errorText === "net::ERR_INVALID_AUTH_CREDENTIALS" && (tab.auth !== undefined || tab.intercept);
+  }
+
+  /** Show viewers a challenge once per origin + realm; `failed` (credentials refused) sticks until it is answered. */
+  private askForAuth(tab: Tab, origin: string, realm: string, failed: boolean, document?: string): void {
+    tab.authDocument = document;
+    const was = tab.auth;
+    const same = was?.origin === origin && was.realm === realm;
+    tab.auth = { origin, realm, ...(failed || (same && was.failed) ? { failed: true } : {}) };
+    this.emitState(tab);
+  }
+
+  /** A viewer's answer: credentials (kept in memory, then the page reloads) or null to cancel. */
+  private async answerAuth(tab: Tab, answer: BasicCredentials | null): Promise<void> {
+    const auth = tab.auth;
+    if (!auth) return; // another viewer answered first
+    tab.auth = undefined;
+    if (!answer) return this.emitState(tab);
+    tab.entry.credentials.set(authKey(auth.origin, auth.realm), answer);
+    this.emitState(tab);
+    await this.interceptAuth(tab);
+    await this.retryPage(tab, tab.authDocument);
+  }
+
+  /** Load the page again with interception on: its document when the challenge stopped it, else a reload. */
+  private async retryPage(tab: Tab, document: string | undefined): Promise<void> {
+    if (document) await tab.session.send("Page.navigate", { url: document });
+    else await tab.session.send("Page.reload", {});
+  }
+
+  /** Answer this tab's Basic challenges from the session's credentials. Every paused request is continued, whatever happens. */
+  private async interceptAuth(tab: Tab): Promise<void> {
+    if (tab.intercept || tab.closed) return;
+    tab.intercept = true;
+    const s = tab.session;
+    tab.offs.push(
+      s.on("Fetch.requestPaused", (p) => void s.send("Fetch.continueRequest", { requestId: p.requestId }).catch(() => {})),
+      s.on("Fetch.authRequired", (p) => void this.onAuthRequired(tab, p).catch(() => {})),
+    );
+    try {
+      await s.send("Fetch.enable", { patterns: [{ urlPattern: "*" }], handleAuthRequests: true });
+    } catch (e) {
+      tab.intercept = false;
+      throw e;
+    }
+  }
+
+  private async onAuthRequired(tab: Tab, p: { requestId: string; frameId?: string; resourceType?: string; request?: { url?: string }; authChallenge?: { source?: string; origin?: string; scheme?: string; realm?: string } }): Promise<void> {
+    const c = p.authChallenge ?? {};
+    const respond = (authChallengeResponse: Record<string, string>) =>
+      tab.session.send("Fetch.continueWithAuth", { requestId: p.requestId, authChallengeResponse }).catch(() => {});
+    // A proxy's challenge, or a scheme other than Basic, is Chrome's to handle.
+    if (c.source !== "Server" || c.scheme?.toLowerCase() !== "basic" || !c.origin) return void (await respond({ response: "Default" }));
+    const realm = c.realm ?? "";
+    const key = authKey(c.origin, realm);
+    const credentials = tab.entry.credentials.get(key);
+    const attempt = `${p.requestId} ${key}`;
+    if (credentials && !tab.authTried.has(attempt)) {
+      tab.authTried.add(attempt);
+      // Request ids are never reused: keep the set from growing for the life of a long page.
+      if (tab.authTried.size > 200) tab.authTried.delete(tab.authTried.values().next().value!);
+      return void (await respond({ response: "ProvideCredentials", username: credentials.username, password: credentials.password }));
+    }
+    // Refused (or none yet): forget them so they are never sent again, and ask.
+    if (credentials) tab.entry.credentials.delete(key);
+    await respond({ response: "CancelAuth" });
+    this.askForAuth(tab, c.origin, realm, credentials !== undefined, p.resourceType === "Document" && p.frameId === tab.frameId ? p.request?.url : undefined);
   }
 
   /**
@@ -2030,7 +2170,10 @@ export class BrowserManager implements BrowserService {
     });
     try {
       const res = await tab.session.send("Page.navigate", { url });
-      if (res.errorText) throw new Error(`Navigation to ${url} failed: ${res.errorText}`);
+      if (res.errorText) {
+        if (this.challenged(tab, res.errorText)) return;
+        throw new Error(`Navigation to ${url} failed: ${res.errorText}`);
+      }
       const loaderId: string | undefined = res.loaderId;
       if (!loaderId || loaded.has(loaderId)) return; // same-document navigation, or already loaded
       await new Promise<void>((resolve) => {

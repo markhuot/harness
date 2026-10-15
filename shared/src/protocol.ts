@@ -1248,6 +1248,8 @@ export interface BrowserState {
   /** The tab's page is closed to save memory (unused for a while, or the ticket is done); it reloads its URL when opened. Absent: false. */
   suspended?: boolean;
   tabs?: BrowserTab[];
+  /** The tab's page asked for HTTP Basic credentials and is waiting for a viewer to answer (an `auth` input). Absent: nothing pending. */
+  auth?: BrowserAuth;
   /** The tab's input mode and viewport (BrowserSize). Services from before per-tab sizes omit it. */
   size?: BrowserSize;
   /**
@@ -1271,6 +1273,17 @@ export interface BrowserSize {
 }
 
 export type BrowserDevice = "desktop" | "mobile";
+
+/**
+ * A page's pending HTTP Basic Auth challenge. `origin` comes from the request's URL (never from the
+ * page); `realm` is the server's own text, so show it as quoted secondary text. `failed`: the last
+ * credentials were refused. The credentials themselves never appear in state or events.
+ */
+export interface BrowserAuth {
+  origin: string;
+  realm: string;
+  failed?: boolean;
+}
 
 /** The size the Desktop button (and every new tab) resets to. */
 export const BROWSER_DESKTOP = { width: 1280, height: 800 } as const;
@@ -1345,6 +1358,8 @@ export interface BrowserTab {
   suspended?: boolean;
   /** Its input mode and viewport. Services from before per-tab sizes omit it. */
   size?: BrowserSize;
+  /** Its page is waiting for HTTP Basic credentials (BrowserState.auth). */
+  auth?: BrowserAuth;
 }
 
 /**
@@ -1479,6 +1494,13 @@ export type BrowserInput =
   | { type: "back" }
   | { type: "forward" }
   | { type: "reload" }
+  /**
+   * Answer the tab's pending HTTP Basic Auth challenge (BrowserState.auth) with credentials, or
+   * cancel it. The service keeps credentials in memory only, per session and origin + realm, and
+   * reloads the page. The password is never echoed, logged or persisted.
+   */
+  | { type: "auth"; username: string; password: string }
+  | { type: "authCancel" }
   /**
    * The viewer's stage size. Applied only while the tab is `responsive` and this viewer switched it
    * on (BrowserState.sizeOwner); dropped otherwise, so a pane never resizes a tab by being opened.

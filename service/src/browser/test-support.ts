@@ -126,9 +126,37 @@ export function fixtures(req: Request): Response {
          </script>`,
         "Noisy",
       );
+    case "/secret":
+    case "/secret/a.js":
+    case "/secret/b.js":
+      return basicAuthed(req);
+    case "/vault":
+      // A public page whose scripts sit behind the same realm: several requests, one prompt.
+      return html(
+        `<h1>Vault</h1><div id="out">waiting</div>
+         <script src="/secret/a.js"></script><script src="/secret/b.js"></script>`,
+        "Vault",
+      );
     default:
       return new Response("not found", { status: 404 });
   }
+}
+
+/** The login /secret* expects (Basic, realm "Vault"). */
+export const SECRET_LOGIN = { username: "alice", password: "s3cret" };
+
+/** The Authorization header of every request to /secret*, in order ("" for none). */
+export const authHits: string[] = [];
+
+function basicAuthed(req: Request): Response {
+  const given = req.headers.get("authorization") ?? "";
+  authHits.push(given);
+  const ok = `Basic ${btoa(`${SECRET_LOGIN.username}:${SECRET_LOGIN.password}`)}`;
+  if (given !== ok) return new Response("Unauthorized", { status: 401, headers: { "www-authenticate": 'Basic realm="Vault"' } });
+  if (new URL(req.url).pathname.endsWith(".js")) {
+    return new Response("document.getElementById('out').textContent = 'scripts ok';", { headers: { "content-type": "text/javascript" } });
+  }
+  return html(`<h1 id="ok">Secret ok</h1>`, "Secret");
 }
 
 /** The User-Agent of every load of /ua, in order. */
