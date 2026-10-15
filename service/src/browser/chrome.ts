@@ -179,11 +179,51 @@ export function chromeArgs(opts: LaunchOptions): string[] {
     "--disable-features=Translate,MediaRouter,OptimizationHints",
     "--hide-crash-restore-bubble",
     "--mute-audio",
+    // Leave navigator.webdriver false, as in a person's Chrome; sites (Cloudflare's bot check) read it.
+    "--disable-blink-features=AutomationControlled",
     ...(opts.extraArgs ?? []),
   ];
   if (opts.headless !== false) args.unshift("--headless=new");
   args.push("about:blank");
   return args;
+}
+
+/**
+ * The desktop user agent (and its client hints) a tab sends. Headless Chrome announces itself as
+ * "HeadlessChrome/<version>", in the user agent and in Sec-CH-UA, which bot checks reject outright;
+ * this reports the same version as plain Chrome. Emulation.setUserAgentOverride without metadata
+ * would drop the client hints entirely, which is its own tell, so they are rebuilt here.
+ */
+export function desktopUserAgent(
+  reported: string,
+  host: { platform?: string; arch?: string } = {},
+): { userAgent: string; userAgentMetadata?: Record<string, unknown> } {
+  const userAgent = reported.replace("HeadlessChrome/", "Chrome/");
+  const version = /Chrome\/(\d+)(\.\d+\.\d+\.\d+)/.exec(userAgent);
+  if (!version) return { userAgent };
+  const major = version[1]!;
+  const full = `${major}${version[2]}`;
+  const platform = host.platform ?? process.platform;
+  const arch = host.arch ?? process.arch;
+  const brands = (v: string) => [
+    { brand: "Chromium", version: v },
+    { brand: "Google Chrome", version: v },
+    { brand: "Not.A/Brand", version: v === major ? "24" : "24.0.0.0" },
+  ];
+  return {
+    userAgent,
+    userAgentMetadata: {
+      brands: brands(major),
+      fullVersionList: brands(full),
+      fullVersion: full,
+      platform: platform === "darwin" ? "macOS" : platform === "win32" ? "Windows" : "Linux",
+      platformVersion: platform === "darwin" ? "15.0.0" : platform === "win32" ? "10.0.0" : "",
+      architecture: arch === "arm64" ? "arm" : "x86",
+      bitness: "64",
+      model: "",
+      mobile: false,
+    },
+  };
 }
 
 export class ChromeProcess {

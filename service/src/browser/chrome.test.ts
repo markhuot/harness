@@ -6,7 +6,9 @@ import { describeIf } from "@harness/shared/testing/skip";
 import {
   ChromeProcess,
   chromeStartTimes,
+  chromeArgs,
   codeSignCloneRoot,
+  desktopUserAgent,
   findChrome,
   parseChromeStartTimes,
   sweepCodeSignClones,
@@ -23,6 +25,28 @@ afterEach(() => {
 });
 
 const MIN = 60_000;
+
+describe("looking human to bot checks", () => {
+  test("headless Chrome's user agent is reported as plain Chrome, with matching client hints", () => {
+    const ua = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/130.0.6723.58 Safari/537.36";
+    const out = desktopUserAgent(ua, { platform: "darwin", arch: "arm64" });
+    expect(out.userAgent).toContain(" Chrome/130.0.6723.58 ");
+    expect(out.userAgent).not.toContain("Headless");
+    const meta = out.userAgentMetadata as { brands: { brand: string; version: string }[]; fullVersion: string; platform: string; architecture: string };
+    expect(meta.brands.map((b) => b.brand)).not.toContain("HeadlessChrome");
+    expect(meta.brands.find((b) => b.brand === "Google Chrome")?.version).toBe("130");
+    expect(meta).toMatchObject({ fullVersion: "130.0.6723.58", platform: "macOS", architecture: "arm" });
+  });
+
+  test("an unknown or empty user agent passes through without client hints", () => {
+    expect(desktopUserAgent("")).toEqual({ userAgent: "" });
+    expect(desktopUserAgent("Something/1.0")).toEqual({ userAgent: "Something/1.0" });
+  });
+
+  test("launch args hide the automation flag", () => {
+    expect(chromeArgs({ chromePath: "chrome", profileDir: "/tmp/p" })).toContain("--disable-blink-features=AutomationControlled");
+  });
+});
 
 describe("parseChromeStartTimes", () => {
   test("turns every etime form into a start time, only for Chrome-ish processes", () => {

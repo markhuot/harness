@@ -20,7 +20,7 @@ import { HarnessError } from "../orchestrator/errors.ts";
 import { ExtensionHost } from "./extension-host.ts";
 import { findElementExpression, sameView, type PageElementReport } from "./element.ts";
 import { CdpClient, CdpError, type CdpResult, type CdpSession } from "./cdp.ts";
-import { ChromeProcess, findChrome } from "./chrome.ts";
+import { ChromeProcess, desktopUserAgent, findChrome } from "./chrome.ts";
 import { FrameError, TabFrames, frameChain, frameLabel, type ElementHandle, type Scope } from "./frames.ts";
 import { MOD_CTRL, MOD_META, charPress, macEditingCommands, parseKeyChord, virtualKeyCode, type KeyPress } from "./keys.ts";
 import { SNAPSHOT_DEFAULT_MAX_NODES, axNodes, renderAxTree } from "./snapshot.ts";
@@ -1583,6 +1583,8 @@ export class BrowserManager implements BrowserService {
         session.send("Network.enable"),
         // Cross-origin iframes run in their own process: attach each one (frames.ts).
         tab.frames.autoAttach(session),
+        // A desktop tab never goes through applySize's device switch: drop "HeadlessChrome" from the start.
+        tab.size.device === "desktop" ? this.applyDevice(tab) : undefined,
         this.applySize(tab),
       ]);
       const { frameTree } = await session.send("Page.getFrameTree");
@@ -1881,7 +1883,7 @@ export class BrowserManager implements BrowserService {
     const s = tab.session;
     return Promise.all([
       s.send("Emulation.setTouchEmulationEnabled", mobile ? { enabled: true, maxTouchPoints: 5 } : { enabled: false }),
-      s.send("Emulation.setUserAgentOverride", mobile ? { userAgent: BROWSER_MOBILE_UA, platform: "iPhone" } : { userAgent: this.browser?.userAgent ?? "" }),
+      s.send("Emulation.setUserAgentOverride", mobile ? { userAgent: BROWSER_MOBILE_UA, platform: "iPhone" } : desktopUserAgent(this.browser?.userAgent ?? "")),
     ]);
   }
 

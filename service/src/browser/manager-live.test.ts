@@ -218,6 +218,10 @@ withChrome("BrowserManager (real Chrome)", () => {
     test("Mobile is touch with an iPhone user agent, which the server sees too; Desktop puts it all back", async () => {
       await browser.open("z-mobile", `${base}/touch`);
       const desktopUa = JSON.parse(await browser.evaluate("z-mobile", "navigator.userAgent")) as string;
+      // A desktop tab reads as a person's Chrome from its first page: no "HeadlessChrome", no webdriver flag.
+      expect(desktopUa).not.toContain("Headless");
+      expect(await browser.evaluate("z-mobile", "navigator.webdriver")).toBe("false");
+      expect(await browser.evaluate("z-mobile", "navigator.userAgentData.brands.map((b) => b.brand).join()")).not.toContain("Headless");
       await browser.input("z-mobile", { type: "device", device: "mobile" });
       await until(async () => (await browser.evaluate("z-mobile", "innerWidth").catch(() => "")) === "393", "the tab to be mobile");
       await until(async () => !(await browser.state("z-mobile"))?.loading, "the reload");

@@ -9,6 +9,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- The integrated browser no longer announces itself as automated headless Chrome (`HeadlessChrome` in its user agent and client hints, `navigator.webdriver` set), so pages behind bot checks like Cloudflare's "verify you are human" are more likely to let it through. Sites that fingerprint deeper can still block it.
+
 ### Changed
 
 - Planning agents are now told the ticket's spec is the only plan, and not to use Claude Code's built-in plan mode or its plan.md file, so their thinking stays on the spec instead of drifting to a plan file Harness never reads.
