@@ -30,6 +30,8 @@ export function startDaemonProxy(target: string | (() => string), opts: DaemonPr
   const server = Bun.serve<Upstream>({
     port: 0,
     hostname: "127.0.0.1",
+    // Bun's default of 10 s drops a request the daemon is slow to answer (a 19 s stall in a walkthrough run); this is its longest.
+    idleTimeout: 255,
     async fetch(req, srv) {
       const url = new URL(req.url);
       const upstream = `${typeof target === "function" ? target() : target}${url.pathname}${url.search}`;

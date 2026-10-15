@@ -62,7 +62,9 @@ final class DebugProbe {
                 guard let a = layer.animation(forKey: key), animating.count < 4,
                       a.repeatCount < 1000, a.repeatDuration < 1000,
                       // The system activity indicator's spinner, which runs for as long as it is shown.
-                      !(layer is CAReplicatorLayer) else { continue }
+                      !(layer is CAReplicatorLayer),
+                      // The glass material's own matching animations (SDF element and portal layers, the liquid lens): they restart as lenses move and never rest.
+                      !["SDF", "Portal"].contains(where: String(describing: type(of: layer)).contains), !key.hasPrefix("_UILiquidLensView") else { continue }
                 // One that has run for seconds is ambient (the glass lenses' shimmer), not a transition.
                 let id = "\(ObjectIdentifier(layer).hashValue):\(key)"
                 let since = ambient[id] ?? now

@@ -71,16 +71,18 @@ export function takeAxeStats() {
   return out;
 }
 
-/** An AXe driver for one simulator. */
-export function axeFor(udid: string, developerDir: string) {
+/** An AXe driver for one simulator; `strict` makes a failed action (not a read) throw instead of returning "". */
+export function axeFor(udid: string, developerDir: string, { strict = false }: { strict?: boolean } = {}) {
   let shim = "";
   const run = async (...a: string[]) => {
     shim ||= xcodeShim(developerDir);
     const started = performance.now();
     const p = Bun.spawn(["axe", ...a, "--udid", udid], { env: { ...process.env, DEVELOPER_DIR: shim }, stdout: "pipe", stderr: "pipe" });
-    const [out, , code] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text(), p.exited]);
+    const [out, err, code] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text(), p.exited]);
     const s = axeStats.get(a[0]!) ?? { n: 0, ms: 0 };
     axeStats.set(a[0]!, { n: s.n + 1, ms: s.ms + performance.now() - started });
+    // A strict driver throws on a tap, type or swipe that failed (no such element); describe-ui may fail mid-transition and reads as an empty tree.
+    if (code !== 0 && strict && a[0] !== "describe-ui") throw new Error(`axe ${a.join(" ")} exited ${code}: ${err.trim() || out.trim()}`);
     return code === 0 ? out : "";
   };
   return {

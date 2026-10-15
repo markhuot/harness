@@ -7,16 +7,17 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { buildPairUrl, type TicketDetail } from "@harness/shared";
-import { axeFor, hasAxe, screenKey, type AXElement } from "../../ios/Tools/axe";
-import { installAndPair, openLink, seed, startDaemon, stopDaemon, buildApp } from "../../ios/Tools/dev-sim";
+import { axeFor, hasAxe, type AXElement } from "../../ios/Tools/axe";
+import { installAndPair, seed, startDaemon, stopDaemon, buildApp } from "../../ios/Tools/dev-sim";
 import { GREETINGS_PATH, GREETING_FOR } from "../../ios/Tools/fixtures";
-import { parseState, PROBE_FILE, type DebugState } from "../../ios/Tools/probe";
+import { parseState, PROBE_FILE, settled as probeSettled, type DebugState } from "../../ios/Tools/probe";
 import { acquireReady, exportDeveloperDir } from "../../ios/Tools/sim";
 import { until } from "@harness/shared/testing/daemon";
 import { FAKE_CLAUDE_ENV, REVIEW_PROMPT, REVIEW_PROMPT_ID, startCompacting, startUsageProxy, seedWorld, WORLD_FILES } from "./world";
 import { walk } from "./walk";
 
 const started = performance.now();
+let restStatsOut = () => ({ n: 0, ms: 0, missed: 0 });
 if (!hasAxe()) throw new Error("the walkthrough reads the UI tree with AXe: brew install cameroncooke/axe/axe");
 exportDeveloperDir();
 const app = process.argv.includes("--no-build") ? join(resolve(import.meta.dir, "../../ios"), "build/dd/Build/Products/Release-iphonesimulator/Harness.app") : await buildApp();
@@ -32,11 +33,10 @@ const w = walk("iPhone walkthrough", (name) => {
   if (process.env.WALK_SHOTS) Bun.spawnSync(["xcrun", "simctl", "io", slot.udid, "screenshot", join(process.env.WALK_SHOTS, `${name.replace(/\W+/g, "-")}.png`)], { env: process.env });
 });
 try {
-  const axe = axeFor(slot.udid, process.env.DEVELOPER_DIR!);
+  const axe = axeFor(slot.udid, process.env.DEVELOPER_DIR!, { strict: true });
   const t0 = performance.now();
   await installAndPair(slot.udid, axe, app, buildPairUrl(usageProxy.base, d.token));
   console.log(`installed and paired in ${Math.round(performance.now() - t0)} ms`);
-  let previous = { url: "", key: screenKey(await axe.labels()) };
   const seen = (els: AXElement[]) => "on screen: " + els.map((e) => e.label ?? e.id).filter(Boolean).slice(0, 25).join(" | ");
   const has = (els: AXElement[], match: RegExp | string) => els.some((e) => (typeof match === "string" ? e.label === match : !!e.label && match.test(e.label)));
   /** The tree once `ok` holds (a screen draws after the link lands), or the last read after 8 s so the screen reports what it saw. */
@@ -50,22 +50,25 @@ try {
   const find = (els: AXElement[], match: (label: string) => boolean) => els.find((e) => !!e.label && match(e.label));
   const sameFrame = (a: AXElement | undefined, b: AXElement | undefined) => !!a?.frame && !!b?.frame && JSON.stringify(a.frame) === JSON.stringify(b.frame);
   /**
-   * The element `pick` finds, once two reads in a row put it in the same place: a sheet, popover or alert
-   * that is still animating in swallows a tap, and its frame is how the tree says so.
+   * The element `pick` finds once the app is at rest (the debug probe says nothing is animating,
+   * scrolling or loading), from one read of the tree. A sheet, popover or alert that is still animating
+   * in swallows a tap. Without a probe, once two reads in a row put the element in the same place.
    */
   const settled = async (pick: (els: AXElement[]) => AXElement | undefined, what: string, ms = 8000) => {
     const end = Date.now() + ms;
     let prev: AXElement | undefined;
     for (;;) {
+      const resting = await atRest();
       const els = await axe.nodes();
       const e = pick(els);
-      if (sameFrame(e, prev)) return e!;
+      if (e && (resting || sameFrame(e, prev))) return e;
       if (Date.now() > end) throw new Error(`${what} never settled on screen; ${e ? "it kept moving" : "it isn't in the tree"}; ${els.map((x) => x.id ?? x.label).filter(Boolean).slice(0, 40).join(" | ")}`);
       prev = e;
     }
   };
-  /** The tree once nothing in it moves between two reads: a scroll's momentum is over. */
+  /** The tree once the app is at rest: a scroll's momentum is over. Without a probe, once nothing in it moves between two reads. */
   const quiet = async (ms = 8000) => {
+    if (await atRest()) return axe.nodes();
     const end = Date.now() + ms;
     const sig = (els: AXElement[]) => JSON.stringify(els.map((e) => e.frame));
     let els = await axe.nodes();
@@ -107,10 +110,10 @@ try {
   /** Closes every docked ticket sheet, which cover the next screen's controls: opening Projects does it in one step, whatever the count. */
   const clearDock = async () => {
     if (!probe()?.router.dock.length) return;
-    previous = await openLink(slot.udid, axe, "harness://projects", previous);
+    await open("harness://projects");
     const s = await untilProbe((x) => x.router.dock.length === 0);
     if (s?.router.dock.length) throw new Error(`the dock didn't clear; ${seen(await axe.nodes())}`);
-    previous = await openLink(slot.udid, axe, "harness://board", previous);
+    await open("harness://board");
   };
   /** Taps the field and types into it once it holds the focus. */
   const typeInto = async (match: (label: string) => boolean, text: string) => {
@@ -160,10 +163,34 @@ try {
     }
     return s;
   };
+  /** The app is at rest, which its debug probe says; false when the probe isn't answering (the callers fall back to comparing reads of the tree). */
+  const restStats = { n: 0, ms: 0, missed: 0 };
+  restStatsOut = () => restStats;
+  const atRest = async (ms = 800) => {
+    const t = performance.now();
+    const s = await probeSettled(async () => probe(), { quietMs: 100, fresh: 2, ms }).catch(() => null);
+    restStats.n++;
+    restStats.ms += performance.now() - t;
+    const ok = !!s && s !== "frozen";
+    if (!ok) {
+      restStats.missed++;
+      if (process.env.WALK_TIMING) { const x = probe(); console.log(`  atRest missed: ${s === "frozen" ? "frozen" : x ? `settled=${x.settled} busy=[${x.busy}] quietMs=${x.quietMs} focus=${x.focus ?? ""}` : "no probe"}`); }
+    }
+    return ok;
+  };
+  /** Opens a link in the running app and returns once the router has moved to it (a link to the screen already open leaves it alone: it waits 1 s for a change) and the app is at rest. */
+  const open = async (link: string) => {
+    const route = (s: DebugState | null) => (s ? JSON.stringify(s.router) : "");
+    const before = route(probe());
+    const r = Bun.spawnSync(["xcrun", "simctl", "openurl", slot.udid, link], { env: process.env });
+    if (r.exitCode !== 0) throw new Error(`simctl openurl ${link}: ${r.stderr.toString().trim()}`);
+    await untilProbe((x) => route(x) !== before, 1000);
+    await atRest();
+  };
   /** Reaches `link`, then reads the tree once; the screen's checks all run on that one read. */
   const visit = async (link: string, ready?: (els: AXElement[]) => boolean) => {
-    previous = await openLink(slot.udid, axe, link, previous);
-    // The link opened something; `ready` says it's the screen the link names (a dock or a sheet animating also changes the tree).
+    await open(link);
+    // `ready` says it's the screen the link names (a screen draws after its data lands).
     return ready ? untilTree(() => axe.nodes(), ready) : axe.nodes();
   };
   const composerUp = (e: AXElement[]) => has(e, /^Message the agent/);
@@ -372,7 +399,7 @@ try {
       ["Connect", "harness://connect", appUp],
     ];
     for (const [name, link, ready] of routes) {
-      previous = await openLink(slot.udid, axe, link, previous);
+      await open(link);
       const els = await untilTree(() => axe.nodes(), (e) => appUp(e) && ready(e));
       expect(`${name} opens`, appUp(els) && ready(els), seen(els));
     }
@@ -572,7 +599,7 @@ try {
   // The one tap: the board's palette field opens the palette sheet.
   await w.screen("command palette", async (expect) => {
     await clearDock();
-    previous = await openLink(slot.udid, axe, "harness://board", previous);
+    await open("harness://board");
     const listed = (e: AXElement[]) => has(e, "Go to Inbox, Go to");
     /** Taps the board's field (once the board under the last sheet has stopped moving) and waits for the palette's commands. */
     const openPalette = async () => {
@@ -603,7 +630,7 @@ try {
   });
   // sim-check palette: ⌘K over a ticket lists its actions; Copy ticket key copies it.
   await w.screen("ticket commands", async (expect) => {
-    previous = await openLink(slot.udid, axe, `harness://ticket/${seeded.review.key}?tab=spec`, previous);
+    await open(`harness://ticket/${seeded.review.key}?tab=spec`);
     await axe.keyCombo(227, 14);
     const els = await untilTree(() => axe.nodes(), (e) => has(e, /^Copy ticket key/));
     expect("the ticket's commands", has(els, /^Copy ticket key/), seen(els));
@@ -616,7 +643,7 @@ try {
   // sim-check usage: the sidebar's plan-usage gauges, read from the proxy's fixture. Last, since it relaunches the app.
   await w.screen("plan usage", async (expect) => {
     const showSidebar = async () => {
-      previous = await openLink(slot.udid, axe, "harness://projects", { url: "", key: "" });
+      await open("harness://projects");
       return untilTree(() => axe.nodes(), (e) => has(e, "PLAN USAGE") && has(e, /^Claude Code 5-hour/));
     };
     const usageRows = async () => (await axe.nodes()).filter((e) => /^(Claude Code|GitHub Copilot)\b/.test(e.label ?? ""));
@@ -643,6 +670,7 @@ try {
     expect("filtering to Copilot hides Claude's rows", copilot.length > 0 && copilot.every((e) => /^GitHub Copilot/.test(e.label!)), seen(els));
     // The choice is @AppStorage: it survives a relaunch.
     Bun.spawnSync(["xcrun", "simctl", "terminate", slot.udid, "com.markhuot.harness"]);
+    rmSync(join(container, "tmp", PROBE_FILE), { force: true }); // the old launch's state must not pass for the new one's
     Bun.spawnSync(["xcrun", "simctl", "launch", slot.udid, "com.markhuot.harness"]);
     await untilTree(() => axe.nodes(), (e) => has(e, /^Planning, \d+$/), 15000);
     await showSidebar().catch(() => []);
@@ -664,6 +692,7 @@ try {
 async function axe_terminate() {
   Bun.spawnSync(["xcrun", "simctl", "terminate", slot.udid, "com.markhuot.harness"]);
 }
+if (process.env.WALK_TIMING) console.log(`atRest: ${restStatsOut().n} waits, ${Math.round(restStatsOut().ms)} ms, ${restStatsOut().missed} timed out`);
 const { failed } = w.summary();
 console.log(`total ${Math.round(performance.now() - started)} ms including build, seed, install and pairing`);
 process.exit(failed.length ? 1 : 0);
