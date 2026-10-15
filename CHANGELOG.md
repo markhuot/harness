@@ -11,6 +11,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
+- Agents are now told that a small follow-up (a ticket re-opened by a triage update, bot or Copilot review feedback, a bug report on finished work) still ends with a spec update, so a pull request's fixes show up in the ticket's Status instead of the spec going stale.
 - Agents can now see draft tickets: `list_tickets`, `search_tickets` and `get_ticket` include them (marked `draft: true`), so an agent can find and read a draft instead of duplicating it. `list_tickets` and `search_tickets` take `include_drafts: false` to leave them out. Agents still can't message, start, move or update a draft, and now get an error saying it's a draft.
 
 ## [app-20261015.1934](https://github.com/markhuot/harness/releases/tag/app-20261015.1934) - 2026-10-15

@@ -758,6 +758,12 @@ describe("work-run conduct rules", () => {
     expect(text).not.toContain("verification commands and results");
   });
 
+  test("a small follow-up (reopen, bot feedback) still updates the spec before submitting", () => {
+    expect(sys("work")).toMatch(/holds for a small follow-up too[^\n]*re-read Status, rewrite any statement the fix made stale/);
+    // a review run doesn't edit the spec, so it isn't told to
+    expect(sys("review")).not.toContain("holds for a small follow-up too");
+  });
+
   test("only a worktree run is told to confirm gitignored dependencies", () => {
     const inWorktree = sys("work", ticket({ ...worktree }));
     expect(inWorktree).toMatch(/Gitignored dependencies[^\n]*aren't in a new worktree\. Before you build or test, confirm they're present/);
