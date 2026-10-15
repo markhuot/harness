@@ -8,6 +8,8 @@ import { Terminal } from "@xterm/headless";
 import { SerializeAddon } from "@xterm/addon-serialize";
 
 export const SCROLLBACK_LINES = 5000;
+/** Output waiting to be parsed beyond this many characters is dropped from the emulator. */
+export const MAX_BACKLOG = 8 * 1024 * 1024;
 /** A title or cwd longer than this is ignored (a runaway sequence, not a title). */
 const MAX_VALUE = 4096;
 
@@ -53,26 +55,55 @@ export const createEmulator: CreateEmulator = (cols, rows, events) => {
     return true;
   });
   let pending = 0;
+  let backlog = 0;
+  let dropped = false;
   let waiters: (() => void)[] = [];
+  const settle = () => {
+    if (--pending > 0) return;
+    const done = waiters;
+    waiters = [];
+    for (const w of done) w();
+  };
   return {
     write(data) {
+      // xterm throws once ~50 MB is queued ("use flow control"). Past our own limit the output is
+      // dropped from the emulator (clients still get it live) and the snapshot says it is truncated.
+      if (backlog + data.length > MAX_BACKLOG) {
+        dropped = true;
+        return;
+      }
+      backlog += data.length;
       pending++;
-      term.write(data, () => {
-        if (--pending > 0) return;
-        const done = waiters;
-        waiters = [];
-        for (const w of done) w();
-      });
+      try {
+        term.write(data, () => {
+          backlog -= data.length;
+          settle();
+        });
+      } catch {
+        backlog -= data.length;
+        dropped = true;
+        settle();
+      }
     },
     idle() {
       return pending === 0 ? Promise.resolve() : new Promise<void>((resolve) => waiters.push(resolve));
     },
     resize(c, r) {
-      term.resize(c, r);
+      // Queued behind the output already written, so that output is parsed at the old size.
+      pending++;
+      try {
+        term.write("", () => {
+          term.resize(c, r);
+          settle();
+        });
+      } catch {
+        term.resize(c, r);
+        settle();
+      }
     },
     serialize() {
       const data = serializer.serialize({ scrollback: SCROLLBACK_LINES });
-      return { data, truncated: term.buffer.normal.length >= SCROLLBACK_LINES + term.rows };
+      return { data, truncated: dropped || term.buffer.normal.length >= SCROLLBACK_LINES + term.rows };
     },
     dispose() {
       term.dispose();

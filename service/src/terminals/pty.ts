@@ -36,13 +36,26 @@ export const spawnBunPty: SpawnPty = (file, args, opts) => {
     exited: Promise<number>;
     signalCode: string | null;
     kill(signal?: NodeJS.Signals): void;
-    terminal?: { write(data: string): void; resize(cols: number, rows: number): void };
+    terminal?: { write(data: string): void; resize(cols: number, rows: number): void; close?(): void };
   };
   if (!proc.terminal) throw new Error("Terminals need Bun 1.3.5 or newer (Bun.spawn's terminal option)");
   const terminal = proc.terminal;
+  // The master side stays open until closed, even after the shell is gone (and a background child
+  // holding the slave keeps it producing output), so close it as soon as the shell exits.
+  const closeTerminal = () => {
+    try {
+      terminal.close?.();
+    } catch {}
+  };
   proc.exited.then(
-    (code) => opts.onExit({ exitCode: proc.signalCode ? null : code, signal: proc.signalCode }),
-    () => opts.onExit({ exitCode: null, signal: null }),
+    (code) => {
+      closeTerminal();
+      opts.onExit({ exitCode: proc.signalCode ? null : code, signal: proc.signalCode });
+    },
+    () => {
+      closeTerminal();
+      opts.onExit({ exitCode: null, signal: null });
+    },
   );
   return {
     pid: proc.pid,

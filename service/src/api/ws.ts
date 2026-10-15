@@ -107,6 +107,7 @@ export function createWsHandlers(opts: { bus: EventBus; browser: BrowserService;
           if (typeof msg.id === "string") terminals?.resize(ws.data.id, msg.id, msg.cols, msg.rows);
           return;
         case "terminal.write":
+          if (typeof msg.id !== "string") return;
           try {
             terminals?.write(ws.data.id, msg.id, msg.data);
           } catch (err) {

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseLsof, parsePs, pollTerminals, processName } from "./poller";
+import { parseLsof, parsePs, pollTerminals, processName, run } from "./poller";
 
 const PS = `
   100   100   500 -zsh
@@ -58,5 +58,17 @@ describe("pollTerminals", () => {
     expect(parseLsof(LSOF).get(200)).toBe("/Users/mark/My Docs");
     expect(processName("-zsh")).toBe("zsh");
     expect(processName("/usr/bin/vim")).toBe("vim");
+  });
+});
+
+describe("run", () => {
+  test("a command that hangs is killed after the timeout and reads as empty", async () => {
+    const started = Date.now();
+    expect(await run(["sleep", "30"], 100)).toBe("");
+    expect(Date.now() - started).toBeLessThan(3000);
+  });
+
+  test("a command that finishes returns its output", async () => {
+    expect(await run(["echo", "hi"], 3000)).toBe("hi\n");
   });
 });

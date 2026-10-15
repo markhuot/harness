@@ -9,6 +9,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- Running something that prints a huge amount of output in a terminal (like `cat` on a giant file) no longer crashes the Harness service and every terminal with it. A device that stalls for a while, or a second Mac window showing the same terminal, no longer stops receiving that terminal's output. Shells' pseudo-terminals are released when the shell ends, a hung `lsof` or `ps` can't stop folder and program names updating, and only the eight newest ended terminals are kept. Restarting the service still hangs up every shell.
+
 ### Added
 
 - Terminals on the iPhone and iPad. "New Terminal" in the command palette starts a shell in the project you're viewing (All projects when none) and opens it in a sheet; a connected Mac opens a pane for it at once. Terminals show up in the palette on both devices with their title, folder and running program, and a terminal sheet docks like a ticket or a file. The Mac and the phone attach to the same shell: input from either reaches it, output appears on both, and the shell is as large as the smallest visible device, so a phone makes the Mac's terminal draw smaller (centered in its pane) until the phone sleeps, backgrounds the app or closes the sheet. An accessory bar above the keyboard has Esc, Ctrl, Tab and the arrow keys.

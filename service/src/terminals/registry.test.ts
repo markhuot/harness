@@ -320,6 +320,43 @@ describe("shared size", () => {
     registry.shutdown();
   });
 
+  test("a client that went quiet stops counting for the size but keeps getting output", async () => {
+    const { registry, clock, ptys, settle } = setup();
+    const { id } = registry.create({ cols: 120, rows: 40 });
+    const stalled = new FakeClient("stalled");
+    await registry.attach(new FakeClient("mac"), id, "m", 120, 40);
+    await registry.attach(stalled, id, "p", 50, 20);
+    for (let i = 0; i < 4; i++) {
+      clock.advance(5000);
+      registry.touch("mac");
+      await registry.tick();
+    }
+    await settle(); // size changes resync clients first
+    await Bun.sleep(20);
+    ptys[0]!.emit("still here\r\n");
+    await settle();
+    expect(stalled.of("terminal.output").map((m) => m.data)).toEqual(["still here\r\n"]);
+    // and it counts again as soon as it reports a viewport
+    registry.resize("stalled", id, 30, 10);
+    clock.advance(200);
+    expect(ptys[0]!.resizes.at(-1)).toEqual({ cols: 30, rows: 10 });
+    registry.shutdown();
+  });
+
+  test("a second socket from the same device doesn't freeze the first one's output", async () => {
+    const { registry, ptys, settle } = setup();
+    const { id } = registry.create();
+    const first = new FakeClient("window-1");
+    const second = new FakeClient("window-2");
+    await registry.attach(first, id, "mac", 80, 24);
+    await registry.attach(second, id, "mac", 80, 24);
+    ptys[0]!.emit("hi\r\n");
+    await settle();
+    expect(first.of("terminal.output")).toHaveLength(1);
+    expect(second.of("terminal.output")).toHaveLength(1);
+    registry.shutdown();
+  });
+
   test("a resize from a socket that isn't attached is ignored", async () => {
     const { registry, clock, ptys } = setup();
     const { id } = registry.create({ cols: 80, rows: 24 });
@@ -405,6 +442,94 @@ describe("a slow client", () => {
     expect(snaps).toHaveLength(2);
     expect(snaps[1]!.data).toContain("three");
     expect(snaps[1]!.offset).toBe(fast.of("terminal.output").at(-1)!.offset);
+    registry.shutdown();
+  });
+
+  test("a snapshot bigger than the high-water mark doesn't make the client resync forever", async () => {
+    const { registry, ptys, settle } = setup({ highWater: 1000 });
+    const { id } = registry.create();
+    const client = new FakeClient("c");
+    const send = client.send.bind(client);
+    client.send = (m) => {
+      send(m);
+      if (m.type === "terminal.snapshot") client.queued = 5000; // the snapshot is still draining
+    };
+    await registry.attach(client, id, "c", 80, 24);
+    ptys[0]!.emit("one\r\n");
+    await settle();
+    ptys[0]!.emit("two\r\n");
+    await settle();
+    expect(client.of("terminal.snapshot")).toHaveLength(1);
+    expect(client.of("terminal.output").map((m) => m.data)).toEqual(["one\r\n", "two\r\n"]);
+    registry.shutdown();
+  });
+
+  test("a resize serializes the screen once for every attached client", async () => {
+    let serializations = 0;
+    const { createEmulator } = await import("./emulator");
+    const { registry, clock } = setup({
+      createEmulator: (cols, rows, ev) => {
+        const emu = createEmulator(cols, rows, ev);
+        return { ...emu, serialize: () => (serializations++, emu.serialize()) };
+      },
+    });
+    const { id } = registry.create({ cols: 120, rows: 40 });
+    const a = new FakeClient("a");
+    const b = new FakeClient("b");
+    await registry.attach(a, id, "a", 120, 40);
+    await registry.attach(b, id, "b", 120, 40);
+    serializations = 0;
+    registry.resize("b", id, 60, 20);
+    clock.advance(200);
+    await Bun.sleep(20);
+    expect(a.of("terminal.snapshot").at(-1)).toMatchObject({ cols: 60, rows: 20 });
+    expect(b.of("terminal.snapshot").at(-1)).toMatchObject({ cols: 60, rows: 20 });
+    expect(serializations).toBe(1);
+    registry.shutdown();
+  });
+});
+
+describe("resources", () => {
+  test("a failed spawn disposes the emulator and leaves no terminal behind", () => {
+    let disposed = 0;
+    const { registry } = setup({
+      spawn: () => {
+        throw new Error("no pty");
+      },
+      createEmulator: () => ({ write() {}, idle: async () => {}, resize() {}, serialize: () => ({ data: "", truncated: false }), dispose: () => void disposed++ }),
+    });
+    expect(() => registry.create()).toThrow("no pty");
+    expect(disposed).toBe(1);
+    expect(registry.list()).toEqual([]);
+  });
+
+  test("only the newest exited terminals are kept", () => {
+    const { registry, ptys, clock } = setup();
+    const ids = Array.from({ length: 10 }, () => registry.create().id);
+    ptys.forEach((p) => {
+      clock.advance(10);
+      p.exit(0);
+    });
+    expect(registry.list().map((t) => t.id)).toEqual(ids.slice(2));
+    registry.shutdown();
+  });
+
+  test("a flood of output neither throws nor wedges the emulator, and the snapshot says it is truncated", async () => {
+    const { registry, ptys, settle } = setup();
+    const { id } = registry.create();
+    const client = new FakeClient("c");
+    await registry.attach(client, id, "c", 80, 24);
+    const chunk = "x".repeat(1024 * 1024) + "\r\n";
+    for (let i = 0; i < 70; i++) {
+      ptys[0]!.emit(chunk);
+      await settle();
+    }
+    ptys[0]!.emit("tail\r\n");
+    await settle();
+    const late = new FakeClient("late");
+    await registry.attach(late, id, "l", 80, 24); // completing at all means the emulator went idle
+    expect(late.of("terminal.snapshot")[0]!.truncated).toBe(true);
+    expect(client.of("terminal.output").at(-1)!.data).toBe("tail\r\n");
     registry.shutdown();
   });
 });

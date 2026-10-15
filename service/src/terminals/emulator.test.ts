@@ -91,3 +91,32 @@ describe("snapshots", () => {
     expect(emu.serialize().data).toContain("line 199");
   });
 });
+
+describe("flow control", () => {
+  test("a flood past the backlog limit is dropped instead of throwing, the emulator stays usable and the snapshot is truncated", async () => {
+    const { emu } = make();
+    const chunk = "y".repeat(1024 * 1024);
+    expect(() => {
+      for (let i = 0; i < 80; i++) emu.write(chunk); // ~80 MB queued without yielding
+    }).not.toThrow();
+    await emu.idle();
+    emu.write("\r\nafter-flood");
+    await emu.idle();
+    const snap = emu.serialize();
+    expect(snap.data).toContain("after-flood");
+    expect(snap.truncated).toBe(true);
+  });
+
+  test("a resize waits for the output written before it", async () => {
+    const { emu } = make();
+    emu.write("a".repeat(60)); // 40 columns: wraps at the old width
+    emu.resize(20, 8);
+    await emu.idle();
+    const ref = new Terminal({ cols: 40, rows: 8, allowProposedApi: true });
+    const ser = new SerializeAddon();
+    ref.loadAddon(ser);
+    await new Promise<void>((r) => ref.write("a".repeat(60), r));
+    ref.resize(20, 8);
+    expect(emu.serialize().data).toBe(ser.serialize({ scrollback: 5000 }));
+  });
+});

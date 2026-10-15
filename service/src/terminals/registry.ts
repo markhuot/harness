@@ -50,6 +50,8 @@ export interface TerminalRegistryOptions {
 }
 
 export const MAX_WRITE = 1024 * 1024;
+/** Exited terminals kept for their grace period; the oldest go first past this. */
+export const MAX_EXITED_TERMINALS = 8;
 const UPDATE_INTERVAL_MS = 1000;
 const ENV_DROP = /^(ELECTRON_|HARNESS_|BUN_|npm_|NODE_OPTIONS$)/;
 
@@ -110,6 +112,8 @@ interface ClientState {
   /** Gets live output; false until its snapshot is out, and while it resyncs. */
   ready: boolean;
   resyncing: boolean;
+  /** The lowest the socket's queue has been since its snapshot: what's above it is live output. */
+  floor: number;
 }
 
 interface Term {
@@ -133,6 +137,8 @@ interface Term {
   lastEmitted: string;
   emitTimer: unknown;
   closed: boolean;
+  /** The last serialized screen, until output or a resize changes it. */
+  snapshot: { offset: number; cols: number; rows: number; data: string; truncated: boolean } | null;
 }
 
 export class TerminalRegistry {
@@ -217,6 +223,7 @@ export class TerminalRegistry {
       lastEmitted: JSON.stringify(info),
       emitTimer: null,
       closed: false,
+      snapshot: null,
     };
     term.emu = this.makeEmulator(initial.cols, initial.rows, {
       title: (title) => {
@@ -235,14 +242,21 @@ export class TerminalRegistry {
       timers: this.o.timers,
       apply: (size) => this.applySize(term, size),
     });
-    term.pty = this.opts.spawn(shell, ["-l"], {
-      cwd,
-      cols: initial.cols,
-      rows: initial.rows,
-      env: shellEnv(this.env),
-      onData: (bytes) => this.onData(term, bytes),
-      onExit: (exit) => this.onExit(term, exit.exitCode),
-    });
+    try {
+      term.pty = this.opts.spawn(shell, ["-l"], {
+        cwd,
+        cols: initial.cols,
+        rows: initial.rows,
+        env: shellEnv(this.env),
+        onData: (bytes) => this.onData(term, bytes),
+        onExit: (exit) => this.onExit(term, exit.exitCode),
+      });
+    } catch (err) {
+      term.closed = true;
+      term.size.dispose();
+      term.emu.dispose();
+      throw err;
+    }
     this.terms.set(id, term);
     this.opts.bus.emit({ kind: "terminal.created", terminal: { ...info } });
     return { ...info };
@@ -264,12 +278,13 @@ export class TerminalRegistry {
       term.size.report(client.id, cols, rows);
       return;
     }
-    // The same device on an older socket (a reconnect) doesn't count twice.
+    // The same device on an older socket (a reconnect, or a second window) doesn't count twice for
+    // sizing. The older socket stays attached and keeps its output; its next resize counts it again.
     for (const [sid, st] of term.clients) {
-      if (deviceId && st.deviceId === deviceId && sid !== client.id) this.detach(sid, id);
+      if (deviceId && st.deviceId === deviceId && sid !== client.id) term.size.remove(sid);
     }
     term.size.report(client.id, cols, rows); // an unusable report leaves the size as it is
-    const state: ClientState = { client, deviceId, ready: false, resyncing: false };
+    const state: ClientState = { client, deviceId, ready: false, resyncing: false, floor: 0 };
     term.clients.set(client.id, state);
     term.lastActive = this.o.now();
     await this.sendSnapshot(term, state);
@@ -318,7 +333,9 @@ export class TerminalRegistry {
   async tick(): Promise<void> {
     const now = this.o.now();
     for (const term of [...this.terms.values()]) {
-      for (const sid of term.size.sweep()) this.detach(sid, term.info.id);
+      // A silent client stops counting for the size but stays attached: it still gets output, and
+      // its next resize or attach counts it again. Closing its socket is what detaches it.
+      term.size.sweep();
       if (term.info.state === "exited" && term.exitedAt !== null && now - term.exitedAt >= this.o.exitedGraceMs) this.remove(term, false);
       else if (term.info.state === "running" && term.clients.size === 0 && now - term.lastActive >= this.o.idleMs && term.info.process === basename(term.shell)) {
         this.remove(term, true);
@@ -403,10 +420,14 @@ export class TerminalRegistry {
     const text = term.pending;
     term.pending = "";
     term.offset += Buffer.byteLength(text);
+    term.snapshot = null;
     term.emu.write(text);
     for (const st of term.clients.values()) {
       if (!st.ready) continue;
-      if (st.client.buffered() > this.o.highWater) {
+      // Backpressure is what queued since the snapshot went out, not the snapshot itself.
+      const queued = st.client.buffered();
+      st.floor = Math.min(st.floor, queued);
+      if (queued - st.floor > this.o.highWater) {
         // A slow client never stalls the shell or the others: it skips output and resyncs.
         void this.sendSnapshot(term, st);
         continue;
@@ -426,9 +447,15 @@ export class TerminalRegistry {
       while (st.client.buffered() > this.o.highWater / 4) await new Promise((r) => this.o.timers.set(() => r(null), 50));
       if (term.closed || term.clients.get(st.client.id) !== st) return;
       await term.emu.idle();
-      const snap = term.emu.serialize();
+      // One serialization per size or output change, shared by every client that needs it.
       const { cols, rows } = term.info;
-      st.client.send({ type: "terminal.snapshot", id: term.info.id, data: snap.data, offset: term.offset, cols, rows, truncated: snap.truncated });
+      let shot = term.snapshot;
+      if (!shot || shot.offset !== term.offset || shot.cols !== cols || shot.rows !== rows) {
+        shot = { offset: term.offset, cols, rows, ...term.emu.serialize() };
+        term.snapshot = shot;
+      }
+      st.client.send({ type: "terminal.snapshot", id: term.info.id, data: shot.data, offset: shot.offset, cols, rows, truncated: shot.truncated });
+      st.floor = st.client.buffered();
       if (term.info.state === "exited") st.client.send({ type: "terminal.exit", id: term.info.id, exitCode: term.info.exitCode });
       st.ready = true;
     } finally {
@@ -438,7 +465,7 @@ export class TerminalRegistry {
 
   private applySize(term: Term, size: Size) {
     if (term.closed) return;
-    this.flush(term); // output before the resize is parsed at the old size
+    this.flush(term); // the emulator parses output queued before the resize at the old size
     try {
       term.pty.resize(size.cols, size.rows);
     } catch {}
@@ -459,6 +486,9 @@ export class TerminalRegistry {
     term.exitedAt = this.o.now();
     for (const st of term.clients.values()) st.client.send({ type: "terminal.exit", id: term.info.id, exitCode });
     this.changed(term, true);
+    // Each exited terminal keeps its scrollback emulator, so only the newest few are kept.
+    const exited = [...this.terms.values()].filter((t) => t.info.state === "exited").sort((a, b) => a.exitedAt! - b.exitedAt!);
+    for (const old of exited.slice(0, Math.max(0, exited.length - MAX_EXITED_TERMINALS))) this.remove(old, false);
   }
 
   /** Emit terminal.updated when something changed, at most once a second per terminal. */

@@ -21,14 +21,19 @@ export interface PollRunners {
   lsof(pids: number[]): Promise<string>;
 }
 
-async function run(cmd: string[]): Promise<string> {
+/** Output of `cmd`, or "" when it fails or runs past `timeoutMs` (a hung lsof on a dead mount). */
+export async function run(cmd: string[], timeoutMs = 3000): Promise<string> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     const proc = Bun.spawn(cmd, { stdout: "pipe", stderr: "ignore" });
+    timer = setTimeout(() => proc.kill("SIGKILL"), timeoutMs);
     const out = await new Response(proc.stdout).text();
     await proc.exited;
     return out;
   } catch {
     return "";
+  } finally {
+    clearTimeout(timer);
   }
 }
 
