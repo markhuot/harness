@@ -412,20 +412,41 @@ struct RouterSheetTests {
         #expect(r.sheet == nil && r.ticketSheetState == .presented)
     }
 
-    @Test func projectsClosesTheTicketSheetPresentedOrDocked() {
+    @Test func projectsKeepsTheDockAndHidesItWhileOpen() {
         let r = sheeted()
         r.push(t("A-1"))
         r.openTicket(key: "A-2", tab: nil)
-        r.present(.projects)
-        #expect(r.dockedSheets.isEmpty)
-        #expect(r.sheet == .projects)
-        #expect(r.ticketSheetState == .gone)
+        r.present(.newSession(projectId: "p1", key: nil))
+        let before = r.dockedSheets.map(\.id)
+        #expect(before.count == 3 && r.ticketSheetState == .presented)
 
-        let d = sheeted()
-        d.push(t("A-1"))
-        d.dockSheet()
-        d.present(.projects)
-        #expect(d.sheet == .projects && d.dock == nil)
+        r.present(.projects)
+        #expect(r.dockedSheets.map(\.id) == before)
+        #expect(r.sheet == .projects)
+        #expect(r.ticketSheetState == .docked)
+        #expect(r.dockedSheets.first?.root == .newSession(projectId: "p1", key: nil))
+        #expect(!DockCards.isShown(count: r.dockedSheets.count, sheetUp: r.sheet != nil, coverUp: false, keyboardUp: false, dialogUp: false))
+
+        r.close(.projects)
+        #expect(r.sheet == nil && r.dockedSheets.map(\.id) == before && r.ticketSheetState == .docked)
+        #expect(DockCards.isShown(count: r.dockedSheets.count, sheetUp: r.sheet != nil, coverUp: false, keyboardUp: false, dialogUp: false))
+
+        // Already docked, or nothing open: Projects changes nothing about the dock.
+        let n = sheeted()
+        n.present(.projects)
+        #expect(n.ticketSheetState == .gone && n.sheet == .projects)
+    }
+
+    @Test func theDockSurvivesOpeningProjects() {
+        let r = sheeted()
+        r.openTicket(key: "A-1", tab: nil)
+        r.openTicket(key: "B-1", tab: nil)
+        r.dockSheet()
+        r.present(.projects)
+
+        let relaunched = Router()
+        relaunched.restorePersistedDock(r.persistedDock)
+        #expect(relaunched.dockedSheets.map(\.title) == ["B-1", "A-1"])
     }
 
     @Test func otherSheetsAndCoversWorkAsBefore() {

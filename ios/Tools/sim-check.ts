@@ -80,11 +80,11 @@
 //   --sheets: the iPhone's ticket sheet on its own: a board card opens its ticket in a sheet, a
 //      conductor's child pushes inside it and the back swipe returns, dragging it to the bottom docks
 //      it under the board as a bar titled by its key, a tap on the bar restores it where it was (its
-//      composer no higher than before), Projects closes it, the bar's ✕ sends it away, a flick down
+//      composer no higher than before), Projects hides it, the bar's ✕ sends it away, a flick down
 //      from full size sends it away without docking. Then several docked: a second ticket joins as a
 //      second card, a long press on the title and a swipe along the dock switch, three show two
 //      cards and "1 more…", which expands into the list, a card's ✕ and a swipe down close only the
-//      top, the dock comes back after a relaunch, Projects closes them all.
+//      top, the dock comes back after a relaunch, Projects hides them and gives them back.
 //
 //   --memory: the app's footprint with none, 5 and 20 docked tickets (about 45 s on its own; the rule
 //      that only 5 stay mounted is in RouterSheetTests).
@@ -1469,16 +1469,19 @@ async function barClearsDock(udid: string, dockTop?: number) {
 }
 
 /**
- * Swipes docked ticket sheets away until none is left (each swipe closes the one on top), so a
- * shot of a tab doesn't carry them.
+ * Closes every docked ticket at once by dropping the reset file the debug probe watches
+ * (DebugProbe), however many are docked. Projects keeps the dock, so it can't be the shortcut.
  */
-/** Closes every docked ticket at once: opening Projects does (one tap, however many are docked). */
 async function clearDock(udid: string) {
-  if (!(await labels(udid)).some(isDock)) return;
+  if (!(await probe(udid))?.router.dock.length && !(await labels(udid)).some(isDock)) return;
+  await resetDock(udid);
   await goto(udid, BOARD);
-  await tapWhere(udid, "Projects");
-  await until("the Projects sheet", async () => (await labels(udid)).includes("Inbox"), 5000);
-  await goto(udid, BOARD);
+}
+async function resetDock(udid: string) {
+  let dir = containers.get(udid);
+  if (!dir) containers.set(udid, (dir = await simctl("get_app_container", udid, BUNDLE, "data")));
+  writeFileSync(join(dir, "tmp", "harness-debug-reset-dock"), "");
+  await probeUntil(udid, "the dock reset", (s) => s.router.dock.length === 0, 8000);
 }
 /** Closes the docked cards one at a time with their ✕ until none is left. */
 async function undock(udid: string) {
@@ -1851,7 +1854,7 @@ async function seedDockable(projectId: string, n: number): Promise<Ticket[]> {
  * sheet, with the composer above them; switching cards or docking never remounts the dock; three
  * show two cards and "1 more…", which expands into the list of all three, whose oldest (parked)
  * opens at its saved path; a card's ✕ closes only that ticket; the dock comes back after a
- * relaunch; Projects closes them all.
+ * relaunch; Projects hides them and gives them back.
  */
 async function dockStackChecks(udid: string, p: { project: Project; conductor: Ticket }) {
   selector.sequence("declared");
@@ -2112,12 +2115,17 @@ async function dockStackChecks(udid: string, p: { project: Project; conductor: T
     await barClearsDock(udid);
     return "11pt above the card";
   }, CHECK_CAP_MS, [RELAUNCH]);
-  await check("Projects closes every docked ticket", async () => {
+  await check("Projects hides the dock and gives it back", async () => {
+    const before = (await probe(udid))?.router.dock.map((d) => d.id) ?? [];
+    if (!before.length) throw new Error("nothing is docked to keep");
     await tapWhere(udid, "Projects");
     await until("the Projects sheet", async () => (await labels(udid)).includes("Inbox"), 5000);
+    if ((await labels(udid)).some(isDock)) throw new Error("the dock shows over Projects");
     await goto(udid, BOARD);
-    if ((await labels(udid)).some(isDock)) throw new Error("a dock is still there after Projects");
-    return "all closed";
+    await until("the dock back", async () => (await labels(udid)).some(isDock), 8000);
+    const after = (await probe(udid))?.router.dock.map((d) => d.id) ?? [];
+    if (after.join() !== before.join()) throw new Error(`the dock was ${before} and is now ${after}`);
+    return `${after.length} still docked`;
   }, CHECK_CAP_MS, [PALETTE_BAR]);
 }
 
@@ -2353,9 +2361,7 @@ async function memoryChecks(udid: string, p: { project: Project }) {
       for (const t of ts) await goto(udid, `harness://ticket/${encodeURIComponent(t.key)}`, (l) => ticketShown(l, t.key));
     };
     const closeAll = async () => {
-      await goto(udid, BOARD);
-      await tapWhere(udid, "Projects");
-      await until("the Projects sheet", async () => (await labels(udid)).includes("Inbox"), 5000);
+      await resetDock(udid);
       await goto(udid, BOARD);
     };
     await goto(udid, BOARD);

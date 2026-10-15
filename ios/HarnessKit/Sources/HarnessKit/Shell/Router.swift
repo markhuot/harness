@@ -46,7 +46,7 @@ import Observation
 ///   Only the first `liveSheetCount` are mounted (`liveSheets`); the rest are parked, drawn as a
 ///   row from the board's `Ticket` until opened again at their saved path.
 /// - Closing (`dismissSheet()`, `closeSheet(id:)`, `popOutSheet()` into a window) takes one sheet
-///   off; when it was the top, the next becomes the top, docked. Projects closes them all.
+///   off; when it was the top, the next becomes the top, docked. Projects docks the presented one and keeps the dock.
 /// Other `sheet`s (pickers…) and `cover` work as before and come up over it. A ticket window has
 /// no ticket sheet: tickets push on its stack. The list survives a relaunch through
 /// `persistedDock` / `restorePersistedDock(_:)`, which the app keeps on the device.
@@ -122,9 +122,9 @@ public final class Router {
                 sheet = nil
                 presentTicketSheet(.newSession(projectId: projectId, key: key))
             } else if s == .projects {
-                // Two system sheets would fight over the bottom of the screen: Projects closes the
-                // ticket sheets (New session drafts are saved).
-                dismissAllSheets()
+                // Two system sheets would fight over the bottom of the screen: a presented ticket
+                // sheet docks, and the dock hides while Projects is up (`DockCards.isShown`).
+                dockSheet()
                 sheet = s
             } else {
                 sheet = s
@@ -353,7 +353,7 @@ public final class Router {
         keepSheets(sheets.filter { $0.id != id })
     }
 
-    /// Every ticket sheet → gone (Projects).
+    /// Every ticket sheet → gone. Only the debug reset uses it; nothing in the app closes them all.
     public func dismissAllSheets() { keepSheets([]) }
 
     /// `popOutSheet()` would do something: there's a window opener and a ticket sheet, presented or

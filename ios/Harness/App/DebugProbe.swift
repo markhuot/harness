@@ -85,8 +85,16 @@ final class DebugProbe {
         return animating + (scrolling ? ["scrolling"] : [])
     }
 
+    /// sim-check drops this file in the container's tmp to close every ticket sheet at once (the
+    /// dock reset between checks); the probe deletes it and does so.
+    private let resetURL = FileManager.default.temporaryDirectory.appendingPathComponent(DebugState.resetFileName)
+
     private func write() async {
         guard let router else { return }
+        if FileManager.default.fileExists(atPath: resetURL.path) {
+            try? FileManager.default.removeItem(at: resetURL)
+            router.dismissAllSheets()
+        }
         // The editor on screen: a file's host has a window, the hidden diff host and parked ones don't.
         let onScreen = hosts.compactMap(\.host).filter { $0.webView.window != nil }
         var state = DebugState(router: DebugState.router(router))

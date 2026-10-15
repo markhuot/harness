@@ -18,7 +18,7 @@ import SwiftUI
 /// tapping a card swaps the sheet to that ticket, or presents it again from the board.
 ///
 /// Pickers, the watcher form and covers come up over it: the root is busy presenting this, so
-/// they're presented from here. Projects closes it instead (`Router.open(.sheet(.projects))`), and
+/// they're presented from here. Projects docks it instead (`Router.open(.sheet(.projects))`), and
 /// anything the board behind presents (an alert in Settings, say) has UIKit dismiss it, which the
 /// root's binding turns into `dismissSheet()`. New session drafts are saved either way.
 struct TicketSheetHost: View {

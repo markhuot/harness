@@ -25,6 +25,8 @@ import Foundation
 public struct DebugState: Codable, Equatable, Sendable {
     public static let version = 1
     public static let fileName = "harness-debug-state.json"
+    /// A file sim-check creates beside it to have the app close every ticket sheet.
+    public static let resetFileName = "harness-debug-reset-dock"
 
     public var version = DebugState.version
     /// Counts the writes, so a reader can tell the app is still alive and writing.

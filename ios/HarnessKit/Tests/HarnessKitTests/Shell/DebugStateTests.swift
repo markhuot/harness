@@ -17,12 +17,13 @@ struct DebugStateTests {
         let r = Router()
         r.open(.tab(.inbox))
         r.open(.push(.triage(sessionId: "s1")))
+        r.open(.push(.ticket(key: "A-1", tab: nil)))
         r.open(.sheet(.projects))
         let s = DebugState.router(r)
         #expect(s.selectedTab == "inbox")
         #expect(s.path == ["triage:s1"])
         #expect(s.sheet == "projects")
-        #expect(s.ticketSheet == "gone" && s.dock.isEmpty)
+        #expect(s.ticketSheet == "docked" && s.dock.map(\.title) == ["A-1"])
     }
 
     @Test func aTicketOpensAPresentedSheetThatDocks() {
