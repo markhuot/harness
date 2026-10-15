@@ -34,6 +34,9 @@ final class DebugProbe {
         guard router.scope == .main else { return }
         self.router = router
         guard loop == nil else { return }
+        // The walkthrough launches with this to check what a screen shows, not how it moves: sheets, pushes and
+        // keyboards land at once, so a read of the tree never waits on a transition. Launching without it keeps them.
+        if ProcessInfo.processInfo.environment["HARNESS_NO_ANIMATIONS"] == "1" { UIView.setAnimationsEnabled(false) }
         loop = Task { [weak self] in
             while !Task.isCancelled {
                 await self?.write()

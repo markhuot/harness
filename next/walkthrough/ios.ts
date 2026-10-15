@@ -33,7 +33,33 @@ const w = walk("iPhone walkthrough", (name) => {
   if (process.env.WALK_SHOTS) Bun.spawnSync(["xcrun", "simctl", "io", slot.udid, "screenshot", join(process.env.WALK_SHOTS, `${name.replace(/\W+/g, "-")}.png`)], { env: process.env });
 });
 try {
-  const axe = axeFor(slot.udid, process.env.DEVELOPER_DIR!, { strict: true });
+  const rawAxe = axeFor(slot.udid, process.env.DEVELOPER_DIR!, { strict: true });
+  // One tree read serves every look at the screen until something acts on it: a read taken while the app was at rest is kept
+  // for 1.5 s, and any tap, swipe, key or typing (any AXe call but a read), or any change in the app's debug state, drops it.
+  let cache: { els: AXElement[]; at: number; sig: string } | null = null;
+  const stateSig = () => {
+    const s = probe();
+    return s ? JSON.stringify([s.settled, s.busy, s.router, s.focus, s.editor]) : "";
+  };
+  const calm = () => {
+    const s = probe();
+    return !!s && s.settled && s.quietMs >= 100;
+  };
+  const cachedTree = () => (cache && cache.sig && Date.now() - cache.at < 1500 && cache.sig === stateSig() ? cache.els : null);
+  const axe = Object.fromEntries(
+    Object.entries(rawAxe).map(([k, f]) => [
+      k,
+      k === "nodes"
+        ? async () => {
+            const sig = stateSig();
+            const rested = calm();
+            const els = await rawAxe.nodes();
+            cache = rested && calm() && stateSig() === sig ? { els, at: Date.now(), sig } : null;
+            return els;
+          }
+        : k === "labels" ? f : (...a: unknown[]) => { cache = null; return (f as (...x: unknown[]) => unknown)(...a); },
+    ]),
+  ) as typeof rawAxe;
   const t0 = performance.now();
   await installAndPair(slot.udid, axe, app, buildPairUrl(usageProxy.base, d.token));
   console.log(`installed and paired in ${Math.round(performance.now() - t0)} ms`);
@@ -42,8 +68,18 @@ try {
   /** The tree once `ok` holds (a screen draws after the link lands), or the last read after 8 s so the screen reports what it saw. */
   const untilTree = async (read: () => Promise<AXElement[]>, ok: (els: AXElement[]) => boolean, ms = 8000) => {
     const end = Date.now() + ms;
+    const hit = cachedTree();
+    if (hit && ok(hit)) return hit;
+    // Wait for the app to stop moving before the first read, and between reads for the debug state to change (1 s at most, for
+    // data that lands without a visible change): a read costs ~350 ms, and one taken mid-animation is rarely the one that passes.
+    await atRest();
     let els = await read();
-    while (!ok(els) && Date.now() < end) els = await read();
+    while (!ok(els) && Date.now() < end) {
+      const sig = stateSig();
+      const until = Math.min(end, Date.now() + 1000);
+      while (stateSig() === sig && Date.now() < until) await Bun.sleep(50);
+      els = await read();
+    }
     return els;
   };
   /** The first element whose label passes `match`. */
@@ -57,9 +93,9 @@ try {
   const settled = async (pick: (els: AXElement[]) => AXElement | undefined, what: string, ms = 8000) => {
     const end = Date.now() + ms;
     let prev: AXElement | undefined;
-    for (;;) {
+    for (let first = true; ; first = false) {
       const resting = await atRest();
-      const els = await axe.nodes();
+      const els = (first && resting ? cachedTree() : null) ?? (await axe.nodes());
       const e = pick(els);
       if (e && (resting || sameFrame(e, prev))) return e;
       if (Date.now() > end) throw new Error(`${what} never settled on screen; ${e ? "it kept moving" : "it isn't in the tree"}; ${els.map((x) => x.id ?? x.label).filter(Boolean).slice(0, 40).join(" | ")}`);
@@ -69,6 +105,9 @@ try {
   /** The tree once the app is at rest: a scroll's momentum is over. Without a probe, once nothing in it moves between two reads. */
   const quiet = async (ms = 8000) => {
     if (await atRest()) return axe.nodes();
+    return framesStill(ms);
+  };
+  const framesStill = async (ms: number) => {
     const end = Date.now() + ms;
     const sig = (els: AXElement[]) => JSON.stringify(els.map((e) => e.frame));
     let els = await axe.nodes();
@@ -78,8 +117,20 @@ try {
     }
     return els;
   };
-  /** Taps the element with this accessibilityIdentifier once it has settled. */
+  /** Waits for the app to be at rest without reading the tree (for a caller that only needs the motion over); the tree comparison is the fallback when the probe doesn't answer. */
+  const rest = async (ms = 8000) => {
+    if (!(await atRest())) await framesStill(ms);
+  };
+  /** Taps the element with this accessibilityIdentifier once it has settled: straight away when the app is at rest, which needs no read of the tree, else after finding it. */
   const tapId = async (id: string) => {
+    if (await atRest()) {
+      try {
+        await axe.tapId(id);
+        return;
+      } catch {
+        // not drawn yet: find it below
+      }
+    }
     await settled((els) => els.find((e) => e.id === id), id);
     await axe.tapId(id);
   };
@@ -105,7 +156,7 @@ try {
   const untilKeyboard = async () => {
     const s = await untilProbe((x) => !!x.focus);
     if (!s?.focus) throw new Error(`no field took the focus; ${seen(await axe.nodes())}`);
-    await quiet(); // the keyboard has finished sliding in
+    await rest(); // the keyboard has finished sliding in
   };
   /** Closes every docked ticket sheet, which cover the next screen's controls: opening Projects does it in one step, whatever the count. */
   const clearDock = async () => {
@@ -194,6 +245,18 @@ try {
     return ready ? untilTree(() => axe.nodes(), ready) : axe.nodes();
   };
   const composerUp = (e: AXElement[]) => has(e, /^Message the agent/);
+  /**
+   * Starts the app again (a pairing survives it) with its animations off: the walkthrough checks what a screen shows, and a
+   * transition is only time spent waiting for it to end. WALK_ANIMATIONS=1 keeps them, for a run that wants the real motion.
+   */
+  const relaunch = () => {
+    probe(); // finds the container
+    Bun.spawnSync(["xcrun", "simctl", "terminate", slot.udid, "com.markhuot.harness"]);
+    rmSync(join(container, "tmp", PROBE_FILE), { force: true }); // the old launch's state must not pass for the new one's
+    const env = process.env.WALK_ANIMATIONS === "1" ? process.env : { ...process.env, SIMCTL_CHILD_HARNESS_NO_ANIMATIONS: "1" };
+    Bun.spawnSync(["xcrun", "simctl", "launch", slot.udid, "com.markhuot.harness"], { env });
+  };
+  relaunch();
 
   await w.screen("board", async (expect) => {
     const els = await untilTree(() => axe.nodes(), (e) => has(e, new RegExp(`^${seeded.review.key} `)));
@@ -537,8 +600,7 @@ try {
     let els = await untilTree(() => axe.nodes(), (e) => has(e, "README.md"));
     expect("@READ lists README.md", has(els, "README.md"), seen(els));
     await tapLabel("README.md");
-    await untilTree(() => axe.nodes(), (e) => !has(e, "README.md"));
-    await quiet();
+    await rest(); // the list closes and the composer shrinks
     await start();
     expect("Start session launches the ticket", !!(await launched(seeded.project.id, before)));
 
@@ -557,8 +619,7 @@ try {
     els = await untilTree(() => axe.nodes(), (e) => has(e, "src/app.ts"));
     expect("@src/a lists src/app.ts", has(els, "src/app.ts"), seen(els));
     await tapLabel("src/app.ts");
-    await untilTree(() => axe.nodes(), (e) => !has(e, "src/app.ts")); // the list closes and the composer shrinks, which moves Send
-    await quiet();
+    await rest(); // the list closes and the composer shrinks, which moves Send
     await tapId("composer-send");
     // iOS may capitalize the first word, so the message is compared without case.
     const sent = await until("message with the mention", async () => ((await texts()).some((t) => t.toLowerCase() === "see @src/app.ts") ? true : null), 10000, 100).catch(() => null);
@@ -570,10 +631,9 @@ try {
     els = await untilTree(() => axe.nodes(), (e) => has(e, "/code-walk"), 15000); // the first lookup starts the (fake) CLI
     expect("/co lists the agent's commands and only those", has(els, "/code-walk") && has(els, "/commit-and-pr") && !has(els, "/vercel:deploy"), seen(els));
     await tapLabel("/code-walk");
-    await untilTree(() => axe.nodes(), (e) => !has(e, "/code-walk"));
     await untilKeyboard();
     await axe.type("this branch");
-    await untilTree(() => axe.nodes(), (e) => valueOf(e, spec).endsWith("this branch"));
+    await untilTree(() => axe.nodes(), (e) => valueOf(e, spec).endsWith("this branch") && !has(e, "/code-walk"));
     await start();
     expect("the slash command's ticket launches", !!(await launched(world.slash.id, before)));
   });
@@ -654,12 +714,12 @@ try {
     els = await untilTree(() => axe.nodes(), (e) => has(e, info), 5000);
     expect("the info popover explains the gauges", has(els, info), seen(els));
     await dismissPopover();
-    els = await untilTree(() => axe.nodes(), (e) => !has(e, info) && has(e, "PLAN USAGE"), 5000);
+    await rest(); // the popover has closed
     const choose = async (item: string) => {
       await tapId("plan-usage-options");
-      await untilTree(() => axe.nodes(), (e) => has(e, item), 5000);
+      await untilTree(() => axe.nodes(), (e) => has(e, item), 5000); // tapLabel reuses this read of the open menu
       await tapLabel(item);
-      await untilTree(() => axe.nodes(), (e) => !has(e, item), 5000); // the menu has closed
+      await rest(); // the menu has closed: the next read is of the screen behind it
     };
     await choose("Projected at reset");
     els = await untilTree(() => axe.nodes(), (e) => has(e, /^Claude Code Weekly: on pace for 56% · 45% used, resets/));
@@ -669,9 +729,7 @@ try {
     const copilot = await usageRows();
     expect("filtering to Copilot hides Claude's rows", copilot.length > 0 && copilot.every((e) => /^GitHub Copilot/.test(e.label!)), seen(els));
     // The choice is @AppStorage: it survives a relaunch.
-    Bun.spawnSync(["xcrun", "simctl", "terminate", slot.udid, "com.markhuot.harness"]);
-    rmSync(join(container, "tmp", PROBE_FILE), { force: true }); // the old launch's state must not pass for the new one's
-    Bun.spawnSync(["xcrun", "simctl", "launch", slot.udid, "com.markhuot.harness"]);
+    relaunch();
     await untilTree(() => axe.nodes(), (e) => has(e, /^Planning, \d+$/), 15000);
     await showSidebar().catch(() => []);
     const kept = await untilTree(() => axe.nodes(), (e) => has(e, /^GitHub Copilot/), 8000);
