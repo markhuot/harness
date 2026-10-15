@@ -86,6 +86,8 @@ struct ProtocolRoundTripTests {
         "PluginHostMessage": rt(PluginHostMessage.self),
         "PluginFrameMessage": rt(PluginFrameMessage.self),
         "HarnessEvent": rt(HarnessEvent.self),
+        "TerminalInfo": rt(TerminalInfo.self),
+        "CreateTerminalBody": rt(CreateTerminalBody.self),
         "BrowserInput": rt(BrowserInput.self),
         "ClientMessage": rt(ClientMessage.self),
         "ServerMessage": rt(ServerMessage.self),

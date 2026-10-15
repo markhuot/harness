@@ -49,6 +49,8 @@ import type {
   BrowserScreenshot,
   BrowserElement,
   BrowserElementQuery,
+  CreateTerminalBody,
+  TerminalInfo,
   BrowserExtension,
   BrowserExtensionList,
   BrowserExtensionActionResult,
@@ -433,6 +435,18 @@ export class HarnessClient {
     return this.request<{ token: string }>("POST", "/token/rotate");
   }
 
+  // Terminals
+  /** The service's terminals; `refresh` looks up every terminal's cwd and process first. */
+  terminals(refresh = false) {
+    return this.request<TerminalInfo[]>("GET", `/terminals${refresh ? "?refresh=1" : ""}`);
+  }
+  createTerminal(body: CreateTerminalBody = {}) {
+    return this.request<TerminalInfo>("POST", "/terminals", body);
+  }
+  closeTerminal(id: string) {
+    return this.request<{ ok: true }>("DELETE", `/terminals/${encodeURIComponent(id)}`);
+  }
+
   // Browser
   /** `tabId` omitted: the lowest open tab. */
   browserState(sessionId: string, tabId?: number) {
@@ -486,6 +500,7 @@ export class HarnessClient {
   connect(handlers: {
     onEvent: (e: HarnessEvent) => void;
     onStatus?: (connected: boolean) => void;
+    onMessage?: (msg: ServerMessage) => void;
   }): HarnessSocket {
     return new HarnessSocket(this.baseUrl.replace(/^http/, "ws") + `/ws?token=${encodeURIComponent(this.opts.token)}`, handlers);
   }
@@ -523,10 +538,18 @@ export class HarnessSocket {
   private browserSubs = new Map<string, { sessionId: string; viewerId: string | undefined; tabId: number | undefined }>();
   /** The last presence set, sent again after each reconnect. */
   private presence: Presence | null = null;
+  /** Terminals attached (id → device and viewport), attached again after each reconnect. */
+  private terminalSubs = new Map<string, { deviceId: string; cols: number; rows: number }>();
+  private pingTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(
     private url: string,
-    private handlers: { onEvent: (e: HarnessEvent) => void; onStatus?: (connected: boolean) => void },
+    private handlers: {
+      onEvent: (e: HarnessEvent) => void;
+      onStatus?: (connected: boolean) => void;
+      /** Every other message from the service (terminal.snapshot, terminal.output, …). */
+      onMessage?: (msg: ServerMessage) => void;
+    },
   ) {
     this.open();
   }
@@ -539,11 +562,13 @@ export class HarnessSocket {
       this.send({ type: "hello", client: "harness-client" });
       for (const sub of this.browserSubs.values()) this.send(browserSubscribe(sub.sessionId, sub.tabId, sub.viewerId));
       if (this.presence) this.send({ type: "presence", ...this.presence });
+      for (const [id, t] of this.terminalSubs) this.send({ type: "terminal.attach", id, ...t });
       this.handlers.onStatus?.(true);
     };
     ws.onmessage = (m) => {
       const msg = JSON.parse(typeof m.data === "string" ? m.data : new TextDecoder().decode(m.data as ArrayBuffer)) as ServerMessage;
       if (msg.type === "event") this.handlers.onEvent(msg.event);
+      else this.handlers.onMessage?.(msg);
     };
     ws.onclose = () => {
       this.handlers.onStatus?.(false);
@@ -592,8 +617,44 @@ export class HarnessSocket {
     this.send({ type: "presence", ...next });
   }
 
+  /**
+   * Watch a terminal and report this viewport (the service sizes the shell to the smallest visible
+   * client). Remembered across reconnects; again with a new size only reports it. While any terminal
+   * is attached the socket pings every 5 s, which tells the service this client is still live.
+   */
+  attachTerminal(id: string, deviceId: string, cols: number, rows: number) {
+    const known = this.terminalSubs.has(id);
+    this.terminalSubs.set(id, { deviceId, cols, rows });
+    this.send({ type: "terminal.attach", id, deviceId, cols, rows });
+    if (!known) this.updatePing();
+  }
+  detachTerminal(id: string) {
+    if (!this.terminalSubs.delete(id)) return;
+    this.send({ type: "terminal.detach", id });
+    this.updatePing();
+  }
+  resizeTerminal(id: string, cols: number, rows: number) {
+    const sub = this.terminalSubs.get(id);
+    if (!sub) return;
+    sub.cols = cols;
+    sub.rows = rows;
+    this.send({ type: "terminal.resize", id, cols, rows });
+  }
+  writeTerminal(id: string, data: string) {
+    this.send({ type: "terminal.write", id, data });
+  }
+  private updatePing() {
+    if (this.terminalSubs.size > 0 && !this.pingTimer) this.pingTimer = setInterval(() => this.send({ type: "ping" }), 5000);
+    else if (this.terminalSubs.size === 0 && this.pingTimer) {
+      clearInterval(this.pingTimer);
+      this.pingTimer = null;
+    }
+  }
+
   close() {
     this.closed = true;
+    if (this.pingTimer) clearInterval(this.pingTimer);
+    this.pingTimer = null;
     this.ws?.close();
   }
 }

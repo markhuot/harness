@@ -12,6 +12,7 @@ import { MAX_UPLOAD_BYTES } from "../attachment-lists";
 import type { PluginHost } from "../plugins/host";
 import type { NotificationService } from "../notifications/dispatcher";
 import type { PresenceRegistry } from "../notifications/presence";
+import type { TerminalRegistry } from "../terminals/registry";
 import { isLoopback, type NetworkManager } from "./network";
 import { validateListen, validateSettingsPatch } from "../orchestrator/settings";
 import { TICKET_STATUSES, type ServiceStatus, type TicketStatus } from "@harness/shared";
@@ -45,6 +46,8 @@ export interface HttpServerOptions {
   /** Where sockets' presence goes (what each client shows), for the notification dispatcher. */
   presence?: PresenceRegistry;
   notifications?: NotificationService;
+  /** The shells the service hosts; enables /terminals and terminal.* over the WebSocket. */
+  terminals?: TerminalRegistry;
 }
 
 export interface HttpHandler {
@@ -182,6 +185,10 @@ export interface RouteExtras {
   restart?: () => void;
   /** Enables /devices and /notifications (DESIGN.md "Notifications"). */
   notifications?: NotificationService;
+  /** Enables /terminals. */
+  terminals?: TerminalRegistry;
+  /** Asks the connected Macs to open a pane for a terminal (POST /terminals { openOnMac }). */
+  openOnMac?: (terminal: { id: string; projectId: string | null }) => number;
 }
 
 /** `?status=planning,review` → validated statuses; absent/empty → undefined (no filter). */
@@ -202,9 +209,28 @@ function fileSearch(url: URL): { ignored: boolean; kind?: "file" | "dir" } {
 }
 
 export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: RouteExtras = {}): Route[] {
-  const { plugins, network, tokens, notifications } = extras;
+  const { plugins, network, tokens, notifications, terminals, openOnMac } = extras;
   const routes: Route[] = [];
   const add = (method: string, path: string, handler: Handler) => routes.push({ method, ...compile(path), handler });
+
+  // Terminals (DESIGN.md "Terminals"): the list, create and close; output goes over the WebSocket
+  if (terminals) {
+    add("GET", "/terminals", async ({ url }) => {
+      // ?refresh=1: look up every terminal's cwd and process first (a palette opening).
+      if (url.searchParams.get("refresh") === "1") await terminals.poll(true);
+      return terminals.list();
+    });
+    add("POST", "/terminals", async ({ body }) => {
+      const b = (await body()) ?? {};
+      const terminal = terminals.create(b);
+      if (b.openOnMac) openOnMac?.(terminal);
+      return terminal;
+    });
+    add("DELETE", "/terminals/:id", ({ params }) => {
+      terminals.close(params.id!);
+      return { ok: true };
+    });
+  }
 
   // Projects
   add("GET", "/projects", () => o.listProjects());
@@ -469,8 +495,10 @@ function fromLoopback(req: Request, server: Server<WsData>): boolean {
 
 /** One fetch/websocket pair shared by every listener (loopback, Tailscale, custom, 0.0.0.0). */
 export function createHttpHandler(opts: HttpServerOptions): HttpHandler {
-  const ws = createWsHandlers({ bus: opts.bus, browser: opts.browser, presence: opts.presence });
+  const ws = createWsHandlers({ bus: opts.bus, browser: opts.browser, presence: opts.presence, terminals: opts.terminals });
   const routes = buildRoutes(opts.orchestrator, opts.browser, {
+    terminals: opts.terminals,
+    openOnMac: (t) => ws.openOnMac(t),
     plugins: opts.plugins,
     network: opts.network,
     tokens: opts.tokens,

@@ -1202,7 +1202,50 @@ export type HarnessEvent =
   /** The service's code on disk changed since it started (or changed back) */
   | { kind: "service.status"; status: ServiceStatus }
   /** Plan usage (GET /usage) was fetched again */
-  | { kind: "usage.updated"; usage: PlanUsageReport };
+  | { kind: "usage.updated"; usage: PlanUsageReport }
+  /** A terminal was created (service-hosted shells, DESIGN.md "Terminals") */
+  | { kind: "terminal.created"; terminal: TerminalInfo }
+  /** A terminal's title, cwd, foreground process, size or state changed (at most about once a second per terminal) */
+  | { kind: "terminal.updated"; terminal: TerminalInfo }
+  | { kind: "terminal.removed"; id: string };
+
+/** A shell the service hosts. Clients attach with terminal.attach; the list is GET /terminals. */
+export interface TerminalInfo {
+  id: string;
+  /** Where the shell is now (OSC 7, else polled); starts as the cwd it was created in. */
+  cwd: string;
+  /** The title the program set (OSC 0/2); "" until one does. */
+  title: string;
+  /** The foreground program's name ("zsh" at the prompt, "vim" while it runs). */
+  process: string;
+  /** The project the terminal was created in; null = All projects. */
+  projectId: string | null;
+  state: "running" | "exited";
+  exitCode: number | null;
+  createdAt: number;
+  /** Device id of the client that created it ("" when unknown). */
+  createdBy: string;
+  /** The size the shell is at now (the smallest attached, visible client). */
+  cols: number;
+  rows: number;
+}
+
+export interface CreateTerminalBody {
+  /** Start directory: absolute or `~/…`; anything else (or a missing dir) is the home directory. */
+  cwd?: string;
+  projectId?: string | null;
+  /** The creating client's device id. */
+  deviceId?: string;
+  cols?: number;
+  rows?: number;
+  /** Ask the connected Mac(s) to open a pane for it (what iOS's New Terminal sets). */
+  openOnMac?: boolean;
+}
+
+export const MAX_RUNNING_TERMINALS = 24;
+export const MIN_TERMINAL_COLS = 20;
+export const MIN_TERMINAL_ROWS = 5;
+export const MAX_TERMINAL_DIMENSION = 1000;
 
 /**
  * Whether the service runs the code on disk. `stale`: the checkout changed since it started; it
@@ -1469,6 +1512,16 @@ export type ClientMessage =
   | { type: "browser.input"; sessionId: string; tabId?: number; input: BrowserInput; viewerId?: string }
   /** What this socket shows (Presence); replaces its earlier presence. Notifications for tickets a visible presence lists are suppressed. */
   | ({ type: "presence" } & Presence)
+  /**
+   * Watch a terminal and report this client's viewport. The service answers with terminal.snapshot,
+   * then terminal.output from the snapshot's offset. Attaching again only reports a new size.
+   * The client counts toward the shell's size while attached; terminal.detach (backgrounded, pane
+   * hidden) removes it. `deviceId` keeps a reconnecting device from counting twice.
+   */
+  | { type: "terminal.attach"; id: string; deviceId: string; cols: number; rows: number }
+  | { type: "terminal.detach"; id: string }
+  | { type: "terminal.resize"; id: string; cols: number; rows: number }
+  | { type: "terminal.write"; id: string; data: string }
   | { type: "ping" };
 
 export type BrowserInput =
@@ -1507,7 +1560,20 @@ export type ServerMessage =
   | { type: "welcome"; version: string }
   | { type: "event"; event: HarnessEvent }
   | { type: "pong" }
-  | { type: "error"; message: string };
+  | { type: "error"; message: string }
+  /**
+   * The screen to restore (escape sequences to write into an empty emulator at cols × rows), then
+   * live output continues at `offset`. Sent on attach and again whenever this client has to resync.
+   */
+  | { type: "terminal.snapshot"; id: string; data: string; offset: number; cols: number; rows: number; truncated: boolean }
+  /** Live output; `offset` is the byte offset just past `data` in the shell's output. */
+  | { type: "terminal.output"; id: string; data: string; offset: number }
+  /** The shell's size changed: draw at this size. */
+  | { type: "terminal.size"; id: string; cols: number; rows: number }
+  /** The shell ended. */
+  | { type: "terminal.exit"; id: string; exitCode: number | null }
+  /** Open a pane for this terminal: sent once, only to Mac clients connected right now. */
+  | { type: "terminal.open"; id: string; projectId: string | null };
 
 // ---------------------------------------------------------------------------
 // REST API request bodies (responses are the entities above, wrapped as { data })

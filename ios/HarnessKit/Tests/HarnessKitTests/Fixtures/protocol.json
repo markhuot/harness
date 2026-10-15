@@ -849,6 +849,28 @@
       "tickets": []
     },
     {
+      "type": "terminal.attach",
+      "id": "t-9f3c2a1b7d4e",
+      "deviceId": "8C0F4E2A-3B1D-4C6E-9F7A-2D5B8E1C4A90",
+      "cols": 62,
+      "rows": 18
+    },
+    {
+      "type": "terminal.detach",
+      "id": "t-9f3c2a1b7d4e"
+    },
+    {
+      "type": "terminal.resize",
+      "id": "t-9f3c2a1b7d4e",
+      "cols": 70,
+      "rows": 20
+    },
+    {
+      "type": "terminal.write",
+      "id": "t-9f3c2a1b7d4e",
+      "data": "ls -la\r"
+    },
+    {
       "type": "ping"
     }
   ],
@@ -905,6 +927,20 @@
     {
       "path": "/tmp/y",
       "requireHumanReview": false
+    }
+  ],
+  "CreateTerminalBody": [
+    {},
+    {
+      "cwd": "~/Sites",
+      "projectId": "prj_00a1",
+      "deviceId": "8C0F4E2A-3B1D-4C6E-9F7A-2D5B8E1C4A90",
+      "cols": 62,
+      "rows": 18,
+      "openOnMac": true
+    },
+    {
+      "projectId": null
     }
   ],
   "CreateTicketBody": [
@@ -1679,6 +1715,42 @@
           }
         ]
       }
+    },
+    {
+      "kind": "terminal.created",
+      "terminal": {
+        "id": "t-9f3c2a1b7d4e",
+        "cwd": "/Users/mark",
+        "title": "",
+        "process": "zsh",
+        "projectId": null,
+        "state": "running",
+        "exitCode": null,
+        "createdAt": 1759190400000,
+        "createdBy": "8C0F4E2A-3B1D-4C6E-9F7A-2D5B8E1C4A90",
+        "cols": 80,
+        "rows": 24
+      }
+    },
+    {
+      "kind": "terminal.updated",
+      "terminal": {
+        "id": "t-0a1b2c3d4e5f",
+        "cwd": "/Users/mark/Sites/harness",
+        "title": "vim DESIGN.md",
+        "process": "vim",
+        "projectId": "prj_00a1",
+        "state": "running",
+        "exitCode": null,
+        "createdAt": 1759190405000,
+        "createdBy": "",
+        "cols": 62,
+        "rows": 18
+      }
+    },
+    {
+      "kind": "terminal.removed",
+      "id": "t-ffeeddccbbaa"
     }
   ],
   "Health": [
@@ -2937,6 +3009,47 @@
     {
       "type": "error",
       "message": "Unknown message type"
+    },
+    {
+      "type": "terminal.snapshot",
+      "id": "t-9f3c2a1b7d4e",
+      "data": "hello\r\n\u001b[31mred\u001b[0m",
+      "offset": 17,
+      "cols": 80,
+      "rows": 24,
+      "truncated": false
+    },
+    {
+      "type": "terminal.output",
+      "id": "t-9f3c2a1b7d4e",
+      "data": "wörld\r\n",
+      "offset": 25
+    },
+    {
+      "type": "terminal.size",
+      "id": "t-9f3c2a1b7d4e",
+      "cols": 62,
+      "rows": 18
+    },
+    {
+      "type": "terminal.exit",
+      "id": "t-9f3c2a1b7d4e",
+      "exitCode": 0
+    },
+    {
+      "type": "terminal.exit",
+      "id": "t-9f3c2a1b7d4e",
+      "exitCode": null
+    },
+    {
+      "type": "terminal.open",
+      "id": "t-9f3c2a1b7d4e",
+      "projectId": "prj_00a1"
+    },
+    {
+      "type": "terminal.open",
+      "id": "t-9f3c2a1b7d4e",
+      "projectId": null
     }
   ],
   "ServiceStatus": [
@@ -3312,6 +3425,47 @@
       "size": 0,
       "done": true,
       "available": false
+    }
+  ],
+  "TerminalInfo": [
+    {
+      "id": "t-9f3c2a1b7d4e",
+      "cwd": "/Users/mark",
+      "title": "",
+      "process": "zsh",
+      "projectId": null,
+      "state": "running",
+      "exitCode": null,
+      "createdAt": 1759190400000,
+      "createdBy": "8C0F4E2A-3B1D-4C6E-9F7A-2D5B8E1C4A90",
+      "cols": 80,
+      "rows": 24
+    },
+    {
+      "id": "t-0a1b2c3d4e5f",
+      "cwd": "/Users/mark/Sites/harness",
+      "title": "vim DESIGN.md",
+      "process": "vim",
+      "projectId": "prj_00a1",
+      "state": "running",
+      "exitCode": null,
+      "createdAt": 1759190405000,
+      "createdBy": "",
+      "cols": 62,
+      "rows": 18
+    },
+    {
+      "id": "t-ffeeddccbbaa",
+      "cwd": "/tmp",
+      "title": "",
+      "process": "zsh",
+      "projectId": "prj_00a1",
+      "state": "exited",
+      "exitCode": 0,
+      "createdAt": 1759190409000,
+      "createdBy": "d1",
+      "cols": 80,
+      "rows": 24
     }
   ],
   "Ticket": [
@@ -5120,7 +5274,10 @@
       "browser.frame",
       "browser.state",
       "service.status",
-      "usage.updated"
+      "usage.updated",
+      "terminal.created",
+      "terminal.updated",
+      "terminal.removed"
     ],
     "TranscriptContent": [
       "text",
@@ -5140,13 +5297,22 @@
       "browser.unsubscribe",
       "browser.input",
       "presence",
+      "terminal.attach",
+      "terminal.detach",
+      "terminal.resize",
+      "terminal.write",
       "ping"
     ],
     "ServerMessage": [
       "welcome",
       "event",
       "pong",
-      "error"
+      "error",
+      "terminal.snapshot",
+      "terminal.output",
+      "terminal.size",
+      "terminal.exit",
+      "terminal.open"
     ],
     "BrowserInput": [
       "mouse",
