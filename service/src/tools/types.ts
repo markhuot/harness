@@ -67,6 +67,8 @@ export interface BoardListFilter {
   projectKey?: string;
   statuses?: TicketStatus[];
   limit?: number;
+  /** false leaves drafts out; default true */
+  includeDrafts?: boolean;
 }
 
 /** A ticket plus its project's key (a legacy mirror's key like FOO-123 doesn't name its project). */
@@ -79,7 +81,7 @@ export interface BoardTicketDetail {
   ticket: BoardTicket;
   /**
    * Other tickets whose remote ID is the requested key or this ticket's remote ID, newest first
-   * (drafts left out); [] when there are none.
+   * (drafts included); [] when there are none.
    */
   relatedTickets: BoardRelatedTicket[];
   /** The old key the lookup went through, when `key` was an alias */
@@ -338,7 +340,7 @@ export interface HarnessOps {
   /** Full-text search across every status (Orchestrator.searchTickets ranking and cursors). */
   searchTickets(
     ctx: ToolContext,
-    input: { query: string; projectKey?: string; limit?: number; cursor?: string },
+    input: { query: string; projectKey?: string; limit?: number; cursor?: string; includeDrafts?: boolean },
   ): Promise<{ hits: { ticket: BoardTicket; snippet: string }[]; nextCursor: string | null; total: number }>;
   /** Every project with its settings (null permissionMode → the settings default) */
   listProjects(ctx: ToolContext): Promise<ProjectView[]>;

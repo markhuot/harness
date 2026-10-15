@@ -311,38 +311,48 @@ describe("moving a draft to another project", () => {
   });
 });
 
-describe("agents don't see drafts", () => {
-  test("list_tickets, search_tickets and get_ticket leave drafts out; acting on one is unknown", async () => {
+describe("agents read drafts but can't act on them", () => {
+  test("list_tickets, search_tickets and get_ticket include drafts; include_drafts: false and every write refuse them", async () => {
     const h = setup();
     const me = await h.orch.createTicket({ projectId: h.web.id, spec: "me footer", start: false });
     await h.orch.idle();
     h.store.tickets.update(me.id, { status: "in_progress" });
     const d = await h.draft("secret footer");
+    h.store.tickets.setExternalRef(d.id, { source: "jira", key: "FOO-9", url: null, raw: null });
     const c = h.ctx("work", h.get(me));
     for (const scope of ["project", "all"] as const) {
       const list = await h.orch.ops.listTickets(c, { scope });
-      expect(list.tickets.map((t) => t.key)).toEqual([me.key]);
-      expect(list.total).toBe(1);
+      expect(list.tickets.map((t) => [t.key, !!t.draft]).sort()).toEqual([[d.key, true], [me.key, false]].sort());
+      expect(list.total).toBe(2);
+      const bare = await h.orch.ops.listTickets(c, { scope, includeDrafts: false });
+      expect(bare.tickets.map((t) => t.key)).toEqual([me.key]);
+      expect(bare.total).toBe(1);
     }
     const hits = await h.orch.ops.searchTickets(c, { query: "footer" });
-    expect(hits.hits.map((x) => x.ticket.key)).toEqual([me.key]);
-    expect(hits.total).toBe(1);
-    await expect(h.orch.ops.getTicket(c, d.key)).rejects.toThrow(/Unknown ticket/);
-    await expect(h.orch.ops.messageTicket(c, d.key, "hi")).rejects.toThrow(/Unknown ticket/);
-    await expect(h.orch.ops.startTicket(c, d.key)).rejects.toThrow(/Unknown ticket/);
-    await expect(h.orch.ops.moveTicket(c, d.key, "in_progress")).rejects.toThrow(/Unknown ticket/);
-    await expect(h.orch.ops.updateTicket(c, d.key, { title: "x" })).rejects.toThrow(/Unknown ticket/);
-    await expect(h.orch.ops.createTicket(c, { title: "after", spec: "after", dependsOn: [d.key] })).rejects.toThrow(/is a draft/);
-    // Through the MCP tool too, as the agent calls it.
+    expect(hits.hits.map((x) => x.ticket.key).sort()).toEqual([d.key, me.key].sort());
+    const bareHits = await h.orch.ops.searchTickets(c, { query: "footer", includeDrafts: false });
+    expect(bareHits.hits.map((x) => x.ticket.key)).toEqual([me.key]);
+    // get_ticket agrees with search: the draft by key, and by a remote ID only it carries.
+    const got = await h.orch.ops.getTicket(c, d.key);
+    expect([got.ticket.key, got.ticket.draft]).toEqual([d.key, true]);
+    await expect(h.orch.ops.getTicket(c, "FOO-9")).rejects.toMatchObject({ matches: { relatedTickets: [{ key: d.key }] } });
+    // Through the MCP tools, as the agent calls them: the draft is flagged.
     const r = await executeTool(toolsForRun("work", h.driver), "get_ticket", { key: d.key }, c);
-    expect(r.isError).toBe(true);
-    expect(text(r)).toMatch(/Unknown ticket/);
+    expect(r.isError).toBeFalsy();
+    expect(JSON.parse(text(r)).draft).toBe(true);
+    const listed = JSON.parse(text(await executeTool(toolsForRun("work", h.driver), "list_tickets", { include_drafts: false }, c)));
+    expect(listed.map((t: { key: string }) => t.key)).toEqual([me.key]);
+    // Acting on it is refused, by name.
+    await expect(h.orch.ops.messageTicket(c, d.key, "hi")).rejects.toThrow(/is a draft/);
+    await expect(h.orch.ops.startTicket(c, d.key)).rejects.toThrow(/is a draft/);
+    await expect(h.orch.ops.moveTicket(c, d.key, "in_progress")).rejects.toThrow(/is a draft/);
+    await expect(h.orch.ops.updateTicket(c, d.key, { title: "x" })).rejects.toThrow(/is a draft/);
+    await expect(h.orch.ops.createTicket(c, { title: "after", spec: "after", dependsOn: [d.key] })).rejects.toThrow(/is a draft/);
     // Humans still see it.
     expect(h.orch.listTickets(h.web.id).map((t) => t.key)).toContain(d.key);
     expect(h.orch.searchTickets({ q: "secret" }).tickets.map((t) => t.key)).toEqual([d.key]);
-    // Once submitted, agents see it.
     await h.orch.submitTicket(d.key, { start: false });
-    expect((await h.orch.ops.getTicket(c, d.key)).ticket.key).toBe(d.key);
+    expect((await h.orch.ops.getTicket(c, d.key)).ticket.draft).toBe(false);
     await h.orch.idle();
   });
 
@@ -363,7 +373,7 @@ describe("agents don't see drafts", () => {
     // The draft isn't offered as an existing ticket, and naming it as ticket_key doesn't reach it.
     expect(prompt).toContain(d.key);
     expect(prompt).not.toContain("secret");
-    expect(error).toMatch(/^Unknown ticket: /);
+    expect(error).toMatch(/is a draft/);
     expect(h.store.transcript.tail(d.sessionId, 50, ["text"]).length).toBe(0);
     expect(h.get(d).draft).toBe(true);
   });
