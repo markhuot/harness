@@ -34,9 +34,9 @@ async function socket(h: Harness, presence?: { deviceId: string; platform: "mac"
   return { ws, messages, send };
 }
 
-async function until(fn: () => boolean, ms = 3000) {
+async function until(fn: () => boolean | Promise<boolean>, ms = 3000) {
   const deadline = Date.now() + ms;
-  while (!fn()) {
+  while (!(await fn())) {
     if (Date.now() > deadline) throw new Error("condition not met in time");
     await Bun.sleep(5);
   }
