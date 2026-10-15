@@ -59,8 +59,9 @@ public enum CoverRoute: Hashable, Sendable, Identifiable {
 /// What a harness:// URL asks for.
 public enum DeepLink: Equatable, Sendable {
     /// A section: dismisses modals and pops the section to its root. `themes` carries the valid theme
-    /// picks of a settings link (harness://settings?darkTheme=…), nil when it has none.
-    case tab(AppTab, themes: ThemePicker.ThemePrefsPatch? = nil)
+    /// picks of a settings link (harness://settings?darkTheme=…), nil when it has none. `section` is
+    /// the part of Settings to scroll to (harness://settings?section=general), nil for the top.
+    case tab(AppTab, themes: ThemePicker.ThemePrefsPatch? = nil, section: SettingsSection? = nil)
     /// A screen pushed on the selected tab (modals are dismissed first).
     case push(Route)
     case sheet(SheetRoute)
@@ -105,7 +106,7 @@ public enum DeepLink: Equatable, Sendable {
             return .tab(.inbox)
         case "settings":
             let patch = ThemePicker.themeLinkPrefs(queryItems: query)
-            return .tab(.settings, themes: patch == ThemePicker.ThemePrefsPatch() ? nil : patch)
+            return .tab(.settings, themes: patch == ThemePicker.ThemePrefsPatch() ? nil : patch, section: param("section").flatMap(SettingsSection.init(rawValue:)))
         case "ticket":
             guard let key = tail.first, !key.isEmpty else { return nil }
             // Changes is a built-in tab here; "plugin:git:changes" links open it.

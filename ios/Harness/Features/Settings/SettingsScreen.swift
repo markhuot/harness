@@ -13,11 +13,25 @@ struct SettingsScreen: View {
     @Environment(BoardStore.self) private var store
     @Environment(Actions.self) private var actions
     @Environment(\.palette) private var c
+    @Environment(Router.self) private var router
 
     @State private var model = SettingsModel()
     @State private var promptText = ""
 
     var body: some View {
+        ScrollViewReader { proxy in
+            form
+                // A harness://settings?section=… link jumps (no animation). The sections load with
+                // the settings snapshot, so a jump that arrives first waits for it.
+                .task(id: "\(router.settingsJump?.serial ?? 0)#\(store.state.settings != nil)") {
+                    if let jump = router.settingsJump, store.state.settings != nil {
+                        proxy.scrollTo(jump.section, anchor: .top)
+                    }
+                }
+        }
+    }
+
+    private var form: some View {
         Form {
             SettingsConnectionSection()
             SettingsNetworkSection()

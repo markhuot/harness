@@ -296,17 +296,10 @@ try {
   await w.screen("settings", async (expect) => {
     const els = await visit("harness://settings");
     expect("appearance section with a theme choice", has(els, "Appearance") && has(els, "Light theme"), seen(els));
-    // sim-check save-on-blur: scroll to the General switch and press it.
+    // sim-check save-on-blur: jump to the General section (no swipes) and press the switch.
     const sw = (e: AXElement[]) => e.find((x) => x.id === "settings-save-on-blur");
-    const root = (await axe.nodes())[0]!.frame!;
-    const inView = (e: AXElement[]) => !!sw(e)?.frame && sw(e)!.frame!.y > root.height * 0.2 && sw(e)!.frame!.y < root.height * 0.7;
-    let cur = els;
-    // A swipe from the lower middle of the screen: the theme strips above it swallow a swipe that starts on them.
-    for (let i = 0; i < 40 && !inView(cur); i++) {
-      await axe.swipe(root.width / 2, root.height * 0.7, root.width / 2, root.height * 0.2);
-      cur = await quiet();
-    }
-    expect("a Save on blur switch", !!sw(cur)?.frame, seen(els));
+    const cur = await visit("harness://settings?section=general", (e) => !!sw(e)?.frame);
+    expect("a Save on blur switch", !!sw(cur)?.frame, seen(cur));
     if (sw(cur)?.frame) {
       const el = await settled(sw, "the Save on blur switch");
       const before = el.value;

@@ -66,6 +66,9 @@ public final class Router {
     public private(set) var paths: [AppTab: [Route]] = [:]
     public var sheet: SheetRoute?
     public var cover: CoverRoute?
+    /// The latest harness://settings?section=… request; the Settings screen scrolls to it.
+    public private(set) var settingsJump: SettingsJump?
+    @ObservationIgnored private var settingsJumps = 0
 
     /// The ticket sheets, most recently used first: the first is presented or docked, the rest
     /// wait in the dock. Empty when gone.
@@ -107,11 +110,15 @@ public final class Router {
     public func open(_ link: DeepLink) -> ThemePicker.ThemePrefsPatch? {
         if scope == .ticket { return openInTicket(link) }
         switch link {
-        case let .tab(tab, themes):
+        case let .tab(tab, themes, section):
             dismissModals()
             dockSheet()
             selectedTab = tab
             paths[tab] = []
+            if let section {
+                settingsJumps += 1
+                settingsJump = SettingsJump(section: section, serial: settingsJumps)
+            }
             return themes
         case let .push(route):
             dismissModals()
@@ -137,7 +144,7 @@ public final class Router {
 
     private func openInTicket(_ link: DeepLink) -> ThemePicker.ThemePrefsPatch? {
         switch link {
-        case let .tab(_, themes):
+        case let .tab(_, themes, _):
             onSectionLink?(link)
             return themes
         case let .push(route):

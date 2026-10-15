@@ -74,7 +74,7 @@ struct DeepLinkTests {
 
     @Test func settingsLinksCarryOnlyValidThemePicks() throws {
         let link = DeepLink.parse("harness://settings?darkTheme=catppuccin-mocha&theme=dark")
-        guard case let .tab(.settings, themes?) = link else {
+        guard case let .tab(.settings, themes?, _) = link else {
             Issue.record("not a settings link with themes: \(String(describing: link))")
             return
         }
@@ -82,6 +82,13 @@ struct DeepLinkTests {
         // A light theme given as the dark pick, and an unknown appearance, change nothing.
         let light = try #require(Themes.themes(for: .light).first?.id)
         #expect(DeepLink.parse("harness://settings?darkTheme=\(light)&theme=sepia") == .tab(.settings, themes: nil))
+    }
+
+    @Test func settingsLinksCarryAKnownSection() {
+        #expect(DeepLink.parse("harness://settings?section=general") == .tab(.settings, section: .general))
+        // An unknown section is dropped; the link still opens Settings at the top.
+        #expect(DeepLink.parse("harness://settings?section=nope") == .tab(.settings))
+        #expect(DeepLink.parse("harness://settings?section=general&theme=dark") == .tab(.settings, themes: ThemePicker.ThemePrefsPatch(theme: .dark), section: .general))
     }
 
     @Test func pairLinksDecodeTheirParams() {

@@ -63,7 +63,7 @@ struct SettingsGeneralSection: View {
     @Environment(\.palette) private var c
 
     var body: some View {
-        Section("General") {
+        Section {
             SettingsRow(label: "Max concurrent runs", hint: "Agent runs across all sessions. Extra runs wait in the queue.") {
                 DraftField(value: String(settings.maxConcurrentRuns)) { v in
                     if let n = SettingsRules.maxConcurrentRuns(v) { save(SettingsPatch(maxConcurrentRuns: n)) }
@@ -113,6 +113,8 @@ struct SettingsGeneralSection: View {
                 .frame(maxWidth: 160)
                 .accessibilityLabel("Base branch")
             }
+        } header: {
+            Text("General").id(SettingsSection.general)
         }
     }
 

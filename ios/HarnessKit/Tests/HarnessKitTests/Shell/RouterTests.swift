@@ -55,6 +55,18 @@ struct RouterTests {
         #expect(r.sheet == .watcher(id: "w1") && r.cover == nil)
     }
 
+    @Test func aSettingsSectionLinkIsANewJumpEachTime() {
+        let r = Router()
+        r.open(url: URL(string: "harness://settings")!)
+        #expect(r.settingsJump == nil)
+        r.open(url: URL(string: "harness://settings?section=general")!)
+        let first = r.settingsJump
+        #expect(first?.section == .general)
+        // The same link again is a new request, so the screen scrolls back after being scrolled away.
+        r.open(url: URL(string: "harness://settings?section=general")!)
+        #expect(r.settingsJump?.section == .general && r.settingsJump != first)
+    }
+
     @Test func settingsThemesAreHandedBack() {
         let r = Router()
         var applied: ThemePicker.ThemePrefsPatch?
