@@ -54,6 +54,17 @@ describe("/terminals", () => {
     await expect(client.closeTerminal(t.id)).rejects.toMatchObject({ status: 404 });
   });
 
+  test("restart brings an exited terminal back as the same id, and refuses a running one", async () => {
+    const { client, ptys } = await boot();
+    const t = await client.createTerminal();
+    await expect(client.restartTerminal(t.id)).rejects.toMatchObject({ status: 409 });
+    ptys[0]!.exit(139);
+    const again = await client.restartTerminal(t.id);
+    expect(again).toMatchObject({ id: t.id, state: "running", exitCode: null });
+    expect(ptys).toHaveLength(2);
+    await expect(client.restartTerminal("t-gone")).rejects.toMatchObject({ status: 404 });
+  });
+
   test("refresh looks up every terminal, attached or not", async () => {
     const { client } = await boot();
     await client.createTerminal();

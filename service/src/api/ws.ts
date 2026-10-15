@@ -171,6 +171,18 @@ export function createWsHandlers(opts: { bus: EventBus; browser: BrowserService;
     },
   };
 
+  // A rejection from the async handler would end a Bun process with nothing to catch it: nothing a
+  // client sends may take the service down, so whatever escapes is logged and the socket carries on.
+  const handleMessage = websocket.message!;
+  websocket.message = (ws, raw) => {
+    const swallow = (err: unknown) => console.error("websocket message failed:", err);
+    try {
+      return Promise.resolve(handleMessage.call(websocket, ws, raw)).catch(swallow);
+    } catch (err) {
+      swallow(err);
+    }
+  };
+
   return {
     websocket,
     connected: () => sockets.size,

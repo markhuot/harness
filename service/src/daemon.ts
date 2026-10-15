@@ -22,6 +22,12 @@ async function main() {
   const home = resolveHome();
   const port = resolvePort();
   adoptBundledLaunchd(process.env, home);
+  // Bun ends the process on an unhandled rejection or an uncaught exception, and this process hosts
+  // every terminal, browser and agent: log what escaped and keep running, in every run mode.
+  process.on("uncaughtException", (err) => log(`uncaught exception: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}`));
+  process.on("unhandledRejection", (err) => log(`unhandled rejection: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}`));
+  // A shell's parent is this process, so `kill -HUP $PPID` in a terminal would end the service.
+  process.on("SIGHUP", () => log("ignoring SIGHUP"));
   // launchd starts the service again, and so does the app when the service is its child
   // (HARNESS_SUPERVISOR_PID, app/src/main/child.ts). Supervised, it can restart itself: onto new
   // code once idle, or on POST /service/restart. Run by hand, it only reports itself stale.

@@ -226,6 +226,7 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
       if (b.openOnMac) openOnMac?.(terminal);
       return terminal;
     });
+    add("POST", "/terminals/:id/restart", ({ params }) => terminals.restart(params.id!));
     add("DELETE", "/terminals/:id", ({ params }) => {
       terminals.close(params.id!);
       return { ok: true };

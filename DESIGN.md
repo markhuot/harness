@@ -3457,6 +3457,14 @@ Settings, project settings, or on the board route the pane workspace.
   native addon). At most 24 run at once; an exited terminal is listed for 10 minutes; one nobody
   has attached to for 24 hours with only the shell in the foreground is ended; nothing is killed
   because a device stops looking at it. Shutdown sends SIGHUP to every shell.
+  **The service outlives any shell.** Callbacks from the PTY, timers and the WebSocket handler catch
+  and log what they throw; `daemon.ts` logs uncaught exceptions and unhandled rejections in every
+  run mode instead of exiting, and ignores SIGHUP (a shell's parent is the service). Input is capped
+  at 1 MiB a message and 4 MiB a second per terminal, because a shell that isn't reading leaves it
+  queued in the service; sizes clamp to 500×300 so a snapshot stays cheap. A write to a master that
+  just closed reads as the terminal ending. `POST /terminals/:id/restart` starts a new shell in an
+  exited terminal (same id, screen and scrollback; the old shell's late callbacks are ignored).
+  A shell can still `kill -9` the service: it runs as the same user.
   Beside each PTY runs a headless emulator (`emulator.ts`, `@xterm/headless` and its serialize
   addon; chosen because it runs under Bun and in the compiled binary and its snapshot restores
   into ghostty-web) that reads the output and never writes to the PTY. It holds the screen, scrollback

@@ -407,11 +407,112 @@ describe("input", () => {
     expect(ptys[0]!.writes).toEqual([]);
   });
 
+  test("input past the per-second budget is refused, and the budget refills", () => {
+    const { registry, ptys, clock } = setup();
+    const { id } = registry.create();
+    const chunk = "x".repeat(1024 * 1024);
+    for (let i = 0; i < 4; i++) registry.write("a", id, chunk);
+    expect(() => registry.write("a", id, "y")).toThrow(/faster than the shell/);
+    expect(ptys[0]!.writes.length).toBe(4);
+    clock.advance(1000);
+    registry.write("a", id, "y");
+    expect(ptys[0]!.writes.at(-1)).toBe("y");
+    registry.shutdown();
+  });
+
+  test("a write that lands on a closed master reads as the terminal ending, not a failure", () => {
+    const { registry, ptys } = setup();
+    const { id } = registry.create();
+    ptys[0]!.dead = true;
+    expect(() => registry.write("a", id, "x")).toThrow(expect.objectContaining({ status: 404 }));
+    registry.shutdown();
+  });
+
   test("what counts as a terminal reply", () => {
     for (const reply of ["\x1b[12;5R", "\x1b[?1;2c", "\x1b[>0;276;0c", "\x1b[0n", "\x1b[I", "\x1b[O", "\x1b[?2004;2$y", "\x1b]11;rgb:0000/0000/0000\x07", "\x1b]10;rgb:ffff/ffff/ffff\x1b\\"]) {
       expect(isTerminalReply(reply)).toBe(true);
     }
     for (const typed of ["r", "\x1b", "\x1b[A", "\x1b[1;5R x", "ls\r", "\x1b[200~pasted\x1b[201~", "\x03"]) expect(isTerminalReply(typed)).toBe(false);
+  });
+});
+
+describe("a crashing shell", () => {
+  test("an exited terminal restarts in place: same id and screen, a new shell, attached clients resynced", async () => {
+    const { registry, ptys, events, settle } = setup();
+    const { id } = registry.create({ cwd: "/tmp" });
+    const client = new FakeClient("a");
+    await registry.attach(client, id, "a", 80, 24);
+    ptys[0]!.emit("before crash\r\n");
+    await settle();
+    ptys[0]!.exit(139);
+    expect(registry.get(id)?.state).toBe("exited");
+    const info = registry.restart(id);
+    expect(info).toMatchObject({ id, state: "running", exitCode: null });
+    expect(ptys.length).toBe(2);
+    expect(ptys[1]!.opts.cwd).toBe("/tmp");
+    await settle();
+    const last = client.of("terminal.snapshot").at(-1)!;
+    expect(last.data).toContain("before crash");
+    ptys[1]!.emit("after\r\n");
+    await settle();
+    expect(client.of("terminal.output").at(-1)!.data).toContain("after");
+    expect(events.filter((e) => e.kind === "terminal.updated").at(-1)).toMatchObject({ terminal: { id, state: "running" } });
+    // The dead shell's late exit report must not end the new one.
+    ptys[0]!.exit(1);
+    expect(registry.get(id)?.state).toBe("running");
+    registry.shutdown();
+  });
+
+  test("a running terminal can't be restarted, an unknown one is a 404", () => {
+    const { registry } = setup();
+    const { id } = registry.create();
+    expect(() => registry.restart(id)).toThrow(expect.objectContaining({ status: 409 }));
+    expect(() => registry.restart("t-nope")).toThrow(expect.objectContaining({ status: 404 }));
+    registry.shutdown();
+  });
+
+  test("a restart that can't spawn throws and leaves the terminal exited, so it can be tried again", () => {
+    let fail = false;
+    const { spawn, ptys } = fakeSpawn();
+    const registry = new TerminalRegistry({
+      bus: new EventBus(),
+      spawn: (...args) => {
+        if (fail) throw new Error("EAGAIN");
+        return spawn(...args);
+      },
+      env: {},
+      home: "/h",
+      isDirectory: () => true,
+    });
+    const { id } = registry.create();
+    ptys[0]!.exit(1);
+    fail = true;
+    expect(() => registry.restart(id)).toThrow("EAGAIN");
+    expect(registry.get(id)?.state).toBe("exited");
+    fail = false;
+    expect(registry.restart(id).state).toBe("running");
+    registry.shutdown();
+  });
+
+  test("an exception thrown while handling shell output is logged, not thrown into the PTY", () => {
+    const logged: string[] = [];
+    const { registry, ptys, clock } = setup({
+      log: (m) => logged.push(m),
+      createEmulator: () => ({
+        write() {
+          throw new Error("emulator exploded");
+        },
+        idle: async () => {},
+        resize() {},
+        serialize: () => ({ data: "", truncated: false }),
+        dispose() {},
+      }),
+    });
+    registry.create();
+    ptys[0]!.emit("x");
+    expect(() => clock.advance(10)).not.toThrow(); // the flush timer runs the throwing emulator
+    expect(logged.join("\n")).toContain("emulator exploded");
+    registry.shutdown();
   });
 });
 

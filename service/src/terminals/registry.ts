@@ -50,6 +50,11 @@ export interface TerminalRegistryOptions {
 }
 
 export const MAX_WRITE = 1024 * 1024;
+/**
+ * Input a terminal takes per second. A shell that isn't reading (raw mode, a busy program) leaves
+ * what we write queued inside the service, so an unthrottled paste loop would grow its memory.
+ */
+export const MAX_WRITE_PER_SECOND = 4 * 1024 * 1024;
 /** Exited terminals kept for their grace period; the oldest go first past this. */
 export const MAX_EXITED_TERMINALS = 8;
 const UPDATE_INTERVAL_MS = 1000;
@@ -137,6 +142,9 @@ interface Term {
   lastEmitted: string;
   emitTimer: unknown;
   closed: boolean;
+  /** Input accepted since writeWindowAt (a one-second window). */
+  writeWindowAt: number;
+  writeWindowBytes: number;
   /** The last serialized screen, until output or a resize changes it. */
   snapshot: { offset: number; cols: number; rows: number; data: string; truncated: boolean } | null;
 }
@@ -169,7 +177,7 @@ export class TerminalRegistry {
 
   /** Start the 5 s housekeeping tick (size expiry, polling, reaping). */
   start() {
-    this.tickTimer ??= setInterval(() => void this.tick(), 5000);
+    this.tickTimer ??= setInterval(() => void this.tick().catch((err) => this.logError("terminal housekeeping failed", err)), 5000);
     this.tickTimer.unref?.();
   }
 
@@ -223,6 +231,8 @@ export class TerminalRegistry {
       lastEmitted: JSON.stringify(info),
       emitTimer: null,
       closed: false,
+      writeWindowAt: now,
+      writeWindowBytes: 0,
       snapshot: null,
     };
     term.emu = this.makeEmulator(initial.cols, initial.rows, {
@@ -243,14 +253,7 @@ export class TerminalRegistry {
       apply: (size) => this.applySize(term, size),
     });
     try {
-      term.pty = this.opts.spawn(shell, ["-l"], {
-        cwd,
-        cols: initial.cols,
-        rows: initial.rows,
-        env: shellEnv(this.env),
-        onData: (bytes) => this.onData(term, bytes),
-        onExit: (exit) => this.onExit(term, exit.exitCode),
-      });
+      this.spawnShell(term, initial);
     } catch (err) {
       term.closed = true;
       term.size.dispose();
@@ -260,6 +263,52 @@ export class TerminalRegistry {
     this.terms.set(id, term);
     this.opts.bus.emit({ kind: "terminal.created", terminal: { ...info } });
     return { ...info };
+  }
+
+  /**
+   * Start a new shell in an exited terminal: same id, screen and scrollback, so a shell that
+   * crashed or was exited can come back where it was. A running terminal is refused.
+   */
+  restart(id: string): TerminalInfo {
+    const term = this.terms.get(id);
+    if (!term) throw notFound(`No terminal ${id}`);
+    if (term.info.state !== "exited") throw conflict(`Terminal ${id} is still running`);
+    const running = [...this.terms.values()].filter((t) => t.info.state === "running").length;
+    if (running >= this.o.maxRunning) throw conflict(`There are already ${this.o.maxRunning} terminals running; close one first`);
+    const size = { cols: term.info.cols, rows: term.info.rows };
+    // The same login shell in the terminal's last known directory; a spawn failure leaves it exited.
+    term.info.cwd = resolveCwd(term.info.cwd, this.home, this.isDirectory);
+    this.spawnShell(term, size);
+    term.info.state = "running";
+    term.info.exitCode = null;
+    term.info.process = basename(term.shell);
+    term.exitedAt = null;
+    term.lastActive = this.o.now();
+    term.decoder = new TextDecoder("utf-8");
+    term.snapshot = null;
+    term.oscCwd = false;
+    this.changed(term, true);
+    // Clients attached to the dead shell get the screen again, and read the terminal as live.
+    for (const st of term.clients.values()) this.resync(term, st);
+    return { ...term.info };
+  }
+
+  /** Spawn the shell into a term; its callbacks ignore a shell that isn't the term's current one. */
+  private spawnShell(term: Term, size: Size) {
+    let pty: PtyProcess | undefined;
+    pty = this.opts.spawn(term.shell, ["-l"], {
+      cwd: term.info.cwd,
+      cols: size.cols,
+      rows: size.rows,
+      env: shellEnv(this.env),
+      onData: (bytes) => {
+        if (term.pty === pty || !pty) this.guard(() => this.onData(term, bytes));
+      },
+      onExit: (exit) => {
+        if (term.pty === pty || !pty) this.guard(() => this.onExit(term, exit.exitCode));
+      },
+    });
+    term.pty = pty;
   }
 
   /** End the terminal now: SIGHUP the shell (SIGKILL if it lingers), forget it. */
@@ -326,7 +375,19 @@ export class TerminalRegistry {
     } else {
       term.primary = socketId;
     }
-    term.pty.write(data);
+    const now = this.o.now();
+    if (now - term.writeWindowAt >= 1000) {
+      term.writeWindowAt = now;
+      term.writeWindowBytes = 0;
+    }
+    if (term.writeWindowBytes + data.length > MAX_WRITE_PER_SECOND) throw badRequest("Input is arriving faster than the shell can take it; slow down");
+    term.writeWindowBytes += data.length;
+    try {
+      term.pty.write(data);
+    } catch {
+      // The shell went away between its master closing and its exit being reported: it ended.
+      throw notFound(`Terminal ${id} has ended`);
+    }
   }
 
   /** Housekeeping: expire silent clients, poll attached terminals, drop exited and idle ones. */
@@ -410,7 +471,7 @@ export class TerminalRegistry {
     const text = term.decoder.decode(bytes, { stream: true });
     if (!text) return;
     term.pending += text;
-    if (!term.flushTimer) term.flushTimer = this.o.timers.set(() => this.flush(term), this.o.flushMs);
+    if (!term.flushTimer) term.flushTimer = this.o.timers.set(() => this.guard(() => this.flush(term)), this.o.flushMs);
   }
 
   private flush(term: Term) {
@@ -429,7 +490,7 @@ export class TerminalRegistry {
       st.floor = Math.min(st.floor, queued);
       if (queued - st.floor > this.o.highWater) {
         // A slow client never stalls the shell or the others: it skips output and resyncs.
-        void this.sendSnapshot(term, st);
+        this.resync(term, st);
         continue;
       }
       st.client.send({ type: "terminal.output", id: term.info.id, data: text, offset: term.offset });
@@ -474,8 +535,28 @@ export class TerminalRegistry {
     term.info.rows = size.rows;
     // Clients get the screen again at the new size, from the emulator that reflowed it, rather than
     // reflowing what they drew: two emulators reflow wrapped lines differently.
-    for (const st of term.clients.values()) if (st.ready) void this.sendSnapshot(term, st);
+    for (const st of term.clients.values()) if (st.ready) this.resync(term, st);
     this.changed(term);
+  }
+
+  /** Send a client the screen again in the background; a failure is logged, never thrown. */
+  private resync(term: Term, st: ClientState) {
+    this.sendSnapshot(term, st).catch((err) => this.logError("terminal snapshot failed", err));
+  }
+
+  /** Run a callback from the PTY or a timer: whatever it throws ends there, not in the service. */
+  private guard(fn: () => void) {
+    try {
+      fn();
+    } catch (err) {
+      this.logError("terminal callback failed", err);
+    }
+  }
+
+  private logError(what: string, err: unknown) {
+    try {
+      this.opts.log?.(`${what}: ${err instanceof Error ? (err.stack ?? err.message) : String(err)}`);
+    } catch {}
   }
 
   private onExit(term: Term, exitCode: number | null) {
@@ -506,6 +587,6 @@ export class TerminalRegistry {
     if (term.emitTimer) return;
     const wait = UPDATE_INTERVAL_MS - (this.o.now() - term.lastEmit);
     if (force || wait <= 0) return send();
-    term.emitTimer = this.o.timers.set(send, wait);
+    term.emitTimer = this.o.timers.set(() => this.guard(send), wait);
   }
 }

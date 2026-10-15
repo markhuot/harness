@@ -443,6 +443,10 @@ export class HarnessClient {
   createTerminal(body: CreateTerminalBody = {}) {
     return this.request<TerminalInfo>("POST", "/terminals", body);
   }
+  /** A new shell in an exited terminal, keeping its screen and scrollback. */
+  restartTerminal(id: string) {
+    return this.request<TerminalInfo>("POST", `/terminals/${encodeURIComponent(id)}/restart`);
+  }
   closeTerminal(id: string) {
     return this.request<{ ok: true }>("DELETE", `/terminals/${encodeURIComponent(id)}`);
   }

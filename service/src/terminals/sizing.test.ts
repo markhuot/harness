@@ -17,7 +17,7 @@ describe("clampSize", () => {
     expect(clampSize("80", 24)).toBeNull();
     expect(clampSize(5, 2)).toEqual({ cols: 20, rows: 5 });
     expect(clampSize(80.9, 24.2)).toEqual({ cols: 80, rows: 24 });
-    expect(clampSize(99999, 99999)).toEqual({ cols: 1000, rows: 1000 });
+    expect(clampSize(99999, 99999)).toEqual({ cols: 500, rows: 300 });
   });
 });
 

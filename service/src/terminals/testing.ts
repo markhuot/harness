@@ -47,10 +47,14 @@ export class FakePty implements PtyProcess {
     readonly file: string,
     readonly args: string[],
   ) {}
+  /** Set to make write and resize throw, as a closed master does before the exit is reported. */
+  dead = false;
   write(data: string) {
+    if (this.dead) throw new Error("Terminal is closed");
     this.writes.push(data);
   }
   resize(cols: number, rows: number) {
+    if (this.dead) throw new Error("Terminal is closed");
     this.resizes.push({ cols, rows });
   }
   kill(signal?: string) {

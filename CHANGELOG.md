@@ -12,6 +12,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 ### Fixed
 
 - Running something that prints a huge amount of output in a terminal (like `cat` on a giant file) no longer crashes the Harness service and every terminal with it. A device that stalls for a while, or a second Mac window showing the same terminal, no longer stops receiving that terminal's output. Shells' pseudo-terminals are released when the shell ends, a hung `lsof` or `ps` can't stop folder and program names updating, and only the eight newest ended terminals are kept. Restarting the service still hangs up every shell.
+- Nothing a shell or a device does in a terminal can take the Harness service down now. An error anywhere in terminal output, resizing or input handling is logged instead of ending the service, and the service ignores a stray SIGHUP (like `kill -HUP $PPID` typed in a terminal) and logs uncaught errors in every run mode instead of exiting. A device pasting input faster than a shell reads it (about 4 MiB a second) gets an error rather than growing the service's memory, and terminals are capped at 500×300 so a flood of resizes can't stall the service. A shell that has ended can be started again in the same terminal, with its screen and scrollback, through `POST /terminals/:id/restart` (no button for it yet).
 
 ### Added
 

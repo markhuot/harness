@@ -3,7 +3,7 @@
 // resized shouldn't make the shell flap), reports are debounced, and a client that stops reporting
 // (a sleeping phone, a dropped network) expires, so the size goes back to what the rest fit.
 
-import { MAX_TERMINAL_DIMENSION, MIN_TERMINAL_COLS, MIN_TERMINAL_ROWS } from "@harness/shared";
+import { MAX_TERMINAL_COLS, MAX_TERMINAL_ROWS, MIN_TERMINAL_COLS, MIN_TERMINAL_ROWS } from "@harness/shared";
 
 export interface Timers {
   set(fn: () => void, ms: number): unknown;
@@ -45,8 +45,8 @@ export function clampSize(cols: unknown, rows: unknown): Size | null {
   const r = Math.floor(rows);
   if (c <= 0 || r <= 0) return null;
   return {
-    cols: Math.min(MAX_TERMINAL_DIMENSION, Math.max(MIN_TERMINAL_COLS, c)),
-    rows: Math.min(MAX_TERMINAL_DIMENSION, Math.max(MIN_TERMINAL_ROWS, r)),
+    cols: Math.min(MAX_TERMINAL_COLS, Math.max(MIN_TERMINAL_COLS, c)),
+    rows: Math.min(MAX_TERMINAL_ROWS, Math.max(MIN_TERMINAL_ROWS, r)),
   };
 }
 

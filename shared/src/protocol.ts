@@ -1245,7 +1245,9 @@ export interface CreateTerminalBody {
 export const MAX_RUNNING_TERMINALS = 24;
 export const MIN_TERMINAL_COLS = 20;
 export const MIN_TERMINAL_ROWS = 5;
-export const MAX_TERMINAL_DIMENSION = 1000;
+/** Serializing a screen costs its cells: 500×300 is far past any display, and keeps a resize loop cheap. */
+export const MAX_TERMINAL_COLS = 500;
+export const MAX_TERMINAL_ROWS = 300;
 
 /**
  * Whether the service runs the code on disk. `stale`: the checkout changed since it started; it

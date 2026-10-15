@@ -25,11 +25,6 @@ export function adoptBundledLaunchd(env: NodeJS.ProcessEnv, home: string): boole
     } catch {}
   };
   for (const level of ["log", "info", "warn", "error", "debug"] as const) console[level] = write;
-  // Nothing reads launchd's stdout here, so a crash has to reach the log on its own.
-  process.on("uncaughtException", (err) => {
-    write(err);
-    process.exit(1);
-  });
-  process.on("unhandledRejection", (err) => write("unhandled rejection:", err));
+  // Nothing reads launchd's stdout here, so the daemon's handlers (daemon.ts) log through the file above.
   return true;
 }

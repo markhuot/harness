@@ -28,7 +28,10 @@ export const spawnBunPty: SpawnPty = (file, args, opts) => {
       cols: opts.cols,
       rows: opts.rows,
       data(_terminal: unknown, data: Uint8Array) {
-        opts.onData(data);
+        // Bun calls this from native code: nothing a handler throws may escape into it.
+        try {
+          opts.onData(data);
+        } catch {}
       },
     },
   } as never) as unknown as {
@@ -47,15 +50,15 @@ export const spawnBunPty: SpawnPty = (file, args, opts) => {
       terminal.close?.();
     } catch {}
   };
+  const exited = (exitCode: number | null, signal: string | null) => {
+    closeTerminal();
+    try {
+      opts.onExit({ exitCode, signal });
+    } catch {}
+  };
   proc.exited.then(
-    (code) => {
-      closeTerminal();
-      opts.onExit({ exitCode: proc.signalCode ? null : code, signal: proc.signalCode });
-    },
-    () => {
-      closeTerminal();
-      opts.onExit({ exitCode: null, signal: null });
-    },
+    (code) => exited(proc.signalCode ? null : code, proc.signalCode),
+    () => exited(null, null),
   );
   return {
     pid: proc.pid,
