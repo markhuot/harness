@@ -24,6 +24,14 @@ struct DockMetricsTests {
         #expect(three - one == 120)
     }
 
+    @Test func clearanceNeverFallsBelowTheCardsItMakesRoomFor() {
+        // A stack measured at (or below) the screen's bottom must not collapse the clearance to 0.
+        let bad = DockMetrics.clearance(screenHeight: 852, stackTop: 852, homeIndicator: 34, rows: 1)
+        #expect(bad == DockMetrics.stackHeight(rows: 1) + 8 - 34)
+        let two = DockMetrics.clearance(screenHeight: 852, stackTop: 900, homeIndicator: 34, rows: 2)
+        #expect(two == DockMetrics.stackHeight(rows: 2) + 8 - 34)
+    }
+
     @Test func clearanceBeforeMeasuringGrowsWithTheRows() {
         let one = DockMetrics.clearance(screenHeight: nil, stackTop: nil, homeIndicator: 34, rows: 1)
         let two = DockMetrics.clearance(screenHeight: nil, stackTop: nil, homeIndicator: 34, rows: 2)

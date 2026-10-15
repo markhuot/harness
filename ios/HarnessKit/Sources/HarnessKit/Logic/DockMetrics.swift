@@ -65,7 +65,10 @@ public enum DockMetrics {
         guard let screenHeight, let stackTop else {
             return max(0, stackHeight(rows: max(1, rows)) + phoneBottomGap - homeIndicator + 19)
         }
-        return max(0, screenHeight - stackTop - homeIndicator)
+        // Never less than `rows` cards need: a stale or mid-transition measurement (the stack's top
+        // at or below the screen's bottom) would otherwise leave the bar under the cards.
+        let floor = stackHeight(rows: max(1, rows)) + phoneBottomGap - homeIndicator
+        return max(0, floor, screenHeight - stackTop - homeIndicator)
     }
 
     /// The overflow card's label: "N more docked tickets" beside the shown cards, "N docked tickets"
