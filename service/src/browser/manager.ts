@@ -144,6 +144,8 @@ interface Tab {
   intercept: boolean;
   /** Challenges already answered with credentials (Fetch request id + authKey): a second one for the same request means they were refused. */
   authTried: Set<string>;
+  /** Challenges (authKey) a viewer cancelled: not asked again until the tab's next main-frame navigation. */
+  authCancelled: Set<string>;
   /** The input mode and viewport it should have (what states report and the store keeps). */
   size: BrowserSize;
   /**
@@ -726,7 +728,7 @@ export class BrowserManager implements BrowserService {
     } catch (e) {
       if (e instanceof CdpError && NAVIGATED.test(e.message)) {
         await this.untilLoaded(tab);
-        const what = opts.frame !== undefined ? `The frame ${frameLabel(opts.frame)} navigated (the page is at ${tab.url})` : `The page navigated to ${tab.url}`;
+        const what = opts.frame !== undefined ? `The frame ${frameLabel(opts.frame)} navigated (the page is at ${stripUserinfo(tab.url)})` : `The page navigated to ${stripUserinfo(tab.url)}`;
         throw new Error(`${what} while the expression ran, so its result was lost. browser_run runs steps that span a reload (click, wait, read) from outside the page.`);
       }
       throw e;
@@ -820,7 +822,7 @@ export class BrowserManager implements BrowserService {
       viewport: { width: w, height: h },
       scale: Math.round((size.width / w) * 1000) / 1000,
       tabId: tab.id,
-      url: tab.url,
+      url: stripUserinfo(tab.url),
       title: tab.title,
       scroll: { x: page?.[2] ?? 0, y: page?.[3] ?? 0 },
     };
@@ -967,9 +969,9 @@ export class BrowserManager implements BrowserService {
         await s.send("Page.reload", {});
         return;
       case "auth":
-        return this.answerAuth(tab, { username: String(input.username), password: String(input.password) });
+        return this.answerAuth(tab, String(input.origin), String(input.realm), { username: String(input.username), password: String(input.password) });
       case "authCancel":
-        return this.answerAuth(tab, null);
+        return this.answerAuth(tab, String(input.origin), String(input.realm), null);
     }
   }
 
@@ -1575,6 +1577,7 @@ export class BrowserManager implements BrowserService {
       device: "desktop",
       intercept: false,
       authTried: new Set(),
+      authCancelled: new Set(),
       requests: new Map(),
       console: [],
       screencasting: false,
@@ -1650,7 +1653,7 @@ export class BrowserManager implements BrowserService {
         // Chrome's error page for the unanswered challenge is not leaving the origin.
         if (tab.auth && !tab.url.startsWith("chrome-error:") && originOf(tab.url) !== tab.auth.origin) tab.auth = undefined;
         this.emitState(tab);
-        this.emitPage(tab, { kind: "navigated", url: tab.url });
+        this.emitPage(tab, { kind: "navigated", url: stripUserinfo(tab.url) });
       }),
       s.on("Page.navigatedWithinDocument", (p) => {
         if (!isMain(p.frameId)) return;
@@ -1659,6 +1662,7 @@ export class BrowserManager implements BrowserService {
       }),
       s.on("Page.frameStartedLoading", (p) => {
         if (!isMain(p.frameId)) return;
+        tab.authCancelled.clear();
         tab.loading = true;
         this.emitState(tab);
       }),
@@ -1778,9 +1782,10 @@ export class BrowserManager implements BrowserService {
     if (realm === null) return;
     const document = p.type === "Document" && p.frameId === tab.frameId ? (p.response?.url ?? "") : undefined;
     if (tab.entry.credentials.has(authKey(origin, realm))) {
-      // Credentials a viewer gave earlier (in another tab, or before this page was reopened).
+      // Credentials a viewer gave earlier (in another tab, or before this page was reopened): answer
+      // from now on, and load the document again if it is what stopped. A subresource's 401 leaves a working page alone.
       void this.interceptAuth(tab)
-        .then(() => this.retryPage(tab, document))
+        .then(() => (document ? this.retryPage(tab, document) : undefined))
         .catch(() => {});
       return;
     }
@@ -1795,21 +1800,41 @@ export class BrowserManager implements BrowserService {
     return errorText === "net::ERR_INVALID_AUTH_CREDENTIALS" && (tab.auth !== undefined || tab.intercept);
   }
 
-  /** Show viewers a challenge once per origin + realm; `failed` (credentials refused) sticks until it is answered. */
+  /**
+   * Show viewers a challenge once per origin + realm; `failed` (credentials refused) sticks until it is answered.
+   * A cancelled challenge stays quiet until the next main-frame navigation, and a subresource's challenge
+   * (`document` unset) never replaces a prompt a viewer may be typing into.
+   */
   private askForAuth(tab: Tab, origin: string, realm: string, failed: boolean, document?: string): void {
-    tab.authDocument = document;
+    if (tab.authCancelled.has(authKey(origin, realm))) return;
     const was = tab.auth;
     const same = was?.origin === origin && was.realm === realm;
+    if (was && !document) {
+      if (same && failed && !was.failed) {
+        tab.auth = { ...was, failed: true };
+        this.emitState(tab);
+      }
+      return;
+    }
+    tab.authDocument = document;
     tab.auth = { origin, realm, ...(failed || (same && was.failed) ? { failed: true } : {}) };
     this.emitState(tab);
   }
 
-  /** A viewer's answer: credentials (kept in memory, then the page reloads) or null to cancel. */
-  private async answerAuth(tab: Tab, answer: BasicCredentials | null): Promise<void> {
+  /**
+   * A viewer's answer to the challenge `origin` + `realm` names: credentials (kept in memory, then the page
+   * reloads) or null to cancel. An answer for anything but the pending challenge is dropped, so typed
+   * credentials never land on an origin the viewer wasn't shown.
+   */
+  private async answerAuth(tab: Tab, origin: string, realm: string, answer: BasicCredentials | null): Promise<void> {
     const auth = tab.auth;
     if (!auth) return; // another viewer answered first
+    if (auth.origin !== origin || auth.realm !== realm) return;
     tab.auth = undefined;
-    if (!answer) return this.emitState(tab);
+    if (!answer) {
+      tab.authCancelled.add(authKey(origin, realm));
+      return this.emitState(tab);
+    }
     tab.entry.credentials.set(authKey(auth.origin, auth.realm), answer);
     this.emitState(tab);
     await this.interceptAuth(tab);
@@ -1827,16 +1852,17 @@ export class BrowserManager implements BrowserService {
     if (tab.intercept || tab.closed) return;
     tab.intercept = true;
     const s = tab.session;
-    tab.offs.push(
-      s.on("Fetch.requestPaused", (p) => void s.send("Fetch.continueRequest", { requestId: p.requestId }).catch(() => {})),
-      s.on("Fetch.authRequired", (p) => void this.onAuthRequired(tab, p).catch(() => {})),
-    );
     try {
       await s.send("Fetch.enable", { patterns: [{ urlPattern: "*" }], handleAuthRequests: true });
     } catch (e) {
       tab.intercept = false;
       throw e;
     }
+    // Listen only once Fetch is on, so a failed attempt leaves nothing to double up on a retry.
+    tab.offs.push(
+      s.on("Fetch.requestPaused", (p) => void s.send("Fetch.continueRequest", { requestId: p.requestId }).catch(() => {})),
+      s.on("Fetch.authRequired", (p) => void this.onAuthRequired(tab, p).catch(() => {})),
+    );
   }
 
   private async onAuthRequired(tab: Tab, p: { requestId: string; frameId?: string; resourceType?: string; request?: { url?: string }; authChallenge?: { source?: string; origin?: string; scheme?: string; realm?: string } }): Promise<void> {
@@ -2215,7 +2241,7 @@ export class BrowserManager implements BrowserService {
     let quietSince: number | null = null;
     let check: WaitCheck | null = null;
     let checkError = "";
-    const finish = (met: boolean, summary: string): WaitResult => ({ met, elapsedMs: Date.now() - start, url: tab.url, summary });
+    const finish = (met: boolean, summary: string): WaitResult => ({ met, elapsedMs: Date.now() - start, url: stripUserinfo(tab.url), summary });
     try {
       for (;;) {
         if (tab.closed) return finish(false, `Tab ${tab.id} closed while waiting for ${describeCondition(c)}.`);
@@ -2258,14 +2284,14 @@ export class BrowserManager implements BrowserService {
           if (inPage ? !check?.met : !frameReady) met = false;
         }
         const elapsed = Date.now() - start;
-        if (met) return finish(true, `${describeCondition(c)} after ${seconds(elapsed)}; now at ${tab.url}`);
+        if (met) return finish(true, `${describeCondition(c)} after ${seconds(elapsed)}; now at ${stripUserinfo(tab.url)}`);
         if (Date.now() >= deadline) {
           const busy = check?.busy ?? ((await this.evalValue(tab, `document.querySelectorAll('[aria-busy="true"]').length`).catch(() => 0)) as number);
           // Every open request, long polls included: one of them may be what the page waits on.
           const pending = inFlight(tab, Date.now(), true);
           const lines = [
             `Timed out after ${seconds(elapsed)} waiting for ${describeCondition(c)}.`,
-            `Now at ${tab.url}; the page is ${tab.loading ? "still loading" : "loaded"}${busy ? `, with ${busy} element${busy === 1 ? "" : "s"} marked aria-busy` : ""}.`,
+            `Now at ${stripUserinfo(tab.url)}; the page is ${tab.loading ? "still loading" : "loaded"}${busy ? `, with ${busy} element${busy === 1 ? "" : "s"} marked aria-busy` : ""}.`,
           ];
           if (inPage && check) {
             lines.push(lastCheckLine(c, check));
@@ -2274,7 +2300,7 @@ export class BrowserManager implements BrowserService {
           else if (inPage) lines.push("The last check couldn't read the page.");
           if (c.url !== undefined && matchUrl && !matchUrl(tab.url)) lines.push(`The URL doesn't match ${c.url}.`);
           if (pending.length) {
-            lines.push(`Requests still in flight: ${pending.slice(0, 5).map((r) => `${r.method} ${r.url} (${seconds(Date.now() - r.at)})`).join(", ")}${pending.length > 5 ? `, and ${pending.length - 5} more` : ""}.`);
+            lines.push(`Requests still in flight: ${pending.slice(0, 5).map((r) => `${r.method} ${stripUserinfo(r.url)} (${seconds(Date.now() - r.at)})`).join(", ")}${pending.length > 5 ? `, and ${pending.length - 5} more` : ""}.`);
           }
           if (complaints.length) lines.push(`Console errors while waiting: ${complaints.join(" | ")}`);
           return finish(false, lines.join("\n"));

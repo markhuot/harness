@@ -119,8 +119,8 @@ struct BrowserTabView: View {
             }
         }
         // One sheet per challenge: it closes when anyone answers (state.auth clears), here or on the Mac.
-        .sheet(item: Binding(get: { model.state?.auth.map(AuthChallenge.init) }, set: { if $0 == nil, model.state?.auth != nil { model.cancelAuth() } })) { challenge in
-            BrowserAuthSheet(auth: challenge.auth, submit: model.answerAuth)
+        .sheet(item: Binding(get: { model.state?.auth.map(AuthChallenge.init) }, set: { if $0 == nil, let auth = model.state?.auth { model.cancelAuth(auth) } })) { challenge in
+            BrowserAuthSheet(auth: challenge.auth, submit: { model.answerAuth(challenge.auth, username: $0, password: $1) })
         }
         .toolbar {
             if sizeField != nil {

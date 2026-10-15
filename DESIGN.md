@@ -2011,7 +2011,12 @@ A page behind HTTP Basic Auth shows viewers a sign-in sheet; an agent is told th
   `ERR_INVALID_AUTH_CREDENTIALS` after reporting the 401 (`challenged` keeps that from being a
   failed `browser_open`), and reports no response at all for a challenged *subresource*, which just
   hangs. So a subresource prompts only once interception is on.
-- **Answer.** The `auth { username, password }` / `authCancel` input stores the credentials in memory
+- **Which challenge.** Both inputs name the challenge they answer (`origin` + `realm`); an answer
+  that isn't the tab's pending one is dropped, so typed credentials can't land on another origin. A
+  subresource's challenge never replaces a pending prompt or its document. Cancel is remembered per
+  origin + realm until the tab's next main-frame navigation, and only a main-frame document
+  challenge reloads the page.
+- **Answer.** The `auth { origin, realm, username, password }` / `authCancel { origin, realm }` input stores the credentials in memory
   on the session (`Entry.credentials`, per origin + realm), turns on `Fetch.enable { patterns: ["*"],
   handleAuthRequests }` for that tab only (every paused request is continued, errors swallowed),
   answers `Fetch.authRequired` with `ProvideCredentials` and loads the page again (its document URL

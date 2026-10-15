@@ -11,7 +11,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Added
 
-- The integrated browser can now open pages behind HTTP Basic Auth. When a page asks for a username and password, the Mac browser pane and the iPhone Browser tab open a sign-in sheet naming the site (with a warning on unencrypted `http:` sites); the page loads once you answer, a wrong password says so and asks again instead of retrying it, and Cancel leaves the page unloaded. Answering on one device closes the sheet everywhere. The password is kept in memory for that session only and is never saved, logged or shown to agents. Agents opening such a page are told it needs you to sign in, and can wait or ask. Passwords typed into a URL still work, and no longer appear in the tab list.
+- The integrated browser can now open pages behind HTTP Basic Auth. When a page asks for a username and password, the Mac browser pane and the iPhone Browser tab open a sign-in sheet naming the site (with a warning on unencrypted `http:` sites); the page loads once you answer, a wrong password says so and asks again instead of retrying it, and Cancel leaves the page unloaded. Answering on one device closes the sheet everywhere. The password is kept in memory for that session only and is never saved, logged or shown to agents. Agents opening such a page are told it needs you to sign in, and can wait or ask. Passwords typed into a URL still work, and no longer appear in the tab list, page events or wait results. Credentials can only be saved for the site the sheet names, and a page's background requests can't swap the sheet or bring it back after you cancel.
 
 ### Fixed
 

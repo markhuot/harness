@@ -925,7 +925,7 @@ export function BrowserView({
             <span>Waiting for the first frame…</span>
           </div>
         )}
-        {state?.auth && !tornShown && <BrowserAuthSheet auth={state.auth} onSubmit={(username, password) => send({ type: "auth", username, password })} onCancel={() => send({ type: "authCancel" })} />}
+        {state?.auth && !tornShown && <BrowserAuthSheet auth={state.auth} onSubmit={(username, password) => send({ type: "auth", origin: state.auth!.origin, realm: state.auth!.realm, username, password })} onCancel={() => send({ type: "authCancel", origin: state.auth!.origin, realm: state.auth!.realm })} />}
         {tornShown && tear && (
           <div className="browser-empty browser-torn">
             <TornPlaceholder name={state?.title ? `“${tabLabel({ title: state.title, url: state.url ?? "" })}”` : "This tab"} torn={tornShown} onReturn={() => returnTabPane(tear.boardScope, tear.ticketKey, `browser:${tornShown.content.browserTab}`)} />

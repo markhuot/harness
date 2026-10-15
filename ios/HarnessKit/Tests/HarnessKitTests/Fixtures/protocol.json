@@ -595,11 +595,15 @@
     },
     {
       "type": "auth",
+      "origin": "https://staging.example.com",
+      "realm": "Staging",
       "username": "alice",
       "password": "p@ss wörd"
     },
     {
-      "type": "authCancel"
+      "type": "authCancel",
+      "origin": "https://staging.example.com",
+      "realm": "Staging"
     }
   ],
   "BrowserScreenshot": [

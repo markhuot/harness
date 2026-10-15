@@ -25,9 +25,12 @@ struct BrowserAuthProtocolTests {
     }
 
     @Test func answersEncodeWithTheirFields() throws {
-        let sent = String(decoding: try JSONEncoder().encode(BrowserInput.auth(username: "alice", password: "p w")), as: UTF8.self)
+        let sent = String(decoding: try JSONEncoder().encode(BrowserInput.auth(origin: "https://x", realm: "R", username: "alice", password: "p w")), as: UTF8.self)
         #expect(sent.contains(#""type":"auth""#) && sent.contains(#""username":"alice""#) && sent.contains(#""password":"p w""#))
-        #expect(try decode(BrowserInput.self, #"{"type":"authCancel"}"#) == .authCancel)
-        #expect(try decode(BrowserInput.self, #"{"type":"auth","username":"a","password":"b"}"#) == .auth(username: "a", password: "b"))
+        #expect(sent.contains(#""origin":"https:\/\/x""#) && sent.contains(#""realm":"R""#))
+        #expect(try decode(BrowserInput.self, #"{"type":"authCancel","origin":"o","realm":"r"}"#) == .authCancel(origin: "o", realm: "r"))
+        #expect(
+            try decode(BrowserInput.self, #"{"type":"auth","origin":"o","realm":"r","username":"a","password":"b"}"#)
+                == .auth(origin: "o", realm: "r", username: "a", password: "b"))
     }
 }

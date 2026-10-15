@@ -1020,8 +1020,8 @@ export const BrowserInput: P.BrowserInput[] = [
   { type: "newTab", url: "http://localhost:3000/docs" },
   { type: "newTab" },
   { type: "closeTab" },
-  { type: "auth", username: "alice", password: "p@ss wörd" },
-  { type: "authCancel" },
+  { type: "auth", origin: "https://staging.example.com", realm: "Staging", username: "alice", password: "p@ss wörd" },
+  { type: "authCancel", origin: "https://staging.example.com", realm: "Staging" },
 ];
 
 export const ClientMessage: P.ClientMessage[] = [

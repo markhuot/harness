@@ -185,10 +185,11 @@ public enum BrowserInput: Codable, Sendable, Equatable {
     /// leaves a blank tab in its place.
     case closeTab
     /// Answer the tab's pending HTTP Basic Auth challenge (BrowserState.auth). The service keeps the
-    /// credentials in memory only and reloads the page.
-    case auth(username: String, password: String)
-    /// Cancel the pending challenge.
-    case authCancel
+    /// credentials in memory only and reloads the page. `origin` and `realm` name the challenge being
+    /// answered (BrowserAuth); the service ignores an answer for any other.
+    case auth(origin: String, realm: String, username: String, password: String)
+    /// Cancel the pending challenge `origin` + `realm` names.
+    case authCancel(origin: String, realm: String)
     case unknown(type: String, raw: JSONValue)
 
     public var type: String {
@@ -232,8 +233,11 @@ public enum BrowserInput: Codable, Sendable, Equatable {
                 height: try c.decodeIfPresent(Int.self, forKey: "height"))
         case "newTab": self = .newTab(url: try c.decodeIfPresent(String.self, forKey: "url"))
         case "closeTab": self = .closeTab
-        case "auth": self = .auth(username: try c.decode(String.self, forKey: "username"), password: try c.decode(String.self, forKey: "password"))
-        case "authCancel": self = .authCancel
+        case "auth":
+            self = .auth(
+                origin: try c.decode(String.self, forKey: "origin"), realm: try c.decode(String.self, forKey: "realm"),
+                username: try c.decode(String.self, forKey: "username"), password: try c.decode(String.self, forKey: "password"))
+        case "authCancel": self = .authCancel(origin: try c.decode(String.self, forKey: "origin"), realm: try c.decode(String.self, forKey: "realm"))
         default: self = .unknown(type: type, raw: try JSONValue(from: decoder))
         }
     }
@@ -259,9 +263,14 @@ public enum BrowserInput: Codable, Sendable, Equatable {
             try c.encodeIfPresent(width, forKey: "width")
             try c.encodeIfPresent(height, forKey: "height")
         case let .newTab(url): try c.encodeIfPresent(url, forKey: "url")
-        case let .auth(username, password):
+        case let .auth(origin, realm, username, password):
+            try c.encode(origin, forKey: "origin")
+            try c.encode(realm, forKey: "realm")
             try c.encode(username, forKey: "username")
             try c.encode(password, forKey: "password")
+        case let .authCancel(origin, realm):
+            try c.encode(origin, forKey: "origin")
+            try c.encode(realm, forKey: "realm")
         default: break
         }
     }

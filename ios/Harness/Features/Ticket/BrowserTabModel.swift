@@ -138,13 +138,13 @@ final class BrowserTabModel {
     // MARK: HTTP Basic Auth
 
     /// Answer the page's pending challenge. The service reloads the page and clears `state.auth`.
-    func answerAuth(username: String, password: String) {
-        send(.auth(username: username, password: password))
+    func answerAuth(_ auth: BrowserAuth, username: String, password: String) {
+        send(.auth(origin: auth.origin, realm: auth.realm, username: username, password: password))
     }
 
     /// Cancel the pending challenge.
-    func cancelAuth() {
-        send(.authCancel)
+    func cancelAuth(_ auth: BrowserAuth) {
+        send(.authCancel(origin: auth.origin, realm: auth.realm))
     }
 
     // MARK: Tabs

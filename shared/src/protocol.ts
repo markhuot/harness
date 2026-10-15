@@ -1497,10 +1497,12 @@ export type BrowserInput =
   /**
    * Answer the tab's pending HTTP Basic Auth challenge (BrowserState.auth) with credentials, or
    * cancel it. The service keeps credentials in memory only, per session and origin + realm, and
-   * reloads the page. The password is never echoed, logged or persisted.
+   * reloads the page. The password is never echoed, logged or persisted. `origin` and `realm` name
+   * the challenge being answered (BrowserAuth): an answer for any other is ignored, so credentials
+   * can't land on an origin the viewer never saw.
    */
-  | { type: "auth"; username: string; password: string }
-  | { type: "authCancel" }
+  | { type: "auth"; origin: string; realm: string; username: string; password: string }
+  | { type: "authCancel"; origin: string; realm: string }
   /**
    * The viewer's stage size. Applied only while the tab is `responsive` and this viewer switched it
    * on (BrowserState.sizeOwner); dropped otherwise, so a pane never resizes a tab by being opened.
