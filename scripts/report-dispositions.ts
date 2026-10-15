@@ -211,6 +211,15 @@ const SIM_WALKTHROUGH: { name: RegExp; screen: string }[] = [
   { name: /^an image smaller than the screen opens centred/, screen: "attachments" },
   { name: /^swiping down closes the viewer/, screen: "attachments" },
   { name: /^the video page plays and swiping down closes it too/, screen: "attachments" },
+  { name: /^\$\{tab\} opens at the bottom$/, screen: "transcript and activity stick" },
+  { name: /^\$\{tab\} follows new content while at the bottom$/, screen: "transcript and activity stick" },
+  { name: /opens its ticket in a sheet over the board$/, screen: "ticket sheet" },
+  { name: /^a second ticket joins the dock as a second card, the newest at the bottom with its ref and title$/, screen: "dock stack" },
+  { name: /^with a ticket open and another docked, the card shows over the sheet and the composer sits above it$/, screen: "dock stack" },
+  { name: /^switching cards while a ticket is open keeps the dock mounted: only the swapped card changes$/, screen: "dock stack" },
+  { name: /^a picker the ticket screen opens itself \(not the Router\) hides the dock over the sheet and gives it back on Done$/, screen: "dock stack" },
+  { name: /^linking other lines of the docked file scrolls its editor there$/, screen: "file relink" },
+  { name: /^a tap at the bottom of New session's prompt row focuses it$/, screen: "new session prompt focus" },
 ];
 
 export function dispositionOf(row: Row): Disposition {
@@ -221,9 +230,10 @@ export function dispositionOf(row: Row): Disposition {
     for (const h of HARNESSKIT) if (h.name.test(row.name)) return { status: "harnesskit", ref: h.tests.join(", ") };
     // Asserted by a walkthrough screen although its name says relaunch: the screen checks the saved choice after leaving it.
     if (/^usage: the filter shows one driver, and the choice survives a relaunch$/.test(row.name)) return { status: "walkthrough", ref: "next/walkthrough/ios.ts › plan usage" };
+    // A screen that asserts a check carries it, whatever loss rule its function or name would otherwise have got.
+    for (const c of SIM_WALKTHROUGH) if (c.name.test(row.name)) return { status: "walkthrough", ref: `next/walkthrough/ios.ts › ${c.screen}` };
     for (const l of SIM_NAME_LOSSES) if (l.name.test(row.name)) return { status: "loss", reason: l.reason };
     for (const l of SIM_LOSSES) if (l.group.test(row.group)) return { status: "loss", reason: l.reason };
-    for (const c of SIM_WALKTHROUGH) if (c.name.test(row.name)) return { status: "walkthrough", ref: `next/walkthrough/ios.ts › ${c.screen}` };
     if (/leading > shows only commands/.test(row.name)) return { status: "kept", reason: "the > prefix is pure logic that HarnessKit's PaletteTests already pin (greaterThanListsOnlyCommandsEvenWhenATicketAndAPathMatch); a typed query on a simulator added only the keystrokes" };
   }
   if (row.kind === "snapshot" && row.file.endsWith("SnapshotAssertTests.swift")) {

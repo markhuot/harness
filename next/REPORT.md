@@ -15,7 +15,7 @@ Names generated at runtime (loops, helpers, `test.each`) appear as their templat
 
 ## Progress
 
-6102 rows: 3903 open, 753 new, 34 walkthrough, 18 HarnessKit, 46 accepted loss, 1348 kept.
+6102 rows: 3903 open, 753 new, 43 walkthrough, 18 HarnessKit, 37 accepted loss, 1348 kept.
 
 | Area | Rows | Open | New | Walkthrough | HarnessKit | Loss | Kept | Deletable |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :---: |
@@ -26,7 +26,7 @@ Names generated at runtime (loops, helpers, `test.each`) appear as their templat
 | app/src/renderer | 689 | 689 | 0 | 0 | 0 | 0 | 0 |  |
 | editor/scripts | 3 | 3 | 0 | 0 | 0 | 0 | 0 |  |
 | editor/src | 31 | 31 | 0 | 0 | 0 | 0 | 0 |  |
-| ios sim-check | 92 | 0 | 0 | 34 | 18 | 39 | 1 | yes |
+| ios sim-check | 92 | 0 | 0 | 43 | 18 | 30 | 1 | yes |
 | ios snapshot tests | 30 | 26 | 0 | 0 | 0 | 4 | 0 |  |
 | ios/HarnessKit (swift) | 1347 | 0 | 0 | 0 | 0 | 0 | 1347 | yes |
 | ios/Tools | 153 | 153 | 0 | 0 | 0 | 0 | 0 |  |
@@ -65,9 +65,8 @@ Signed off by the human. They stay listed here so each can be brought back at th
 
 ### UIKit gesture arbitration (sheet detents, drag-to-dock, swipe-to-dismiss, scroll following, the pager's sideways swipe): needs real swipes and flicks with velocity, and axe.swipe has no --delta
 
-15 rows:
+12 rows:
 
-- sheetChecks › ${column ? "a board card" : "a ticket link"} opens its ticket in a sheet over the board (ios/Tools/sim-check.ts)
 - sheetChecks › a conductor's child pushes inside the sheet and the back swipe returns (ios/Tools/sim-check.ts)
 - sheetChecks › dragging the sheet to the bottom docks it under the board, titled by the ticket on top (ios/Tools/sim-check.ts)
 - sheetChecks › a slow drag on the transcript moves the ticket as one piece (ios/Tools/sim-check.ts)
@@ -76,8 +75,6 @@ Signed off by the human. They stay listed here so each can be brought back at th
 - sheetChecks › scrolling the ticket's content down and flinging it back up fast leaves the sheet open (ios/Tools/sim-check.ts)
 - sheetChecks › a flick down still dismisses while the app's main thread is stalled (ios/Tools/sim-check.ts)
 - sheetChecks › a swipe down from full size closes the ticket rather than docking it (ios/Tools/sim-check.ts)
-- stickChecks › ${tab} opens at the bottom (ios/Tools/sim-check.ts)
-- stickChecks › ${tab} follows new content while at the bottom (ios/Tools/sim-check.ts)
 - stickChecks › ${tab} stays put after the user scrolls up (ios/Tools/sim-check.ts)
 - stickChecks › ${tab} follows again after scrolling back to the bottom (ios/Tools/sim-check.ts)
 - stickChecks › the transcript pins the current run's header, and the next run's header takes it over (ios/Tools/sim-check.ts)
@@ -91,24 +88,18 @@ Signed off by the human. They stay listed here so each can be brought back at th
 
 ### docked tickets and files: needs a ticket docked by the real hold-and-release drag (AXe can't pause mid-drag, and axe.swipe has no --delta for a flick), which the walkthrough's taps and deep links don't do
 
-6 rows:
+1 rows:
 
-- dockStackChecks › a second ticket joins the dock as a second card, the newest at the bottom with its ref and title (ios/Tools/sim-check.ts)
-- dockStackChecks › with a ticket open and another docked, the card shows over the sheet and the composer sits above it (ios/Tools/sim-check.ts)
-- dockStackChecks › switching cards while a ticket is open keeps the dock mounted: only the swapped card changes (ios/Tools/sim-check.ts)
-- dockStackChecks › a picker the ticket screen opens itself (not the Router) hides the dock over the sheet and gives it back on Done (ios/Tools/sim-check.ts)
 - dockStackChecks › a swipe away from the presented sheet closes it and leaves the next as the docked card, no sheet (ios/Tools/sim-check.ts)
-- fileDockChecks › linking other lines of the docked file scrolls its editor there (ios/Tools/sim-check.ts)
 
 ### software-keyboard geometry: axe typing flips iOS to hardware-keyboard mode, which hides the keyboard from the accessibility tree, so where the keyboard sits can't be read
 
-6 rows:
+5 rows:
 
 - dockStackChecks › the bar keeps its place above the dock after the palette's keyboard comes and goes (ios/Tools/sim-check.ts)
 - keyboardChecksWithSoftwareKeyboard › ticket composer sits on top of the keyboard (ios/Tools/sim-check.ts)
 - keyboardChecksWithSoftwareKeyboard › prompt editor follows the cursor above the keyboard as the text grows (ios/Tools/sim-check.ts)
 - keyboardChecksWithSoftwareKeyboard › New session's prompt grows with every line typed (ios/Tools/sim-check.ts)
-- keyboardChecksWithSoftwareKeyboard › a tap at the bottom of New session's prompt row focuses it (ios/Tools/sim-check.ts)
 - keyboardChecksWithSoftwareKeyboard › the sheet's background runs behind the keyboard's rounded corners (ios/Tools/sim-check.ts)
 
 ### process memory footprint, measured on the running app rather than shown by a screen (accepted: the human said fine)
@@ -2453,7 +2444,7 @@ Signed off by the human. They stay listed here so each can be brought back at th
 
 - pagingChecks › the Done column scrolls into older pages (HarnessKit: BoardLoaderTests.endReachedTwiceBeforeARenderAsksOnce, BoardLoaderTests.shouldAutoFill)
 - pagingChecks › search finds a done ticket that isn't loaded (HarnessKit: BoardLoaderTests.searchIsDebouncedToOneRequestForTheLastTextOfABurst, BoardLoaderTests.searchLoadMorePagesWithTheCursorOnce, BoardLoaderTests.aSlowResponseForAnEarlierQueryNeverOverwritesANewerOne)
-- sheetChecks › ${column ? "a board card" : "a ticket link"} opens its ticket in a sheet over the board
+- sheetChecks › ${column ? "a board card" : "a ticket link"} opens its ticket in a sheet over the board (walkthrough: next/walkthrough/ios.ts › ticket sheet)
 - sheetChecks › a conductor's child pushes inside the sheet and the back swipe returns
 - sheetChecks › dragging the sheet to the bottom docks it under the board, titled by the ticket on top
 - sheetChecks › the dock survives a tab change, and a tap restores the sheet where it was (HarnessKit: RouterSheetTests.dockingKeepsThePathAndRestoringBringsItBack, RouterSheetTests.aTabLinkDocksThePresentedSheetAndKeepsTheDock)
@@ -2465,11 +2456,11 @@ Signed off by the human. They stay listed here so each can be brought back at th
 - sheetChecks › a flick down still dismisses while the app's main thread is stalled
 - sheetChecks › a swipe down from full size closes the ticket rather than docking it
 - sheetChecks › a ticket docked with the keyboard up reopens from its card at its scroll position with its draft (HarnessKit: ScrollRestoreTests.theFirstReadingScrollsToTheSavedOffsetAndKeepsAskingUntilItIsThere, ScrollRestoreTests.itGivesUpAfterTheWindow, ScrollRestoreTests.thePersonScrollingCancelsTheRestore, RouterSheetTests.dockingKeepsThePathAndRestoringBringsItBack)
-- dockStackChecks › a second ticket joins the dock as a second card, the newest at the bottom with its ref and title
-- dockStackChecks › with a ticket open and another docked, the card shows over the sheet and the composer sits above it
+- dockStackChecks › a second ticket joins the dock as a second card, the newest at the bottom with its ref and title (walkthrough: next/walkthrough/ios.ts › dock stack)
+- dockStackChecks › with a ticket open and another docked, the card shows over the sheet and the composer sits above it (walkthrough: next/walkthrough/ios.ts › dock stack)
 - dockStackChecks › with 3 docked, two cards and \"1 more…\" expand into the list, whose oldest opens at its saved path (HarnessKit: DockCardsTests.pastTheLimitAMoreCardCountsTheRest, RouterSheetTests.liveShownAndOverflowSheetsSplitTheDock, RouterSheetTests.aCardChosenFromTheMoreListOpensAtItsSavedPath)
-- dockStackChecks › switching cards while a ticket is open keeps the dock mounted: only the swapped card changes
-- dockStackChecks › a picker the ticket screen opens itself (not the Router) hides the dock over the sheet and gives it back on Done
+- dockStackChecks › switching cards while a ticket is open keeps the dock mounted: only the swapped card changes (walkthrough: next/walkthrough/ios.ts › dock stack)
+- dockStackChecks › a picker the ticket screen opens itself (not the Router) hides the dock over the sheet and gives it back on Done (walkthrough: next/walkthrough/ios.ts › dock stack)
 - dockStackChecks › a card's ✕ closes only that ticket (HarnessKit: RouterSheetTests.closingADockedCardLeavesTheOtherCardsAndOpensNoPanel, RouterSheetTests.closingTheTopLeavesTheNextDocked)
 - dockStackChecks › a swipe away from the presented sheet closes it and leaves the next as the docked card, no sheet
 - dockStackChecks › the dock comes back after the app is quit and relaunched (HarnessKit: RouterDockPersistenceTests.theDockRoundTripsDockedWithItsOrderAndPaths)
@@ -2478,7 +2469,7 @@ Signed off by the human. They stay listed here so each can be brought back at th
 - fileDockChecks › a file opened from a link is its own card next to the ticket's (HarnessKit: RouterSheetTests.aFileOpensAsItsOwnSheetNextToTheTickets)
 - fileDockChecks › tapping the ticket's card and the file's card switches between them (HarnessKit: RouterSheetTests.filesAndTicketsWaitInTheSameDock)
 - fileDockChecks › opening the docked file again focuses it instead of adding a card (HarnessKit: RouterSheetTests.openingADockedFileAgainFocusesItWithoutDuplicating)
-- fileDockChecks › linking other lines of the docked file scrolls its editor there
+- fileDockChecks › linking other lines of the docked file scrolls its editor there (walkthrough: next/walkthrough/ios.ts › file relink)
 - fileDockChecks › a dirty file card's Close asks, and Discard closes the card (HarnessKit: FileEditRulesTests.leavingADirtyFileSavesOrAsksButNeverDrops, FileEditorModelTests.discardedEditsIgnoreLateEditorEvents)
 - fileDockChecks › a failed save as a file card closes keeps the edits: the card comes back with them and Save retries (HarnessKit: FileEditorModelTests.editsAFailedLeaveSaveKeptComeBackDirtyAndSaveable, FileEditorModelTests.aFailedSaveStaysDirtyAndSaysWhy)
 - fileDockChecks › a file card's ✕ closes only it (HarnessKit: RouterSheetTests.closingAFileCardKeepsTheOthersAndDocksTheNext)
@@ -2495,8 +2486,8 @@ Signed off by the human. They stay listed here so each can be brought back at th
 - panelChecks › holding the dragged panel in the trailing 40% shows the ghost card and docks it on release; the card restores it at its root
 - panelChecks › a card's ✕ closes just its ticket without opening it (HarnessKit: RouterSheetTests.closingADockedCardLeavesTheOtherCardsAndOpensNoPanel)
 - panelChecks › the pop-out button moves the panel's ticket into a window of its own
-- stickChecks › ${tab} opens at the bottom
-- stickChecks › ${tab} follows new content while at the bottom
+- stickChecks › ${tab} opens at the bottom (walkthrough: next/walkthrough/ios.ts › transcript and activity stick)
+- stickChecks › ${tab} follows new content while at the bottom (walkthrough: next/walkthrough/ios.ts › transcript and activity stick)
 - stickChecks › ${tab} stays put after the user scrolls up
 - stickChecks › ${tab} follows again after scrolling back to the bottom
 - stickChecks › the transcript pins the current run's header, and the next run's header takes it over
@@ -2506,7 +2497,7 @@ Signed off by the human. They stay listed here so each can be brought back at th
 - keyboardChecksWithSoftwareKeyboard › the composer sits on the keyboard with another ticket docked, and the dock steps aside (HarnessKit: DockMetricsTests.theSheetKeepsRoomForTheDockOnlyWithCardsAndNoKeyboard, DockMetricsTests.theComposerSitsABarGapAboveTheDockOnlyWithCardsAndNoKeyboard, DockMetricsTests.onlyAKeyboardTallerThan100PointsIsTheSoftwareKeyboard, DockLabelsTests.theDockHidesUnderAnythingOverTheTicket)
 - keyboardChecksWithSoftwareKeyboard › prompt editor follows the cursor above the keyboard as the text grows
 - keyboardChecksWithSoftwareKeyboard › New session's prompt grows with every line typed
-- keyboardChecksWithSoftwareKeyboard › a tap at the bottom of New session's prompt row focuses it
+- keyboardChecksWithSoftwareKeyboard › a tap at the bottom of New session's prompt row focuses it (walkthrough: next/walkthrough/ios.ts › new session prompt focus)
 - keyboardChecksWithSoftwareKeyboard › the sheet's background runs behind the keyboard's rounded corners
 - mentionChecks › New session: @READ lists README.md, a tap completes it, and the toolbar launches (walkthrough: next/walkthrough/ios.ts › mentions and commands)
 - mentionChecks › New session: the toolbar's Plan first opens the launched ticket on its Spec tab (walkthrough: next/walkthrough/ios.ts › mentions and commands)
