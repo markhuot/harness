@@ -37,6 +37,18 @@ public protocol BrowserChannel: AnyObject, Sendable {
 
 extension HarnessSocket: BrowserChannel {}
 
+/// The socket's terminal side (HarnessSocket), as a seam for tests. An EventSource that doesn't
+/// conform drops terminal messages and attaches.
+public protocol TerminalChannel: AnyObject, Sendable {
+    var terminalMessages: AsyncStream<ServerMessage> { get }
+    func attachTerminal(_ id: String, deviceId: String, cols: Int, rows: Int) async
+    func detachTerminal(_ id: String) async
+    func resizeTerminal(_ id: String, cols: Int, rows: Int) async
+    func writeTerminal(_ id: String, data: String) async
+}
+
+extension HarnessSocket: TerminalChannel {}
+
 /// The socket's `presence` side (HarnessSocket), as a seam for tests: remembers what this device
 /// shows and sends it now (when open) and after every reconnect.
 public protocol PresenceChannel: AnyObject, Sendable {
@@ -82,6 +94,11 @@ public final class BoardStore {
     /// The plan-usage gauges' last report (GET /usage, then each usage.updated); nil until one arrives.
     /// Held here, not in the reducer: the TS reducer has no usage state to stay in parity with.
     public private(set) var usage: PlanUsageReport?
+    /// The service's terminals (GET /terminals, then terminal.* events). Held here, not in the reducer:
+    /// the TS reducer has no terminal state to stay in parity with.
+    public private(set) var terminals: [TerminalInfo] = []
+    /// Replace the terminals, as a refetch does (and the snapshot tests).
+    public func setTerminals(_ list: [TerminalInfo]) { terminals = list }
     /// Replace the usage report, as a `usage.updated` event does (and the snapshot tests, whose stub client reports none).
     public func setUsage(_ report: PlanUsageReport?) { usage = report }
     /// The release mismatch the person closed: hidden until the service or the app changes.
@@ -106,6 +123,7 @@ public final class BoardStore {
     @ObservationIgnored private var watched: [String: Int] = [:]
     @ObservationIgnored private var listeners: [Int: @MainActor (HarnessEvent) -> Void] = [:]
     @ObservationIgnored private var nextListener = 0
+    @ObservationIgnored private var terminalListeners: [Int: @MainActor (ServerMessage) -> Void] = [:]
     @ObservationIgnored private var backgrounded = false
     @ObservationIgnored private var closed = false
     /// Each ticket's message draft (DESIGN.md "Message drafts"), by ticket id: one per ticket for
@@ -210,6 +228,7 @@ public final class BoardStore {
         outbox = opsIn
         let channel = socket as? any BrowserChannel
         let presenceChannel = socket as? any PresenceChannel
+        let terminalChannel = socket as? any TerminalChannel
         // A rebuilt socket (foregrounding) starts without presence: hand it the last one, which it
         // sends once it's open.
         if let presence { opsIn.yield(.presence(presence)) }
@@ -221,6 +240,13 @@ public final class BoardStore {
                     case let .subscribe(id, tabId, viewerId): await channel?.subscribeBrowser(id, tabId: tabId, viewerId: viewerId)
                     case let .unsubscribe(id, viewerId): await channel?.unsubscribeBrowser(id, viewerId: viewerId)
                     case let .presence(p): await presenceChannel?.setPresence(p)
+                    case let .terminal(op):
+                        switch op {
+                        case let .attach(id, deviceId, cols, rows): await terminalChannel?.attachTerminal(id, deviceId: deviceId, cols: cols, rows: rows)
+                        case let .detach(id): await terminalChannel?.detachTerminal(id)
+                        case let .resize(id, cols, rows): await terminalChannel?.resizeTerminal(id, cols: cols, rows: rows)
+                        case let .write(id, data): await terminalChannel?.writeTerminal(id, data: data)
+                        }
                     }
                 }
             },
@@ -228,6 +254,13 @@ public final class BoardStore {
                 for await event in socket.events {
                     guard let self, !Task.isCancelled else { return }
                     self.receive(event)
+                }
+            },
+            Task { @MainActor [weak self] in
+                guard let terminalChannel else { return }
+                for await message in terminalChannel.terminalMessages {
+                    guard let self, !Task.isCancelled else { return }
+                    for fn in self.terminalListeners.values { fn(message) }
                 }
             },
             Task { @MainActor [weak self] in
@@ -293,6 +326,7 @@ public final class BoardStore {
     private func receive(_ event: HarnessEvent) {
         switch event {
         case .usageUpdated(let u): usage = u
+        case .terminalCreated, .terminalUpdated, .terminalRemoved: terminals = TerminalList.apply(terminals, event)
         case .browserFrame, .browserState: break
         default: dispatch(.event(event))
         }
@@ -309,6 +343,49 @@ public final class BoardStore {
         return { [weak self] in self?.listeners[id] = nil }
     }
 
+    // MARK: Terminals
+
+    /// Every terminal.* message from the service (snapshot, output, exit), for the sheet showing it.
+    /// Call the returned closure to stop listening.
+    @discardableResult
+    public func onTerminalMessage(_ fn: @escaping @MainActor (ServerMessage) -> Void) -> @MainActor () -> Void {
+        nextListener += 1
+        let id = nextListener
+        terminalListeners[id] = fn
+        return { [weak self] in self?.terminalListeners[id] = nil }
+    }
+
+    /// Watch a terminal and report this device's viewport (see HarnessSocket.attachTerminal). The
+    /// socket remembers it across reconnects; send it again after the socket is rebuilt (`socketGeneration`).
+    public func attachTerminal(_ id: String, deviceId: String, cols: Int, rows: Int) {
+        outbox?.yield(.terminal(.attach(id, deviceId: deviceId, cols: cols, rows: rows)))
+    }
+
+    public func detachTerminal(_ id: String) { outbox?.yield(.terminal(.detach(id))) }
+
+    public func resizeTerminal(_ id: String, cols: Int, rows: Int) { outbox?.yield(.terminal(.resize(id, cols: cols, rows: rows))) }
+
+    public func writeTerminal(_ id: String, data: String) { outbox?.yield(.terminal(.write(id, data: data))) }
+
+    /// A palette opening: look up every terminal's folder and program, then list them.
+    public func refreshTerminals() async {
+        if let list = try? await client.listTerminals(refresh: true) { terminals = list }
+    }
+
+    /// Create a terminal in `projectId` (nil: All projects) and add it to the list. `openOnMac` asks
+    /// a connected Mac to open a pane for it.
+    public func createTerminal(projectId: String?, deviceId: String, openOnMac: Bool = true) async throws -> TerminalInfo {
+        let info = try await client.createTerminal(CreateTerminalBody(projectId: Patch(projectId), deviceId: deviceId, openOnMac: openOnMac))
+        if !terminals.contains(where: { $0.id == info.id }) { terminals.append(info) }
+        return info
+    }
+
+    /// End a terminal's shell on the service.
+    public func closeTerminal(_ id: String) async {
+        try? await client.closeTerminal(id)
+        terminals.removeAll { $0.id == id }
+    }
+
     // MARK: Browser
 
     enum BrowserOp: Sendable {
@@ -316,6 +393,14 @@ public final class BoardStore {
         case subscribe(String, tabId: Int?, viewerId: String?)
         case unsubscribe(String, viewerId: String?)
         case presence(Presence)
+        case terminal(TerminalOp)
+    }
+
+    enum TerminalOp: Sendable {
+        case attach(String, deviceId: String, cols: Int, rows: Int)
+        case detach(String)
+        case resize(String, cols: Int, rows: Int)
+        case write(String, data: String)
     }
 
     /// Tell the service what this device shows (DESIGN.md "Notifications"), so it holds back
@@ -379,11 +464,13 @@ public final class BoardStore {
         let client = client
         async let health = try? await client.health()
         async let usage = try? await client.getUsage()
+        async let terminalList = try? await client.listTerminals(refresh: false)
         do {
             let snapshot = try await loadSnapshot(scope)
             guard !closed else { return }
             if let h = await health { self.health = h }
             if let u = await usage { self.usage = u }
+            if let list = await terminalList { self.terminals = list }
             dispatch(.snapshot(snapshot))
             loader.legacy = snapshot.donePage == nil
             loader.snapshotApplied()

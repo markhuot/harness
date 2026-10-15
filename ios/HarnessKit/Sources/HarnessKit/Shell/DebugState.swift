@@ -111,6 +111,7 @@ public struct DebugState: Codable, Equatable, Sendable {
         case .ticket: "ticket"
         case .newSession: "newSession"
         case .file: "file"
+        case .terminal: "terminal"
         }
     }
 

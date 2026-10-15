@@ -32,6 +32,19 @@ struct RouterDockPersistenceTests {
         #expect(Set(back.dockedSheets.map(\.id)).count == 5)
     }
 
+    @Test func aDockedTerminalSurvivesARelaunchAndTheRestWaitsBehindIt() {
+        let r = Router()
+        r.openTicket(key: "A-1", tab: nil)
+        r.openTerminal(id: "t-9")
+        let defaults = MemoryChangesDefaults()
+        r.savePersistedDock(to: defaults)
+        let back = Router()
+        back.restorePersistedDock(from: defaults)
+        #expect(back.ticketSheetState == .docked)
+        #expect(back.dockedSheets.map(\.root) == [.terminal(id: "t-9"), .ticket(key: "A-1", tab: nil)])
+        #expect(back.dock?.terminalID == "t-9")
+    }
+
     @Test func aPayloadFromBeforeFilesDockedDecodesAsTicketsAndNewSessions() {
         // Exactly what builds before file sheets wrote: no "file" root anywhere.
         let json = """

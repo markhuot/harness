@@ -334,3 +334,77 @@ struct HarnessSocketTests {
         await s.close()
     }
 }
+
+@Suite("HarnessSocket terminals")
+struct HarnessSocketTerminalTests {
+    private let attach = ClientMessage.terminalAttach(id: "t-1", deviceId: "dev", cols: 62, rows: 18)
+
+    @Test func attachesAgainAfterEveryReconnectWithTheLatestViewport() async {
+        let c1 = FakeConnection(), c2 = FakeConnection()
+        let sleep = ManualSleep()
+        let s = socket(FakeSocketFactory([c1, c2]), sleep)
+        let status = Recorder(s.status)
+        await eventually("open") { status.items == [true] }
+        await s.attachTerminal("t-1", deviceId: "dev", cols: 62, rows: 18)
+        await s.attachTerminal("t-2", deviceId: "dev", cols: 40, rows: 10)
+        await s.resizeTerminal("t-1", cols: 70, rows: 20)
+        await s.detachTerminal("t-2")
+        #expect(c1.sentMessages.suffix(4) == [attach, .terminalAttach(id: "t-2", deviceId: "dev", cols: 40, rows: 10), .terminalResize(id: "t-1", cols: 70, rows: 20), .terminalDetach(id: "t-2")])
+
+        c1.drop()
+        await eventually("the ping timer is cancelled and the reconnect backoff sleeps") { sleep.pending == 1 && sleep.cancellations == 1 }
+        sleep.advance()
+        await eventually("second open") { status.items == [true, false, true] }
+        // Only what is still attached, at the size it last reported: the service forgot the old socket.
+        #expect(c2.sentMessages == [hello, .terminalAttach(id: "t-1", deviceId: "dev", cols: 70, rows: 20)])
+        await s.close()
+    }
+
+    @Test func detachingOrResizingWhatIsNotAttachedSendsNothing() async {
+        let c = FakeConnection()
+        let s = socket(FakeSocketFactory([c]), ManualSleep())
+        await eventually("hello") { c.sent.count == 1 }
+        await s.detachTerminal("t-9")
+        await s.resizeTerminal("t-9", cols: 1, rows: 1)
+        #expect(c.sentMessages == [hello])
+        await s.writeTerminal("t-9", data: "ls\r")
+        #expect(c.sentMessages.last == .terminalWrite(id: "t-9", data: "ls\r"))
+        await s.close()
+    }
+
+    @Test func terminalMessagesAreSeparateFromEvents() async {
+        let c = FakeConnection()
+        let s = socket(FakeSocketFactory([c]), ManualSleep())
+        let terminal = Recorder(s.terminalMessages)
+        let events = Recorder(s.events)
+        await eventually("open") { c.sent.count == 1 }
+        c.push(#"{"type":"terminal.snapshot","id":"t-1","data":"hi","offset":2,"cols":80,"rows":24,"truncated":false}"#)
+        c.push(eventText(#"{"kind":"terminal.removed","id":"t-1"}"#))
+        c.push(#"{"type":"terminal.output","id":"t-1","data":"x","offset":3}"#)
+        c.push(#"{"type":"terminal.open","id":"t-2","projectId":null}"#)
+        c.push(#"{"type":"pong"}"#)
+        await eventually("messages") { terminal.items.count == 3 && events.items.count == 1 }
+        #expect(terminal.items.map(\.type) == ["terminal.snapshot", "terminal.output", "terminal.open"])
+        #expect(events.items == [.terminalRemoved(id: "t-1")])
+        await s.close()
+    }
+
+    @Test func pingsWhileSomethingIsAttachedAndStopsWhenNothingIs() async {
+        let c = FakeConnection()
+        let sleep = ManualSleep()
+        let s = socket(FakeSocketFactory([c]), sleep)
+        await eventually("hello") { c.sent.count == 1 }
+        await s.attachTerminal("t-1", deviceId: "dev", cols: 62, rows: 18)
+        await eventually("ping timer") { sleep.pending == 1 }
+        sleep.advance()
+        await eventually("pinged") { c.sentMessages.contains(.ping) }
+        await eventually("next tick scheduled") { sleep.pending == 1 }
+        await s.detachTerminal("t-1")
+        let pings = c.sentMessages.filter { $0 == .ping }.count
+        sleep.advance()
+        await Task.yield()
+        try? await Task.sleep(for: .milliseconds(50))
+        #expect(c.sentMessages.filter { $0 == .ping }.count == pings)
+        await s.close()
+    }
+}

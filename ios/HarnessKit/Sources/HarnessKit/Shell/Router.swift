@@ -104,6 +104,14 @@ public final class Router {
 
     /// Applies a link. Returns the theme picks a settings link carries, for the caller to save.
     @discardableResult
+    /// Opens a service terminal as a sheet of its own (docked with the tickets and files); one already
+    /// open comes forward instead of opening twice. Closes the palette it was chosen from.
+    public func openTerminal(id: String) {
+        sheet = nil
+        cover = nil
+        presentTicketSheet(.terminal(id: id))
+    }
+
     public func open(_ link: DeepLink) -> ThemePicker.ThemePrefsPatch? {
         if scope == .ticket { return openInTicket(link) }
         switch link {
@@ -570,6 +578,9 @@ public struct TicketSheet: Hashable, Sendable, Identifiable {
         case newSession(projectId: String?, key: String?)
         /// A file, in the editor: a card of its own next to the tickets.
         case file(FileRouteParams)
+        /// A terminal the service hosts: a card of its own, shared with the Mac. The id is the
+        /// service's; a terminal that has gone (the service restarted) shows as ended.
+        case terminal(id: String)
     }
 
     /// Stays the same while the sheet docks, restores, switches, or changes content in place.
@@ -621,11 +632,18 @@ public struct TicketSheet: Hashable, Sendable, Identifiable {
 
     public var isFile: Bool { file != nil }
 
+    /// The service terminal this sheet shows at its root; nil for a ticket, a file or New session.
+    public var terminalID: String? {
+        if case let .terminal(id) = root { return id }
+        return nil
+    }
+
     /// The plain name (accessibility, the panel's title): the top ticket's key, a file's name, or
     /// "New session".
     public var title: String {
         if let key = topTicketKey { return key }
         if let file { return FileViewerRules.fileName(file.path) }
+        if terminalID != nil { return "Terminal" }
         return "New session"
     }
 
@@ -659,6 +677,7 @@ public struct TicketSheet: Hashable, Sendable, Identifiable {
         case .newSession: self.root == root
         case let .file(params):
             if case let .file(mine) = self.root { mine.sameFile(as: params) } else { false }
+        case .terminal: self.root == root
         }
     }
 }

@@ -73,11 +73,14 @@ public actor HarnessSocket {
     /// open, and repeated failures while down, emit nothing (TS calls onStatus(false) on every
     /// failed attempt). Finishes after `close()`.
     public nonisolated let status: AsyncStream<Bool>
+    /// The terminal.* messages (snapshot, output, exit, open) that aren't events. Finishes after `close()`.
+    public nonisolated let terminalMessages: AsyncStream<ServerMessage>
 
     private let factory: WebSocketFactory
     private let sleep: Sleep
     private let eventsOut: AsyncStream<HarnessEvent>.Continuation
     private let statusOut: AsyncStream<Bool>.Continuation
+    private let terminalOut: AsyncStream<ServerMessage>.Continuation
     private let runner = Mutex<Task<Void, Never>?>(nil)
 
     private var current: (any WebSocketConnection)?
@@ -90,6 +93,9 @@ public actor HarnessSocket {
     private var browserSubs: [BrowserSubscription] = []
     /// The last presence set (normalized), sent again after each reconnect.
     private var presence: Presence?
+    /// Terminals attached (id → device and viewport, in attach order), attached again after each reconnect.
+    private var terminalAttachments: [TerminalAttachment] = []
+    private var pingTask: Task<Void, Never>?
 
     public init(url: String, factory: @escaping WebSocketFactory = URLSessionWebSocketConnection.factory, sleep: @escaping Sleep = { try await Task.sleep(for: $0) }) {
         self.url = url
@@ -97,6 +103,7 @@ public actor HarnessSocket {
         self.sleep = sleep
         (events, eventsOut) = AsyncStream.makeStream(of: HarnessEvent.self)
         (status, statusOut) = AsyncStream.makeStream(of: Bool.self)
+        (terminalMessages, terminalOut) = AsyncStream.makeStream(of: ServerMessage.self)
         runner.withLock { $0 = Task { await self.run() } }
     }
 
@@ -107,6 +114,7 @@ public actor HarnessSocket {
         defer {
             eventsOut.finish()
             statusOut.finish()
+            terminalOut.finish()
         }
         guard let url = URL(string: url) else { return }
         while !closed {
@@ -123,10 +131,17 @@ public actor HarnessSocket {
                 }
                 // The service keeps presence per socket and forgot it when the last one closed.
                 if let presence { try await conn.send(Self.encode(.presence(presence))) }
+                // The service forgot every attachment with the old socket: attach again (a fresh snapshot follows).
+                for t in terminalAttachments {
+                    try await conn.send(Self.encode(.terminalAttach(id: t.id, deviceId: t.deviceId, cols: t.cols, rows: t.rows)))
+                }
                 backoff.reset()
                 setConnected(true)
+                startPingIfAttached()
                 while true { handle(try await conn.receive()) }
             } catch {}
+            pingTask?.cancel()
+            pingTask = nil
             conn.close()
             open = false
             current = nil
@@ -143,6 +158,12 @@ public actor HarnessSocket {
         case let .data(d): data = d
         }
         guard let msg = try? JSONDecoder().decode(ServerMessage.self, from: data) else { return }
+        switch msg {
+        case .terminalSnapshot, .terminalOutput, .terminalExit, .terminalOpen:
+            terminalOut.yield(msg)
+            return
+        default: break
+        }
         guard case let .event(event) = msg else { return }
         // The service moves a subscription between tabs itself (newTab, closing the watched tab):
         // follow it, so a reconnect comes back to the same tab. TS leaves this to its caller
@@ -211,13 +232,78 @@ public actor HarnessSocket {
         await send(.browserUnsubscribe(sessionId: sessionId, viewerId: viewerId))
     }
 
+    // MARK: Terminals
+
+    /// While a terminal is attached the socket pings every 5 s, which tells the service this client is
+    /// still live (it drops a client that stays silent for 15 s from the shell's size).
+    private func startPingIfAttached() {
+        guard open, pingTask == nil, !terminalAttachments.isEmpty else { return }
+        pingTask = Task { [sleep] in
+            while !Task.isCancelled {
+                do { try await sleep(.seconds(5)) } catch { return }
+                guard await self.ping() else { return }
+            }
+        }
+    }
+
+    /// One ping while something is attached; false once nothing is (the loop ends).
+    private func ping() async -> Bool {
+        guard open, !terminalAttachments.isEmpty else {
+            pingTask = nil
+            return false
+        }
+        await send(.ping)
+        return true
+    }
+
+    /// Watch a terminal and report this viewport (the service sizes the shell to the smallest visible
+    /// client). Remembered across reconnects; again with a new size only reports it.
+    public func attachTerminal(_ id: String, deviceId: String, cols: Int, rows: Int) async {
+        if let i = terminalAttachments.firstIndex(where: { $0.id == id }) {
+            terminalAttachments[i] = TerminalAttachment(id: id, deviceId: deviceId, cols: cols, rows: rows)
+        } else {
+            terminalAttachments.append(TerminalAttachment(id: id, deviceId: deviceId, cols: cols, rows: rows))
+        }
+        await send(.terminalAttach(id: id, deviceId: deviceId, cols: cols, rows: rows))
+        startPingIfAttached()
+    }
+
+    public func detachTerminal(_ id: String) async {
+        guard terminalAttachments.contains(where: { $0.id == id }) else { return }
+        terminalAttachments.removeAll { $0.id == id }
+        await send(.terminalDetach(id: id))
+    }
+
+    public func resizeTerminal(_ id: String, cols: Int, rows: Int) async {
+        guard let i = terminalAttachments.firstIndex(where: { $0.id == id }) else { return }
+        terminalAttachments[i].cols = cols
+        terminalAttachments[i].rows = rows
+        await send(.terminalResize(id: id, cols: cols, rows: rows))
+    }
+
+    public func writeTerminal(_ id: String, data: String) async {
+        await send(.terminalWrite(id: id, data: data))
+    }
+
+    /// The remembered attachments (for tests).
+    var attachedTerminals: [TerminalAttachment] { terminalAttachments }
+
     /// Stop for good: closes the connection, interrupts a reconnect wait, then finishes `events`
     /// and `status` (after a final `false` if a connection was open).
     public func close() {
         closed = true
+        pingTask?.cancel()
         current?.close()
         runner.withLock { $0?.cancel() }
     }
+}
+
+/// One remembered `terminal.attach`: a terminal this socket watches and the viewport it reported.
+struct TerminalAttachment: Sendable, Equatable {
+    var id: String
+    var deviceId: String
+    var cols: Int
+    var rows: Int
 }
 
 /// One remembered `browser.subscribe`: a viewer of a session's browser and the tab it's on.
