@@ -9,6 +9,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- Starting the service with `HARNESS_CHROME_HEADLESS=0` now opens the integrated browser's Chrome with a visible window. The variable was ignored before, so you couldn't watch a page that a bot check ("verify you are human") keeps looping on.
+
 ### Changed
 
 - Agents are now told that a small follow-up (a ticket re-opened by a triage update, bot or Copilot review feedback, a bug report on finished work) still ends with a spec update, so a pull request's fixes show up in the ticket's Status instead of the spec going stale.

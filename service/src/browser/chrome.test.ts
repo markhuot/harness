@@ -11,6 +11,7 @@ import {
   desktopUserAgent,
   findChrome,
   parseChromeStartTimes,
+  resolveHeadless,
   sweepCodeSignClones,
 } from "./chrome.ts";
 
@@ -158,4 +159,19 @@ realChrome("code-sign clones with real Chrome", () => {
     // Chrome removes its own clone after a clean exit.
     expect(existsSync(bClone!)).toBe(false);
   }, 120_000);
+});
+
+describe("resolveHeadless", () => {
+  test("defaults to headless", () => {
+    expect(resolveHeadless(undefined, {})).toBe(true);
+    expect(resolveHeadless(undefined, { HARNESS_CHROME_HEADLESS: "1" })).toBe(true);
+  });
+  test('"0" and "false" run headed', () => {
+    expect(resolveHeadless(undefined, { HARNESS_CHROME_HEADLESS: "0" })).toBe(false);
+    expect(resolveHeadless(undefined, { HARNESS_CHROME_HEADLESS: "false" })).toBe(false);
+  });
+  test("an explicit option wins over the env", () => {
+    expect(resolveHeadless(true, { HARNESS_CHROME_HEADLESS: "0" })).toBe(true);
+    expect(resolveHeadless(false, {})).toBe(false);
+  });
 });

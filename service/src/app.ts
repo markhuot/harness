@@ -93,7 +93,7 @@ export async function createHarness(opts: CreateHarnessOptions): Promise<Harness
   const browser = opts.browser ?? (await import("./browser/index")).createBrowserService({
     profileDir: paths.chromeProfileDir,
     extensionsDir: paths.chromeExtensionsDir,
-    headless: true,
+    // Headless unless HARNESS_CHROME_HEADLESS=0 (the manager reads it), to see Chrome and test bot checks.
     tabStore: store.browserTabs,
     idleTabMs: () => (settings().browserIdleTabMinutes ?? DEFAULT_BROWSER_IDLE_TAB_MINUTES) * 60_000,
   });
