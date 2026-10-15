@@ -631,9 +631,9 @@ try {
     els = await untilTree(() => axe.nodes(), (e) => has(e, "/code-walk"), 15000); // the first lookup starts the (fake) CLI
     expect("/co lists the agent's commands and only those", has(els, "/code-walk") && has(els, "/commit-and-pr") && !has(els, "/vercel:deploy"), seen(els));
     await tapLabel("/code-walk");
-    await untilKeyboard();
-    await axe.type("this branch");
-    await untilTree(() => axe.nodes(), (e) => valueOf(e, spec).endsWith("this branch") && !has(e, "/code-walk"));
+    // The picked command fills the field (Commands.insertCommand is covered in HarnessKit), so Start needs no more typing.
+    els = await untilTree(() => axe.nodes(), (e) => valueOf(e, spec).trim() === "/code-walk" && !has(e, "/code-walk"));
+    expect("the picked command fills the field and closes the list", valueOf(els, spec).trim() === "/code-walk", `the field reads ${JSON.stringify(valueOf(els, spec))}`);
     await start();
     expect("the slash command's ticket launches", !!(await launched(world.slash.id, before)));
   });
@@ -681,12 +681,7 @@ try {
     expect("Show child tickets flips to Hide child tickets", has(flipped, /^Hide child tickets/), seen(flipped));
     await tapLabel("Hide child tickets, General"); // back to the default
     await closed();
-    // A leading > shows only commands: the ticket matching the query isn't listed.
-    await openPalette();
-    await axe.type(">hello");
-    // The ticket search runs after a pause: wait for it to settle before asserting nothing was listed.
-    const commands = await quiet();
-    expect("a > query lists no ticket", !has(commands, new RegExp(`^${seeded.review.key} `)), seen(commands));
+    // The > prefix (commands only) is PaletteTests' to cover; no typing here.
   });
   // sim-check palette: ⌘K over a ticket lists its actions; Copy ticket key copies it.
   await w.screen("ticket commands", async (expect) => {

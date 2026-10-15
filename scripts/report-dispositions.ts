@@ -105,7 +105,6 @@ const SIM_WALKTHROUGH: { name: RegExp; screen: string }[] = [
   { name: /agent notes start collapsed/, screen: "ticket details" },
   { name: /Save on blur switch/, screen: "settings" },
   { name: /bottom bar's field opens the palette/, screen: "command palette" },
-  { name: /leading > shows only commands/, screen: "command palette" },
   { name: /⌘K over a ticket sheet/, screen: "ticket commands" },
   { name: /^Agents & tasks: the filter survives/, screen: "agents & tasks filter" },
   { name: /a relative file link in a spec opens the file viewer/, screen: "file link" },
@@ -139,6 +138,7 @@ export function dispositionOf(row: Row): Disposition {
     for (const l of SIM_NAME_LOSSES) if (l.name.test(row.name)) return { status: "loss", reason: l.reason };
     for (const l of SIM_LOSSES) if (l.group.test(row.group)) return { status: "loss", reason: l.reason };
     for (const c of SIM_WALKTHROUGH) if (c.name.test(row.name)) return { status: "walkthrough", ref: `next/walkthrough/ios.ts › ${c.screen}` };
+    if (/leading > shows only commands/.test(row.name)) return { status: "kept", reason: "the > prefix is pure logic that HarnessKit's PaletteTests already pin (greaterThanListsOnlyCommandsEvenWhenATicketAndAPathMatch); a typed query on a simulator added only the keystrokes" };
     if (row.group === "memoryChecks") return { status: "loss", reason: "a memory measurement of docked tickets, not behaviour a screen shows; the dock itself is an accepted loss" };
   }
   if (row.kind === "snapshot" && row.file.endsWith("SnapshotAssertTests.swift")) {

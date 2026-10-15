@@ -14,7 +14,7 @@ Names generated at runtime (loops, helpers, `test.each`) appear as their templat
 
 ## Progress
 
-6083 rows: 3905 open, 753 new, 29 walkthrough, 65 accepted loss, 1331 kept.
+6083 rows: 3905 open, 753 new, 28 walkthrough, 65 accepted loss, 1332 kept.
 
 | Area | Rows | Open | New | Walkthrough | Loss | Kept | Deletable |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | :---: |
@@ -25,7 +25,7 @@ Names generated at runtime (loops, helpers, `test.each`) appear as their templat
 | app/src/renderer | 689 | 689 | 0 | 0 | 0 | 0 |  |
 | editor/scripts | 3 | 3 | 0 | 0 | 0 | 0 |  |
 | editor/src | 31 | 31 | 0 | 0 | 0 | 0 |  |
-| ios sim-check | 92 | 5 | 0 | 29 | 58 | 0 |  |
+| ios sim-check | 92 | 5 | 0 | 28 | 58 | 1 |  |
 | ios snapshot tests | 30 | 26 | 0 | 0 | 4 | 0 |  |
 | ios/HarnessKit (swift) | 1331 | 0 | 0 | 0 | 0 | 1331 | yes |
 | ios/Tools | 153 | 153 | 0 | 0 | 0 | 0 |  |
@@ -2544,7 +2544,7 @@ Signed off by the human. They stay listed here so each can be brought back at th
 - interactionChains › touch and hold on a card previews its ticket on the Spec tab, with no moves in the menu, and offers the ticket's actions (open)
 - interactionChains › a relative file link in a spec opens the file viewer in the ticket's folder, at its lines (walkthrough: next/walkthrough/ios.ts › file link)
 - interactionChains › the bottom bar's field opens the palette; Show child tickets runs and its label flips (walkthrough: next/walkthrough/ios.ts › command palette)
-- interactionChains › a leading > shows only commands, not the ticket that matches (walkthrough: next/walkthrough/ios.ts › command palette)
+- interactionChains › a leading > shows only commands, not the ticket that matches (kept)
 - interactionChains › ⌘K over a ticket sheet lists its actions; Copy ticket key copies it (walkthrough: next/walkthrough/ios.ts › ticket commands)
 - interactionChains › Open file… (⌘P) finds a file in the ticket's folder and opens it at the typed lines (walkthrough: next/walkthrough/ios.ts › open file palette)
 - interactionChains › Settings → General has a Save on blur switch that flips when pressed (walkthrough: next/walkthrough/ios.ts › settings)
