@@ -55,6 +55,8 @@ export class SizeCoordinator {
   private current: Size;
   private debounce: unknown = null;
   private dirty = false;
+  /** A client attached to a terminal with none: its first evaluation applies in full. */
+  private fresh = false;
   private growTimer: unknown = null;
   private readonly debounceMs: number;
   private readonly growMs: number;
@@ -79,6 +81,8 @@ export class SizeCoordinator {
   report(clientId: string, cols: unknown, rows: unknown): boolean {
     const size = clampSize(cols, rows);
     if (!size) return false;
+    // The first client to attach to a terminal nobody is watching gets its own size at once.
+    if (this.clients.size === 0) this.fresh = true;
     this.clients.set(clientId, { ...size, seen: this.opts.now() });
     this.schedule();
     return true;
@@ -138,6 +142,15 @@ export class SizeCoordinator {
   private evaluate() {
     const target = this.target();
     if (!target) return; // nobody attached: keep the last size
+    if (this.fresh && this.clients.size === 1) {
+      // Nobody to flap against: a first client gets its own size at once.
+      this.fresh = false;
+      if (this.growTimer) this.opts.timers.clear(this.growTimer);
+      this.growTimer = null;
+      this.set(target);
+      return;
+    }
+    this.fresh = false;
     const cur = this.current;
     this.set({ cols: Math.min(cur.cols, target.cols), rows: Math.min(cur.rows, target.rows) });
     const grows = target.cols > this.current.cols || target.rows > this.current.rows;

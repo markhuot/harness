@@ -3026,12 +3026,6 @@
       "offset": 25
     },
     {
-      "type": "terminal.size",
-      "id": "t-9f3c2a1b7d4e",
-      "cols": 62,
-      "rows": 18
-    },
-    {
       "type": "terminal.exit",
       "id": "t-9f3c2a1b7d4e",
       "exitCode": 0
@@ -5310,7 +5304,6 @@
       "error",
       "terminal.snapshot",
       "terminal.output",
-      "terminal.size",
       "terminal.exit",
       "terminal.open"
     ],

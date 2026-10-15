@@ -445,7 +445,9 @@ export class TerminalRegistry {
     term.emu.resize(size.cols, size.rows);
     term.info.cols = size.cols;
     term.info.rows = size.rows;
-    for (const st of term.clients.values()) if (st.ready) st.client.send({ type: "terminal.size", id: term.info.id, cols: size.cols, rows: size.rows });
+    // Clients get the screen again at the new size, from the emulator that reflowed it, rather than
+    // reflowing what they drew: two emulators reflow wrapped lines differently.
+    for (const st of term.clients.values()) if (st.ready) void this.sendSnapshot(term, st);
     this.changed(term);
   }
 

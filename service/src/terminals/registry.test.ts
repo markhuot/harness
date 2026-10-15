@@ -271,7 +271,7 @@ describe("attach, output and snapshots", () => {
 });
 
 describe("shared size", () => {
-  test("the shell follows the smallest attached client, both ways, and tells the others", async () => {
+  test("the shell follows the smallest attached client, both ways, and the others get the screen again at the new size", async () => {
     const { registry, clock, ptys } = setup();
     const { id } = registry.create({ cols: 120, rows: 40 });
     const mac = new FakeClient("mac");
@@ -280,12 +280,14 @@ describe("shared size", () => {
     await registry.attach(phone, id, "phone-dev", 50, 20);
     clock.advance(200);
     expect(ptys[0]!.resizes.at(-1)).toEqual({ cols: 50, rows: 20 });
-    expect(mac.of("terminal.size").at(-1)).toMatchObject({ cols: 50, rows: 20 });
+    await Bun.sleep(20);
+    expect(mac.of("terminal.snapshot").at(-1)).toMatchObject({ cols: 50, rows: 20 });
     expect(registry.get(id)).toMatchObject({ cols: 50, rows: 20 });
     registry.detach("phone", id);
     clock.advance(2000);
     expect(ptys[0]!.resizes.at(-1)).toEqual({ cols: 120, rows: 40 });
-    expect(mac.of("terminal.size").at(-1)).toMatchObject({ cols: 120, rows: 40 });
+    await Bun.sleep(20);
+    expect(mac.of("terminal.snapshot").at(-1)).toMatchObject({ cols: 120, rows: 40 });
     registry.shutdown();
   });
 

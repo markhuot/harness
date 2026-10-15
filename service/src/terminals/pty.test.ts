@@ -54,8 +54,8 @@ describe("real PTY", () => {
     await Bun.sleep(300);
     reg.write("mac", id, "stty size\r");
     await until(() => text(mac).includes("20 50"));
-    // the phone learns the size it is drawn at: in its snapshot or in the size message after it
-    expect(phone.of("terminal.size").at(-1) ?? phone.of("terminal.snapshot")[0]).toMatchObject({ cols: 50, rows: 20 });
+    // the phone is sent the screen at the size it is drawn at
+    expect(phone.of("terminal.snapshot").at(-1)).toMatchObject({ cols: 50, rows: 20 });
     reg.detach("phone", id);
     await until(() => reg.get(id)!.cols === 100, 4000);
     reg.write("mac", id, "stty size\r");

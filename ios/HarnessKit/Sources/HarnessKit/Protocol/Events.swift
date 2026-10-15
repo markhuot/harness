@@ -294,8 +294,6 @@ public enum ServerMessage: Codable, Sendable, Equatable {
     case terminalSnapshot(id: String, data: String, offset: Int, cols: Int, rows: Int, truncated: Bool)
     /// Live output; `offset` is the byte offset just past `data`.
     case terminalOutput(id: String, data: String, offset: Int)
-    /// The shell's size changed: draw at this size.
-    case terminalSize(id: String, cols: Int, rows: Int)
     case terminalExit(id: String, exitCode: Int?)
     /// Open a pane for this terminal (sent once, only to Mac clients).
     case terminalOpen(id: String, projectId: String?)
@@ -309,7 +307,6 @@ public enum ServerMessage: Codable, Sendable, Equatable {
         case .error: "error"
         case .terminalSnapshot: "terminal.snapshot"
         case .terminalOutput: "terminal.output"
-        case .terminalSize: "terminal.size"
         case .terminalExit: "terminal.exit"
         case .terminalOpen: "terminal.open"
         case let .unknown(type, _): type
@@ -330,7 +327,6 @@ public enum ServerMessage: Codable, Sendable, Equatable {
                 cols: try c.decode(Int.self, forKey: "cols"), rows: try c.decode(Int.self, forKey: "rows"), truncated: try c.decode(Bool.self, forKey: "truncated"))
         case "terminal.output":
             self = .terminalOutput(id: try c.decode(String.self, forKey: "id"), data: try c.decode(String.self, forKey: "data"), offset: try c.decode(Int.self, forKey: "offset"))
-        case "terminal.size": self = .terminalSize(id: try c.decode(String.self, forKey: "id"), cols: try c.decode(Int.self, forKey: "cols"), rows: try c.decode(Int.self, forKey: "rows"))
         case "terminal.exit": self = .terminalExit(id: try c.decode(String.self, forKey: "id"), exitCode: try c.decodeIfPresent(Int.self, forKey: "exitCode"))
         case "terminal.open": self = .terminalOpen(id: try c.decode(String.self, forKey: "id"), projectId: try c.decodeIfPresent(String.self, forKey: "projectId"))
         default: self = .unknown(type: type, raw: try JSONValue(from: decoder))
@@ -356,10 +352,6 @@ public enum ServerMessage: Codable, Sendable, Equatable {
             try c.encode(id, forKey: "id")
             try c.encode(data, forKey: "data")
             try c.encode(offset, forKey: "offset")
-        case let .terminalSize(id, cols, rows):
-            try c.encode(id, forKey: "id")
-            try c.encode(cols, forKey: "cols")
-            try c.encode(rows, forKey: "rows")
         case let .terminalExit(id, exitCode):
             try c.encode(id, forKey: "id")
             if let exitCode { try c.encode(exitCode, forKey: "exitCode") } else { try c.encodeNil(forKey: "exitCode") }

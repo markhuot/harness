@@ -6,7 +6,6 @@ function setup() {
   const sink: TerminalSink = {
     reset: (c, r) => log.push(`reset ${c}x${r}`),
     write: (d) => log.push(`write ${JSON.stringify(d)}`),
-    resize: (c, r) => log.push(`resize ${c}x${r}`),
     exited: (code) => log.push(`exit ${code}`),
     truncated: () => log.push("truncated"),
   };
@@ -80,12 +79,11 @@ describe("TerminalFeed", () => {
     expect(feed.isSynced).toBe(true);
   });
 
-  test("size, exit, truncation and messages for another terminal", () => {
+  test("exit, truncation and messages for another terminal", () => {
     const { feed, log, snapshot } = setup();
     feed.handle(snapshot("", 0, { truncated: true, cols: 40, rows: 10 }));
-    feed.handle({ type: "terminal.size", id: "t1", cols: 62, rows: 18 });
     feed.handle({ type: "terminal.exit", id: "t1", exitCode: 2 });
-    feed.handle({ type: "terminal.size", id: "other", cols: 1, rows: 1 });
-    expect(log).toEqual(["reset 40x10", "truncated", "resize 62x18", "exit 2"]);
+    feed.handle({ type: "terminal.exit", id: "other", exitCode: 9 });
+    expect(log).toEqual(["reset 40x10", "truncated", "exit 2"]);
   });
 });

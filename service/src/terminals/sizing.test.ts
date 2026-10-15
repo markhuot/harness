@@ -35,16 +35,18 @@ describe("SizeCoordinator", () => {
   test("the size is the componentwise minimum, shrinking at once and growing after a delay", () => {
     const { clock, size } = setup({ cols: 80, rows: 24 });
     size.report("mac", 120, 40);
-    clock.advance(200);
-    expect(size.size).toEqual({ cols: 80, rows: 24 }); // a grow waits
+    expect(size.size).toEqual({ cols: 120, rows: 40 }); // alone, it gets its own size at once
     size.report("phone", 50, 60);
     clock.advance(200);
-    expect(size.size).toEqual({ cols: 50, rows: 24 }); // the shrink was immediate, the rows still wait
-    clock.advance(1500);
     expect(size.size).toEqual({ cols: 50, rows: 40 });
-    size.remove("phone");
+    size.report("phone", 70, 60); // the phone grows: a grow waits
     clock.advance(200);
     expect(size.size).toEqual({ cols: 50, rows: 40 });
+    clock.advance(1500);
+    expect(size.size).toEqual({ cols: 70, rows: 40 });
+    size.remove("phone");
+    clock.advance(200);
+    expect(size.size).toEqual({ cols: 70, rows: 40 });
     clock.advance(1500);
     expect(size.size).toEqual({ cols: 120, rows: 40 });
   });

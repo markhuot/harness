@@ -10,6 +10,13 @@ import { TerminalFeed, type TerminalMessage, type TerminalSink } from "./session
 
 export type GhosttyModule = typeof import("ghostty-web");
 
+/**
+ * ghostty-web passes `scrollback` to Ghostty as a limit in bytes (cells are 8 bytes), though its
+ * docs call it lines; its default of 10 000 keeps about a screenful and corrupts the oldest rows as
+ * it prunes. This holds the service's 5 000 lines of history at 200 columns.
+ */
+export const SCROLLBACK_BYTES = 8_000_000;
+
 /** ghostty-web's WASM core is inlined into the module; init() once per page. */
 let loaded: Promise<GhosttyModule> | null = null;
 export const loadGhostty = (): Promise<GhosttyModule> => (loaded ??= import("ghostty-web").then(async (m) => (await m.init(), m)));
@@ -64,7 +71,7 @@ export function createTerminalView(ghostty: GhosttyModule, o: ViewOptions): Term
   stage.style.transition = "transform 0.15s";
   container.append(stage);
 
-  const term = new ghostty.Terminal({ fontFamily: o.fontFamily, fontSize: o.fontSize, cursorBlink: true, theme: o.theme });
+  const term = new ghostty.Terminal({ fontFamily: o.fontFamily, fontSize: o.fontSize, cursorBlink: true, theme: o.theme, scrollback: SCROLLBACK_BYTES });
   term.open(stage);
   if (o.keyHandler) term.attachCustomKeyEventHandler(o.keyHandler);
   term.onData((d) => o.onData(d));
@@ -105,13 +112,13 @@ export function createTerminalView(ghostty: GhosttyModule, o: ViewOptions): Term
 
   const sink: TerminalSink = {
     reset(cols, rows) {
-      term.reset();
+      // Not term.reset(): it frees the VT core and makes a new one, and the buffer API (and the
+      // selection) keep reading the freed one, which shows the old screen through the new. A full
+      // reset sequence (RIS, plus clearing scrollback) starts over in place.
       if (term.cols !== cols || term.rows !== rows) term.resize(cols, rows);
+      term.write("\x1bc\x1b[3J");
     },
     write: (data) => term.write(data),
-    resize(cols, rows) {
-      if (term.cols !== cols || term.rows !== rows) term.resize(cols, rows);
-    },
     exited: (code) => o.onExit?.(code),
     truncated: () => o.onTruncated?.(),
   };

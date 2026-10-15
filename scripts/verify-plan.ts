@@ -50,7 +50,7 @@ export const RENDERER_CHECKS: [RegExp, string][] = [
   [/views\/ActivityTab\.tsx$|state\/activity\.|components\/Markdown\.tsx$/, "spec-activity"],
   [/components\/Markdown\.tsx$|views\/SpecTab\.tsx$/, "spec-headings-check"],
   [/views\/TicketDetails\.tsx$/, "agent-notes-check"],
-  [/views\/TerminalPane\.tsx$/, "terminal-pane-check"],
+  [/views\/TerminalPane\.tsx$|state\/terminal\./, "terminal-pane-check"],
   [/views\/Board\.tsx$|components\/PaneWorkspace\.tsx$|state\/panes/, "cmd-click-check"],
   [/views\/BrowserView\.tsx$|state\/browser/, "browser-size-check"],
   [/components\/Annotat|annotationDraw/, "annotate-check"],

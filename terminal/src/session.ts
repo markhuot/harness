@@ -6,10 +6,10 @@
 
 import type { ServerMessage } from "@harness/shared";
 
-export type TerminalMessage = Extract<ServerMessage, { type: "terminal.snapshot" | "terminal.output" | "terminal.size" | "terminal.exit" }>;
+export type TerminalMessage = Extract<ServerMessage, { type: "terminal.snapshot" | "terminal.output" | "terminal.exit" }>;
 
 export function isTerminalMessage(msg: ServerMessage): msg is TerminalMessage {
-  return msg.type === "terminal.snapshot" || msg.type === "terminal.output" || msg.type === "terminal.size" || msg.type === "terminal.exit";
+  return msg.type === "terminal.snapshot" || msg.type === "terminal.output" || msg.type === "terminal.exit";
 }
 
 /** What a feed draws on. */
@@ -17,7 +17,6 @@ export interface TerminalSink {
   /** Start over at this size: the next write is a snapshot. */
   reset(cols: number, rows: number): void;
   write(data: string): void;
-  resize(cols: number, rows: number): void;
   exited(exitCode: number | null): void;
   /** The snapshot began mid-history (the service keeps a bounded scrollback). */
   truncated?(): void;
@@ -87,9 +86,6 @@ export class TerminalFeed {
         this.seen = msg.offset;
         return;
       }
-      case "terminal.size":
-        this.sink.resize(msg.cols, msg.rows);
-        return;
       case "terminal.exit":
         this.sink.exited(msg.exitCode);
         return;

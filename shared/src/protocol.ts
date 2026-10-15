@@ -1563,13 +1563,13 @@ export type ServerMessage =
   | { type: "error"; message: string }
   /**
    * The screen to restore (escape sequences to write into an empty emulator at cols × rows), then
-   * live output continues at `offset`. Sent on attach and again whenever this client has to resync.
+   * live output continues at `offset`. Sent on attach, whenever the shell's size changes (the
+   * service reflows its own emulator, so a client never reflows what it drew) and whenever this
+   * client has to resync.
    */
   | { type: "terminal.snapshot"; id: string; data: string; offset: number; cols: number; rows: number; truncated: boolean }
   /** Live output; `offset` is the byte offset just past `data` in the shell's output. */
   | { type: "terminal.output"; id: string; data: string; offset: number }
-  /** The shell's size changed: draw at this size. */
-  | { type: "terminal.size"; id: string; cols: number; rows: number }
   /** The shell ended. */
   | { type: "terminal.exit"; id: string; exitCode: number | null }
   /** Open a pane for this terminal: sent once, only to Mac clients connected right now. */
