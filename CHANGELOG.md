@@ -29,6 +29,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
+- Internal, for people working on Harness: the dock ghost snapshot references (peak, quarter, reduce motion; iPhone and iPad, light and dark) match the smoother glow again, so the snapshot tests pass on this branch.
 - On iPhone, the Plan usage section's info button, its options menu and its rows now keep their own accessibility identifiers (the section's identifier used to overwrite all of them), and the Context limit sheet's Cancel and Save sit in the sheet, where assistive tools and UI tests can find them.
 - Internal, for people working on Harness: the debug probe in a SIM_CHECK build now reports which text field holds the keyboard's focus (`focus`), and the test proxy can drop or rewrite what the daemon sends over the event socket, so the walkthrough's plan-usage fixture isn't replaced by a real reading pushed after a claude-code run ends.
 - For people working on Harness: the iPhone walkthrough taps by accessibility identifier and waits for the screen to stop moving instead of sleeping or retrying swallowed taps, so it fails less often for reasons unrelated to the app.
