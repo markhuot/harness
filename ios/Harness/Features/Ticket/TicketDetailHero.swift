@@ -60,20 +60,33 @@ struct TicketDetailHero: View {
         }
         header(compact: compact, crumb: crumb)
         if !compact {
-            FlowLayout(spacing: 6) {
+            // Project, key and gauge lead; the review marks sit at the trailing edge.
+            HStack(spacing: 6) {
+                if let project { ProjectKeyBadge(project.key, color: project.color) }
                 TicketKeyLabel(ticket: ticket, size: 12.5, color: c.text2)
+                // Its 44pt tap target overflows the 24pt the row gives it, so it
+                // doesn't make the row taller.
+                if TicketContextGauge.isShown(for: ticket, drivers: state.drivers) {
+                    TicketContextGauge(ticket: ticket).frame(height: 24)
+                }
                 if state.hasCustomDriver(ticket) { DriverBadge(driver: ticket.driver, drivers: state.drivers) }
                 ModelBadge(ticket: ticket, state: state)
-                if let branch = ticket.branch { Badge(branch, outline: true, icon: "branch") }
-                ForEach(ticket.pullRequests, id: \.url) { pullRequestBadge($0) }
+                Spacer(minLength: 6)
                 if ticket.status == .review {
                     ReviewMark(who: .agent, state: ticket.agentReview)
                     ReviewMark(who: .human, state: ticket.humanReview)
                 }
-                // At the row's end. Its 44pt tap target overflows the 24pt the row gives it, so it
-                // doesn't make the badges' row taller.
-                if TicketContextGauge.isShown(for: ticket, drivers: state.drivers) {
-                    TicketContextGauge(ticket: ticket).frame(height: 24)
+            }
+            if ticket.branch != nil || !ticket.pullRequests.isEmpty {
+                FlowLayout(spacing: 6) {
+                    if let branch = ticket.branch {
+                        let base = Branches.resolveBaseBranch(ticket: ticket, project: project, settingsBaseBranch: state.settings?.baseBranch, parent: parent).branch
+                        Text("\(branch) → \(base)")
+                            .font(.scaled(size: 12, design: .monospaced))
+                            .foregroundStyle(c.text2)
+                            .accessibilityLabel("Branch \(branch) into \(base)")
+                    }
+                    ForEach(ticket.pullRequests, id: \.url) { pullRequestBadge($0) }
                 }
             }
         }

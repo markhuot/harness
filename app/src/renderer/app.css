@@ -615,6 +615,15 @@ html[data-input="keyboard"] .card.cursor:not(:focus) {
   gap: 5px;
   align-items: center;
 }
+.detail-git {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-2);
+}
 .actions {
   display: flex;
   flex-wrap: wrap;
@@ -2395,7 +2404,7 @@ button.prompt-attachment-row-main:disabled {
   gap: 5px;
   height: 22px;
   padding: 0 7px 0 5px;
-  border: 1px solid var(--border);
+  border: 1px solid transparent;
   border-radius: 11px;
   background: transparent;
   color: var(--text-2);

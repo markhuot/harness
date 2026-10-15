@@ -43,6 +43,7 @@ import { AnnotateScope, type AnnotatedAttachment } from "../components/Annotator
 import { ModelBadge } from "../components/ModelSelect";
 import { ContextGauge } from "../components/ContextGauge";
 import { COMPACTING_PLACEHOLDER } from "../state/contextGauge";
+import { ProjectKey } from "../components/ProjectKey";
 import { DriverBadge, MenuButton, MOD, ReviewMark, STATUS_LABEL, StatusDot, TicketKey } from "../components/bits";
 import { LandButton } from "../components/LandButton";
 import { landMenu, pullRequestLabel, type LandChoice } from "../state/approveMenu";
@@ -568,37 +569,49 @@ function DetailHeader({
       <div className="detail-hero">
         {parent && <ParentCrumb parent={parent} onOpen={(key) => openTicket(key, "children")} />}
         <div className="detail-meta">
+          {project && <ProjectKey project={project} />}
           <span className="detail-key selectable" data-testid="detail-key" title={ticket.externalRef && label !== k ? `Remote ID ${ticket.externalRef.key} · ticket ${k}` : undefined}>
             <TicketKey ticket={ticket} />
           </span>
+          <ContextGauge ticket={ticket} />
           {hasCustomDriver(state, ticket) && <DriverBadge driver={ticket.driver} />}
           <ModelBadge ticket={ticket} />
-          {ticket.branch && (
-            <span className="badge badge-outline mono" title={ticket.workdir ?? undefined}>
-              <Icon name="branch" />
-              {ticket.branch}
-            </span>
-          )}
-          {ticket.pullRequests.map((pr) => (
-            <button
-              key={pr.url}
-              className="badge badge-outline pr-badge"
-              data-testid="pr-link"
-              title={pr.title ?? `Open ${pr.url}`}
-              onClick={() => void window.harness?.openExternal(pr.url)}
-            >
-              <Icon name="external" />
-              {pullRequestLabel(pr.url)}
-            </button>
-          ))}
+          <div className="grow" />
           {ticket.status === "review" && (
             <>
               <ReviewMark who="agent" state={ticket.agentReview} />
               <ReviewMark who="human" state={ticket.humanReview} />
             </>
           )}
-          <ContextGauge ticket={ticket} />
         </div>
+
+        {(ticket.branch || ticket.pullRequests.length > 0) && (
+          <div className="detail-git" data-testid="detail-git">
+            {ticket.branch && (
+              <>
+                <span className="mono selectable" data-testid="detail-branch" title={ticket.workdir ?? undefined}>
+                  {ticket.branch}
+                </span>
+                <span aria-hidden="true">→</span>
+                <span className="mono selectable" data-testid="detail-base">
+                  {resolveBaseBranch(ticket, project, state.settings, parent).branch}
+                </span>
+              </>
+            )}
+            {ticket.pullRequests.map((pr) => (
+              <button
+                key={pr.url}
+                className="badge badge-outline pr-badge"
+                data-testid="pr-link"
+                title={pr.title ?? `Open ${pr.url}`}
+                onClick={() => void window.harness?.openExternal(pr.url)}
+              >
+                <Icon name="external" />
+                {pullRequestLabel(pr.url)}
+              </button>
+            ))}
+          </div>
+        )}
 
         {ticket.pendingApproval && <ApprovalCard key={ticket.pendingApproval.id} ticket={ticket} approval={ticket.pendingApproval} />}
 
