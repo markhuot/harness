@@ -16,9 +16,20 @@ struct DockedTicketText: Equatable {
     var status: TicketStatus?
     var isNewSession = false
     var isFile = false
+    var isTerminal = false
 
-    @MainActor init(_ sheet: TicketSheet, state: BoardState?) {
-        if let file = sheet.file {
+    @MainActor init(_ sheet: TicketSheet, state: BoardState?, terminals: [TerminalInfo] = []) {
+        if let id = sheet.terminalID {
+            // A terminal: what it is (its title, else its program) and where it is; "ended" once it's gone.
+            isTerminal = true
+            if let t = terminals.first(where: { $0.id == id }) {
+                ref = TerminalList.label(t)
+                title = TerminalList.subtitle(t)
+            } else {
+                ref = "Terminal"
+                title = "ended"
+            }
+        } else if let file = sheet.file {
             // A file: its name, and the ticket or project it's in.
             ref = FileViewerRules.fileName(file.path)
             isFile = true
@@ -58,7 +69,7 @@ struct DockedTicketLabel: View {
     @Environment(\.palette) private var c
 
     var body: some View {
-        let text = DockedTicketText(sheet, state: app.store?.state)
+        let text = DockedTicketText(sheet, state: app.store?.state, terminals: app.store?.terminals ?? [])
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(text.ref)
                 .font(refFont)
@@ -132,7 +143,12 @@ struct DockedCard: View {
     static let closeInset = DockMetrics.closeInset
 
     @ViewBuilder private func statusIcon(_ text: DockedTicketText) -> some View {
-        if text.isFile {
+        if text.isTerminal {
+            Image(systemName: "terminal")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(c.text2)
+                .frame(width: 14)
+        } else if text.isFile {
             Image(systemName: "doc.text")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(c.text2)
@@ -305,7 +321,7 @@ struct DockedTicketsMenuItems: View {
     }
 
     private func row(_ sheet: TicketSheet, state: BoardState?) -> some View {
-        Button(DockedTicketText(sheet, state: state).menuLine) { router.activateSheet(id: sheet.id) }
+        Button(DockedTicketText(sheet, state: state, terminals: app.store?.terminals ?? []).menuLine) { router.activateSheet(id: sheet.id) }
     }
 }
 
@@ -367,7 +383,7 @@ struct DockedTicketsKeeper: ViewModifier {
         switch sheet.root {
         case let .ticket(key, _): out.append(key)
         case let .newSession(_, key?): out.append(key)
-        case .newSession, .file: break
+        case .newSession, .file, .terminal: break
         }
         if let top = sheet.topTicketKey, !out.contains(top) { out.append(top) }
         return out

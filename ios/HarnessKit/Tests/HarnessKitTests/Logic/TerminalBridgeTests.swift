@@ -40,6 +40,18 @@ struct TerminalBridgeTests {
     }
 }
 
+@Suite("Terminal viewport rules")
+struct TerminalViewportRulesTests {
+    @Test func aSmallShrinkKeepsTheHeightButRealChangesDont() {
+        #expect(TerminalViewportRules.ignoresShrink(from: 742, to: 708)) // the home indicator's inset
+        #expect(TerminalViewportRules.ignoresShrink(from: 742, to: 622)) // an accessory bar's worth, at the limit
+        #expect(!TerminalViewportRules.ignoresShrink(from: 742, to: 500)) // a different amount of room
+        #expect(!TerminalViewportRules.ignoresShrink(from: 708, to: 742)) // growing always applies
+        #expect(!TerminalViewportRules.ignoresShrink(from: 0, to: 600)) // the first size
+        #expect(!TerminalViewportRules.ignoresShrink(from: 700, to: 700))
+    }
+}
+
 @Suite("Terminal attach rules")
 struct TerminalAttachRulesTests {
     @Test func attachesOnlyOnceVisibleAndMeasured() {

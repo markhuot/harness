@@ -9,8 +9,14 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- Terminals on the iPhone and iPad. "New Terminal" in the command palette starts a shell in the project you're viewing (All projects when none) and opens it in a sheet; a connected Mac opens a pane for it at once. Terminals show up in the palette on both devices with their title, folder and running program, and a terminal sheet docks like a ticket or a file. The Mac and the phone attach to the same shell: input from either reaches it, output appears on both, and the shell is as large as the smallest visible device, so a phone makes the Mac's terminal draw smaller (centered in its pane) until the phone sleeps, backgrounds the app or closes the sheet. An accessory bar above the keyboard has Esc, Ctrl, Tab and the arrow keys.
+
 ### Changed
 
+- Terminals on the Mac now run in the service, not in the app, so they end when the service restarts (a pane for one that has ended says so) and closing a pane leaves its shell running: use "End terminal" in the pane's menu to close it. The service needs Bun 1.3.5 or newer to run from a checkout. The app no longer ships a native terminal add-on.
+- Internal: `bun run verify` and the type check cover the new `terminal/` package (the ghostty-web bundle the Mac pane and the iPhone share), and the iOS build bundles it as `terminal.js`.
 - Agents can now see draft tickets: `list_tickets`, `search_tickets` and `get_ticket` include them (marked `draft: true`), so an agent can find and read a draft instead of duplicating it. `list_tickets` and `search_tickets` take `include_drafts: false` to leave them out. Agents still can't message, start, move or update a draft, and now get an error saying it's a draft.
 
 ## [app-20261015.1934](https://github.com/markhuot/harness/releases/tag/app-20261015.1934) - 2026-10-15

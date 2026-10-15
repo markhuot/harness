@@ -25,6 +25,9 @@ public enum TerminalCommand: Equatable, Sendable {
     case ctrl(Bool)
     /// The soft keyboard covers this many points of the web view (0: hidden).
     case inset(Double)
+    /// The web view's size in points: the page is exactly that big whatever the keyboard does, so the
+    /// rows it reports never change with it.
+    case frame(width: Double, height: Double)
 
     var json: JSONValue {
         switch self {
@@ -41,6 +44,7 @@ public enum TerminalCommand: Equatable, Sendable {
         case let .paste(text): return .object(["type": .string("paste"), "text": .string(text)])
         case let .ctrl(on): return .object(["type": .string("ctrl"), "on": .bool(on)])
         case let .inset(bottom): return .object(["type": .string("inset"), "bottom": .number(bottom)])
+        case let .frame(width, height): return .object(["type": .string("frame"), "width": .number(width), "height": .number(height)])
         }
     }
 
@@ -135,6 +139,18 @@ public enum TerminalKey: CaseIterable, Sendable {
         case .slash: "/"
         case .dash: "-"
         }
+    }
+}
+
+/// Which layout changes of the terminal's web view reach the rows the shell is given.
+public enum TerminalViewportRules {
+    /// A height drop of at most this many points is the keyboard's accessory or the home indicator's
+    /// inset, not a different amount of room (a soft keyboard covers the page without resizing it).
+    public static let keyboardShrink = 120.0
+
+    /// Whether going from `old` to `new` points tall (at the same width) is such a shrink, which keeps `old`.
+    public static func ignoresShrink(from old: Double, to new: Double) -> Bool {
+        old > 0 && new < old && old - new <= keyboardShrink
     }
 }
 

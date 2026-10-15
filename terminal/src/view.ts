@@ -101,6 +101,10 @@ export function createTerminalView(ghostty: GhosttyModule, o: ViewOptions): Term
   const schedule = () => {
     if (!timer) timer = setTimeout(report, o.debounceMs ?? 100);
   };
+  // A tap anywhere in the viewport (the stage can be smaller than it) gives the terminal the keyboard.
+  // On iOS the soft keyboard only comes up for a focus made inside the tap's own event.
+  const tap = () => term.focus();
+  container.addEventListener("pointerup", tap);
   const observer = new ResizeObserver(schedule);
   observer.observe(container);
   // Before the first snapshot, draw at what the container holds; the first report goes out at once.
@@ -141,6 +145,7 @@ export function createTerminalView(ghostty: GhosttyModule, o: ViewOptions): Term
     dispose() {
       if (timer) clearTimeout(timer);
       observer.disconnect();
+      container.removeEventListener("pointerup", tap);
       term.dispose();
       stage.remove();
     },

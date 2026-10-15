@@ -11,6 +11,8 @@ The architecture, ticket lifecycle, tool list and HTTP API are in [DESIGN.md](DE
 The published Mac app (the install page) needs nothing else: it carries the service as a compiled
 executable. To build from the repo:
 
+Bun 1.3.5 or newer is needed (terminals use its built-in PTY); `bun upgrade` updates it.
+
 ```sh
 bun install
 cd app && bun run install-app             # build Harness.app into ~/Applications

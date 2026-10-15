@@ -32,9 +32,12 @@ export type BridgeCommand =
   /** The Ctrl accessory key: the next typed letter becomes its control character. */
   | { type: "ctrl"; on: boolean }
   /** The soft keyboard now covers this many points of the web view (0: hidden). */
-  | { type: "inset"; bottom: number };
+  | { type: "inset"; bottom: number }
+  /** The web view's size in points; the page is exactly that big whatever the keyboard does. */
+  | { type: "frame"; width: number; height: number };
 
 export type BridgeEvent =
+  /** The page mounted and can take `open`; sent once, and again if the page reloads. */
   | { type: "ready" }
   /** Typed, pasted or answered input for the shell. */
   | { type: "input"; data: string }
@@ -59,6 +62,8 @@ export interface BridgeProbe {
   screen: string[];
   ctrl: boolean;
   keyboardInset: number;
+  /** What the page could show, in points (the viewport the rows are counted from). */
+  container: { width: number; height: number };
 }
 
 export interface Mounted {
@@ -120,12 +125,15 @@ export function mount(win: Window, post: (event: BridgeEvent) => void, parent?: 
 
   const fail = (e: unknown) => post({ type: "error", message: e instanceof Error ? e.message : String(e) });
 
+  // The page is up: the host answers with `open`. (A host's commands before this are dropped.)
+  win.setTimeout(() => post({ type: "ready" }), 0);
+
   return {
     receive(command) {
       switch (command.type) {
         case "open":
           open = { id: command.id, theme: command.theme, fontFamily: command.fontFamily ?? DEFAULT_FONT, fontSize: command.fontSize ?? 13 };
-          build().then(() => post({ type: "ready" }), fail);
+          build().catch(fail);
           return;
         case "message":
           if (isTerminalMessage(command.message)) view?.handle(command.message);
@@ -162,6 +170,14 @@ export function mount(win: Window, post: (event: BridgeEvent) => void, parent?: 
           inset = command.bottom;
           pan();
           return;
+        case "frame":
+          // The web view's own size: the page's viewport shrinks when the keyboard (or its accessory)
+          // comes up, and the rows reported must not follow it.
+          root.style.right = "auto";
+          root.style.bottom = "auto";
+          root.style.width = `${command.width}px`;
+          root.style.height = `${command.height}px`;
+          return;
       }
     },
     probe() {
@@ -169,7 +185,7 @@ export function mount(win: Window, post: (event: BridgeEvent) => void, parent?: 
       const buffer = view.term.buffer.active;
       const screen: string[] = [];
       for (let y = 0; y < view.term.rows; y++) screen.push(buffer.getLine(buffer.viewportY + y)?.translateToString(true) ?? "");
-      return { cols: view.term.cols, rows: view.term.rows, synced: view.feed.isSynced, offset: view.feed.offset, screen, ctrl, keyboardInset: inset };
+      return { cols: view.term.cols, rows: view.term.rows, synced: view.feed.isSynced, offset: view.feed.offset, screen, ctrl, keyboardInset: inset, container: { width: root.clientWidth, height: root.clientHeight } };
     },
     destroy() {
       view?.dispose();
