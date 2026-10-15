@@ -110,6 +110,17 @@
       "name": "@harness/shared",
       "version": "0.1.0",
     },
+    "terminal": {
+      "name": "@harness/terminal",
+      "version": "0.1.0",
+      "dependencies": {
+        "@harness/shared": "workspace:*",
+        "ghostty-web": "0.4.0-next.20.g1858a59",
+      },
+      "devDependencies": {
+        "esbuild": "^0.28.2",
+      },
+    },
   },
   "trustedDependencies": [
     "electron",
@@ -242,6 +253,8 @@
     "@harness/service": ["@harness/service@workspace:service"],
 
     "@harness/shared": ["@harness/shared@workspace:shared"],
+
+    "@harness/terminal": ["@harness/terminal@workspace:terminal"],
 
     "@jridgewell/gen-mapping": ["@jridgewell/gen-mapping@0.3.13", "", { "dependencies": { "@jridgewell/sourcemap-codec": "^1.5.0", "@jridgewell/trace-mapping": "^0.3.24" } }, "sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA=="],
 
