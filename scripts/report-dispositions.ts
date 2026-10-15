@@ -4,6 +4,7 @@
 //   new          covered by a test in the new suite (next/); the old test may be deleted once a mutation
 //                check shows the new one can fail (named in the ticket's Status)
 //   walkthrough  covered by a screen of the one iPhone or Mac walkthrough
+//   harnesskit   covered by a HarnessKit swift test (no simulator); the ref names the tests
 //   loss         accepted loss; the reason is what the human signs off on
 //   kept         not part of the retired suite (it stays and keeps running as it does today)
 //   open         no decision yet
@@ -14,6 +15,7 @@ export type Disposition =
   | { status: "open" }
   | { status: "new"; ref: string }
   | { status: "walkthrough"; ref: string }
+  | { status: "harnesskit"; ref: string }
   | { status: "loss"; reason: string }
   | { status: "kept"; reason: string };
 
@@ -88,16 +90,92 @@ export const DROPPED: Dropped[] = [
   },
 ];
 
+// The blockers behind the accepted losses. Each names what the walkthrough (deep links, rest-gated accessibility
+// reads, a few taps) can't do, so the human signs off on a real reason.
+const IPAD = "iPad-only layout: the walkthrough has no iPad pass, so the side panel, the corner cards and the split columns have no screen to assert them";
+const GESTURE =
+  "UIKit gesture arbitration (sheet detents, drag-to-dock, swipe-to-dismiss, scroll following, the pager's sideways swipe): needs real swipes and flicks with velocity, and axe.swipe has no --delta";
+const DOCK_DRAG =
+  "needs a ticket docked by the real hold-and-release drag (AXe can't pause mid-drag, and axe.swipe has no --delta for a flick), which the walkthrough's taps and deep links don't do";
+const ANIMATION = "pixel or video evidence of an animation: frames recorded across the transition, which a rest-gated accessibility read can't see";
+const KEYBOARD =
+  "software-keyboard geometry: axe typing flips iOS to hardware-keyboard mode, which hides the keyboard from the accessibility tree, so where the keyboard sits can't be read";
+const SCENE = "real UIScene creation: a window of its own (the pop-out) is made by the system, not by anything a screen shows";
+const MEMORY = "process memory footprint, measured on the running app rather than shown by a screen (accepted: the human said fine)";
+const RELAUNCH = "a real quit-and-relaunch of the app: the walkthrough is one launch with no relaunch pass; what is saved across a launch is pinned in HarnessKit where it is logic";
+
 /** sim-check functions whose behaviour the single walkthrough can't carry: the ticket's expected losses. */
 const SIM_LOSSES: { group: RegExp; reason: string }[] = [
-  { group: /^sheetChecks$|^dockStackChecks$|^panelChecks$|^fileDockChecks$/, reason: "sheets and docked panels: sheet detents, dock stacking and panel resizing need real gestures; the walkthrough only jumps to screens" },
-  { group: /^keyboardChecks/, reason: "keyboard handling: needs the software keyboard and real focus, which a deep-link walkthrough doesn't drive" },
-  { group: /^stickChecks$|^pagingChecks$|^cardStackChecks$/, reason: "scrolling and drag behaviour: scroll-to-bottom, paging and card dragging need real touches" },
+  { group: /^sheetChecks$|^stickChecks$|^pagingChecks$/, reason: GESTURE },
+  { group: /^dockStackChecks$|^fileDockChecks$/, reason: `docked tickets and files: ${DOCK_DRAG}` },
+  { group: /^panelChecks$|^cardStackChecks$/, reason: IPAD },
+  { group: /^keyboardChecks/, reason: KEYBOARD },
+  { group: /^memoryChecks$/, reason: MEMORY },
 ];
 
+/** Checks decided by what they do, ahead of their function's reason. */
 const SIM_NAME_LOSSES: { name: RegExp; reason: string }[] = [
-  { name: /relaunch|restor/i, reason: "relaunch and restore: the walkthrough launches once, so it can't relaunch" },
-  { name: /ipad/i, reason: "iPad layouts: the walkthrough runs on one iPhone" },
+  { name: /quit and relaunched|survives a relaunch/i, reason: RELAUNCH },
+  { name: /^the pop-out button moves the panel's ticket into a window/, reason: SCENE },
+  { name: /^the dock's close button sends it away without opening it/, reason: ANIMATION },
+  { name: /keyboard/i, reason: KEYBOARD },
+  { name: /ipad/i, reason: IPAD },
+];
+
+/**
+ * Old sim-check checks whose decisive logic a HarnessKit swift test pins, matched by the check's name. Each lists the
+ * tests as `Suite.function` (scripts/report.test.ts checks they exist). These win over every loss rule below: the
+ * simulator only added the taps, scrolls and keyboard that reached the logic.
+ */
+export const HARNESSKIT: { name: RegExp; tests: string[] }[] = [
+  { name: /^the Done column scrolls into older pages$/, tests: ["BoardLoaderTests.endReachedTwiceBeforeARenderAsksOnce", "BoardLoaderTests.shouldAutoFill"] },
+  {
+    name: /^search finds a done ticket that isn't loaded$/,
+    tests: ["BoardLoaderTests.searchIsDebouncedToOneRequestForTheLastTextOfABurst", "BoardLoaderTests.searchLoadMorePagesWithTheCursorOnce", "BoardLoaderTests.aSlowResponseForAnEarlierQueryNeverOverwritesANewerOne"],
+  },
+  // The hide on scrolling forward, the show on scrolling back and the clamp that doesn't bring it back are the state machine;
+  // the 4+10+4 pt title alignment the check also measured is layout and is not pinned.
+  { name: /^the hero collapses on scrolling the Spec and stays collapsed scrolling back$/, tests: ["HeroCollapseTests.step", "HeroCollapseTests.drivenByPhases"] },
+  { name: /^the dock survives a tab change, and a tap restores the sheet where it was$/, tests: ["RouterSheetTests.dockingKeepsThePathAndRestoringBringsItBack", "RouterSheetTests.aTabLinkDocksThePresentedSheetAndKeepsTheDock"] },
+  {
+    name: /^with 3 docked, two cards and .*1 more….* expand into the list, whose oldest opens at its saved path$/,
+    tests: ["DockCardsTests.pastTheLimitAMoreCardCountsTheRest", "RouterSheetTests.liveShownAndOverflowSheetsSplitTheDock", "RouterSheetTests.aCardChosenFromTheMoreListOpensAtItsSavedPath"],
+  },
+  { name: /^a card's ✕ closes only that ticket$/, tests: ["RouterSheetTests.closingADockedCardLeavesTheOtherCardsAndOpensNoPanel", "RouterSheetTests.closingTheTopLeavesTheNextDocked"] },
+  { name: /^the dock comes back after the app is quit and relaunched$/, tests: ["RouterDockPersistenceTests.theDockRoundTripsDockedWithItsOrderAndPaths"] },
+  { name: /^Projects closes every docked ticket$/, tests: ["RouterSheetTests.projectsClosesTheTicketSheetPresentedOrDocked"] },
+  { name: /^a file opened from a link is its own card next to the ticket's$/, tests: ["RouterSheetTests.aFileOpensAsItsOwnSheetNextToTheTickets"] },
+  { name: /^tapping the ticket's card and the file's card switches between them$/, tests: ["RouterSheetTests.filesAndTicketsWaitInTheSameDock"] },
+  { name: /^opening the docked file again focuses it instead of adding a card$/, tests: ["RouterSheetTests.openingADockedFileAgainFocusesItWithoutDuplicating"] },
+  { name: /^a dirty file card's Close asks, and Discard closes the card$/, tests: ["FileEditRulesTests.leavingADirtyFileSavesOrAsksButNeverDrops", "FileEditorModelTests.discardedEditsIgnoreLateEditorEvents"] },
+  {
+    name: /^a failed save as a file card closes keeps the edits/,
+    tests: ["FileEditorModelTests.editsAFailedLeaveSaveKeptComeBackDirtyAndSaveable", "FileEditorModelTests.aFailedSaveStaysDirtyAndSaysWhy"],
+  },
+  { name: /^a file card's ✕ closes only it$/, tests: ["RouterSheetTests.closingAFileCardKeepsTheOthersAndDocksTheNext"] },
+  {
+    name: /^a slow drag along the panel's top edge short of halfway, or a 10pt flick, springs back; a fast fling closes the ticket$/,
+    tests: ["PanelReleaseTests.shortFlicksSpringBackWhateverTheMomentum", "PanelReleaseTests.aLongSlowDragShortOfHalfwaySpringsBack", "PanelReleaseTests.fortyPointsWithAProjectionPastHalfCloses"],
+  },
+  { name: /^a card's ✕ closes just its ticket without opening it$/, tests: ["RouterSheetTests.closingADockedCardLeavesTheOtherCardsAndOpensNoPanel"] },
+  {
+    name: /^a ticket docked with the keyboard up reopens from its card at its scroll position with its draft$/,
+    tests: [
+      "ScrollRestoreTests.theFirstReadingScrollsToTheSavedOffsetAndKeepsAskingUntilItIsThere",
+      "ScrollRestoreTests.itGivesUpAfterTheWindow",
+      "ScrollRestoreTests.thePersonScrollingCancelsTheRestore",
+      "RouterSheetTests.dockingKeepsThePathAndRestoringBringsItBack",
+    ],
+  },
+  {
+    name: /^the composer sits on the keyboard with another ticket docked, and the dock steps aside$/,
+    tests: [
+      "DockMetricsTests.theSheetKeepsRoomForTheDockOnlyWithCardsAndNoKeyboard",
+      "DockMetricsTests.theComposerSitsABarGapAboveTheDockOnlyWithCardsAndNoKeyboard",
+      "DockMetricsTests.onlyAKeyboardTallerThan100PointsIsTheSoftwareKeyboard",
+      "DockLabelsTests.theDockHidesUnderAnythingOverTheTicket",
+    ],
+  },
 ];
 
 /** sim-check checks the iPhone walkthrough carries now, by the screen that asserts them. */
@@ -140,11 +218,13 @@ export function dispositionOf(row: Row): Disposition {
   if (row.ref) return { status: "new", ref: row.ref };
   if (row.kind === "swift") return { status: "kept", reason: "HarnessKit's swift test needs no simulator and stays; it also decodes the service's golden files" };
   if (row.kind === "sim-check") {
+    for (const h of HARNESSKIT) if (h.name.test(row.name)) return { status: "harnesskit", ref: h.tests.join(", ") };
+    // Asserted by a walkthrough screen although its name says relaunch: the screen checks the saved choice after leaving it.
+    if (/^usage: the filter shows one driver, and the choice survives a relaunch$/.test(row.name)) return { status: "walkthrough", ref: "next/walkthrough/ios.ts › plan usage" };
     for (const l of SIM_NAME_LOSSES) if (l.name.test(row.name)) return { status: "loss", reason: l.reason };
     for (const l of SIM_LOSSES) if (l.group.test(row.group)) return { status: "loss", reason: l.reason };
     for (const c of SIM_WALKTHROUGH) if (c.name.test(row.name)) return { status: "walkthrough", ref: `next/walkthrough/ios.ts › ${c.screen}` };
     if (/leading > shows only commands/.test(row.name)) return { status: "kept", reason: "the > prefix is pure logic that HarnessKit's PaletteTests already pin (greaterThanListsOnlyCommandsEvenWhenATicketAndAPathMatch); a typed query on a simulator added only the keystrokes" };
-    if (row.group === "memoryChecks") return { status: "loss", reason: "a memory measurement of docked tickets, not behaviour a screen shows; the dock itself is an accepted loss" };
   }
   if (row.kind === "snapshot" && row.file.endsWith("SnapshotAssertTests.swift")) {
     return { status: "loss", reason: "tests the snapshot diff helper, which retires with the snapshots; the walkthrough's reference diff gets its own bun test" };
@@ -156,5 +236,6 @@ export const label = (d: Disposition): string =>
   d.status === "open" ? "open"
   : d.status === "new" ? `new: ${d.ref}`
   : d.status === "walkthrough" ? `walkthrough: ${d.ref}`
+  : d.status === "harnesskit" ? `HarnessKit: ${d.ref}`
   : d.status === "loss" ? "accepted loss"
   : "kept";

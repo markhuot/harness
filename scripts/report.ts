@@ -72,7 +72,7 @@ export function areaOf(row: Row): string {
 const esc = (s: string) => s.replace(/\|/g, "\\|").replace(/\n/g, " ");
 
 type Tally = Record<Disposition["status"], number>;
-const emptyTally = (): Tally => ({ open: 0, new: 0, walkthrough: 0, loss: 0, kept: 0 });
+const emptyTally = (): Tally => ({ open: 0, new: 0, walkthrough: 0, harnesskit: 0, loss: 0, kept: 0 });
 
 export function buildReport(rows: Row[]): string {
   const withD = rows.map((row) => ({ row, d: dispositionOf(row), area: areaOf(row) }));
@@ -94,6 +94,7 @@ export function buildReport(rows: Row[]): string {
     "",
     "- **new**: covered by a test in the new suite (`next/`); the old one is deleted only after a spot mutation check shows the new one can fail.",
     "- **walkthrough**: covered by a screen of the iPhone or Mac walkthrough.",
+    "- **harnesskit**: covered by a HarnessKit swift test, which needs no simulator; the row names the tests.",
     "- **loss**: accepted loss. The human has signed off on the reason; the row stays listed so it can be revisited at the end.",
     "- **kept**: not part of the retired suite; it stays as it is.",
     "- **open**: no decision yet. An area is deleted only when it has no open rows.",
@@ -103,12 +104,12 @@ export function buildReport(rows: Row[]): string {
   );
 
   out.push("## Progress", "");
-  out.push(`${rows.length} rows: ${total.open} open, ${total.new} new, ${total.walkthrough} walkthrough, ${total.loss} accepted loss, ${total.kept} kept.`, "");
-  out.push("| Area | Rows | Open | New | Walkthrough | Loss | Kept | Deletable |", "| --- | ---: | ---: | ---: | ---: | ---: | ---: | :---: |");
+  out.push(`${rows.length} rows: ${total.open} open, ${total.new} new, ${total.walkthrough} walkthrough, ${total.harnesskit} HarnessKit, ${total.loss} accepted loss, ${total.kept} kept.`, "");
+  out.push("| Area | Rows | Open | New | Walkthrough | HarnessKit | Loss | Kept | Deletable |", "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :---: |");
   for (const a of areas) {
     const t = byArea.get(a)!;
-    const n = t.open + t.new + t.walkthrough + t.loss + t.kept;
-    out.push(`| ${esc(a)} | ${n} | ${t.open} | ${t.new} | ${t.walkthrough} | ${t.loss} | ${t.kept} | ${t.open === 0 ? "yes" : ""} |`);
+    const n = t.open + t.new + t.walkthrough + t.harnesskit + t.loss + t.kept;
+    out.push(`| ${esc(a)} | ${n} | ${t.open} | ${t.new} | ${t.walkthrough} | ${t.harnesskit} | ${t.loss} | ${t.kept} | ${t.open === 0 ? "yes" : ""} |`);
   }
   out.push("");
 

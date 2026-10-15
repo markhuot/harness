@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { DROPPED, PORTED, dispositionOf } from "./report-dispositions";
+import { DROPPED, HARNESSKIT, PORTED, dispositionOf, label } from "./report-dispositions";
 import { extractAppChecks, extractBunTests, extractSimChecks, extractSnapshotTests, extractSwiftTests } from "./report-extract";
 import { REPORT_PATH, areaOf, buildReport, collectRows, listFiles, rowsForFile } from "./report";
 
@@ -96,6 +96,41 @@ describe("dispositions", () => {
     expect(dispositionOf({ kind: "bun", file: "service/src/x.test.ts", group: "", name: "x" }).status).toBe("open");
   });
 
+  test("a check a HarnessKit test pins is harnesskit by its name, ahead of its function's loss reason", () => {
+    const d = dispositionOf(sim("panelChecks", "a card's ✕ closes just its ticket without opening it"));
+    expect(d).toEqual({ status: "harnesskit", ref: "RouterSheetTests.closingADockedCardLeavesTheOtherCardsAndOpensNoPanel" });
+    expect(label(d)).toBe("HarnessKit: RouterSheetTests.closingADockedCardLeavesTheOtherCardsAndOpensNoPanel");
+    // The next check in the same function has no HarnessKit test: it keeps the function's reason.
+    expect(dispositionOf(sim("panelChecks", "dragging the panel's edge resizes it, stopping at 25% and 80% of the window")).status).toBe("loss");
+    // Even with a keyboard in its name.
+    expect(dispositionOf(sim("keyboardChecksWithSoftwareKeyboard", "the composer sits on the keyboard with another ticket docked, and the dock steps aside")).status).toBe("harnesskit");
+  });
+
+  test("a restore is not a relaunch, and the usage filter is a walkthrough screen", () => {
+    const reason = (name: string, group: string) => (dispositionOf(sim(group, name)) as { reason: string }).reason;
+    expect(reason("docking stashes the panel as a card in the bottom-right corner, and the card restores its path", "panelChecks")).toMatch(/^iPad-only layout/);
+    expect(reason("holding the dragged panel in the trailing 40% shows the ghost card and docks it on release; the card restores it at its root", "panelChecks")).toMatch(/^iPad-only layout/);
+    expect(reason("state survives a relaunch", "interactionChains")).toMatch(/quit-and-relaunch/);
+    expect(dispositionOf(sim("usageChecks", "usage: the filter shows one driver, and the choice survives a relaunch"))).toEqual({
+      status: "walkthrough",
+      ref: "next/walkthrough/ios.ts › plan usage",
+    });
+  });
+
+  test("every HarnessKit test a disposition names exists", () => {
+    const tests = listFiles().filter((f) => f.startsWith("ios/HarnessKit/Tests/") && f.endsWith(".swift")).map((f) => ({ f, src: readFileSync(join(root, f), "utf8") }));
+    expect(HARNESSKIT.length).toBeGreaterThan(15);
+    for (const h of HARNESSKIT) {
+      expect(h.tests.length).toBeGreaterThan(0);
+      for (const t of h.tests) {
+        const [suite, fn] = t.split(".") as [string, string];
+        const file = tests.find((x) => new RegExp(`\\b(?:struct|class|enum)\\s+${suite}\\b`).test(x.src));
+        expect(file, `${t}: no suite ${suite}`).toBeDefined();
+        expect(new RegExp(`\\bfunc\\s+${fn}\\b`).test(file!.src), `${t}: ${suite} has no ${fn}`).toBe(true);
+      }
+    }
+  });
+
   test("HarnessKit's swift tests are kept", () => {
     expect(dispositionOf({ kind: "swift", file: "ios/HarnessKit/Tests/X.swift", group: "", name: "x" }).status).toBe("kept");
   });
@@ -123,8 +158,8 @@ describe("report", () => {
       { kind: "swift", file: "ios/HarnessKit/Tests/A.swift", group: "", name: "a" },
       { kind: "bun", file: "service/src/x/a.test.ts", group: "", name: "a" },
     ]);
-    expect(md).toContain("| ios/HarnessKit (swift) | 1 | 0 | 0 | 0 | 0 | 1 | yes |");
-    expect(md).toContain("| service/src/x | 1 | 1 | 0 | 0 | 0 | 0 |  |");
+    expect(md).toContain("| ios/HarnessKit (swift) | 1 | 0 | 0 | 0 | 0 | 0 | 1 | yes |");
+    expect(md).toContain("| service/src/x | 1 | 1 | 0 | 0 | 0 | 0 | 0 |  |");
   });
 
   test("every old test file in the repo is accounted for in the report", () => {
