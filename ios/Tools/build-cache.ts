@@ -43,7 +43,7 @@ export function xcodegenHash(ios: string): string {
 }
 
 /** The files each bundle build phase reads, as paths relative to ios/ (the phases run bun on them). */
-export function bundleInputs(ios: string): { highlighter: string[]; editor: string[] } {
+export function bundleInputs(ios: string): { highlighter: string[]; editor: string[]; terminal: string[] } {
   const root = resolve(ios, "..");
   const sources = (dir: string) =>
     walk(join(root, dir)).filter((f) => /\.(tsx?|[mc]?js|json|css)$/.test(f) && !/\.test\.tsx?$/.test(f)).map((f) => relative(ios, f));
@@ -54,6 +54,7 @@ export function bundleInputs(ios: string): { highlighter: string[]; editor: stri
   return {
     highlighter: [...shared, ...harnessShared, ...sources("ios/Tools/highlighter"), "Tools/build-highlighter.ts"],
     editor: [...shared, ...harnessShared, ...sources("editor/src"), "../editor/scripts/build.ts", "../editor/package.json"],
+    terminal: [...shared, ...harnessShared, ...sources("terminal/src"), "../terminal/scripts/build.ts", "../terminal/package.json"],
   };
 }
 

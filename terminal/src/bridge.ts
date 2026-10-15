@@ -4,18 +4,27 @@
 // in one place: Swift forwards each terminal.* message in, and the bridge posts back what to send.
 
 import type { ServerMessage } from "@harness/shared";
-import { createTerminalView, loadGhostty, type TerminalTheme, type TerminalView } from "./view";
+import type { ResolvedTheme } from "@harness/shared/state";
+import type { ThemeTokens } from "@harness/shared/themes";
+import { terminalColors } from "./colors";
+import { createTerminalView, loadGhostty, type TerminalView } from "./view";
 import { ctrlChar, keyboardPan } from "./layout";
 import { isTerminalMessage } from "./session";
 
+/** The app theme the host sends: the page turns it into the terminal's colors (colors.ts). */
+export interface BridgeTheme {
+  appearance: ResolvedTheme;
+  tokens: ThemeTokens;
+}
+
 export type BridgeCommand =
-  | { type: "open"; id: string; theme: TerminalTheme; fontFamily?: string; fontSize?: number }
+  | { type: "open"; id: string; theme: BridgeTheme; fontFamily?: string; fontSize?: number }
   /** A terminal.* message from the service. */
   | { type: "message"; message: ServerMessage }
   /** The socket dropped: draw nothing until the next snapshot. */
   | { type: "reconnecting" }
   /** New colors: ghostty-web can't recolor an open terminal, so the view is rebuilt (and resyncs). */
-  | { type: "theme"; theme: TerminalTheme }
+  | { type: "theme"; theme: BridgeTheme }
   | { type: "fontSize"; fontSize: number }
   | { type: "focus" }
   | { type: "blur" }
@@ -63,7 +72,7 @@ const DEFAULT_FONT = "ui-monospace, Menlo, monospace";
 export function mount(win: Window, post: (event: BridgeEvent) => void, parent?: HTMLElement): Mounted {
   const root = parent ?? win.document.body;
   let view: TerminalView | undefined;
-  let open: { id: string; theme: TerminalTheme; fontFamily: string; fontSize: number } | undefined;
+  let open: { id: string; theme: BridgeTheme; fontFamily: string; fontSize: number } | undefined;
   let ctrl = false;
   let inset = 0;
   let lastViewport: { cols: number; rows: number } | null = null;
@@ -83,7 +92,7 @@ export function mount(win: Window, post: (event: BridgeEvent) => void, parent?: 
     view = createTerminalView(ghostty, {
       container: root,
       id: o.id,
-      theme: o.theme,
+      theme: terminalColors(o.theme.tokens, o.theme.appearance),
       fontFamily: o.fontFamily,
       fontSize: o.fontSize,
       onData: (data) => {
