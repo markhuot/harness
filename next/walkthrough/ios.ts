@@ -6,10 +6,10 @@
 //   bun run sim with-lock -- bun next/walkthrough/ios.ts [--no-build]
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { buildPairUrl, type TicketDetail } from "@harness/shared";
+import { buildPairUrl, reviewPassed, type ActivityEntry, type Ticket, type TicketDetail, type TranscriptEntry } from "@harness/shared";
 import { axeFor, hasAxe, type AXElement } from "../../ios/Tools/axe";
 import { installAndPair, seed, startDaemon, stopDaemon, buildApp } from "../../ios/Tools/dev-sim";
-import { GREETINGS_PATH, GREETING_FOR, SMALL_IMAGE, litBox } from "../../ios/Tools/fixtures";
+import { GREETINGS_PATH, GREETING_FOR, SMALL_IMAGE, greetingsLines, litBox } from "../../ios/Tools/fixtures";
 import { parseState, PROBE_FILE, settled as probeSettled, type DebugState } from "../../ios/Tools/probe";
 import { acquireReady, exportDeveloperDir } from "../../ios/Tools/sim";
 import { until } from "@harness/shared/testing/daemon";
@@ -715,6 +715,251 @@ try {
       expect(`the field still reads the draft after a tap at x=${Math.round(x)}`, valueOf(els, composer).toLowerCase() === "started on the phone", `reads ${JSON.stringify(valueOf(els, composer))}`);
     }
     expect("the stored draft is unchanged", (await draft()) === "started on the phone", `draft ${JSON.stringify(await draft())}`);
+  });
+
+  // Ticket sheets and the dock. A tab link (harness://board) docks a presented ticket sheet, and a link to a ticket opens it as
+  // the presented sheet over whatever is docked, so every state below is reached by links: no drag, no swipe.
+  /** Closes every ticket sheet, presented or docked (the Projects link closes them all), and leaves the board showing. */
+  const closeAllSheets = async () => {
+    await open("harness://projects");
+    const s = await untilProbe((x) => x.router.ticketSheet === "gone");
+    if (s?.router.ticketSheet !== "gone") throw new Error(`the ticket sheets didn't close; ${seen(await axe.nodes())}`);
+    await open("harness://board");
+  };
+  const enc = encodeURIComponent;
+  const isDock = (l: string | null) => !!l && l.endsWith(", docked");
+  const dockCards = (els: AXElement[]) => els.filter((e) => isDock(e.label) && !!e.frame);
+  /** The docked tickets: the cards, and the ones behind "N more…". */
+  const dockTotal = (els: AXElement[]) => dockCards(els).length + Number(els.find((e) => /^\d+ more docked tickets$/.test(e.label ?? ""))?.label?.split(" ")[0] ?? 0);
+  const screenHeight = (els: AXElement[]) => els[0]!.frame!.height;
+  const cardOf = (key: string) => (l: string) => l.startsWith(`${key}, `) && isDock(l);
+  const dockable = (i: number) => d.api<Ticket>("POST", "/tickets", { projectId: seeded.project.id, spec: `Docked ticket ${i}: a title long enough that it has to truncate before the dock's buttons`, driver: "dummy", start: false });
+  // Mutation checks: WALK_MUT=<name> flips one premise of a check so it must fail (see the ticket's spec).
+  const MUT = process.env.WALK_MUT ?? "";
+
+  // sim-check sheets: a ticket link opens its ticket in a sheet over the board, its composer as far from the bottom as from the side.
+  await w.screen("ticket sheet", async (expect) => {
+    await closeAllSheets();
+    const [kid, sibling] = (await d.api<TicketDetail>("GET", `/tickets/${world.conductor.key}`)).children;
+    const els = await visit(`harness://ticket/${enc(world.conductor.key)}?tab=children`, (e) => has(e, new RegExp(kid!.key)) && has(e, new RegExp(sibling!.key)) && has(e, "Attach"));
+    expect("the link opens the ticket with its children listed", has(els, new RegExp(kid!.key)) && has(els, new RegExp(sibling!.key)), seen(els));
+    expect("the router says it is a presented sheet", probe()?.router.ticketSheet === "presented", `ticketSheet ${probe()?.router.ticketSheet}`);
+    expect("no dock shows over a presented sheet with nothing else docked", dockTotal(els) === 0, seen(els));
+    expect("the collapsed hero hides its More menu", !has(els, "More"), seen(els));
+    // A sheet doesn't keep the home indicator's inset, so the window's figure would sit the composer too low.
+    const attach = find(els, (l) => l === "Attach");
+    expect("a composer in the sheet", !!attach?.frame, seen(els));
+    if (!attach?.frame) return;
+    const gap = screenHeight(els) - (attach.frame.y + attach.frame.height);
+    const slack = MUT === "sheet-gap" ? -1 : 3;
+    expect("the composer is as far from the bottom as from the side", Math.abs(gap - attach.frame.x) <= slack, `${Math.round(gap)} pt above the bottom, ${Math.round(attach.frame.x)} pt from the side`);
+  });
+
+  // sim-check dock-stack: tickets join the dock as cards (the newest at the bottom), a card over the sheet leaves the composer clear above it,
+  // switching cards keeps the dock mounted, and a picker the ticket screen opens hides the dock until Done.
+  await w.screen("dock stack", async (expect) => {
+    await closeAllSheets();
+    const kid = (await d.api<TicketDetail>("GET", `/tickets/${world.conductor.key}`)).children[0]!;
+    const [b, c] = [await dockable(1), await dockable(2)];
+    const dockTopOf = (els: AXElement[]) => Math.min(...[...dockCards(els), ...els.filter((e) => e.id === "ticket-dock-more")].map((e) => e.frame!.y));
+    /** The bottom bar sits 11 pt (DockMetrics.barGap) above the topmost card; it glides to its place, so it has to settle there. */
+    const barGap = async (dockTop?: number) => {
+      let gap = NaN;
+      for (const end = Date.now() + 3000; ; ) {
+        const els = await axe.nodes();
+        const bar = find(els, (l) => l === "New session");
+        gap = bar?.frame ? (dockTop ?? dockTopOf(els)) - (bar.frame.y + bar.frame.height) : NaN;
+        if (Math.abs(gap - 11) <= 3 || Date.now() > end) return gap;
+        await Bun.sleep(250);
+      }
+    };
+
+    await open(`harness://ticket/${enc(kid.key)}`);
+    await open("harness://board");
+    let els = await untilTree(() => axe.nodes(), (e) => dockCards(e).length === 1);
+    expect("one card in the dock", dockCards(els).length === 1, seen(els));
+    const one = await barGap();
+    expect("the bar rides 11 pt above a single card", Math.abs(one - (MUT === "bar-gap" ? 30 : 11)) <= 3, `${Math.round(one)} pt`);
+
+    await open(`harness://ticket/${enc(b.key)}`);
+    await open("harness://board");
+    els = await untilTree(() => axe.nodes(), (e) => dockCards(e).length === 2);
+    const cards = dockCards(els);
+    expect("the second ticket joins as a second card, the first on top", cards.length === 2 && cardOf(kid.key)(cards[0]!.label!), cards.map((x) => x.label).join(" | "));
+    if (cards.length !== 2) return;
+    expect("the newest card is the bottom one, with its ref and title", cards[1]!.label === `${b.key}, ${b.title}, docked` && cards[1]!.frame!.y > cards[0]!.frame!.y, `${cards[1]!.label}`);
+    expect("both cards are the same height", Math.abs(cards[0]!.frame!.height - cards[1]!.frame!.height) <= 1, `${cards[0]!.frame!.height} over ${cards[1]!.frame!.height}`);
+    expect("a docked sheet shows no grabber", !has(els, "Sheet Grabber"), seen(els));
+    const top = dockTopOf(els);
+    const two = await barGap(top);
+    expect("the bar rides 11 pt above the whole stack", Math.abs(two - 11) <= 3, `${Math.round(two)} pt`);
+    const projects = find(els, (l) => l === "Projects")?.frame, newSession = find(els, (l) => l === "New session")?.frame;
+    expect("the bar's buttons are on the board", !!projects && !!newSession, seen(els));
+    if (projects && newSession) {
+      const barLeft = projects.x, barRight = newSession.x + newSession.width;
+      // A card's frame stops short of its ✕, whose capsule ends 10 pt past it.
+      const closes = els.filter((e) => e.id === "ticket-dock-close" && !!e.frame);
+      for (const n of cards) {
+        const x = closes.find((e) => e.frame!.y >= n.frame!.y && e.frame!.y < n.frame!.y + n.frame!.height);
+        const right = x ? x.frame!.x + x.frame!.width + 10 : n.frame!.x + n.frame!.width;
+        expect(`${n.label!.split(",")[0]}'s card has the bar's left and right edges`, Math.abs(n.frame!.x - barLeft) <= 2 && Math.abs(right - barRight) <= 2, `card ${Math.round(n.frame!.x)}–${Math.round(right)}, bar ${Math.round(barLeft)}–${Math.round(barRight)}`);
+      }
+    }
+
+    // sim-check dock-stack OVER: a tap on a card opens it as the sheet, and the other card waits over it with the composer above.
+    await tapCenter(cardOf(kid.key)); // the cards share one identifier, so a tap by label's position
+    els = await untilTree(() => axe.nodes(), (e) => has(e, "Sheet Grabber") && !e.some((x) => cardOf(kid.key)(x.label ?? "")) && e.some((x) => cardOf(b.key)(x.label ?? "")) && has(e, "Attach"));
+    const waiting = find(els, cardOf(b.key));
+    const attach = find(els, (l) => l === "Attach");
+    expect("the opened ticket is the sheet, not a card, and the other ticket's card waits over it", has(els, "Sheet Grabber") && !els.some((x) => cardOf(kid.key)(x.label ?? "")) && !!waiting, seen(els));
+    if (waiting?.frame && attach?.frame) {
+      const gap = waiting.frame.y - (attach.frame.y + attach.frame.height);
+      const [lo, hi] = MUT === "over-gap" ? [30, 60] : [8, 24];
+      expect("the composer's attach button sits 8–24 pt above the card (the 11 pt gap plus its inset in the row)", gap >= lo && gap <= hi, `${Math.round(gap)} pt`);
+    }
+
+    // sim-check dock-stack STABLE: with two cards over the sheet, swapping one in changes only that card and mounts the dock once.
+    await open("harness://board");
+    await open(`harness://ticket/${enc(c.key)}`);
+    els = await untilTree(() => axe.nodes(), (e) => dockCards(e).length === 2 && has(e, "Sheet Grabber"));
+    const [upper, lower] = dockCards(els).sort((x, y) => x.frame!.y - y.frame!.y);
+    expect("two tickets wait over the sheet", !!upper && !!lower, seen(els));
+    if (!upper || !lower) return;
+    await tapCenter((l) => l === lower.label);
+    els = await untilTree(() => axe.nodes(), (e) => has(e, "Sheet Grabber") && !e.some((x) => x.label === lower.label) && e.some((x) => x.label === upper.label) && dockCards(e).length === 2);
+    expect("the lower card's ticket is the sheet and the old sheet a card", has(els, "Sheet Grabber") && !els.some((x) => x.label === lower.label) && dockCards(els).length === 2, seen(els));
+    const after = els.find((x) => x.label === upper.label)?.frame;
+    expect("the card that didn't change stayed where it was", !!after && Math.abs(after.y - upper.frame!.y) <= (MUT === "stable" ? -1 : 1), `${Math.round(upper.frame!.y)} → ${after ? Math.round(after.y) : "(gone)"}`);
+    expect("the dock mounted once since launch", probe()?.dockMounts === (MUT === "mounts" ? 2 : 1), `dockMounts ${probe()?.dockMounts}`);
+
+    // sim-check dock-stack PICKER: a picker the ticket screen opens itself hides the dock, and Done gives it back.
+    const isModels = (l: string) => l.startsWith("Models, ");
+    els = await visit(`harness://ticket/${enc(b.key)}?tab=details`, (e) => has(e, /^Models, /) && dockCards(e).length === 2);
+    const n = dockTotal(els);
+    expect("cards wait over the open ticket", n >= 1, seen(els));
+    await tapWhere(isModels);
+    els = await untilTree(() => axe.nodes(), (e) => has(e, "Search models"), 6000);
+    els = await untilTree(() => axe.nodes(), (e) => dockTotal(e) === 0, 4000);
+    expect("the dock is hidden under the Models sheet", has(els, "Search models") && dockTotal(els) === (MUT === "picker" ? n : 0), `${dockTotal(els)} cards; ${seen(els)}`);
+    await tapLabel("Done");
+    els = await untilTree(() => axe.nodes(), (e) => !has(e, "Search models") && dockTotal(e) === n, 5000);
+    expect("the dock is back after Done", !has(els, "Search models") && dockTotal(els) === n, `${dockTotal(els)} cards, not ${n}`);
+  });
+
+  // sim-check dock-stack, drafts: a ticket docked with its draft typed reopens from its card with its draft. The old check also scrolled the
+  // spec first and asserted it reopened at that offset; a scroll needs a swipe (the hardware keyboard's Page Down, Space and arrows don't
+  // reach a SwiftUI scroll view), so that half stays with HarnessKit's ScrollRestore tests.
+  await w.screen("docked ticket restores", async (expect) => {
+    await closeAllSheets();
+    const t = await d.api<Ticket>("POST", "/tickets", { projectId: seeded.project.id, spec: "Dock me with a draft typed", driver: "dummy", start: false });
+    const composer = (l: string) => l.startsWith("Message the agent");
+    await visit(`harness://ticket/${enc(t.key)}?tab=spec`, composerUp);
+    if (MUT !== "no-draft") await typeInto(composer, "kept");
+    await open("harness://board"); // docks it: the sheet is dismissed and its view torn down
+    let els = await untilTree(() => axe.nodes(), (e) => dockCards(e).length === 1 && !has(e, /^Message the agent/));
+    expect("docked, the sheet is gone and its composer with it", dockCards(els).length === 1 && !has(els, /^Message the agent/), seen(els));
+    await tapCenter(isDock);
+    els = await untilTree(() => axe.nodes(), composerUp);
+    await Bun.sleep(1000); // the sheet's own state settles
+    els = await axe.nodes();
+    const field = find(els, composer);
+    expect("the reopened composer holds the draft", (field?.value ?? "").toLowerCase().includes("kept"), `reads ${JSON.stringify(field?.value)}`);
+  });
+
+  // sim-check file-dock RELINK: linking other lines of the file in the dock scrolls its open editor there, on the same card.
+  await w.screen("file relink", async (expect) => {
+    await closeAllSheets();
+    const link = `harness://file/${GREETINGS_PATH}?ticket=${world.fileLink.key}`;
+    const lines = greetingsLines(false);
+    const marks = (text: string) => (s: DebugState) => s.editor?.markedLines.length === 1 && s.editor.markedLines[0]!.includes(text);
+    await open(`harness://ticket/${enc(world.fileLink.key)}?tab=spec`);
+    await open(link);
+    await untilProbe((x) => !!x.editor && !x.busy.includes("editor"), 15000);
+    await open(`${link}#L3`);
+    const three = await untilProbe(marks(lines[2]!.trim()), 8000);
+    expect("#L3 marks line three in the open editor", !!three && marks(lines[2]!.trim())(three), `marked ${JSON.stringify(three?.editor?.markedLines)}`);
+    await open(`${link}#L4-L4`);
+    const four = await untilProbe(marks(lines[MUT === "relink" ? 2 : 3]!.trim()), 8000);
+    expect("the next link's #L4-L4 marks line four", !!four && marks(lines[3]!.trim())(four), `marked ${JSON.stringify(four?.editor?.markedLines)}`);
+    await open("harness://board");
+    const els = await untilTree(() => axe.nodes(), (e) => dockTotal(e) >= 2);
+    expect("relinking left one card for the file and one for its ticket", dockTotal(els) === 2, `${dockTotal(els)} docked; ${seen(els)}`);
+  });
+
+  // sim-check keyboard: New session's prompt row is tall before anything is typed, and a tap at its bottom focuses it.
+  await w.screen("new session prompt focus", async (expect) => {
+    await closeAllSheets();
+    const draft = await d.api<Ticket>("POST", "/tickets", { projectId: seeded.project.id, spec: "One line", draft: true, skipAgentReview: true });
+    const field = (e: AXElement[]) => e.find((x) => x.label === "Spec" && !!x.frame);
+    await visit(`harness://new?key=${enc(draft.key)}`, (e) => !!field(e));
+    const start = await settled(field, "the prompt field");
+    expect("a reopened draft doesn't autofocus: no field holds the focus", !probe()?.focus, `focus ${probe()?.focus}`);
+    // AXe reports the text view's own frame: a short one means the height is padding around it, which a tap doesn't reach.
+    expect("the text view fills its row, tall with one line in it", start.frame!.height >= (MUT === "focus-tall" ? 10000 : 120), `${Math.round(start.frame!.height)} pt`);
+    const y = start.frame!.y + start.frame!.height - (MUT === "focus-tap" ? 10 + start.frame!.height + 40 : 10);
+    await axe.tapAt(start.frame!.x + start.frame!.width / 2, y);
+    const s = await untilProbe((x) => !!x.focus, 5000);
+    expect("a tap 10 pt above the field's bottom focuses it", !!s?.focus, `a tap at y=${Math.round(y)} (the field's top is ${Math.round(start.frame!.y)}) left no field focused`);
+    await closeAllSheets();
+  });
+
+  // sim-check stick: a ticket's Transcript and Activity open scrolled to the bottom and follow new content while they are there.
+  await w.screen("transcript and activity stick", async (expect) => {
+    await closeAllSheets();
+    const LOREM = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore. ";
+    const stickText = (n: number, repeat = 3) => `Stick ${n}: ${LOREM.repeat(repeat)}`;
+    const REVIEWED = "The dummy reviewer approves.";
+    const stick = await d.api<Ticket>("POST", "/tickets", { projectId: seeded.project.id, spec: stickText(0, 14), driver: "dummy", start: true });
+    const key = stick.key;
+    const settleTicket = (pred: (t: Ticket) => boolean) => until(`${key} settles`, async () => ((t) => (pred(t) ? t : null))(await ticketOf(key)), 60000, 100);
+    const reviewed = (t: Ticket) => t.status === "review" && !t.busy && reviewPassed(t.agentReview);
+    const activityOf = () => d.api<ActivityEntry[]>("GET", `/tickets/${enc(key)}/activity`);
+    /** Message `n`: a plain one ends with its chat run, an `activity` one has the dummy resubmit the work, which Activity shows. */
+    const say = async (n: number, activity: boolean) => {
+      const approvals = async () => (await activityOf()).filter((e) => e.kind === "review_approved").length;
+      const was = activity ? await approvals() : 0;
+      await d.api("POST", `/tickets/${key}/messages`, { text: activity ? `${stickText(n)} [dummy:resume] [dummy:submit]` : stickText(n) });
+      if (activity) {
+        await until(`${key} re-reviewed after message ${n}`, async () => ((await approvals()) > was ? true : null), 60000, 100);
+        return settleTicket(reviewed);
+      }
+      const sessionId = (await ticketOf(key)).sessionId;
+      await until(`${key} replies to message ${n}`, async () => ((await d.api<TranscriptEntry[]>("GET", `/sessions/${sessionId}/transcript`)).some((e) => "text" in e.content && e.content.text.includes(`You said: "Stick ${n}:`)) ? true : null), 60000, 100);
+      return settleTicket((t) => !t.busy);
+    };
+    await settleTicket(reviewed);
+    for (let n = 1; n <= 3; n++) await say(n, true);
+
+    /** At the bottom: the lowest row below the tab strip is the list's last and ends just above the composer. */
+    const atBottom = (els: AXElement[], last: (l: string) => boolean) => {
+      const tab = els.find((e) => e.label === "Transcript" || e.label?.startsWith("Activity"));
+      const composer = els.filter((e) => !!e.frame && (e.label?.startsWith("Message the agent") || e.label === "Send" || e.label === "Attach"));
+      const top = tab?.frame ? tab.frame.y + tab.frame.height : 100;
+      const bottom = composer.length ? Math.min(...composer.map((e) => e.frame!.y)) : screenHeight(els) - 60;
+      const rows = els.filter((e) => e.label && !composer.includes(e) && e.frame && e.frame.y >= top);
+      const lowest = rows.reduce<AXElement | null>((a, e) => (!a || e.frame!.y + e.frame!.height > a.frame!.y + a.frame!.height ? e : a), null);
+      const end = lowest ? lowest.frame!.y + lowest.frame!.height : 0;
+      // The premise flipped for the mutation check: a list that is not at the bottom.
+      const near = MUT === "stick" ? end <= bottom - 200 : end <= bottom + 2 && end >= bottom - 70;
+      return !!lowest && last(lowest.label!) && near ? `last row "${lowest.label!.slice(0, 32)}" ends at ${Math.round(end)}, composer at ${Math.round(bottom)}` : null;
+    };
+    const tabs: [string, (l: string) => boolean, (l: string) => boolean][] = [
+      ["transcript", (l) => l.startsWith("Run finished ("), (l) => l.startsWith("Run finished (chat)")],
+      ["activity", (l) => l.includes(REVIEWED), (l) => l.includes(REVIEWED)],
+    ];
+    let n = 3;
+    for (const [tab, opening, last] of tabs) {
+      let els = await visit(`harness://ticket/${enc(key)}?tab=${tab}`);
+      els = await untilTree(() => axe.nodes(), (e) => !!atBottom(e, opening), 10000);
+      expect(`${tab} opens at the bottom`, !!atBottom(els, opening), seen(els));
+      const activity = tab === "activity";
+      const count = els.filter((e) => e.label && last(e.label)).length;
+      await say(++n, activity);
+      // New content has landed once its row is drawn: the message's own row in the transcript, one more approval in Activity.
+      const landed = (e: AXElement[]) => (activity ? e.filter((x) => x.label && last(x.label)).length > count : e.some((x) => x.label?.includes(`Stick ${n}:`)));
+      els = await untilTree(() => axe.nodes(), (e) => landed(e) && !!atBottom(e, last), 15000);
+      expect(`${tab} follows new content while at the bottom`, landed(els) && !!atBottom(els, last), seen(els));
+    }
   });
 
   // The one tap: the board's palette field opens the palette sheet.
