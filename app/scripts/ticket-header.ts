@@ -1,6 +1,6 @@
 // The ticket pane's header against the REAL service (dummy driver, throwaway HARNESS_HOME): the
-// title in the title bar (and truncated when the pane is narrow), no More menu up there, the key,
-// status pill and model in the hero, and the hero's […] menu: Move to done, Cancel run while a run
+// title in the title bar (and truncated when the pane is narrow), no More menu up there, the project
+// key, ticket key, gauge and review marks in the hero with the branch → base line under them, and the hero's […] menu: Move to done, Cancel run while a run
 // is busy, and Delete ticket. A screenshot of each state.
 //
 //   bun run build && bun scripts/ticket-header.ts [screenshotDir] [--theme=dark]
@@ -17,6 +17,10 @@ mkdirSync(shots, { recursive: true });
 
 const home = tempDir("harness-header-home-");
 const projectDir = tempDir("harness-header-project-");
+// A git repo, so a started ticket gets a worktree and a branch for the git line.
+for (const args of [["init", "-q", "-b", "main"], ["commit", "-q", "--allow-empty", "-m", "init"]]) {
+  Bun.spawnSync(["git", ...args], { cwd: projectDir, env: { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" } });
+}
 const daemon = await startDaemon({ home, delayMs: 500, logs: "inherit" });
 const { port, base } = daemon;
 
@@ -54,13 +58,14 @@ try {
   await idle(t1.key);
   await go(`#/board/${project.id}/ticket/${t1.key}`);
   await until("the hero", () => exists(".detail-hero"), 10000);
-  const bar = await js<{ title: string; barText: string; more: boolean; metaFirst: string; hero: { project: boolean; status: boolean; conductor: boolean }; dot: { before: boolean; label: string; status: string } }>(`(() => {
+  const bar = await js<{ title: string; barText: string; more: boolean; metaFirst: string; metaSecond: string; hero: { project: boolean; status: boolean; conductor: boolean }; dot: { before: boolean; label: string; status: string } }>(`(() => {
     const bar = document.querySelector(".pane-ticket .detail-titlebar, .detail .detail-titlebar");
     return {
       title: bar.querySelector(".detail-title")?.textContent ?? "",
       barText: bar.textContent,
       more: !!bar.querySelector("button[title=More]"),
-      metaFirst: document.querySelector(".detail-meta").firstElementChild?.getAttribute("data-testid") ?? "",
+      metaFirst: document.querySelector(".detail-meta").firstElementChild?.className ?? "",
+      metaSecond: document.querySelector(".detail-meta").children[1]?.getAttribute("data-testid") ?? "",
       hero: {
         project: !!document.querySelector(".detail-hero .project-key"),
         status: !!document.querySelector(".detail-hero .status-pill"),
@@ -80,8 +85,8 @@ try {
   check("the title bar shows the ticket's title", bar.title === LONG, bar.title);
   check("the title bar has no key, status or More menu", !bar.barText.includes(t1.key) && !bar.more, bar.barText);
   check("the hero has no large title", !(await exists("h1.detail-title")));
-  check("the meta row starts with the key", bar.metaFirst === "detail-key", bar.metaFirst);
-  check("the hero has no project, status or Conductor pill", !bar.hero.project && !bar.hero.status && !bar.hero.conductor, JSON.stringify(bar.hero));
+  check("the meta row starts with the project key, then the ticket key", bar.metaFirst.includes("project-key") && bar.metaSecond === "detail-key", `${bar.metaFirst} ${bar.metaSecond}`);
+  check("the hero has a project key but no status or Conductor pill", bar.hero.project && !bar.hero.status && !bar.hero.conductor, JSON.stringify(bar.hero));
   check("a status dot leads the title, labelled with the status", bar.dot.before && bar.dot.label.length > 0 && bar.dot.status === "planning", JSON.stringify(bar.dot));
   const idleItems = await moreItems();
   check("an idle planning ticket's More menu: Move to done, Delete ticket", idleItems.join("|") === "Move to done|Delete ticket", idleItems.join("|"));
@@ -123,6 +128,21 @@ try {
   check("in review the More menu is Re-run agent review, then Delete ticket", /^(Re-run|Run) agent review\|Delete ticket$/.test(reviewItems.join("|")), reviewItems.join("|"));
   check("…and the action row has no separate rerun button", await js<boolean>(`![...document.querySelectorAll(".actions > button")].some(b => /agent review/i.test(b.textContent))`));
   check("…and it's the last thing in the action row", await js<boolean>(`!!document.querySelector(".actions")?.lastElementChild?.querySelector("[data-testid=ticket-more]")`));
+  const layout = await js<{ git: string; gitBelowMeta: boolean; marksLast: boolean; gaugeBorder: string }>(`(() => {
+    const meta = document.querySelector(".detail-meta");
+    const git = document.querySelector("[data-testid=detail-git]");
+    const marks = [...meta.querySelectorAll("[data-review]")];
+    const gauge = meta.querySelector(".context-gauge");
+    return {
+      git: git ? git.textContent : "",
+      gitBelowMeta: !!git && !!(meta.compareDocumentPosition(git) & Node.DOCUMENT_POSITION_FOLLOWING),
+      marksLast: marks.length === 2 && marks[1].getBoundingClientRect().right >= meta.getBoundingClientRect().right - 1,
+      gaugeBorder: gauge ? getComputedStyle(gauge).borderTopColor : "none",
+    };
+  })()`);
+  check("the git line (branch → base) sits on its own line below the meta row", layout.gitBelowMeta && /harness\/.+→main/.test(layout.git), JSON.stringify(layout));
+  check("the review marks are right-aligned in the meta row", layout.marksLast, JSON.stringify(layout));
+  check("the context gauge has no border", layout.gaugeBorder === "none" || layout.gaugeBorder === "rgba(0, 0, 0, 0)", layout.gaugeBorder);
   await shot("more-review");
   await closeMenu();
 

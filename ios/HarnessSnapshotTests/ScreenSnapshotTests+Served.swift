@@ -131,11 +131,22 @@ extension ScreenSnapshotTests {
         }
     }
 
-    /// The expanded header's meta row: the key, then the gauge at the end; no status, project or Conductor pill.
+    /// The expanded header's meta row: the project key, the ticket key, then the gauge; no status or Conductor pill.
     func testTicketHeroEndsInTheGauge() async throws {
         world.add(Self.gaugeTickets.map(\.1))
         world.store.dispatch(.drivers([Self.claude, Self.copilot]))
         try await snapshot("ticket-hero-gauge", router: openTicket("HAR-20", .spec)) { RootView() }
+    }
+
+    /// The git line is its own row under the meta row: "branch → base", with no icon or border; the review marks
+    /// sit at the meta row's trailing edge.
+    func testTicketHeroGitLine() async throws {
+        var ticket = Self.extra(26, "Git line", status: .review, context: Self.usage(4_000, cacheRead: 70_000, cacheWrite: 8_000))
+        ticket.branch = "harness/har-26"
+        ticket.agentReview = .approved
+        world.add([ticket])
+        world.store.dispatch(.drivers([Self.claude, Self.copilot]))
+        try await snapshot("ticket-hero-git", router: openTicket("HAR-26", .spec)) { RootView() }
     }
 
     /// A conductor's hero has no Conductor pill.
