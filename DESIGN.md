@@ -1996,6 +1996,44 @@ target in its own headless window (so every tab paints and can screencast). Numb
 - **Compatibility.** `tabId`/`tabs` are optional on the wire: older services omit them and the
   apps then show no strip; older apps omit `tabId` and keep seeing the lowest open tab.
 
+### Browser HTTP Basic Auth
+
+A page behind HTTP Basic Auth shows viewers a sign-in sheet; an agent is told the page needs a human.
+
+- **Detect, then intercept.** Chrome's `Fetch` domain pauses every request of a tab, blocks
+  `Page.navigate` past the 30 s command timeout while a person types, and only reports
+  `authRequired` for patterns that match everything, so it is not on up front. A 401 with a
+  `WWW-Authenticate: Basic` header is noticed passively on `Network.responseReceived`
+  (`noteResponse`) and becomes the tab's `auth { origin, realm, failed? }`, part of `BrowserState`
+  and `BrowserTab`, so late subscribers and reconnects sync through the ordinary state diff (there
+  is no one-shot event). `origin` is the request's, never the page-controlled realm.
+- **Headless specifics.** Chrome fails the unanswered main-frame navigation with
+  `ERR_INVALID_AUTH_CREDENTIALS` after reporting the 401 (`challenged` keeps that from being a
+  failed `browser_open`), and reports no response at all for a challenged *subresource*, which just
+  hangs. So a subresource prompts only once interception is on.
+- **Answer.** The `auth { username, password }` / `authCancel` input stores the credentials in memory
+  on the session (`Entry.credentials`, per origin + realm), turns on `Fetch.enable { patterns: ["*"],
+  handleAuthRequests }` for that tab only (every paused request is continued, errors swallowed),
+  answers `Fetch.authRequired` with `ProvideCredentials` and loads the page again (its document URL
+  when the error page stopped it, else a reload). A second challenge for the same request means the
+  credentials were refused: they are evicted, the challenge is `CancelAuth`ed and `auth.failed`
+  set, so they are never retried. A tab's other challenges for the same origin + realm share one
+  prompt; the first viewer to answer clears it for all. Proxy (407) and non-Basic challenges get
+  `Default`.
+- **Credentials stay out.** Never persisted (`StoredBrowserTab`, `browser_tabs` table), logged,
+  put in tool results, or broadcast. A password typed into a URL (`https://user:pw@host/`) still
+  works and is stripped (`stripUserinfo`) from every state, tab list, stored tab and request URL.
+  They reach the service over the app WebSocket, which is TLS only through a tunnel: on the plain
+  LAN link they cross in the clear, as the rest of the session does. The sheet also warns on
+  `http:` origins, where Basic itself sends the password unencrypted.
+- **Agents.** `browser_open` and `browser_tabs` say the page needs Basic Auth and that the human can
+  enter credentials (use `wait_for`, or `block`). There is no password argument: it would sit in the
+  model transcript.
+- **Limits.** Chrome keeps its own profile-wide auth cache, so after one answer the whole origin is
+  signed in for every session sharing this Chrome. Interception stays on for the rest of a page's
+  life. Cross-process iframes and workers aren't intercepted. Headed Chrome may show its own dialog
+  first. A challenged POST is re-sent as a GET of its document when answered.
+
 ### Browser extensions
 
 Every session's tabs share the service Chrome's extensions (HARNESS-285; `browser/extensions.ts`,

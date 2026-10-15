@@ -256,6 +256,49 @@ try {
   })()`);
   check("with the strip overflowing, + stays visible at its end, outside the scrolling chips", strip.overflow && strip.plusIn && strip.plusOutsideScroller, JSON.stringify(strip));
   await shot("13-strip-overflow");
+
+  // 13. HTTP Basic Auth: a challenged page opens a sheet (origin, quoted realm, plain-http warning);
+  //     wrong credentials say so and ask again; right ones load the page and close the sheet.
+  const logins: string[] = [];
+  const secret = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch(req) {
+      const given = req.headers.get("authorization") ?? "";
+      logins.push(given);
+      if (given !== `Basic ${btoa("alice:s3cret")}`) return new Response("Unauthorized", { status: 401, headers: { "www-authenticate": 'Basic realm="Staging"' } });
+      return new Response("<!doctype html><title>Secret</title><h1>Welcome in</h1>", { headers: { "content-type": "text/html" } });
+    },
+  });
+  try {
+    const origin = `http://127.0.0.1:${secret.port}`;
+    const sheet = (sel: string) => `document.querySelector("[data-testid=browser-auth] ${sel}")`;
+    await a.type(".browser-url-input", origin);
+    await a.key("Enter", "Enter", 13);
+    await until("the sign-in sheet", () => a.exists("[data-testid=browser-auth]"), 10000);
+    check("the sheet names the origin and quotes the realm", (await js<string>(`document.querySelector("[data-testid=browser-auth]").textContent`)).includes(origin) && (await js<string>(sheet(".dim") + ".textContent")) === "“Staging”");
+    check("an http: origin warns that the password is sent in the clear", await a.exists("[data-testid=browser-auth-plain]"));
+    check("the first ask shows no refusal", !(await a.exists("[data-testid=browser-auth-failed]")));
+    check("the tab's chip is flagged", (await js<number>(`document.querySelectorAll(".browser-tab-auth").length`)) === 1);
+    await shot("14-auth-sheet");
+    n = inputs.length;
+    await a.type("#browser-auth-user", "alice");
+    await a.type("#browser-auth-pass", "wrong");
+    await click("[data-testid=browser-auth] button[type=submit]");
+    await until("the refusal", () => a.exists("[data-testid=browser-auth-failed]"), 10000);
+    check("a refused password says so and asks again", (await js<string>(`document.querySelector("#browser-auth-pass").value`)) === "", "the password field starts empty");
+    check("the app sent the auth input", since(n, "auth").length === 1 && since(n, "auth")[0]?.username === "alice");
+    await shot("15-auth-refused");
+    await a.type("#browser-auth-user", "alice");
+    await a.type("#browser-auth-pass", "s3cret");
+    await click("[data-testid=browser-auth] button[type=submit]");
+    await until("the sheet to close", async () => !(await a.exists("[data-testid=browser-auth]")), 10000);
+    await until("the page to load", async () => logins.includes(`Basic ${btoa("alice:s3cret")}`), 10000);
+    check("the right password loads the page and clears the chip flag", (await js<number>(`document.querySelectorAll(".browser-tab-auth").length`)) === 0);
+    check("the wrong password was sent once, never again", logins.filter((l) => l === `Basic ${btoa("alice:wrong")}`).length === 1, JSON.stringify(logins));
+  } finally {
+    void secret.stop(true);
+  }
 } catch (e) {
   c.fail();
   console.error("✗", (e as Error).stack ?? (e as Error).message);
