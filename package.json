@@ -10,6 +10,7 @@
     "test:next": "bun next/run.ts",
     "walk:mac": "bun run --cwd app build && bun next/walkthrough/mac.ts",
     "walk:ios": "bun run sim with-lock -- bun next/walkthrough/ios.ts",
+    "walk:ipad": "bun run sim with-lock --ipad -- bun next/walkthrough/ios.ts --ipad",
     "report": "bun scripts/report.ts",
     "typecheck": "bun scripts/typecheck.ts",
     "verify": "bun scripts/verify.ts",

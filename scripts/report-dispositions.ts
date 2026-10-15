@@ -92,14 +92,15 @@ export const DROPPED: Dropped[] = [
 
 // The blockers behind the accepted losses. Each names what the walkthrough (deep links, rest-gated accessibility
 // reads, a few taps) can't do, so the human signs off on a real reason.
-const IPAD = "iPad-only layout: the walkthrough has no iPad pass, so the side panel, the corner cards and the split columns have no screen to assert them";
+const IPAD =
+  "dropped (human decision): the iPad's corner cards, panel resize and docking, and New session in the panel are not driven on a simulator; the rules are HarnessKit's (DockMetricsTests, DockCardsTests, TicketPanelWidthTests, RouterSheetTests). The iPad pass asserts the board columns, the sidebar and the side panel";
 const GESTURE =
-  "UIKit gesture arbitration (sheet detents, drag-to-dock, swipe-to-dismiss, scroll following, the pager's sideways swipe): needs real swipes and flicks with velocity, and axe.swipe has no --delta";
+  "dropped (human decision): the sheet's drag, flick, back-swipe and scroll gestures (UIKit gesture arbitration, needing velocity that axe.swipe has no --delta for) are not driven on a simulator; the rules they reach are HarnessKit's (DockArmingTests, RouterSheetTests, StickToBottomTests, RunSectionsTests)";
 const DOCK_DRAG =
-  "needs a ticket docked by the real hold-and-release drag (AXe can't pause mid-drag, and axe.swipe has no --delta for a flick), which the walkthrough's taps and deep links don't do";
-const ANIMATION = "pixel or video evidence of an animation: frames recorded across the transition, which a rest-gated accessibility read can't see";
+  "dropped (human decision): a swipe-away of the presented sheet needs a flick AXe can't send with velocity; the rule is HarnessKit's (RouterSheetTests.aSystemDismissalClosesTheTicketAndDocksOnlyOnTheArmedRelease)";
+const ANIMATION = "dropped (human decision): pixel or video evidence of an animation (frames recorded across the transition) is not carried";
 const KEYBOARD =
-  "software-keyboard geometry: axe typing flips iOS to hardware-keyboard mode, which hides the keyboard from the accessibility tree, so where the keyboard sits can't be read";
+  "dropped (human decision): the prompt editor's cursor-follow above the keyboard and the pixel check of the screen edge behind the keyboard's corners are not carried; the walkthrough's keyboard screen asserts the composer's and New session's geometry";
 const SCENE = "real UIScene creation: a window of its own (the pop-out) is made by the system, not by anything a screen shows";
 const MEMORY = "process memory footprint, measured on the running app rather than shown by a screen (accepted: the human said fine)";
 const RELAUNCH = "a real quit-and-relaunch of the app: the walkthrough is one launch with no relaunch pass; what is saved across a launch is pinned in HarnessKit where it is logic";
@@ -158,6 +159,11 @@ export const HARNESSKIT: { name: RegExp; tests: string[] }[] = [
     tests: ["PanelReleaseTests.shortFlicksSpringBackWhateverTheMomentum", "PanelReleaseTests.aLongSlowDragShortOfHalfwaySpringsBack", "PanelReleaseTests.fortyPointsWithAProjectionPastHalfCloses"],
   },
   { name: /^a card's ✕ closes just its ticket without opening it$/, tests: ["RouterSheetTests.closingADockedCardLeavesTheOtherCardsAndOpensNoPanel"] },
+  // The check asserts only the bar-to-dock gap and never looks at a keyboard.
+  {
+    name: /^the bar keeps its place above the dock after the palette's keyboard comes and goes$/,
+    tests: ["DockMetricsTests.theComposerSitsABarGapAboveTheDockOnlyWithCardsAndNoKeyboard", "DockCardsTests.theDockHidesUnderAnythingOverTheTicket"],
+  },
   {
     name: /^a ticket docked with the keyboard up reopens from its card at its scroll position with its draft$/,
     tests: [
@@ -220,6 +226,11 @@ const SIM_WALKTHROUGH: { name: RegExp; screen: string }[] = [
   { name: /^a picker the ticket screen opens itself \(not the Router\) hides the dock over the sheet and gives it back on Done$/, screen: "dock stack" },
   { name: /^linking other lines of the docked file scrolls its editor there$/, screen: "file relink" },
   { name: /^a tap at the bottom of New session's prompt row focuses it$/, screen: "new session prompt focus" },
+  { name: /^dragging the sheet to the bottom docks it under the board, titled by the ticket on top$/, screen: "sheet dock drag" },
+  { name: /^a sideways swipe changes tab and back$/, screen: "transcript and activity stick" },
+  { name: /^ticket composer sits on top of the keyboard$/, screen: "keyboard geometry" },
+  { name: /^New session's prompt grows with every line typed$/, screen: "keyboard geometry" },
+  { name: /^a board card opens its ticket in the side panel against the trailing edge$/, screen: "ipad side panel" },
 ];
 
 export function dispositionOf(row: Row): Disposition {

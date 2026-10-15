@@ -27,11 +27,18 @@ const seeded = await seed(d, WORLD_FILES);
 const world = await seedWorld(d, seeded);
 const usageProxy = startUsageProxy(d); // the app pairs through it: it answers GET /usage and forwards the rest
 console.log(`built and seeded in ${Math.round(performance.now() - started)} ms`);
-const slot = await acquireReady({ onWait: () => console.log("waiting for a shared simulator…") }, {});
+// `--ipad` runs only the iPad's own layouts, on the shared iPad `with-lock --ipad` holds and names in SIM_UDID; every screen the
+// two share is the iPhone pass's to check, not repeated here.
+const ipad = process.argv.includes("--ipad");
+const IPAD_SCREENS = new Set(["ipad board and sidebar", "ipad side panel"]);
+if (ipad && !process.env.SIM_UDID) throw new Error("--ipad runs under the iPad's lock: bun run walk:ipad");
+const slot = ipad ? { udid: process.env.SIM_UDID!, release: () => {} } : await acquireReady({ onWait: () => console.log("waiting for a shared simulator…") }, {});
 // A screenshot of what a failing screen saw, when WALK_SHOTS names a directory.
-const w = walk("iPhone walkthrough", (name) => {
+const w = walk(ipad ? "iPad walkthrough" : "iPhone walkthrough", (name) => {
   if (process.env.WALK_SHOTS) Bun.spawnSync(["xcrun", "simctl", "io", slot.udid, "screenshot", join(process.env.WALK_SHOTS, `${name.replace(/\W+/g, "-")}.png`)], { env: process.env });
 });
+const screenOf = w.screen;
+Object.assign(w, { screen: ((name, fn) => (IPAD_SCREENS.has(name) === ipad ? screenOf(name, fn) : Promise.resolve(undefined))) as typeof w.screen });
 try {
   const rawAxe = axeFor(slot.udid, process.env.DEVELOPER_DIR!, { strict: true });
   // One tree read serves every look at the screen until something acts on it: a read taken while the app was at rest is kept
@@ -752,6 +759,32 @@ try {
     expect("the composer is as far from the bottom as from the side", Math.abs(gap - attach.frame.x) <= 3, `${Math.round(gap)} pt above the bottom, ${Math.round(attach.frame.x)} pt from the side`);
   });
 
+  // sim-check sheets: a slow drag of the sheet to the bottom holds a ghost card, and the release docks it under the board, inset like the bar.
+  await w.screen("sheet dock drag", async (expect) => {
+    await closeAllSheets();
+    const kid = (await d.api<TicketDetail>("GET", `/tickets/${world.conductor.key}`)).children[0]!;
+    let els = await visit(`harness://ticket/${enc(kid.key)}`, (e) => has(e, "Sheet Grabber"));
+    const W = els[0]!.frame!.width, H = screenHeight(els);
+    const drag = axe.swipe(Math.round(W / 2), 90, Math.round(W / 2), Math.round(H - 110), 3);
+    await Bun.sleep(2600);
+    let ghost = false;
+    for (const end = Date.now() + 1500; !ghost && Date.now() < end; ) ghost = (await axe.nodes()).some((e) => e.label?.startsWith("Dock card"));
+    expect("holding the sheet low shows the ghost dock card", ghost);
+    await drag;
+    els = await untilTree(() => axe.nodes(), (e) => dockCards(e).length === 1 && has(e, /^Planning, \d+$/), 6000);
+    const card = dockCards(els)[0];
+    expect("the dock is titled by the ticket on top", card?.label === `${kid.key}, ${kid.title}, docked`, `${card?.label}`);
+    expect("the board shows over the dock", has(els, /^Planning, \d+$/), seen(els));
+    const close = els.find((e) => e.id === "ticket-dock-close" && !!e.frame);
+    const projects = find(els, (l) => l === "Projects")?.frame, newSession = find(els, (l) => l === "New session")?.frame;
+    if (!card?.frame || !close?.frame || !projects || !newSession) return expect("the dock and the bar's buttons are on screen", false, seen(els));
+    // The card's frame stops short of its ✕, whose capsule ends 10 pt past it.
+    const barLeft = card.frame.x, barRight = close.frame.x + close.frame.width + 10;
+    expect("New session sits above the dock, not under it", newSession.y + newSession.height <= card.frame.y, `bottom ${Math.round(newSession.y + newSession.height)}, dock top ${Math.round(card.frame.y)}`);
+    expect("the dock is inset like the bar: Projects at its left end, New session at its right", Math.abs(barLeft - projects.x) <= 2 && Math.abs(barRight - (newSession.x + newSession.width)) <= 2, `dock ${Math.round(barLeft)}–${Math.round(barRight)}, bar ${Math.round(projects.x)}–${Math.round(newSession.x + newSession.width)}`);
+    await closeAllSheets();
+  });
+
   // sim-check dock-stack: tickets join the dock as cards (the newest at the bottom), a card over the sheet leaves the composer clear above it,
   // switching cards keeps the dock mounted, and a picker the ticket screen opens hides the dock until Done.
   await w.screen("dock stack", async (expect) => {
@@ -956,6 +989,104 @@ try {
       els = await untilTree(() => axe.nodes(), (e) => landed(e) && !!atBottom(e, last), 15000);
       expect(`${tab} follows new content while at the bottom`, landed(els) && !!atBottom(els, last), seen(els));
     }
+
+    // sim-check stick: the tab bodies sit side by side in a pager, and a sideways swipe moves to the neighbour and back.
+    const specRow = (l: string) => l.startsWith("Stick 0:");
+    const activityRow = (l: string) => l.includes(REVIEWED);
+    let els = await visit(`harness://ticket/${enc(key)}?tab=spec`, (e) => e.some((x) => !!x.label && specRow(x.label)));
+    const W = els[0]!.frame!.width, H = screenHeight(els);
+    /** A page is shown when a row of it sits below the tab strip and inside the width: its neighbours are laid out beside it. */
+    const shows = (e: AXElement[], match: (l: string) => boolean) => {
+      const strip = e.find((x) => x.label === "Transcript")?.frame;
+      const top = strip ? strip.y + strip.height : 0;
+      return e.some((x) => !!x.label && match(x.label) && !!x.frame && x.frame.y >= top && x.frame.x >= 0 && x.frame.x < W - 20);
+    };
+    const sideways = (from: number, to: number) => axe.swipe(Math.round(W * from), Math.round(H * 0.7), Math.round(W * to), Math.round(H * 0.7), 0.3);
+    els = await untilTree(() => axe.nodes(), (e) => shows(e, specRow), 5000);
+    expect("the Spec page is shown first", shows(els, specRow), seen(els));
+    await sideways(0.85, 0.1);
+    els = await untilTree(() => axe.nodes(), (e) => shows(e, activityRow) && !shows(e, specRow), 5000);
+    expect("a swipe left moves from Spec to Activity", shows(els, activityRow) && !shows(els, specRow), seen(els));
+    await sideways(0.15, 0.9);
+    els = await untilTree(() => axe.nodes(), (e) => shows(e, specRow) && !shows(e, activityRow), 5000);
+    expect("a swipe right moves back to Spec", shows(els, specRow) && !shows(els, activityRow), seen(els));
+  });
+
+  // sim-check keyboard: the composer and New session's prompt sit on top of the software keyboard, which is read from its keys (the
+  // keyboard is in the tree only while it's up as a software keyboard, so the pref that minimizes it with a hardware keyboard is off).
+  await w.screen("keyboard geometry", async (expect) => {
+    await closeAllSheets();
+    const KEYBOARD_PREFS = "com.apple.keyboard.preferences";
+    const defaults = (...a: string[]) => Bun.spawnSync(["xcrun", "simctl", "spawn", slot.udid, "defaults", ...a], { env: process.env }).stdout.toString().trim();
+    const was = defaults("read", KEYBOARD_PREFS, "AutomaticMinimizationEnabled");
+    defaults("write", KEYBOARD_PREFS, "AutomaticMinimizationEnabled", "-bool", "NO");
+    try {
+      // The keyboard's top edge: its "q" key, or the predictive bar sitting right on it when there is one.
+      const keyboardTop = (els: AXElement[]) => {
+        if (els.filter((e) => /^[a-zA-Z]$/.test(e.label ?? "")).length < 10) return null;
+        const q = els.find((e) => (e.label === "q" || e.label === "Q") && !!e.frame)?.frame;
+        if (!q) return null;
+        const bar = els.filter((e) => !!e.frame && e.frame.y < q.y - 4 && e.frame.y > q.y - 70 && Math.abs(e.frame.y + e.frame.height - q.y) <= 12).map((e) => e.frame!.y);
+        return Math.min(q.y, ...bar) - 8;
+      };
+      const keyboardUp = async () => {
+        await untilKeyboard();
+        const els = await untilTree(() => axe.nodes(), (e) => keyboardTop(e) !== null, 8000);
+        const top = keyboardTop(els);
+        if (top === null) throw new Error(`the software keyboard isn't in the tree; ${seen(els)}`);
+        return top;
+      };
+      /** Types by tapping the on-screen keys: AXe's `type` sends hardware key events, which flip iOS to hardware-keyboard mode. */
+      const typeOnKeys = async (text: string) => {
+        const keys = (await axe.nodes()).filter((e) => !!e.frame && /^([a-zA-Z]|space|return|new line)$/i.test(e.label ?? ""));
+        const at = (label: string) => keys.find((k) => k.label!.toLowerCase() === label)?.frame;
+        for (const ch of text) {
+          const f = ch === " " ? at("space") : ch === "\n" ? (at("return") ?? at("new line")) : at(ch.toLowerCase());
+          if (!f) throw new Error(`no key for ${JSON.stringify(ch)} on the keyboard`);
+          await axe.tapAt(f.x + f.width / 2, f.y + f.height / 2);
+        }
+      };
+      const bottomOf = (e: AXElement) => e.frame!.y + e.frame!.height;
+
+      const composer = (e: AXElement[]) => find(e, (l) => l.startsWith("Message the agent"));
+      await visit(`harness://ticket/${seeded.review.key}?tab=transcript`, (e) => !!composer(e)?.frame);
+      await tapWhere((l) => l.startsWith("Message the agent"));
+      let top = await keyboardUp();
+      const field = composer(await axe.nodes());
+      expect("the ticket composer is in the tree with the keyboard up", !!field?.frame);
+      if (field?.frame) {
+        const gap = top - bottomOf(field);
+        expect("the ticket composer sits on top of the keyboard, 0 to 40 pt above it", gap >= 0 && gap <= 40, `${Math.round(gap)} pt (field ends ${Math.round(bottomOf(field))}, keyboard ${Math.round(top)})`);
+      }
+
+      await closeAllSheets();
+      const prompt = (e: AXElement[]) => e.find((x) => x.label === "Spec" && !!x.frame);
+      await visit(`harness://new?projectId=${enc(seeded.project.id)}`, (e) => !!prompt(e));
+      const start = (await settled(prompt, "the prompt field")).frame!;
+      await axe.tapAt(start.x + 40, start.y + 20);
+      top = await keyboardUp();
+      const lines = 18;
+      await typeOnKeys(Array.from({ length: lines }, () => "a").join("\n"));
+      await atRest(900);
+      const grown = prompt(await axe.nodes());
+      expect("the prompt field is still in the tree after typing", !!grown?.frame);
+      if (grown?.frame) {
+        // 16 pt text runs about 19 pt a line. AXe reports only the part of the field in sight, so it falls short when the field stops
+        // growing or when the form doesn't scroll up to follow the cursor.
+        expect(`the prompt grows with every line typed: ${lines} lines are ${lines * 16}+ pt in sight`, grown.frame.height >= lines * 16, `${Math.round(grown.frame.height)} pt`);
+        const gap = top - bottomOf(grown);
+        expect("the form keeps the line being typed 0 to 120 pt above the keyboard", gap >= 0 && gap <= 120, `${Math.round(gap)} pt (field ends ${Math.round(bottomOf(grown))}, keyboard ${Math.round(top)})`);
+      }
+      // Typing saved a draft: discard it.
+      const cancel = find(await axe.nodes(), (l) => l === "Cancel")?.frame;
+      if (cancel) await axe.tapAt(cancel.x + cancel.width / 2, cancel.y + cancel.height / 2);
+      else await axe.tapAt(36, 89);
+      await untilTree(() => axe.nodes(), (e) => has(e, "Discard draft"), 5000);
+      await tapLabel("Discard draft");
+    } finally {
+      defaults(...(was === "1" || was === "0" ? ["write", KEYBOARD_PREFS, "AutomaticMinimizationEnabled", "-bool", was === "1" ? "YES" : "NO"] : ["delete", KEYBOARD_PREFS, "AutomaticMinimizationEnabled"]));
+    }
+    await closeAllSheets();
   });
 
   // The one tap: the board's palette field opens the palette sheet.
@@ -1037,6 +1168,61 @@ try {
     await choose("All drivers");
     els = await untilTree(() => axe.nodes(), (e) => has(e, /^Claude Code 5-hour|^Claude Code, 5-hour/), 5000);
     expect("All drivers brings the rows back", has(els, /^Claude Code/), seen(els));
+  });
+
+  // The iPad's own layouts (run with --ipad): the board's columns sit side by side beside the sidebar column.
+  await w.screen("ipad board and sidebar", async (expect) => {
+    const els = await visit("harness://board", (e) => has(e, /^Planning, \d+$/));
+    const W = els[0]!.frame!.width;
+    const heads = ["Planning", "In progress", "Blocked", "Review", "Done"].map((c) => find(els, (l) => new RegExp(`^${c}, \\d+$`).test(l))?.frame);
+    expect("all five column headers are on screen at once", heads.every((f) => !!f && f.x >= 0 && f.x + f.width <= W + 1), seen(els));
+    const flat = heads.filter((f): f is NonNullable<typeof f> => !!f);
+    expect("the columns sit side by side on one row", flat.length === 5 && flat.every((f) => Math.abs(f.y - flat[0]!.y) <= 2) && flat.every((f, i) => i === 0 || f.x > flat[i - 1]!.x), flat.map((f) => `${Math.round(f.x)},${Math.round(f.y)}`).join(" | "));
+    expect("the sidebar is a column beside the board, with its rows", has(els, /^Inbox/) && has(els, "All projects"), seen(els));
+    expect("the sidebar toggle is in the top bar", has(els, "Hide Sidebar") || has(els, "Show Sidebar"), seen(els));
+  });
+
+  // sim-check panel: a board card opens its ticket in a side panel against the trailing edge, left of which the board stays live.
+  await w.screen("ipad side panel", async (expect) => {
+    await closeAllSheets().catch(() => {});
+    const key = seeded.review.key;
+    const cardOf = (e: AXElement[]) => find(e, (l) => l.startsWith(`${key} `) && !isDock(l));
+    let els = await visit("harness://board", (e) => has(e, /^Planning, \d+$/));
+    const W = els[0]!.frame!.width;
+    // The Review column's card, paged into view by its column chip when the board is narrower than its columns.
+    for (let i = 0; i < 4 && !((cardOf(els)?.frame?.x ?? -1) >= 0 && cardOf(els)!.frame!.x + 20 < W); i++) {
+      await tapWhere((l) => /^Review, \d+$/.test(l));
+      els = await quiet();
+    }
+    const card = (await settled((e) => (cardOf(e)?.frame ? cardOf(e) : undefined), "the review card")).frame!;
+    await axe.tapAt(card.x + card.width / 2, card.y + Math.min(30, card.height / 2));
+    els = await untilTree(() => axe.nodes(), (e) => has(e, "Resize panel") && has(e, `Close ${key}`), 8000);
+    expect("the card opens its ticket in the side panel", has(els, "Resize panel") && has(els, `Close ${key}`), seen(els));
+    // Wait out the slide-in: the handle stops moving.
+    let slid = -1;
+    for (const end = Date.now() + 4000; Date.now() < end; await Bun.sleep(150)) {
+      const h = find(await axe.nodes(), (l) => l === "Resize panel")?.frame;
+      if (!h) continue;
+      const at = h.x + h.width / 2;
+      if (Math.abs(at - slid) < 1) break;
+      slid = at;
+    }
+    els = await axe.nodes();
+    const handle = find(els, (l) => l === "Resize panel")?.frame, close = find(els, (l) => l === `Close ${key}`)?.frame;
+    if (!handle || !close) return expect("the panel's handle and close button are on screen", false, seen(els));
+    const leading = handle.x + handle.width / 2, fraction = (W - leading) / W;
+    expect("the panel is between 25% and 80% of the window", fraction >= 0.24 && fraction <= 0.81, `${Math.round(fraction * 100)}%`);
+    expect("the panel is trailing-aligned: its close button ends at the window's edge", W - (close.x + close.width) <= 16, `ends at ${Math.round(close.x + close.width)} of ${W}`);
+    expect("the board stays live beside the panel", has(els, /^Planning, \d+$/), seen(els));
+    const toggle = find(els, (l) => l === "Hide Sidebar" || l === "Show Sidebar")?.frame;
+    expect("the panel's buttons sit no higher than the sidebar button, below the status bar", !toggle || close.y >= toggle.y - 4, `buttons y=${Math.round(close.y)}, sidebar button y=${Math.round(toggle?.y ?? 0)}`);
+    // The hero names the ticket (its key when expanded, its title row when collapsed): one title, none in a bar above it.
+    const inPanel = els.filter((e) => !!e.frame && e.frame.x >= leading && !!e.label);
+    const named = inPanel.filter((e) => e.label === key || e.label!.startsWith(`${key},`) || e.label!.startsWith(`${key} ·`));
+    const bar = named.filter((e) => e.frame!.y < 60 && e.label !== key);
+    expect("the hero alone names the ticket, with no title bar above it", named.length >= 1 && named.length <= 2 && bar.length === 0, named.map((e) => `"${e.label}" at y=${Math.round(e.frame!.y)}`).join(", "));
+    await tapId("ticket-panel-close");
+    await rest();
   });
 } finally {
   usageProxy.stop();
