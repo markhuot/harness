@@ -20,7 +20,7 @@ import { HarnessError } from "../orchestrator/errors.ts";
 import { ExtensionHost } from "./extension-host.ts";
 import { findElementExpression, sameView, type PageElementReport } from "./element.ts";
 import { CdpClient, CdpError, type CdpResult, type CdpSession } from "./cdp.ts";
-import { ChromeProcess, desktopUserAgent, findChrome } from "./chrome.ts";
+import { ChromeProcess, desktopUserAgent, findChrome, resolveHeadless } from "./chrome.ts";
 import { FrameError, TabFrames, frameChain, frameLabel, type ElementHandle, type Scope } from "./frames.ts";
 import { MOD_CTRL, MOD_META, charPress, macEditingCommands, parseKeyChord, virtualKeyCode, type KeyPress } from "./keys.ts";
 import { SNAPSHOT_DEFAULT_MAX_NODES, axNodes, renderAxTree } from "./snapshot.ts";
@@ -1310,8 +1310,7 @@ export class BrowserManager implements BrowserService {
         "Chrome not found. Install Google Chrome or set HARNESS_CHROME_PATH to a Chrome/Chromium executable.",
       );
     }
-    const headlessEnv = process.env.HARNESS_CHROME_HEADLESS;
-    const headless = this.opts.headless ?? !(headlessEnv === "0" || headlessEnv === "false");
+    const headless = resolveHeadless(this.opts.headless);
     const chrome = await ChromeProcess.launch({
       chromePath,
       profileDir: this.opts.profileDir,

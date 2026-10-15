@@ -160,6 +160,15 @@ export interface LaunchOptions {
   extraArgs?: string[];
 }
 
+/** Headless unless HARNESS_CHROME_HEADLESS is "0"/"false"; an explicit option wins over the env. */
+export function resolveHeadless(
+  explicit: boolean | undefined,
+  env: Record<string, string | undefined> = process.env,
+): boolean {
+  const v = env.HARNESS_CHROME_HEADLESS;
+  return explicit ?? !(v === "0" || v === "false");
+}
+
 export function chromeArgs(opts: LaunchOptions): string[] {
   const width = opts.width ?? 1280;
   const height = opts.height ?? 800;
