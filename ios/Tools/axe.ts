@@ -61,13 +61,26 @@ export function xcodeShim(developerDir: string): string {
 
 export const hasAxe = () => Bun.spawnSync(["which", "axe"]).exitCode === 0;
 
+/** Calls and wall time per AXe subcommand since the last `takeAxeStats()`, for a walkthrough's timing breakdown. */
+const axeStats = new Map<string, { n: number; ms: number }>();
+
+/** The per-subcommand totals so far, and start counting again. */
+export function takeAxeStats() {
+  const out = [...axeStats].map(([cmd, s]) => ({ cmd, ...s }));
+  axeStats.clear();
+  return out;
+}
+
 /** An AXe driver for one simulator. */
 export function axeFor(udid: string, developerDir: string) {
   let shim = "";
   const run = async (...a: string[]) => {
     shim ||= xcodeShim(developerDir);
+    const started = performance.now();
     const p = Bun.spawn(["axe", ...a, "--udid", udid], { env: { ...process.env, DEVELOPER_DIR: shim }, stdout: "pipe", stderr: "pipe" });
     const [out, , code] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text(), p.exited]);
+    const s = axeStats.get(a[0]!) ?? { n: 0, ms: 0 };
+    axeStats.set(a[0]!, { n: s.n + 1, ms: s.ms + performance.now() - started });
     return code === 0 ? out : "";
   };
   return {
