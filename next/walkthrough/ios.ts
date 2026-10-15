@@ -91,6 +91,11 @@ try {
     const f = region.frame!;
     await axe.tapAt(f.x + f.width / 2, f.y + f.height * 0.9);
   };
+  /** Taps the middle of the element's frame, for a control a tap by label doesn't reach (a small radio button in a list row). */
+  const tapCenter = async (match: (label: string) => boolean) => {
+    const f = (await settled((els) => find(els, match), "the element to tap")).frame!;
+    await axe.tapAt(f.x + f.width / 2, f.y + f.height / 2);
+  };
   /** Taps the element labelled exactly `label` once it has settled (an alert's or a menu's button has no identifier). */
   const tapLabel = (label: string) => tapWhere((l) => l === label);
   /** A text field holds the focus, which the app's debug state names; the keyboard isn't in the tree. Typing before it does drops keys. */
@@ -455,7 +460,7 @@ try {
     // Narrow the list first: the sheet is lazy, and a long driver list ahead of Dummy's can leave its rows out of the tree.
     await typeInto((l) => l === "Search models", "slow");
     await quiet(); // the list re-filters as the text lands, and a tap on a row that is still moving misses
-    await tapWhere((l) => l.startsWith("Work, ") && l.endsWith("Dummy Slow"));
+    await tapCenter((l) => l.startsWith("Work, ") && l.endsWith("Dummy Slow"));
     const picked = await until("work model saved", async () => (((x) => (x.phaseModels?.work?.driver === "dummy" && x.phaseModels.work.model === "dummy-slow" ? x : null))(await ticketOf(world.branchPlan.key))), 8000, 100).catch(() => null);
     expect("the pick is saved to the Work phase", !!picked, `phaseModels ${JSON.stringify((await ticketOf(world.branchPlan.key)).phaseModels)}`);
     await tapLabel("Done"); // the sheet stays open after a pick
