@@ -242,14 +242,12 @@ private struct SheetDockRoom: ViewModifier {
     /// What the ticket sheet's screens give up at their bottom for `cards` waiting tickets: 0 with
     /// none, or with a keyboard up (the dock is hidden then).
     static func sheetRoom(cards: Int, screen: ConcentricBar.Screen?, inset: DockedSheetInset?) -> CGFloat {
-        guard cards > 0, inset?.keyboardUp != true else { return 0 }
-        return DockMetrics.clearance(screenHeight: screen?.height, stackTop: inset?.stackTop, homeIndicator: 0,
-                                     rows: DockCards.rows(count: cards, maxVisible: DockCards.phoneVisible))
+        DockMetrics.sheetRoom(cards: cards, keyboardUp: inset?.keyboardUp == true, screenHeight: screen?.height, stackTop: inset?.stackTop)
     }
 
     /// How far above the dock the ticket's composer sits at rest; nil leaves its usual concentric gap.
     static func composerGap(cards: Int, inset: DockedSheetInset?) -> CGFloat? {
-        cards > 0 && inset?.keyboardUp != true ? barGap : nil
+        DockMetrics.composerGap(cards: cards, keyboardUp: inset?.keyboardUp == true)
     }
 }
 

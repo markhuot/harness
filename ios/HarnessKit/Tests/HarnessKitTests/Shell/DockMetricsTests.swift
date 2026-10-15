@@ -72,4 +72,47 @@ struct DockMetricsTests {
         #expect(DockMetrics.rowsFitting(height: 144) == 2)
         #expect(DockMetrics.rowsFitting(height: 10) == 1)
     }
+
+    // MARK: With a keyboard up (the composer sits on the keyboard, the dock steps aside)
+
+    @Test func theSheetKeepsRoomForTheDockOnlyWithCardsAndNoKeyboard() {
+        let top = 852 - 8 - DockMetrics.stackHeight(rows: 2)
+        let room = DockMetrics.sheetRoom(cards: 2, keyboardUp: false, screenHeight: 852, stackTop: top)
+        // The whole two-card stack plus its float above the bottom edge (no home-indicator inset to subtract in the sheet).
+        #expect(room == DockMetrics.stackHeight(rows: 2) + 8)
+        // A keyboard up hides the dock, so the sheet keeps nothing: the composer sits on the keyboard.
+        #expect(DockMetrics.sheetRoom(cards: 2, keyboardUp: true, screenHeight: 852, stackTop: top) == 0)
+        // No cards waiting, no room, keyboard or not.
+        #expect(DockMetrics.sheetRoom(cards: 0, keyboardUp: false, screenHeight: 852, stackTop: top) == 0)
+        #expect(DockMetrics.sheetRoom(cards: 0, keyboardUp: true, screenHeight: 852, stackTop: top) == 0)
+    }
+
+    @Test func theSheetsRoomCountsTheRowsTheDockDrawsAndNeverGoesNegative() {
+        // Not yet measured: it grows with the rows, and a third ticket adds the "N more…" row, not a card.
+        func unmeasured(_ cards: Int) -> CGFloat { DockMetrics.sheetRoom(cards: cards, keyboardUp: false, screenHeight: nil, stackTop: nil) }
+        #expect(unmeasured(2) - unmeasured(1) == 60)
+        #expect(unmeasured(3) - unmeasured(2) == 60)
+        #expect(unmeasured(7) == unmeasured(3))
+        // A stack top measured below the screen's bottom (a stale reading) never gives a negative inset.
+        #expect(DockMetrics.sheetRoom(cards: 1, keyboardUp: false, screenHeight: 852, stackTop: 900) == 0)
+    }
+
+    @Test func theComposerSitsABarGapAboveTheDockOnlyWithCardsAndNoKeyboard() {
+        #expect(DockMetrics.composerGap(cards: 1, keyboardUp: false) == DockMetrics.barGap)
+        #expect(DockMetrics.composerGap(cards: 5, keyboardUp: false) == 11)
+        // Keyboard up, or no cards: its usual concentric gap.
+        #expect(DockMetrics.composerGap(cards: 1, keyboardUp: true) == nil)
+        #expect(DockMetrics.composerGap(cards: 0, keyboardUp: false) == nil)
+        #expect(DockMetrics.composerGap(cards: 0, keyboardUp: true) == nil)
+    }
+
+    @Test func onlyAKeyboardTallerThan100PointsIsTheSoftwareKeyboard() {
+        // The hardware keyboard's shortcut bar is a few dozen points; the software keyboard is 250+.
+        #expect(!DockMetrics.isSoftwareKeyboard(frameHeight: 0))
+        #expect(!DockMetrics.isSoftwareKeyboard(frameHeight: 55))
+        #expect(!DockMetrics.isSoftwareKeyboard(frameHeight: 100))
+        #expect(DockMetrics.isSoftwareKeyboard(frameHeight: 100.5))
+        #expect(DockMetrics.isSoftwareKeyboard(frameHeight: 101))
+        #expect(DockMetrics.isSoftwareKeyboard(frameHeight: 291))
+    }
 }

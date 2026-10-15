@@ -68,6 +68,28 @@ public enum DockMetrics {
         return max(0, screenHeight - stackTop - homeIndicator)
     }
 
+    /// What the ticket sheet's screens give up at their bottom for `cards` waiting tickets: 0 with none, or
+    /// with a keyboard up (the dock fades out then, so nothing is kept for it).
+    public static func sheetRoom(cards: Int, keyboardUp: Bool, screenHeight: CGFloat?, stackTop: CGFloat?) -> CGFloat {
+        guard cards > 0, !keyboardUp else { return 0 }
+        return clearance(screenHeight: screenHeight, stackTop: stackTop, homeIndicator: 0,
+                         rows: DockCards.rows(count: cards, maxVisible: DockCards.phoneVisible))
+    }
+
+    /// How far above the dock the ticket's composer sits at rest: `barGap` with cards waiting and no keyboard
+    /// up; nil (its usual concentric gap) otherwise.
+    public static func composerGap(cards: Int, keyboardUp: Bool) -> CGFloat? {
+        cards > 0 && !keyboardUp ? barGap : nil
+    }
+
+    /// A keyboard frame taller than this is the software keyboard. The hardware keyboard's shortcut bar,
+    /// which also posts keyboard notifications, is shorter and doesn't cover the dock.
+    public static let softwareKeyboardMinHeight: CGFloat = 100
+
+    public static func isSoftwareKeyboard(frameHeight: CGFloat) -> Bool {
+        frameHeight > softwareKeyboardMinHeight
+    }
+
     /// The overflow card's label: "N more docked tickets" beside the shown cards, "N docked tickets"
     /// when it stands for all of them.
     public static func moreLabel(count: Int, all: Bool) -> String {

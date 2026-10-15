@@ -297,6 +297,48 @@ struct RouterSheetTests {
         #expect(r.ticketSheetState == .gone)
     }
 
+    /// A card's ✕ closes just its ticket, whichever card it is, and never opens anything (the iPad's corner stack and the iPhone's dock).
+    @Test func closingADockedCardLeavesTheOtherCardsAndOpensNoPanel() {
+        let r = sheeted()
+        for k in ["A-1", "B-1", "C-1"] { r.openTicket(key: k, tab: nil) }
+        r.dockSheet()
+        let ids = r.dockedSheets.map(\.id) // C-1 (top), B-1, A-1
+        #expect(r.dockedSheets.map(\.title) == ["C-1", "B-1", "A-1"])
+        // A card behind the top: the others stay, in order, and nothing is presented.
+        r.closeSheet(id: ids[1])
+        #expect(r.dockedSheets.map(\.title) == ["C-1", "A-1"])
+        #expect(r.ticketSheetState == .docked && r.ticketSheet == nil && r.dock?.title == "C-1")
+        // The top card itself: the next one becomes the top card, still docked, still no panel.
+        r.closeSheet(id: ids[0])
+        #expect(r.dockedSheets.map(\.title) == ["A-1"])
+        #expect(r.ticketSheetState == .docked && r.ticketSheet == nil)
+        // The last card: gone.
+        r.closeSheet(id: ids[2])
+        #expect(r.dockedSheets.isEmpty && r.ticketSheetState == .gone && r.ticketSheet == nil)
+        // An id that isn't a card closes nothing.
+        r.openTicket(key: "D-1", tab: nil)
+        r.dockSheet()
+        r.closeSheet(id: 9999)
+        #expect(r.dockedSheets.map(\.title) == ["D-1"] && r.ticketSheetState == .docked)
+    }
+
+    @Test func aCardChosenFromTheMoreListOpensAtItsSavedPath() {
+        let r = sheeted()
+        r.push(t("A-1"))
+        r.push(t("A-2"))
+        r.push(.prompts)
+        for k in ["B-1", "C-1"] { r.openTicket(key: k, tab: nil) }
+        r.dockSheet()
+        // Three docked: two cards and "1 more…", which holds the oldest, A-1 with its child and prompts pushed.
+        #expect(DockCards.split(count: r.dockedSheets.count, maxVisible: DockCards.phoneVisible) == (2, 1))
+        let oldest = r.dockedSheets.last!
+        #expect(oldest.path == [t("A-2"), .prompts])
+        r.activateSheet(id: oldest.id)
+        #expect(r.dock?.id == oldest.id && r.dock?.path == [t("A-2"), .prompts])
+        r.restoreDock()
+        #expect(r.ticketSheet?.id == oldest.id && r.ticketSheet?.path == [t("A-2"), .prompts])
+    }
+
     @Test func aSystemDismissalClosesTheTicketAndDocksOnlyOnTheArmedRelease() {
         let r = sheeted()
         r.openTicket(key: "A-1", tab: nil)

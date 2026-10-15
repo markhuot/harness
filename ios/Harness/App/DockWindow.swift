@@ -192,7 +192,7 @@ private struct PhoneDock: View {
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { note in
             // The software keyboard on this screen: not the hardware keyboard's shortcut bar, which is short.
             let frame = (note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect) ?? .zero
-            setKeyboard(frame.height > 100)
+            setKeyboard(DockMetrics.isSoftwareKeyboard(frameHeight: frame.height))
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in setKeyboard(false) }
         .onDisappear { setKeyboard(false) }

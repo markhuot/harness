@@ -326,10 +326,9 @@ private struct TicketDetailHeroScroll: ViewModifier {
     @Environment(\.scrollMemoryKey) private var memoryKey
     @State private var track = ScrollTrack(())
     @State private var position = ScrollPosition()
-    /// Where the person left this tab (TicketViewMemory) and until when it keeps trying to get
-    /// back there: the content may still be loading when the screen comes up.
-    @State private var pending = ScrollTrack<(y: Double, until: TimeInterval)?>(nil)
-    @State private var started = ScrollTrack(false)
+    /// Getting back to where the person left this tab (TicketViewMemory): the content may still be
+    /// loading when the screen comes up.
+    @State private var restore = ScrollTrack(ScrollRestore())
 
     @ViewBuilder func body(content: Content) -> some View {
         // Only a restoring scroll view owns its position: the stick-to-bottom feeds attach their own.
@@ -344,24 +343,15 @@ private struct TicketDetailHeroScroll: ViewModifier {
             }
             .onScrollGeometryChange(for: Double.self, of: { Double($0.contentOffset.y) }) { _, y in
                 guard restores, let key = memoryKey else { return }
-                // The first reading, before anything is written over the saved offset.
-                if !started.value {
-                    started.value = true
-                    if let saved = TicketViewMemory.shared.offset(for: key), abs(saved) > 2 {
-                        pending.value = (saved, DockHold.now + 1.5)
-                        position.scrollTo(y: saved)
-                        return
-                    }
-                }
-                if let wanted = pending.value {
-                    if abs(y - wanted.y) < 2 || DockHold.now > wanted.until { pending.value = nil } else { position.scrollTo(y: wanted.y) }
-                } else {
-                    TicketViewMemory.shared.setOffset(y, for: key)
+                switch restore.value.step(offset: y, saved: TicketViewMemory.shared.offset(for: key), now: DockHold.now) {
+                case let .scrollTo(wanted): position.scrollTo(y: wanted)
+                case let .record(y): TicketViewMemory.shared.setOffset(y, for: key)
+                case .none: break
                 }
             }
             .onScrollPhaseChange { old, new in
                 // The person's own scroll wins over a restore still looking for its offset.
-                if new == .interacting { started.value = true; pending.value = nil }
+                if new == .interacting { restore.value.interrupt() }
                 for e in HeroCollapse.events(from: scrollPhase(old), to: scrollPhase(new), metrics: track.metrics) { hero?.send(e) }
             }
     }
