@@ -85,6 +85,19 @@ final class DebugProbe {
         return animating + (scrolling ? ["scrolling"] : [])
     }
 
+    /// The text input that is the first responder, by accessibility label (its class when it has none).
+    private func focusedInput() -> String? {
+        func find(_ view: UIView) -> String? {
+            if view.isFirstResponder, view is UITextInput { return view.accessibilityLabel ?? String(describing: type(of: view)) }
+            for sub in view.subviews { if let hit = find(sub) { return hit } }
+            return nil
+        }
+        for case let scene as UIWindowScene in UIApplication.shared.connectedScenes {
+            for window in scene.windows { if let hit = find(window) { return hit } }
+        }
+        return nil
+    }
+
     private func write() async {
         guard let router else { return }
         // The editor on screen: a file's host has a window, the hidden diff host and parked ones don't.
@@ -93,6 +106,7 @@ final class DebugProbe {
         state.dockMounts = dockMounts
         if onScreen.contains(where: { !$0.ready }) { state.busy.append("editor") }
         state.busy += motion()
+        state.focus = focusedInput()
         for host in onScreen where host.ready {
             if let editor = await host.probe() { state.editor = editor; break }
         }

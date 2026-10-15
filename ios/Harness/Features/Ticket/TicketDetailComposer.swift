@@ -121,6 +121,7 @@ struct TicketDetailComposer: View {
                 .buttonBorderShape(.circle)
                 .tint(c.accent)
                 .accessibilityLabel("Send")
+                .accessibilityIdentifier("composer-send")
                 .accessibilityHint(disabled ? hint : "")
         } else {
             Button(action: action) { label.foregroundStyle(c.text3) }
@@ -128,6 +129,7 @@ struct TicketDetailComposer: View {
                 .buttonBorderShape(.circle)
                 .disabled(true)
                 .accessibilityLabel("Send")
+                .accessibilityIdentifier("composer-send")
         }
     }
 

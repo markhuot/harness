@@ -12,7 +12,8 @@ import { installAndPair, openLink, seed, startDaemon, stopDaemon, buildApp } fro
 import { GREETINGS_PATH, GREETING_FOR } from "../../ios/Tools/fixtures";
 import { parseState, PROBE_FILE, type DebugState } from "../../ios/Tools/probe";
 import { acquireReady, exportDeveloperDir } from "../../ios/Tools/sim";
-import { startCompacting, startUsageProxy, seedWorld, WORLD_FILES } from "./world";
+import { until } from "@harness/shared/testing/daemon";
+import { FAKE_CLAUDE_ENV, REVIEW_PROMPT, REVIEW_PROMPT_ID, startCompacting, startUsageProxy, seedWorld, WORLD_FILES } from "./world";
 import { walk } from "./walk";
 
 const started = performance.now();
@@ -20,13 +21,16 @@ if (!hasAxe()) throw new Error("the walkthrough reads the UI tree with AXe: brew
 exportDeveloperDir();
 const app = process.argv.includes("--no-build") ? join(resolve(import.meta.dir, "../../ios"), "build/dd/Build/Products/Release-iphonesimulator/Harness.app") : await buildApp();
 if (!existsSync(app)) throw new Error(`${app} doesn't exist; drop --no-build`);
-const d = await startDaemon();
+const d = await startDaemon(FAKE_CLAUDE_ENV);
 const seeded = await seed(d, WORLD_FILES);
 const world = await seedWorld(d, seeded);
 const usageProxy = startUsageProxy(d); // the app pairs through it: it answers GET /usage and forwards the rest
 console.log(`built and seeded in ${Math.round(performance.now() - started)} ms`);
 const slot = await acquireReady({ onWait: () => console.log("waiting for a shared simulator…") }, {});
-const w = walk("iPhone walkthrough");
+// A screenshot of what a failing screen saw, when WALK_SHOTS names a directory.
+const w = walk("iPhone walkthrough", (name) => {
+  if (process.env.WALK_SHOTS) Bun.spawnSync(["xcrun", "simctl", "io", slot.udid, "screenshot", join(process.env.WALK_SHOTS, `${name.replace(/\W+/g, "-")}.png`)], { env: process.env });
+});
 try {
   const axe = axeFor(slot.udid, process.env.DEVELOPER_DIR!);
   const t0 = performance.now();
@@ -89,6 +93,48 @@ try {
   };
   /** Taps the element labelled exactly `label` once it has settled (an alert's or a menu's button has no identifier). */
   const tapLabel = (label: string) => tapWhere((l) => l === label);
+  /** A text field holds the focus, which the app's debug state names; the keyboard isn't in the tree. Typing before it does drops keys. */
+  const untilKeyboard = async () => {
+    const s = await untilProbe((x) => !!x.focus);
+    if (!s?.focus) throw new Error(`no field took the focus; ${seen(await axe.nodes())}`);
+    await quiet(); // the keyboard has finished sliding in
+  };
+  /** Closes every docked ticket sheet, which cover the next screen's controls: opening Projects does it in one step, whatever the count. */
+  const clearDock = async () => {
+    if (!probe()?.router.dock.length) return;
+    previous = await openLink(slot.udid, axe, "harness://projects", previous);
+    const s = await untilProbe((x) => x.router.dock.length === 0);
+    if (s?.router.dock.length) throw new Error(`the dock didn't clear; ${seen(await axe.nodes())}`);
+    previous = await openLink(slot.udid, axe, "harness://board", previous);
+  };
+  /** Taps the field and types into it once it holds the focus. */
+  const typeInto = async (match: (label: string) => boolean, text: string) => {
+    await tapWhere(match);
+    await untilKeyboard();
+    await axe.type(text);
+  };
+  /** The field's text, as VoiceOver reads it. */
+  const valueOf = (els: AXElement[], match: (label: string) => boolean) => find(els, match)?.value ?? "";
+  /** Swipes until the element is in the middle of the screen and the scroll has stopped: up when it's below, down when it's above. */
+  const scrollToId = async (id: string) => {
+    const root = (await axe.nodes())[0]!.frame!;
+    const where = (e: AXElement[]) => {
+      const f = e.find((x) => x.id === id)?.frame;
+      return !f || f.y > root.height * 0.8 ? "below" : f.y + f.height < root.height * 0.2 ? "above" : "in view";
+    };
+    let els = await axe.nodes();
+    for (let i = 0; i < 40 && where(els) !== "in view"; i++) {
+      const [from, to] = where(els) === "below" ? [0.7, 0.3] : [0.3, 0.7];
+      await axe.swipe(root.width / 2, root.height * from, root.width / 2, root.height * to);
+      els = await quiet();
+    }
+    if (where(els) !== "in view") throw new Error(`${id} never scrolled into view; ${seen(els)}`);
+  };
+  const ticketOf = async (key: string) => (await d.api<TicketDetail>("GET", `/tickets/${key}`)).ticket;
+  const prompts = async () => d.api<{ id: string; override: string | null }[]>("GET", "/prompts");
+  const override = async (id: string) => (await prompts()).find((p) => p.id === id)!.override;
+  /** The app is up showing something: its root element is "Harness". A crash leaves SpringBoard's tree. */
+  const appUp = (els: AXElement[]) => els[0]?.label === "Harness";
   // The app's debug state (a SIM_CHECK build writes it into its container): the editor is a web view the tree can't see into.
   let container = "";
   const probe = (): DebugState | null => {
@@ -110,10 +156,12 @@ try {
     return s;
   };
   /** Reaches `link`, then reads the tree once; the screen's checks all run on that one read. */
-  const visit = async (link: string) => {
+  const visit = async (link: string, ready?: (els: AXElement[]) => boolean) => {
     previous = await openLink(slot.udid, axe, link, previous);
-    return axe.nodes();
+    // The link opened something; `ready` says it's the screen the link names (a dock or a sheet animating also changes the tree).
+    return ready ? untilTree(() => axe.nodes(), ready) : axe.nodes();
   };
+  const composerUp = (e: AXElement[]) => has(e, /^Message the agent/);
 
   await w.screen("board", async (expect) => {
     const els = await untilTree(() => axe.nodes(), (e) => has(e, new RegExp(`^${seeded.review.key} `)));
@@ -303,8 +351,222 @@ try {
     expect("the gauge reads compacting", has(els, "Context, compacting"), seen(els));
     expect("the composer says Compacting…", has(els, "Compacting…") && !has(els, "Message the agent"), seen(els));
   });
+  // sim-check routes: every screen a link can open comes up without taking the app down.
+  await w.screen("routes", async (expect) => {
+    const enc = encodeURIComponent;
+    const pluginLoaded = (e: AXElement[]) => has(e, "Changes") && !has(e, "In progress");
+    const routes: [string, string, (e: AXElement[]) => boolean][] = [
+      ["projects", "harness://projects", (e) => has(e, "PLAN USAGE")],
+      ["ticket with code", `harness://ticket/${world.code.key}?tab=spec`, (e) => has(e, /export const greeting/)],
+      ["conductor's children", `harness://ticket/${world.conductor.key}?tab=children`, (e) => has(e, /Add a greet helper/)],
+      ["a nested sub-agent", `harness://ticket/${world.approvable.key}?tab=${enc(`agent:${world.nestedAgent.id}`)}`, (e) => has(e, "Back to Agents & tasks")],
+      ["a pending approval", `harness://ticket/${world.approval.key}`, (e) => has(e, "Allow once")],
+      ["the Changes tab", `harness://ticket/${world.changes.key}?tab=plugin:git:changes`, pluginLoaded],
+      ["New session", `harness://new?projectId=${seeded.project.id}`, (e) => has(e, /^Spec/)],
+      ["the Inbox", "harness://inbox", (e) => has(e, /empty name/)],
+      ["Connect", "harness://connect", appUp],
+    ];
+    for (const [name, link, ready] of routes) {
+      previous = await openLink(slot.udid, axe, link, previous);
+      const els = await untilTree(() => axe.nodes(), (e) => appUp(e) && ready(e));
+      expect(`${name} opens`, appUp(els) && ready(els), seen(els));
+    }
+    // Connect is a sheet: close it, or it covers every screen after.
+    await tapLabel("Cancel");
+    await untilTree(() => axe.nodes(), (e) => !has(e, "Connect to a Mac"));
+  });
+
+  // sim-check blocked-composer: a message to a blocked ticket is sent from the composer, and the Transcript opens.
+  await w.screen("blocked composer", async (expect) => {
+    await clearDock();
+    await visit(`harness://ticket/${seeded.blocked.key}`, composerUp);
+    // The dummy picks the work back up only when told to.
+    await typeInto((l) => l.startsWith("Message the agent"), "[dummy:unblock]");
+    await tapId("composer-send");
+    // A sent message opens the Transcript, where its run rows show: the ticket opened on its Spec.
+    const els = await untilTree(() => axe.nodes(), (e) => e.some((x) => x.id?.startsWith("run-header")));
+    expect("the Transcript is shown", els.some((x) => x.id?.startsWith("run-header")), seen(els));
+  });
+  // sim-check approve-and: the Approve menu's Approve and… takes typed instructions and approves.
+  await w.screen("approve and…", async (expect) => {
+    await clearDock();
+    await visit(`harness://ticket/${world.approvable.key}?tab=spec`, (e) => e.some((x) => x.id === "ticket-approve-more"));
+    await tapId("ticket-approve-more");
+    await tapLabel("Approve and…");
+    await untilKeyboard(); // the sheet focuses its field
+    await axe.type("v2");
+    await quiet(); // the field takes no value in the tree, so the typing has landed once the screen is still
+    await tapId("approve-and-submit");
+    const t = await until(`${world.approvable.key} approved`, async () => (((x) => (x.humanReview === "approved" ? x : null))(await ticketOf(world.approvable.key))), 15000, 100).catch(() => null);
+    expect("Approve sends the instructions and approves the ticket", !!t, `humanReview ${(await ticketOf(world.approvable.key)).humanReview}`);
+  });
+  // sim-check prompt-editor: a bad variable shows inline and can't save; Save stores the fixed override; Reset (confirmed) clears it.
+  await w.screen("prompt editor", async (expect) => {
+    await clearDock();
+    const field = (l: string) => l === "Work run instructions prompt";
+    const saveShortcut = () => axe.keyCombo(227, 22); // ⌘S: the header's buttons aren't in the tree, and Save has this shortcut only while enabled
+    await visit("harness://prompt/system.work", (e) => e.some((x) => x.id === "prompt-customize"));
+    await tapId("prompt-customize");
+    await untilTree(() => axe.nodes(), (e) => has(e, "Compare with built-in"));
+    await typeInto(field, " {{brnch}}");
+    let els = await untilTree(() => axe.nodes(), (e) => has(e, /^Unknown variable \{\{brnch\}\}/));
+    expect("an unknown variable shows inline", has(els, /^Unknown variable \{\{brnch\}\}/), seen(els));
+    await saveShortcut(); // disabled while invalid, so the shortcut isn't there; a save would be in flight by the time the tree has been read twice
+    await quiet();
+    expect("an invalid prompt isn't saved", (await override("system.work")) === null);
+    await axe.keys(Array(10).fill(42)); // takes the bad variable's ten characters back out
+    await axe.type(" x{{branch}}");
+    await untilTree(() => axe.nodes(), (e) => !has(e, /^Unknown variable/));
+    await saveShortcut();
+    const saved = await until("override saved", async () => ((v) => (v?.includes("x{{branch}}") ? v : null))(await override("system.work")), 8000, 100).catch(() => null);
+    expect("Save stores the fixed override", !!saved, `override ${JSON.stringify(await override("system.work"))}`);
+    await untilTree(() => axe.nodes(), (e) => e.some((x) => x.id === "prompt-reset"));
+    await scrollToId("prompt-reset"); // typing left the editor scrolled to the end of the long prompt, above the button
+    await tapId("prompt-reset");
+    await tapLabel("Reset"); // the confirmation alert; `settled` waits out its presentation
+    const cleared = await until("override cleared", async () => ((await override("system.work")) === null ? true : null), 8000, 100).catch(() => null);
+    expect("Reset to built-in, confirmed, clears the override", !!cleared);
+    els = await untilTree(() => axe.nodes(), (e) => e.some((x) => x.id === "prompt-customize"));
+    expect("the prompt is read-only again", els.some((x) => x.id === "prompt-customize"), seen(els));
+  });
+  // sim-check prompt-editor: a tapped variable goes in at the cursor, and the next key follows it.
+  await w.screen("prompt variable chip", async (expect) => {
+    await clearDock();
+    const field = (l: string) => l === "Agent review prompt";
+    const els = await visit(`harness://prompt/${REVIEW_PROMPT_ID}`, (e) => e.some((x) => x.id === "prompt-reset"));
+    const f = await settled((e) => find(e, field), "the editor field");
+    await axe.tapAt(f.frame!.x + f.frame!.width - 20, f.frame!.y + f.frame!.height - 16); // past the end of the text: the caret goes to the end
+    await untilKeyboard();
+    await tapId("prompt-var-key");
+    await untilTree(() => axe.nodes(), (e) => valueOf(e, field).endsWith("{{key}}"));
+    await axe.type("Z");
+    const typed = await untilTree(() => axe.nodes(), (e) => valueOf(e, field).endsWith("{{key}}Z"));
+    expect("the variable is inserted at the caret and the next key follows it", valueOf(typed, field).endsWith("then the diff.{{key}}Z"), `the field reads ${JSON.stringify(valueOf(typed, field).slice(-40))}; focus ${probe()?.focus}; ${seen(typed)}`);
+    await axe.keyCombo(227, 22);
+    const saved = await until("override saved", async () => ((v) => (v !== REVIEW_PROMPT ? v : null))(await override(REVIEW_PROMPT_ID)), 8000, 100).catch(() => null);
+    expect("Save stores the text with the variable", !!saved?.endsWith("then the diff.{{key}}Z"), `override ${JSON.stringify(saved?.slice(-30))}`);
+    await d.api("PATCH", "/settings", { prompts: { [REVIEW_PROMPT_ID]: REVIEW_PROMPT } });
+  });
+  // sim-check models-picker: a tap on a model in the Models picker saves it to the phase.
+  await w.screen("models picker", async (expect) => {
+    await clearDock();
+    await visit(`harness://ticket/${world.branchPlan.key}?tab=details`, (e) => has(e, /^Models, /));
+    await tapWhere((l) => l.startsWith("Models, "));
+    // Narrow the list first: the sheet is lazy, and a long driver list ahead of Dummy's can leave its rows out of the tree.
+    await typeInto((l) => l === "Search models", "slow");
+    await quiet(); // the list re-filters as the text lands, and a tap on a row that is still moving misses
+    await tapWhere((l) => l.startsWith("Work, ") && l.endsWith("Dummy Slow"));
+    const picked = await until("work model saved", async () => (((x) => (x.phaseModels?.work?.driver === "dummy" && x.phaseModels.work.model === "dummy-slow" ? x : null))(await ticketOf(world.branchPlan.key))), 8000, 100).catch(() => null);
+    expect("the pick is saved to the Work phase", !!picked, `phaseModels ${JSON.stringify((await ticketOf(world.branchPlan.key)).phaseModels)}`);
+    await tapLabel("Done"); // the sheet stays open after a pick
+  });
+  // sim-check file-edit: the file editor edits, shows the unsaved dot and writes the file with Save.
+  await w.screen("file editor save", async (expect) => {
+    await clearDock();
+    const wd = (await ticketOf(world.fileLink.key)).workdir!;
+    const path = join(wd, GREETINGS_PATH);
+    const original = readFileSync(path, "utf8");
+    const dot = (e: AXElement[]) => has(e, "Unsaved changes");
+    try {
+      await visit(`harness://file/${GREETINGS_PATH}?ticket=${world.fileLink.key}`, (e) => has(e, new RegExp(GREETINGS_PATH)));
+      await untilProbe((x) => !!x.editor && !x.busy.includes("editor")); // the page has loaded and said it's ready
+      const save = await settled((e) => find(e, (l) => l === "Save"), "Save");
+      const root = (await axe.nodes())[0]!.frame!;
+      await axe.tapAt(root.width / 2, save.frame!.y + save.frame!.height + 120); // into the editor below the info bar
+      await untilKeyboard();
+      await axe.type("qzx"); // short, and not in the file
+      const dirty = await untilTree(() => axe.nodes(), dot);
+      expect("a keystroke marks the file unsaved", dot(dirty), seen(dirty));
+      expect("the edit hasn't reached the disk before Save", !readFileSync(path, "utf8").includes("qzx"));
+      await tapLabel("Save");
+      const clean = await untilTree(() => axe.nodes(), (e) => !dot(e));
+      expect("Save clears the unsaved dot", !dot(clean), seen(clean));
+      expect("the editor agrees it's clean", (await untilProbe((x) => x.editor?.dirty === false))?.editor?.dirty === false);
+      expect("Save wrote the edit to the file", readFileSync(path, "utf8").includes("qzx"));
+    } finally {
+      writeFileSync(path, original); // the file is the ticket's, and the file link screens read it as clean
+    }
+    await visit("harness://board"); // the file screen stays pushed otherwise
+  });
+  // sim-check mentions: New session and the composer complete @-mentions and /commands from a tap, and launch.
+  await w.screen("mentions and commands", async (expect) => {
+    await clearDock();
+    const keys = async (projectId: string) => new Set((await d.api<{ key: string; draft?: boolean }[]>("GET", `/tickets?projectId=${projectId}`)).filter((t) => !t.draft).map((t) => t.key));
+    const launched = (projectId: string, before: Set<string>) => until("ticket launched", async () => ([...(await keys(projectId))].find((k) => !before.has(k)) ?? null), 10000, 100).catch(() => null);
+    const spec = (l: string) => l.startsWith("Spec");
+    const newSession = (projectId: string) => visit(`harness://new?projectId=${projectId}`, (e) => has(e, /^Spec/));
+    // Start session is ⌘↩ and Plan first ⇧⌘↩: the toolbar's buttons aren't in the tree.
+    const start = () => axe.keyCombo(227, 40);
+    const planFirst = () => axe.keyCombo([227, 225], 40);
+
+    let before = await keys(seeded.project.id);
+    await newSession(seeded.project.id);
+    await typeInto(spec, "Summarize @READ");
+    let els = await untilTree(() => axe.nodes(), (e) => has(e, "README.md"));
+    expect("@READ lists README.md", has(els, "README.md"), seen(els));
+    await tapLabel("README.md");
+    await untilTree(() => axe.nodes(), (e) => !has(e, "README.md"));
+    await quiet();
+    await start();
+    expect("Start session launches the ticket", !!(await launched(seeded.project.id, before)));
+
+    before = await keys(seeded.project.id);
+    await newSession(seeded.project.id);
+    await typeInto(spec, "Plan the readme");
+    await planFirst();
+    const planned = await launched(seeded.project.id, before);
+    expect("Plan first launches a ticket", !!planned);
+    els = await untilTree(() => axe.nodes(), (e) => has(e, "Show changes")); // the Spec tab's revision bar is on no other tab
+    expect("Plan first opens the ticket on its Spec tab", has(els, "Show changes"), seen(els));
+
+    const texts = async () => (await d.api<{ content: { text?: string } }[]>("GET", `/sessions/${(await ticketOf(world.messaging.key)).sessionId}/transcript`)).map((e) => e.content.text ?? "");
+    await visit(`harness://ticket/${world.messaging.key}?tab=transcript`, composerUp);
+    await typeInto((l) => l.startsWith("Message the agent"), "see @src/a");
+    els = await untilTree(() => axe.nodes(), (e) => has(e, "src/app.ts"));
+    expect("@src/a lists src/app.ts", has(els, "src/app.ts"), seen(els));
+    await tapLabel("src/app.ts");
+    await untilTree(() => axe.nodes(), (e) => !has(e, "src/app.ts")); // the list closes and the composer shrinks, which moves Send
+    await quiet();
+    await tapId("composer-send");
+    // iOS may capitalize the first word, so the message is compared without case.
+    const sent = await until("message with the mention", async () => ((await texts()).some((t) => t.toLowerCase() === "see @src/app.ts") ? true : null), 10000, 100).catch(() => null);
+    expect("Send posts the message with the mention", !!sent, `transcript ends ${JSON.stringify((await texts()).slice(-4))}`);
+
+    before = await keys(world.slash.id);
+    await newSession(world.slash.id);
+    await typeInto(spec, "/co");
+    els = await untilTree(() => axe.nodes(), (e) => has(e, "/code-walk"), 15000); // the first lookup starts the (fake) CLI
+    expect("/co lists the agent's commands and only those", has(els, "/code-walk") && has(els, "/commit-and-pr") && !has(els, "/vercel:deploy"), seen(els));
+    await tapLabel("/code-walk");
+    await untilTree(() => axe.nodes(), (e) => !has(e, "/code-walk"));
+    await untilKeyboard();
+    await axe.type("this branch");
+    await untilTree(() => axe.nodes(), (e) => valueOf(e, spec).endsWith("this branch"));
+    await start();
+    expect("the slash command's ticket launches", !!(await launched(world.slash.id, before)));
+  });
+  // sim-check drafts: moving the caret keeps what's typed, on the field and in the draft the service stored.
+  await w.screen("composer draft", async (expect) => {
+    await clearDock();
+    const composer = (l: string) => l.startsWith("Message the agent");
+    const draft = async () => (await ticketOf(world.drafting.key)).messageDraft?.text.toLowerCase() ?? null;
+    await visit(`harness://ticket/${world.drafting.key}?tab=transcript`, composerUp);
+    await typeInto(composer, "started on the phone");
+    await until("the draft saved", async () => ((await draft()) === "started on the phone" ? true : null), 8000, 100);
+    const el = await settled((e) => find(e, composer), "the composer");
+    const y = el.frame!.y + el.frame!.height / 2;
+    // Near the start of the text, then back near its end: each tap only moves the caret.
+    for (const x of [el.frame!.x + 22, el.frame!.x + el.frame!.width / 2]) {
+      await axe.tapAt(x, y);
+      const els = await quiet();
+      expect(`the field still reads the draft after a tap at x=${Math.round(x)}`, valueOf(els, composer).toLowerCase() === "started on the phone", `reads ${JSON.stringify(valueOf(els, composer))}`);
+    }
+    expect("the stored draft is unchanged", (await draft()) === "started on the phone", `draft ${JSON.stringify(await draft())}`);
+  });
+
   // The one tap: the board's palette field opens the palette sheet.
   await w.screen("command palette", async (expect) => {
+    await clearDock();
     previous = await openLink(slot.udid, axe, "harness://board", previous);
     const listed = (e: AXElement[]) => has(e, "Go to Inbox, Go to");
     /** Taps the board's field (once the board under the last sheet has stopped moving) and waits for the palette's commands. */

@@ -22,6 +22,8 @@ export interface DebugState {
   };
   /** How many times the dock has mounted since launch: 1, however tickets open, switch or dock. */
   dockMounts: number;
+  /** The text input holding the keyboard's focus (its accessibility label, or its class), absent when none is. */
+  focus?: string;
   editor?: {
     markedLines: string[];
     selection: { anchor: number; head: number };

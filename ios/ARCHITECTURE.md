@@ -1195,6 +1195,9 @@ The shape is HarnessKit's `DebugState` (`Shell/DebugState.swift`, pinned by `Deb
   most recently used first. `editor` is the file editor on screen (absent with none): the text of each
   line the page marked (`data-selected-line` rows), the selection, the dirty flag, the page's scroll offset,
   the line count and how many colors the drawn code carries (`colors`, 0 for plain text), read from the page through `window.harnessEditor.probe()` (editor/src/bridge.ts).
+- `focus` names the text input that is the first responder (its accessibility label, or its class when it has
+  none) and is absent when nothing is focused. The simulator's keyboard isn't in the accessibility tree (a
+  hardware keyboard is attached), so this is what a walkthrough waits on before it types.
 - `settled` is the app's idea of "at rest": `busy` is empty and nothing in the state has changed for 250 ms
   (`quietMs`, from `DebugSettle`). `busy` holds `editor` (a page that hasn't said ready), `animating:<layer>:<key>`
   (a Core Animation animation in flight in any window, the keyboard's and a sheet's included; one that

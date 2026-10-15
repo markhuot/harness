@@ -61,6 +61,18 @@ struct DebugStateTests {
         #expect(try original.json() == again.json())
     }
 
+    @Test func aFocusedFieldIsNamedAndNoFocusEncodesWithoutTheKey() throws {
+        var focused = state()
+        focused.focus = "Message the agent"
+        let object = try #require(try JSONSerialization.jsonObject(with: focused.json()) as? [String: Any])
+        #expect(object["focus"] as? String == "Message the agent")
+        #expect(try DebugState.decode(focused.json()).focus == "Message the agent")
+        let none = try #require(try JSONSerialization.jsonObject(with: state().json()) as? [String: Any])
+        #expect(none["focus"] == nil)
+        // Focus moving is a change, so the screen isn't at rest while the keyboard comes up.
+        #expect(try focused.json() != state().json())
+    }
+
     @Test func noEditorEncodesWithoutTheKey() throws {
         let object = try #require(try JSONSerialization.jsonObject(with: state().json()) as? [String: Any])
         #expect(object["editor"] == nil)

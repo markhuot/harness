@@ -256,10 +256,11 @@ async function shoot(udid: string, name: string) {
 
 export type Daemon = TestDaemon & { scratch: string };
 
-export async function startDaemon(): Promise<Daemon> {
+/** `env` goes to the daemon's process: the walkthrough points `HARNESS_CLAUDE_BIN` at the fake claude CLI with it. */
+export async function startDaemon(env: Record<string, string> = {}): Promise<Daemon> {
   const scratch = mkdtempSync(join(tmpdir(), "harness-dev-projects-"));
   try {
-    return { ...(await startDaemonShared({ delayMs: 1 })), scratch };
+    return { ...(await startDaemonShared({ delayMs: 1, env })), scratch };
   } catch (e) {
     rmSync(scratch, { recursive: true, force: true });
     throw e;

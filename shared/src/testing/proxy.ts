@@ -11,6 +11,8 @@ export type DaemonProxyOptions = {
   intercept?: (req: Request) => Response | undefined | Promise<Response | undefined>;
   /** Called with every message a client socket sends, before it goes upstream. */
   onClientMessage?: (message: string) => void;
+  /** Called with every message the daemon sends a client: return it (or a replacement) to deliver it, or null to drop it. */
+  onUpstreamMessage?: (message: string) => string | null;
 };
 
 export type DaemonProxy = {
@@ -55,7 +57,9 @@ export function startDaemonProxy(target: string | (() => string), opts: DaemonPr
         };
         up.onmessage = (e) => {
           try {
-            ws.send(typeof e.data === "string" ? e.data : String(e.data));
+            const text = typeof e.data === "string" ? e.data : String(e.data);
+            const out = opts.onUpstreamMessage ? opts.onUpstreamMessage(text) : text;
+            if (out !== null) ws.send(out);
           } catch {}
         };
         up.onclose = () => {

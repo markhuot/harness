@@ -136,6 +136,7 @@ struct TicketDetailApproveCustomSheet: View {
             HButton("Approve", variant: .primary, fullWidth: false, haptic: nil) { submit() }
                 .disabled(TicketDetailLogic.trim(instructions).isEmpty)
                 .submitShortcut()
+                .accessibilityIdentifier("approve-and-submit")
         } content: {
             TicketDetailSheetField(text: $instructions, placeholder: "What should the agent do with the work? e.g. “deploy it to staging, then open a PR”",
                                    minHeight: 140, accessibilityLabel: "Completion instructions", autoFocus: true)

@@ -117,6 +117,18 @@ const SIM_WALKTHROUGH: { name: RegExp; screen: string }[] = [
   { name: /the misses row in the gauge menu opens its explanation/, screen: "context gauge states" },
   { name: /a compacting session shows the spinner gauge/, screen: "context gauge states" },
   { name: /^usage: /, screen: "plan usage" },
+  { name: /routes open without crashing the app/, screen: "routes" },
+  { name: /^composer answers a blocked ticket/, screen: "blocked composer" },
+  { name: /^Approve menu → Approve and… takes typed instructions/, screen: "approve and…" },
+  { name: /^prompt editor: a bad variable shows inline/, screen: "prompt editor" },
+  { name: /^prompt editor: a tapped variable goes in at the cursor/, screen: "prompt variable chip" },
+  { name: /tapping a model in the Models picker saves it to the phase/, screen: "models picker" },
+  { name: /^the file editor edits, shows the unsaved dot and writes the file with Save/, screen: "file editor save" },
+  { name: /^New session: @READ lists README\.md/, screen: "mentions and commands" },
+  { name: /^New session: the toolbar's Plan first opens the launched ticket/, screen: "mentions and commands" },
+  { name: /^composer: @src\/a lists src\/app\.ts/, screen: "mentions and commands" },
+  { name: /^New session: \/co lists the agent's commands/, screen: "mentions and commands" },
+  { name: /^composer: moving the caret keeps what's typed/, screen: "composer draft" },
 ];
 
 export function dispositionOf(row: Row): Disposition {

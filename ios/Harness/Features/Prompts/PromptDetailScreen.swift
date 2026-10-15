@@ -83,10 +83,12 @@ private struct PromptDetailView: View {
                     HStack(spacing: 8) {
                         if !editing {
                             HButton("Customize", icon: "edit", variant: .primary, fullWidth: false) { setAppDraft(Prompts.promptStartText(entry)) }
+                                .accessibilityIdentifier("prompt-customize")
                         }
                         if entry.override != nil {
                             HButton("Reset to built-in", icon: "refresh", variant: .danger, fullWidth: false, action: reset)
                                 .disabled(saving)
+                                .accessibilityIdentifier("prompt-reset")
                         }
                     }
                 }
@@ -177,6 +179,7 @@ private struct PromptDetailView: View {
                     if insertable {
                         Button { insertVar(v.name) } label: { variableRow(v, insertable: true) }
                             .buttonStyle(.plain)
+                            .accessibilityIdentifier("prompt-var-\(v.name)")
                     } else {
                         variableRow(v, insertable: false)
                             .accessibilityElement(children: .combine)

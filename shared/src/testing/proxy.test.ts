@@ -34,6 +34,24 @@ describe("startDaemonProxy", () => {
     }
   });
 
+  test("drops or rewrites what the daemon sends a client, and passes the rest", async () => {
+    const be = backend();
+    const proxy = startDaemonProxy(`http://127.0.0.1:${be.port}`, { onUpstreamMessage: (m) => (m === "echo:drop" ? null : m === "echo:swap" ? "swapped" : m) });
+    try {
+      const ws = await open(`${proxy.base.replace("http", "ws")}/ws`);
+      const got: string[] = [];
+      ws.onmessage = (e) => got.push(String(e.data));
+      await Bun.sleep(150); // the upstream socket is open once the proxy has relayed
+      for (const m of ["drop", "swap", "keep"]) ws.send(m);
+      await Bun.sleep(250);
+      expect(got).toEqual(["swapped", "echo:keep"]);
+      ws.close();
+    } finally {
+      proxy.stop();
+      be.stop(true);
+    }
+  });
+
   test("passes socket traffic both ways, reports what clients send and pushes events to them", async () => {
     const be = backend();
     const seen: string[] = [];

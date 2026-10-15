@@ -58,3 +58,10 @@ export const usageFixture = (): UsageReport => ({
     { driver: "github-copilot", name: "GitHub Copilot", windows: [], error: "Sign in to GitHub to see Copilot usage", fetchedAt: usageNow() - 180_000 },
   ],
 });
+
+/** What the fake claude CLI (service/src/drivers/__fixtures__/fake-claude.ts) lists as the agent's slash commands. */
+export const SLASH_COMMANDS = [
+  { name: "code-walk", description: "Walk a user through a piece of code so they can perform a detailed code review. (user)", argumentHint: "" },
+  { name: "commit-and-pr", description: "Commit and PR (user)", argumentHint: "" },
+  { name: "vercel:deploy", description: "(vercel) Deploy the current project to Vercel.", argumentHint: "[prod]" },
+];

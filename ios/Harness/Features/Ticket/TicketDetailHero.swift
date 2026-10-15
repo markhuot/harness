@@ -308,6 +308,7 @@ struct TicketDetailHero: View {
         .menuOrder(.fixed)
         .buttonStyle(.harness(.primary, small: true, fullWidth: false))
         .accessibilityLabel("More ways to approve")
+        .accessibilityIdentifier("ticket-approve-more")
     }
 
     private func approve(_ choice: Approve.Choice) {

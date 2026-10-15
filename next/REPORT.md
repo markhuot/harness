@@ -14,7 +14,7 @@ Names generated at runtime (loops, helpers, `test.each`) appear as their templat
 
 ## Progress
 
-6081 rows: 3916 open, 753 new, 17 walkthrough, 65 accepted loss, 1330 kept.
+6083 rows: 3905 open, 753 new, 29 walkthrough, 65 accepted loss, 1331 kept.
 
 | Area | Rows | Open | New | Walkthrough | Loss | Kept | Deletable |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | :---: |
@@ -25,9 +25,9 @@ Names generated at runtime (loops, helpers, `test.each`) appear as their templat
 | app/src/renderer | 689 | 689 | 0 | 0 | 0 | 0 |  |
 | editor/scripts | 3 | 3 | 0 | 0 | 0 | 0 |  |
 | editor/src | 31 | 31 | 0 | 0 | 0 | 0 |  |
-| ios sim-check | 92 | 17 | 0 | 17 | 58 | 0 |  |
+| ios sim-check | 92 | 5 | 0 | 29 | 58 | 0 |  |
 | ios snapshot tests | 30 | 26 | 0 | 0 | 4 | 0 |  |
-| ios/HarnessKit (swift) | 1330 | 0 | 0 | 0 | 0 | 1330 | yes |
+| ios/HarnessKit (swift) | 1331 | 0 | 0 | 0 | 0 | 1331 | yes |
 | ios/Tools | 153 | 153 | 0 | 0 | 0 | 0 |  |
 | ios/Tools/highlighter | 14 | 14 | 0 | 0 | 0 | 0 |  |
 | plugins/git | 15 | 15 | 0 | 0 | 0 | 0 |  |
@@ -46,7 +46,7 @@ Names generated at runtime (loops, helpers, `test.each`) appear as their templat
 | service/src/tools | 116 | 116 | 0 | 0 | 0 | 0 |  |
 | shared/src | 159 | 159 | 0 | 0 | 0 | 0 |  |
 | shared/src/state | 418 | 418 | 0 | 0 | 0 | 0 |  |
-| shared/src/testing | 39 | 39 | 0 | 0 | 0 | 0 |  |
+| shared/src/testing | 40 | 40 | 0 | 0 | 0 | 0 |  |
 | shared/src/themes | 19 | 19 | 0 | 0 | 0 | 0 |  |
 
 ## Accepted losses
@@ -2516,11 +2516,11 @@ Signed off by the human. They stay listed here so each can be brought back at th
 - keyboardChecksWithSoftwareKeyboard › New session's prompt grows with every line typed
 - keyboardChecksWithSoftwareKeyboard › a tap at the bottom of New session's prompt row focuses it
 - keyboardChecksWithSoftwareKeyboard › the sheet's background runs behind the keyboard's rounded corners
-- mentionChecks › New session: @READ lists README.md, a tap completes it, and the toolbar launches (open)
-- mentionChecks › New session: the toolbar's Plan first opens the launched ticket on its Spec tab (open)
-- mentionChecks › composer: @src/a lists src/app.ts, a tap completes it and Send posts the message (open)
-- mentionChecks › New session: /co lists the agent's commands, a tap completes one, and the toolbar launches (open)
-- draftChecks › composer: moving the caret keeps what's typed (open)
+- mentionChecks › New session: @READ lists README.md, a tap completes it, and the toolbar launches (walkthrough: next/walkthrough/ios.ts › mentions and commands)
+- mentionChecks › New session: the toolbar's Plan first opens the launched ticket on its Spec tab (walkthrough: next/walkthrough/ios.ts › mentions and commands)
+- mentionChecks › composer: @src/a lists src/app.ts, a tap completes it and Send posts the message (walkthrough: next/walkthrough/ios.ts › mentions and commands)
+- mentionChecks › New session: /co lists the agent's commands, a tap completes one, and the toolbar launches (walkthrough: next/walkthrough/ios.ts › mentions and commands)
+- draftChecks › composer: moving the caret keeps what's typed (walkthrough: next/walkthrough/ios.ts › composer draft)
 - usageChecks › usage: the info popover explains the limits (walkthrough: next/walkthrough/ios.ts › plan usage)
 - usageChecks › usage: Projected at reset shows pace, the tick and too-early (walkthrough: next/walkthrough/ios.ts › plan usage)
 - usageChecks › usage: the filter shows one driver, and the choice survives a relaunch
@@ -2529,13 +2529,13 @@ Signed off by the human. They stay listed here so each can be brought back at th
 - attachmentChecks › an image smaller than the screen opens centred at its own size (open)
 - attachmentChecks › swiping down closes the viewer (open)
 - attachmentChecks › the video page plays and swiping down closes it too (open)
-- visitScreens › ${list.length} routes open without crashing the app (open)
+- visitScreens › ${list.length} routes open without crashing the app (walkthrough: next/walkthrough/ios.ts › routes)
 - interactionChains › ticket details: agent notes start collapsed, and a tap on the header opens and closes them (walkthrough: next/walkthrough/ios.ts › ticket details)
-- interactionChains › composer answers a blocked ticket (open)
-- interactionChains › Approve menu → Approve and… takes typed instructions and approves (open)
-- interactionChains › prompt editor: a bad variable shows inline and can't save; Save stores the fixed override, Reset to built-in (confirmed) clears it (open)
-- interactionChains › prompt editor: a tapped variable goes in at the cursor, and the next key follows it (open)
-- interactionChains › ticket details: tapping a model in the Models picker saves it to the phase (open)
+- interactionChains › composer answers a blocked ticket (walkthrough: next/walkthrough/ios.ts › blocked composer)
+- interactionChains › Approve menu → Approve and… takes typed instructions and approves (walkthrough: next/walkthrough/ios.ts › approve and…)
+- interactionChains › prompt editor: a bad variable shows inline and can't save; Save stores the fixed override, Reset to built-in (confirmed) clears it (walkthrough: next/walkthrough/ios.ts › prompt editor)
+- interactionChains › prompt editor: a tapped variable goes in at the cursor, and the next key follows it (walkthrough: next/walkthrough/ios.ts › prompt variable chip)
+- interactionChains › ticket details: tapping a model in the Models picker saves it to the phase (walkthrough: next/walkthrough/ios.ts › models picker)
 - interactionChains › the gauge's 44 pt tap target sits on the ticket key's row, after it (walkthrough: next/walkthrough/ios.ts › context gauge)
 - interactionChains › a gauge opens its menu and its About popover (walkthrough: next/walkthrough/ios.ts › context gauge)
 - interactionChains › New session asks first, and Limit… opens the limit sheet (walkthrough: next/walkthrough/ios.ts › context gauge limit)
@@ -2549,7 +2549,7 @@ Signed off by the human. They stay listed here so each can be brought back at th
 - interactionChains › Open file… (⌘P) finds a file in the ticket's folder and opens it at the typed lines (walkthrough: next/walkthrough/ios.ts › open file palette)
 - interactionChains › Settings → General has a Save on blur switch that flips when pressed (walkthrough: next/walkthrough/ios.ts › settings)
 - interactionChains › a Terraform file opens highlighted, like the Changes tab shows it (walkthrough: next/walkthrough/ios.ts › terraform highlight)
-- interactionChains › the file editor edits, shows the unsaved dot and writes the file with Save (open)
+- interactionChains › the file editor edits, shows the unsaved dot and writes the file with Save (walkthrough: next/walkthrough/ios.ts › file editor save)
 - agentsFilterChecks › Agents & tasks: the filter survives opening a row and coming back (walkthrough: next/walkthrough/ios.ts › agents & tasks filter)
 
 ### ios snapshot tests
@@ -3458,12 +3458,13 @@ Signed off by the human. They stay listed here so each can be brought back at th
 - AppModelTests › serverIdsLookLikeTheRNOnes
 - AppModelTests › oneStorePerConnectionAndTheOldOneCloses
 
-#### ios/HarnessKit/Tests/HarnessKitTests/Shell/DebugStateTests.swift: 9 rows, mostly kept
+#### ios/HarnessKit/Tests/HarnessKitTests/Shell/DebugStateTests.swift: 10 rows, mostly kept
 
 - DebugStateTests › routerStateNamesTheTabStackAndSheet
 - DebugStateTests › aTicketOpensAPresentedSheetThatDocks
 - DebugStateTests › routesDescribeAsKindAndDetail
 - DebugStateTests › jsonRoundTripsAndKeepsKeysStable
+- DebugStateTests › aFocusedFieldIsNamedAndNoFocusEncodesWithoutTheKey
 - DebugStateTests › noEditorEncodesWithoutTheKey
 - DebugStateTests › settlesOnceStateHasBeenQuietForTheWindow
 - DebugStateTests › aChangeRestartsTheQuietWindow
@@ -7483,9 +7484,10 @@ Signed off by the human. They stay listed here so each can be brought back at th
 - pool › never runs more than jobs at once, starts in order, and keeps results in input order
 - pool › an empty list resolves without running anything
 
-#### shared/src/testing/proxy.test.ts: 2 rows, mostly open
+#### shared/src/testing/proxy.test.ts: 3 rows, mostly open
 
 - startDaemonProxy › forwards requests it doesn't intercept, with the caller's headers
+- startDaemonProxy › drops or rewrites what the daemon sends a client, and passes the rest
 - startDaemonProxy › passes socket traffic both ways, reports what clients send and pushes events to them
 
 #### shared/src/testing/seed.test.ts: 4 rows, mostly open

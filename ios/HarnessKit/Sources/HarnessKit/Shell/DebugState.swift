@@ -19,7 +19,8 @@ import Foundation
 ///   "editor": {
 ///     "markedLines": ["let x = 1"], "selection": {"anchor": 0, "head": 0}, "dirty": false,
 ///     "scrollY": 0, "lineCount": 12, "colors": 5
-///   }
+///   },
+///   "focus": "Message the agent"
 /// }
 /// ```
 public struct DebugState: Codable, Equatable, Sendable {
@@ -43,6 +44,9 @@ public struct DebugState: Codable, Equatable, Sendable {
     public var dockMounts = 0
     /// The editor on screen, nil when none is.
     public var editor: EditorState?
+    /// The text input holding the keyboard's focus, by its accessibility label (its class when it has none), nil when
+    /// nothing is focused. A walkthrough types once this names the field: typing before it does drops keys.
+    public var focus: String?
 
     public init(busy: [String] = [], router: RouterState, editor: EditorState? = nil) {
         self.busy = busy

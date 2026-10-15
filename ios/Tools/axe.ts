@@ -79,8 +79,10 @@ export function axeFor(udid: string, developerDir: string) {
     tapId: (id: string) => run("tap", "--id", id),
     /** Types into the focused field. */
     type: (text: string) => run("type", text),
-    /** A key chord: modifiers and key are HID codes (⌘ is 227, K is 14, P is 19). */
-    keyCombo: (modifier: number, key: number) => run("key-combo", "--modifiers", String(modifier), "--key", String(key)),
+    /** A key chord: modifiers and key are HID codes (⌘ is 227, ⇧ is 225, K is 14, P is 19, S is 22, Return is 40); several modifiers are a list. */
+    keyCombo: (modifier: number | number[], key: number) => run("key-combo", "--modifiers", [modifier].flat().join(","), "--key", String(key)),
+    /** Presses keys one after another (HID codes: Delete is 42). */
+    keys: (codes: number[]) => run("key-sequence", "--keycodes", codes.join(","), "--delay", "0.02"),
     swipe: (x1: number, y1: number, x2: number, y2: number, seconds = 0.6) =>
       run("swipe", "--start-x", String(x1), "--start-y", String(y1), "--end-x", String(x2), "--end-y", String(y2), "--duration", String(seconds)),
     /** A tap at a point, for what has no label of its own (a link inside a paragraph, a sheet's Cancel). */
