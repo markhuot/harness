@@ -28,7 +28,7 @@ const noBrowser = () => Promise.reject(new Error("the test harness has no browse
  * suspending a ticket's tabs, shutdown) is a no-op, reads find nothing, and anything that would
  * drive a page rejects. `implements` keeps it in step with BrowserService.
  */
-class QuietBrowser implements BrowserService {
+export class QuietBrowser implements BrowserService {
   open = noBrowser;
   state = async () => null;
   tabs = async () => [];
