@@ -1,11 +1,13 @@
 // `bun run testing <cmd>`: the one entry point of the test suite.
+//   l0      logic tests: bun (testing/l0) and Swift (testing/swift) side by side, each timed
 //   stress  L0–L2 repeatedly, shuffled, in parallel   (--rounds=N --parallel=M --seed=S)
 //   ios     the iPhone/iPad layer                       (not built yet: fails)
 //   walk    the walkthrough                             (not built yet: fails)
 //   lint    the test-import lint
-//   (none)  the full gate: lint, L0–L2, ios, walk. Nothing lands on main until it passes.
+//   (none)  the full gate: lint, L0, L1–L2, ios, walk. Nothing lands on main until it passes.
 
 import { cpus } from "node:os";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { formatViolations, lintTestImports } from "./lint/imports";
 import { stress } from "./stress";
@@ -34,9 +36,43 @@ function lint(): number {
   return 1;
 }
 
+/** Every bun test outside L0 (L0 has its own step, with the Swift package). */
 async function unit(): Promise<number> {
-  const proc = Bun.spawn(["bun", "test"], { cwd: dir, stdout: "inherit", stderr: "inherit", stdin: "ignore" });
+  const proc = Bun.spawn(["bun", "test", "--path-ignore-patterns=l0/**"], { cwd: dir, stdout: "inherit", stderr: "inherit", stdin: "ignore" });
   return proc.exited;
+}
+
+/** Run `cmd` to the end, streaming nothing; its exit code, combined output and wall time. */
+async function timed(cmd: string[], cwd: string, env: Record<string, string> = {}) {
+  const started = performance.now();
+  const proc = Bun.spawn(cmd, { cwd, env: { ...process.env, ...env }, stdout: "pipe", stderr: "pipe", stdin: "ignore" });
+  const [out, err, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);
+  return { code, output: (out + err).trim(), seconds: (performance.now() - started) / 1000 };
+}
+
+/** The Xcode the Simulators rules in CLAUDE.md pin, when it's installed; else whatever `swift` resolves. */
+function developerDir(): Record<string, string> {
+  const pinned = "/Applications/Xcode-27.0.0.app/Contents/Developer";
+  return process.env.DEVELOPER_DIR || !existsSync(pinned) ? {} : { DEVELOPER_DIR: pinned };
+}
+
+/** L0: the bun logic tests and the Swift package, in parallel. No simulator, no Electron. */
+async function l0(): Promise<number> {
+  const started = performance.now();
+  const [bun, swift] = await Promise.all([
+    timed(["bun", "test", "l0"], dir),
+    timed(["swift", "test", "--package-path", join(dir, "swift")], dir, developerDir()),
+  ]);
+  const failed: string[] = [];
+  for (const [name, r] of [["bun l0", bun], ["swift", swift]] as const) {
+    console.log(`${r.code === 0 ? "✓" : "✗"} L0 ${name} [${r.seconds.toFixed(1)}s]`);
+    if (r.code !== 0) {
+      console.log(r.output);
+      failed.push(name);
+    }
+  }
+  console.log(`L0 ${failed.length ? `failed: ${failed.join(", ")}` : "passes"} [${((performance.now() - started) / 1000).toFixed(1)}s]`);
+  return failed.length ? 1 : 0;
 }
 
 async function runStress(args: string[]): Promise<number> {
@@ -56,7 +92,8 @@ export async function main(args: string[]): Promise<number> {
   if (cmd === undefined) {
     const steps: [string, () => number | Promise<number>][] = [
       ["lint", lint],
-      ["L0–L2", unit],
+      ["L0", l0],
+      ["L1–L2", unit],
       ["ios", () => run("ios")],
       ["walk", () => run("walk")],
     ];
@@ -75,7 +112,8 @@ async function run(cmd: string, args: string[] = []): Promise<number> {
   }
   if (cmd === "stress") return runStress(args);
   if (cmd === "lint") return lint();
-  console.error(`Unknown command "${cmd}". Commands: stress, ios, walk, lint (none runs the full gate).`);
+  if (cmd === "l0") return l0();
+  console.error(`Unknown command "${cmd}". Commands: l0, stress, ios, walk, lint (none runs the full gate).`);
   return 2;
 }
 
