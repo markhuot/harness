@@ -95,7 +95,7 @@ test("a parent can't submit while its children are open", async () => {
   await h.orch.startTicket(parent.key);
   await h.settle();
   expect(conduct.results[0]!.isError).toBe(true);
-  expect(conduct.results[0]!.text).toMatch(/still has child tickets that aren't done \(ACME-2: planning\)/);
+  expect(conduct.results[0]!.text).toMatch(/still has child tickets that aren't done \(ACME-2: review\)/);
 });
 
 test("the agent turning off the reviews at submit time is recorded in the transcript", async () => {
