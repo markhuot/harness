@@ -427,6 +427,17 @@ describe("shared size", () => {
       registry.shutdown();
     });
 
+    test("a resize that creates the entry after an unusable attach size respects a hidden presence", async () => {
+      const { registry, clock } = setup();
+      const { id } = registry.create({ cols: 120, rows: 40 });
+      await registry.attach(new FakeClient("mac"), id, "mac-dev", 0, 0); // before first layout: no entry
+      registry.setPresence("mac", presence(false, []));
+      registry.resize("mac", id, 100, 30);
+      clock.advance(200);
+      expect(registry.sizeReports(id).clients.map((c) => [c.clientId, c.counted])).toEqual([["mac", false]]);
+      registry.shutdown();
+    });
+
     test("a dropped socket forgets its presence, so a reconnect under the same id counts again", async () => {
       const { registry, clock } = setup();
       const { id } = registry.create({ cols: 120, rows: 40 });

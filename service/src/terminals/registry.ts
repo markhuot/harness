@@ -384,7 +384,8 @@ export class TerminalRegistry {
   resize(socketId: string, id: string, cols: unknown, rows: unknown) {
     const term = this.terms.get(id);
     if (!term?.clients.has(socketId)) return;
-    term.size.report(socketId, cols, rows);
+    // A resize can recreate an entry (unusable attach size, swept), so it carries the presence's verdict.
+    term.size.report(socketId, cols, rows, watchesTerminal(this.presences.get(socketId), id));
   }
 
   write(socketId: string, id: string, data: unknown) {

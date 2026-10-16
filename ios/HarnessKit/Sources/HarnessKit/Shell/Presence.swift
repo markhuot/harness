@@ -57,7 +57,7 @@ public enum PresenceRules {
     /// The terminals on screen in `router`'s window, so the service sizes a shell for the clients
     /// looking at it: the terminal in the presented ticket sheet (the iPhone's covering sheet or the
     /// iPad's panel beside the board). A sheet docked to its bar, or under a full-screen cover,
-    /// shows no terminal, and neither does a sheet that another sheet has covered.
+    /// shows no terminal.
     @MainActor
     public static func terminals(_ router: Router) -> [String] {
         switch router.scope {
