@@ -22,7 +22,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
-- Agents are now told that a small follow-up (a ticket re-opened by a triage update, bot or Copilot review feedback, a bug report on finished work) still ends with a spec update, so a pull request's fixes show up in the ticket's Status instead of the spec going stale.
+- Agents are now told that a small follow-up (a ticket re-opened by a triage update, bot or Copilot review feedback, a bug report on finished work) still ends with a spec update, so a pull request's fixes show up in the ticket's Status instead of the spec going stale. That spec update rewrites the spec to the current state, without a record of earlier rounds.
 - Terminals on the Mac now run in the service, not in the app, so they end when the service restarts (a pane for one that has ended says so) and closing a pane leaves its shell running: use "End terminal" in the pane's menu to close it. The service needs Bun 1.3.5 or newer to run from a checkout. The app no longer ships a native terminal add-on.
 - Internal: `bun run verify` and the type check cover the new `terminal/` package (the ghostty-web bundle the Mac pane and the iPhone share), and the iOS build bundles it as `terminal.js`.
 - Agents can now see draft tickets: `list_tickets`, `search_tickets` and `get_ticket` include them (marked `draft: true`), so an agent can find and read a draft instead of duplicating it. `list_tickets` and `search_tickets` take `include_drafts: false` to leave them out. Agents still can't message, start, move or update a draft, and now get an error saying it's a draft.
