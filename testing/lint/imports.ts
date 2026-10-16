@@ -23,25 +23,26 @@ export const DATA_DIRS = ["fixtures", "data"];
 
 const scanner = new Bun.Transpiler({ loader: "ts" });
 
-function* testFiles(dir: string): Generator<string> {
+function* sourceFiles(dir: string): Generator<string> {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     if (entry.name === "node_modules" || entry.name.startsWith(".")) continue;
     const path = join(dir, entry.name);
-    if (entry.isDirectory()) yield* testFiles(path);
-    else if (entry.name.endsWith(".test.ts")) yield path;
+    if (entry.isDirectory()) yield* sourceFiles(path);
+    else if (entry.name.endsWith(".ts")) yield path;
   }
 }
 
 const bare = (path: string) => path.replace(/\.ts$/, "").replace(/\/index$/, "");
 
 /**
- * Every `*.test.ts` under `testingDir` must stand alone: it may import product code, builders,
- * and non-test helpers, but never another test file, a data folder, or the old suite's helpers.
+ * Every `.ts` file under `testingDir` (tests and builders alike, since a builder's imports reach
+ * every test) must stand alone: it may import product code, builders, and non-test helpers, but
+ * never a test file, a data folder, or the old suite's helpers.
  */
 export function lintTestImports(testingDir: string): Violation[] {
   const root = dirname(testingDir);
   const violations: Violation[] = [];
-  for (const file of testFiles(testingDir)) {
+  for (const file of sourceFiles(testingDir)) {
     const source = readFileSync(file, "utf8");
     const lines = source.split("\n");
     // The transpiler's scan reads real imports only, not import-looking text inside a string.

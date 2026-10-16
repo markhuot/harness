@@ -1,4 +1,5 @@
 import { createHarness, type CreateHarnessOptions, type Harness } from "../../service/src/app";
+import type { BrowserService } from "../../service/src/browser/types";
 import { tempDir } from "./tmp";
 
 /**
@@ -13,12 +14,50 @@ export async function startHarness(overrides: Partial<CreateHarnessOptions> = {}
     hostname: "127.0.0.1",
     dbPath: ":memory:",
     drivers: [],
-    browser: quietBrowser,
+    browser: new QuietBrowser(),
     watchers: null,
     pluginDirs: [],
     ...overrides,
   });
 }
 
-// createHarness starts Chrome lazily; this keeps it from being constructed at all.
-const quietBrowser = {} as NonNullable<CreateHarnessOptions["browser"]>;
+const noBrowser = () => Promise.reject(new Error("the test harness has no browser; pass `browser` to startHarness to supply one"));
+
+/**
+ * A browser that never starts Chrome. What the orchestrator calls on its own (closing and
+ * suspending a ticket's tabs, shutdown) is a no-op, reads find nothing, and anything that would
+ * drive a page rejects. `implements` keeps it in step with BrowserService.
+ */
+class QuietBrowser implements BrowserService {
+  open = noBrowser;
+  state = async () => null;
+  tabs = async () => [];
+  tabInfo = noBrowser;
+  resize = noBrowser;
+  content = noBrowser;
+  click = noBrowser;
+  type = noBrowser;
+  keys = noBrowser;
+  select = noBrowser;
+  upload = noBrowser;
+  snapshot = noBrowser;
+  evaluate = noBrowser;
+  waitFor = noBrowser;
+  watch = () => () => {};
+  screenshot = noBrowser;
+  capture = noBrowser;
+  elementAt = noBrowser;
+  closeTab = async () => {};
+  input = noBrowser;
+  subscribe = noBrowser;
+  unsubscribe = async () => {};
+  suspendTabs = async () => {};
+  extensions = noBrowser;
+  addExtension = noBrowser;
+  setExtensionEnabled = noBrowser;
+  removeExtension = async () => {};
+  runExtensionAction = noBrowser;
+  restartBrowser = async () => {};
+  close = async () => {};
+  shutdown = async () => {};
+}

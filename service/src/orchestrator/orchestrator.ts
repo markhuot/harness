@@ -1340,7 +1340,8 @@ export class Orchestrator {
    */
   sweepUploads(at = this.now()): string[] {
     const referenced = this.referencedAttachments();
-    const removed = sweepUploads(this.paths.uploadsDir, referenced.paths, ORPHAN_UPLOAD_AGE_MS, at);
+    // Folders age by filesystem mtime, which only real time can be compared to; registry rows age by the injected clock.
+    const removed = sweepUploads(this.paths.uploadsDir, referenced.paths, ORPHAN_UPLOAD_AGE_MS, Date.now());
     const forget = this.store.attachments
       .listUnowned()
       .filter((a) => !fileOf(a) || (!referenced.ids.has(a.id) && !referenced.paths.has(a.path) && at - a.createdAt >= ORPHAN_UPLOAD_AGE_MS))

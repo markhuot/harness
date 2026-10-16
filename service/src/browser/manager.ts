@@ -1225,8 +1225,8 @@ export class BrowserManager implements BrowserService {
       }
       // The popup arrives as a new page on the extension's origin (first as an empty "other" target).
       const origin = `chrome-extension://${id}/`;
-      const deadline = this.now() + 3000;
-      while (this.now() < deadline) {
+      const deadline = Date.now() + 3000;
+      while (Date.now() < deadline) {
         const popup = (await pages()).find((t) => t.type === "page" && !before.has(t.targetId) && t.url.startsWith(origin));
         if (popup) {
           const entry = tab.entry;
@@ -1712,7 +1712,7 @@ export class BrowserManager implements BrowserService {
           known.url = p.request.url;
           return;
         }
-        tab.requests.set(p.requestId, { method: p.request.method, url: p.request.url, type: p.type ?? "Other", started: p.timestamp, at: this.now() });
+        tab.requests.set(p.requestId, { method: p.request.method, url: p.request.url, type: p.type ?? "Other", started: p.timestamp, at: Date.now() });
         if (tab.requests.size > MAX_REQUESTS) tab.requests.delete(tab.requests.keys().next().value!);
       }),
       s.on("Network.responseReceived", (p) => {
@@ -2249,7 +2249,7 @@ export class BrowserManager implements BrowserService {
         let met = true;
         if (matchUrl && !matchUrl(tab.url)) met = false;
         if (c.idle) {
-          const now = this.now();
+          const now = Date.now();
           if (tab.loading || inFlight(tab, now).length > 0) quietSince = null;
           else quietSince ??= now;
           if (quietSince === null || now - quietSince < IDLE_QUIET_MS) met = false;
@@ -2288,7 +2288,7 @@ export class BrowserManager implements BrowserService {
         if (Date.now() >= deadline) {
           const busy = check?.busy ?? ((await this.evalValue(tab, `document.querySelectorAll('[aria-busy="true"]').length`).catch(() => 0)) as number);
           // Every open request, long polls included: one of them may be what the page waits on.
-          const pending = inFlight(tab, this.now(), true);
+          const pending = inFlight(tab, Date.now(), true);
           const lines = [
             `Timed out after ${seconds(elapsed)} waiting for ${describeCondition(c)}.`,
             `Now at ${stripUserinfo(tab.url)}; the page is ${tab.loading ? "still loading" : "loaded"}${busy ? `, with ${busy} element${busy === 1 ? "" : "s"} marked aria-busy` : ""}.`,
@@ -2300,7 +2300,7 @@ export class BrowserManager implements BrowserService {
           else if (inPage) lines.push("The last check couldn't read the page.");
           if (c.url !== undefined && matchUrl && !matchUrl(tab.url)) lines.push(`The URL doesn't match ${c.url}.`);
           if (pending.length) {
-            lines.push(`Requests still in flight: ${pending.slice(0, 5).map((r) => `${r.method} ${stripUserinfo(r.url)} (${seconds(this.now() - r.at)})`).join(", ")}${pending.length > 5 ? `, and ${pending.length - 5} more` : ""}.`);
+            lines.push(`Requests still in flight: ${pending.slice(0, 5).map((r) => `${r.method} ${stripUserinfo(r.url)} (${seconds(Date.now() - r.at)})`).join(", ")}${pending.length > 5 ? `, and ${pending.length - 5} more` : ""}.`);
           }
           if (complaints.length) lines.push(`Console errors while waiting: ${complaints.join(" | ")}`);
           return finish(false, lines.join("\n"));

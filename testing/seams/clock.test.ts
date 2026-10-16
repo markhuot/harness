@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, utimesSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { DEFAULT_NOTIFICATION_SETTINGS, type Watcher } from "@harness/shared";
 import { EventBus } from "../../service/src/events";
 import { NotificationService } from "../../service/src/notifications/dispatcher";
@@ -42,18 +42,35 @@ describe("store", () => {
 });
 
 describe("orchestrator", () => {
-  test("an unused upload is swept once the injected clock says it is a day old", async () => {
-    const clock = fakeClock(Date.now());
+  const upload = (h: Awaited<ReturnType<typeof startHarness>>) => h.orchestrator.uploadAttachment(new TextEncoder().encode("hello"), "note.txt", "text/plain");
+
+  test("an upload folder is swept by its real age, and its registry row by the injected clock, whatever the clock starts at", async () => {
+    const clock = fakeClock(); // nowhere near real time
     const h = await startHarness({ now: clock });
     try {
-      const upload = h.orchestrator.uploadAttachment(new TextEncoder().encode("hello"), "note.txt", "text/plain");
-      expect(h.orchestrator.sweepUploads()).toEqual([]);
-      expect(existsSync(upload.path)).toBe(true);
-
+      const a = upload(h);
       clock.advance(25 * HOUR);
+      // The row is a day old to the clock, but the folder was just written: it stays.
+      expect(h.orchestrator.sweepUploads()).toEqual([]);
+      expect(existsSync(a.path)).toBe(true);
+      expect(h.store.attachments.get(a.id)).toBeNull();
+
+      const b = upload(h);
+      const old = new Date(Date.now() - 25 * HOUR);
+      utimesSync(dirname(b.path), old, old);
       expect(h.orchestrator.sweepUploads()).toHaveLength(1);
-      expect(existsSync(upload.path)).toBe(false);
-      expect(h.store.attachments.get(upload.id)).toBeNull();
+      expect(existsSync(b.path)).toBe(false);
+    } finally {
+      await h.stop();
+    }
+  });
+
+  test("a clock far ahead of real time does not delete a fresh upload folder", async () => {
+    const h = await startHarness({ now: fakeClock(Date.now() + 365 * 24 * HOUR) });
+    try {
+      const a = upload(h);
+      expect(h.orchestrator.sweepUploads()).toEqual([]);
+      expect(existsSync(a.path)).toBe(true);
     } finally {
       await h.stop();
     }

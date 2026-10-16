@@ -209,6 +209,7 @@ export function removeUploadDirs(dirs: readonly string[]): void {
  * Remove upload folders no ticket refers to that are older than `maxAgeMs` (a paste taken back
  * out of a draft, or a draft discarded before its first save). Young ones are left alone: a
  * client may have just uploaded one and not saved the draft yet. Returns the folders removed.
+ * A folder's age is its filesystem mtime, so `at` must be real time (`Date.now()`), never a test clock.
  */
 export function sweepUploads(uploadsDir: string, referenced: ReadonlySet<string>, maxAgeMs = ORPHAN_UPLOAD_AGE_MS, at = Date.now()): string[] {
   let entries: string[];

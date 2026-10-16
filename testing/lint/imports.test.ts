@@ -46,6 +46,13 @@ describe("lintTestImports", () => {
     expect(lintTestImports(dir)).toEqual([]);
   });
 
+  test("fails a builder that imports the old suite, since every test inherits it", () => {
+    const dir = repo({
+      "testing/builders/x.ts": `import { fake } from "../../service/src/testing/fakes";\n`,
+    });
+    expect(lintTestImports(dir)).toMatchObject([{ file: "testing/builders/x.ts", reason: "imports the old suite" }]);
+  });
+
   test("fails an import from a data folder", () => {
     const dir = repo({
       "testing/fixtures/world.ts": ``,
@@ -67,12 +74,12 @@ describe("lintTestImports", () => {
     expect(lintTestImports(dir).map((v) => v.line)).toEqual([1, 2, 3, 4, 5]);
   });
 
-  test("ignores files that aren't tests", () => {
+  test("scans helpers too, since a helper's import reaches every test", () => {
     const dir = repo({
       "testing/a.test.ts": ``,
       "testing/helper.ts": `import { x } from "./a.test";\n`,
     });
-    expect(lintTestImports(dir)).toEqual([]);
+    expect(lintTestImports(dir)).toMatchObject([{ file: "testing/helper.ts", reason: "imports another test file" }]);
   });
 
   test("the real testing/ tree is clean", () => {

@@ -20,7 +20,7 @@ export class SeenRepo {
 
 /** Key/value JSON settings. */
 export class SettingsRepo {
-  constructor(private db: Database, private now: Clock = systemClock) {}
+  constructor(private db: Database) {}
 
   all(): Record<string, unknown> {
     const out: Record<string, unknown> = {};
@@ -49,7 +49,7 @@ export class SettingsRepo {
 
 /** Named monotonic counters (e.g. TRIAGE-n). */
 export class CounterRepo {
-  constructor(private db: Database, private now: Clock = systemClock) {}
+  constructor(private db: Database) {}
 
   next(name: string): number {
     const row = this.db
