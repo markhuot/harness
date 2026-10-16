@@ -43,6 +43,11 @@ export class PresenceRegistry {
     return this.holders(ticketKey).length > 0;
   }
 
+  /** What this socket last reported, or null before its first presence. */
+  get(socketId: string): Presence | null {
+    return this.bySocket.get(socketId) ?? null;
+  }
+
   all(): Presence[] {
     return [...this.bySocket.values()];
   }

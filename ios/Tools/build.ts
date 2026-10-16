@@ -198,11 +198,12 @@ function writeIfChanged(path: string, text: string): void {
   writeFileSync(path, text);
 }
 
-/** The files the two bundle build phases read, for Xcode's skip check (project.yml, "Bundle highlighter"). */
+/** The files the three bundle build phases read, for Xcode's skip check (project.yml, "Bundle highlighter"). */
 function writeBundleLists(): void {
   const inputs = bundleInputs(IOS);
   writeIfChanged(join(BUILD, "bundle-highlighter.xcfilelist"), xcfilelist(inputs.highlighter));
   writeIfChanged(join(BUILD, "bundle-editor.xcfilelist"), xcfilelist(inputs.editor));
+  writeIfChanged(join(BUILD, "bundle-terminal.xcfilelist"), xcfilelist(inputs.terminal));
 }
 
 const XCODEGEN_HASH = join(BUILD, "xcodegen.hash");

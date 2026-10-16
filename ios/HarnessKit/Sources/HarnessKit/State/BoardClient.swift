@@ -26,10 +26,17 @@ public protocol BoardClient: LoaderClient, DetailClient {
     func listActivity(_ key: String) async throws -> [ActivityEntry]
     /// The plan-usage gauges' readings; a client without them throws and the store keeps no report.
     func getUsage() async throws -> PlanUsageReport
+    /// The service's terminals; `refresh` looks up each one's cwd and process first (a palette opening).
+    func listTerminals(refresh: Bool) async throws -> [TerminalInfo]
+    func createTerminal(_ body: CreateTerminalBody) async throws -> TerminalInfo
+    func closeTerminal(_ id: String) async throws
 }
 
 extension BoardClient {
     public func getUsage() async throws -> PlanUsageReport { throw URLError(.unsupportedURL) }
+    public func listTerminals(refresh: Bool) async throws -> [TerminalInfo] { [] }
+    public func createTerminal(_ body: CreateTerminalBody) async throws -> TerminalInfo { throw URLError(.unsupportedURL) }
+    public func closeTerminal(_ id: String) async throws { throw URLError(.unsupportedURL) }
 }
 
 extension HarnessClient: BoardClient {}

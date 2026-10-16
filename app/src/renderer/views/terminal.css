@@ -32,7 +32,7 @@
   background: var(--bg);
   border-top: 1px solid var(--border);
 }
-/* The FitAddon sizes the canvas to this box, so the padding is the terminal's margin. */
+/* The view reports how much of this box fits and draws the shell centered at the service's size, so the inset is the terminal's margin. */
 .terminal-host {
   position: absolute;
   inset: 6px 4px 4px 10px;
@@ -57,4 +57,9 @@
   box-shadow: var(--shadow);
   font-size: 12.5px;
   color: var(--text-2);
+}
+.terminal-shared {
+  flex: none;
+  font-size: 11px;
+  color: var(--text-3);
 }

@@ -410,6 +410,20 @@ public final class HarnessClient: Sendable {
         try await request("GET", "/usage")
     }
 
+    // MARK: Terminals
+
+    public func listTerminals(refresh: Bool = false) async throws -> [TerminalInfo] {
+        try await request("GET", refresh ? "/terminals?refresh=1" : "/terminals")
+    }
+
+    public func createTerminal(_ body: CreateTerminalBody) async throws -> TerminalInfo {
+        try await request("POST", "/terminals", body: body)
+    }
+
+    public func closeTerminal(_ id: String) async throws {
+        let _: OkResponse = try await request("DELETE", "/terminals/\(id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id)")
+    }
+
     public func listDrivers() async throws -> [DriverInfo] {
         try await request("GET", "/drivers")
     }

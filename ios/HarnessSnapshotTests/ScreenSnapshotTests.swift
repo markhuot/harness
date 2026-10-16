@@ -77,6 +77,31 @@ final class ScreenSnapshotTests: XCTestCase {
         }) { NavigationStack { PaletteScreen(startInFiles: false, autofocus: false) } }
     }
 
+    /// Terminals are rows of their own: the title or program, the folder and the program, newest first.
+    func testPaletteTerminals() async throws {
+        try await snapshot("palette-terminals") { NavigationStack { PaletteScreen(startInFiles: false, initialText: "term", autofocus: false) } }
+    }
+
+    /// A terminal sheet: its chrome and the accessory bar (the page itself is a web view, empty here).
+    func testTerminalSheet() async throws {
+        try await snapshot("terminal-sheet", router: {
+            let router = Router()
+            router.openTerminal(id: "t-dev")
+            return router
+        }) { RootView() }
+    }
+
+    /// A terminal docked beside tickets: its card shows the title, folder and program.
+    func testDockWithTerminal() async throws {
+        try await snapshot("dock-terminal", router: {
+            let router = Router()
+            router.openTicket(key: "HAR-7", tab: .spec)
+            router.openTerminal(id: "t-dev")
+            router.dockSheet()
+            return router
+        }) { RootView() }
+    }
+
     func testPaletteLargeType() async throws {
         try await snapshot("palette-large-type") {
             NavigationStack { PaletteScreen(startInFiles: false, autofocus: false) }.dynamicTypeSize(.accessibility2)

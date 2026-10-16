@@ -3150,7 +3150,7 @@ Settings, project settings, or on the board route the pane workspace.
   prop and provides it to the panes (`usePaneScope`, `components/paneContext.ts`). Switching
   scope unmounts the other board's panes rather than keeping every board mounted. Leaves mount
   again by id when you come back, and a terminal re-attaches to its shell, which lives in the
-  main process. Keeping every board mounted would mean running a board per project, each with its
+  service. Keeping every board mounted would mean running a board per project, each with its
   own search. Leaves show content (`{ kind: "board" }`, `{ kind: "ticket", ticketKey, tab }` or
   `{ kind: "terminal", sessionId, cwd, title? }`, `{ kind: "file", root, path, startLine?, endLine?, tab? }`,
   `{ kind: "ticketTab", ticketKey, tab, browserTab? }`), splits lay their children out side by side
@@ -3298,15 +3298,15 @@ Settings, project settings, or on the board route the pane workspace.
   (`popOut`; `popoutPanes` takes out the board the other operations put back). Everything that
   acts on a pane's scope works there unchanged: tabs, a child link replacing the pane, a
   terminal's title. The move is one store write, so a terminal's session never leaves every scope
-  and its shell keeps running; the pop-out's `TerminalPane` re-attaches and replays the
-  scrollback. The window opens at `#/popout/<id>/<fromScope>`, over the spot the pane had
+  and its shell keeps running; the pop-out's `TerminalPane` attaches again and restores
+  from a snapshot. The window opens at `#/popout/<id>/<fromScope>`, over the spot the pane had
   (`main/popouts.ts` `popoutBounds`), and renders `PopoutWindow` instead of the shell: the one pane,
   with "Put back on the board" in place of Maximize, and no grip or Move pane rows. Putting it back
   (`popIn`) docks it beside the focused pane of the board it came from (All projects if that
   project is gone), or focuses the pane already showing that ticket, and brings the main window
   forward on that board. Closing the pane closes the window. Closing the window closes the pane:
-  the main process tells the main window (`popout:closed`), which drops the scope, so a terminal's
-  shell dies with it. At startup the main window drops pop-outs whose windows aren't open (the app
+  the main process tells the main window (`popout:closed`), which drops the scope; a terminal's shell keeps running on the
+  service. At startup the main window drops pop-outs whose windows aren't open (the app
   quit with them open). While a pop-out has focus, menu commands about its pane (⌘W, the palette, a
   ticket's tabs) go to it, and board-level ones (⌘1, ⌘N, ⌘T, Settings) go to the main window,
   which the Dock icon also brings back.
@@ -3438,72 +3438,105 @@ Settings, project settings, or on the board route the pane workspace.
   Task / Conductor beside it, the prompt, the Options disclosure (always collapsed at first, with
   `newSessionOptionsSummary` as its label, opened by itself when `optionsNeedAttention`), and
   Plan first (⇧⌘↩) and Start session (⌘↩).
-- **Terminal panes.** New ▾ → New terminal in the sidebar (a split button whose main part is
+- **Terminal panes.** A terminal pane is a view of a shell the service hosts (below), the same
+  shell the iPhone shows. New ▾ → New terminal in the sidebar (a split button whose main part is
   still New session ⌘N), File ▸ New Terminal (⌘T) and a project's context menu call the store's
   `openTerminal(projectId?)`. It picks the board (`terminalScope`: the board on screen, a
   project's own board from its settings, otherwise the board last shown or All projects) and the
-  folder (`terminalCwd`: the project's `path`, `~` on All projects or for an unknown project).
-  Then it runs `openTerminal` in that scope, which appends the terminal as the far-right, full-height pane of the
-  workspace, 70em wide like a New session pane (`COMPOSE_WIDTH_PX`, shared sizing in
-  `fixedWidthShare`, floor 320px), and focuses it, and goes to that board if it isn't on
-  screen. Each call adds a pane. The content's `sessionId` is `t:<uuid>` (`newTerminalContent`)
-  and names the PTY. It isn't the leaf id: leaf ids come from a per-window counter, so two
-  windows can mint the same one before either sees the other's write, and loading re-ids a
-  duplicate. A shell must never be handed to the wrong pane, and a UUID never collides. Parsing
-  drops a terminal whose session id the main process would reject, and a session stored in two
-  scopes stays in the first. `views/TerminalPane.tsx` renders it with
-  [ghostty-web](https://github.com/coder/ghostty-web), Ghostty's VT core compiled to WASM behind
-  an xterm.js-like API, drawn on a canvas. The package is pinned to a `next` build because the
-  0.4.0 release doesn't report the mouse to programs like vim and htop. It loads on the first
-  terminal, in its own chunk. Its WASM is inlined as a `data:` URL, so it works from `file://` and
-  inside the asar with no asset to find, and the CSP adds `'wasm-unsafe-eval'` to `script-src`
-  (`connect-src` already allowed `data:`). A FitAddon sizes the terminal to its pane and follows
-  resizes. ghostty-web can't change colors after `open()`, so a theme change disposes the
-  terminal and makes a new one that re-attaches (`terminalColors` turns the theme's tokens into
-  the `#rrggbb` its VT core needs, flattening translucent ones). Attaching (`createAttach`,
-  `state/terminal.ts`): data events are held until `ensure` resolves, then the scrollback is
-  written and only output past its `end` offset (below) is, so nothing prints twice or goes
-  missing whichever order the reply and the events arrive in. A re-attached pane resizes the PTY
-  to itself, since `ensure` ignores cols/rows for an existing shell. The shell's title (OSC 0/2)
-  goes into the content (`setTerminalTitle`) for the header, else the folder's name. Keys: ⌘
-  shortcuts other than ⌘C/⌘V never reach the terminal. ghostty-web marks every key it handles
-  with preventDefault, and a prevented ⌘ key never reaches the native menu, so a capture listener
-  stops them before the terminal and they go unhandled, as from a text field. ⌃⌘ keys (the
-  renderer's own ⌃⌘S) pass through. ghostty-web's custom key handler is the reverse of xterm's:
-  returning true means "handled". ⌘C (and Edit ▸ Copy) copies the selection, and a paste goes
-  through the terminal's bracketed paste. An exited shell shows its code with Restart, which is
-  `kill` then `ensure` under the same session id. Lifecycle: `useTerminalLifecycle`
-  (`state/store.tsx`) watches the pane store (`watchPaneStore`, including another window's writes
-  re-read on `storage`) and kills every session that's in no scope any more (`closedSessions`).
-  That covers closing the pane, removing a project and a close in another window, while moving a
-  pane (even to another board) kills nothing. At startup it re-reads the stored panes and kills
-  the pane sessions (`t:` ids) none of them show (`orphanSessions` over `list()`), which are left
-  over from a renderer reload. Sessions with other ids aren't a pane's, so they're left alone. Shells
-  don't outlive the app, so after a relaunch a stored terminal pane starts a new shell in its
-  folder. `scripts/terminal-pane-check.ts [--packaged]` drives all of this in the real app over
-  CDP, with real key events.
-- **Terminals (process side).** `TerminalManager` (`main/terminals.ts`) keeps one PTY per id,
-  and the id is the terminal pane's `sessionId`. Each PTY runs the user's login shell (`$SHELL -l`,
-  else `/bin/zsh`) with `TERM=xterm-256color` and without `ELECTRON_*` or `NODE_OPTIONS`. The
-  preload exposes it as `window.harness.terminal` over `harness:terminal:*` IPC. `ensure(id,
-  { cwd, cols, rows })` is idempotent. It spawns on the first call (`~` expands, and a missing
-  directory falls back to home), and later calls re-attach to the same shell and return its
-  bounded scrollback (1 MiB), so a remounted pane replays what it missed. Output is coalesced
-  for a few ms, then broadcast as `terminal:data` to every window, and the exit code goes out as
-  `terminal:exit`. Each data event carries the offset its output ends at (UTF-16 code units of
-  everything the shell has printed, which keeps counting after the scrollback trims), and
-  `ensure` returns the offset its scrollback ends at (`end`). Data events and the `ensure` reply
-  are separate IPC messages that can arrive in either order, so the offsets are how a
-  re-attaching pane knows which output its scrollback already has. `ensure` doesn't touch unsent
-  output, which still goes to other windows showing that shell. An exited session stays until `kill`, so the pane can show the exit. `list()`
-  lets the renderer kill sessions no pane shows any more. `kill` sends SIGHUP, then SIGKILL after
-  3 s, and every shell is killed on quit. IPC arguments are validated (id pattern, dimensions
-  1–1000, writes up to 1 MiB) because the main process trusts nothing from a renderer. node-pty
-  is an N-API addon, so its prebuilt `pty.node` loads in Electron without a rebuild. The bundle
-  keeps it external, and `package.ts` copies it unpacked beside `app.asar`, where `sign-mac.ts`
-  signs it. Its `spawn-helper` ships without the executable bit, which `package.ts` fixes (and
-  `pty.ts` fixes for dev). `scripts/terminal-check.ts [--packaged]` drives the bridge in a real
-  app over CDP.
+  folder (`terminalCwd`: the project's `path`, `~` on All projects or for an unknown project),
+  creates the terminal on the service (`POST /terminals`, `projectId` set when the board is a
+  project) and runs `openTerminal` in that scope, which appends it as the far-right, full-height
+  pane, 70em wide like a New session pane (`COMPOSE_WIDTH_PX`, `fixedWidthShare`, floor 320px),
+  focuses it, and goes to that board if it isn't on screen. The content's `sessionId` is the
+  service's terminal id (`terminalContent`). A stored pane whose terminal is gone (the service
+  restarted) shows "This terminal has ended". The store keeps the terminal list (`terminals`,
+  `GET /terminals` on every connect, then `terminal.*` events through `applyTerminalEvent`) and
+  hands `terminal.snapshot` / `output` / `exit` socket messages to the panes (`onTerminalMessage`).
+  `views/TerminalPane.tsx` draws it with the shared terminal bundle (`terminal/`,
+  `createTerminalView`): [ghostty-web](https://github.com/coder/ghostty-web), Ghostty's VT core
+  compiled to WASM behind an xterm.js-like API, on a canvas. The package is pinned to a `next`
+  build because the 0.4.0 release doesn't report the mouse to programs like vim and htop. It loads
+  on the first terminal, in its own chunk; its WASM is inlined as a `data:` URL, so it works from
+  `file://` and inside the asar, and the CSP adds `'wasm-unsafe-eval'` to `script-src`.
+  The view reports how many columns and rows its pane could show (`terminal.attach` / `resize`,
+  with the device id, debounced) and draws the shell at the size the service says, centered: when a
+  smaller device is attached the terminal is smaller than the pane and the rest stays empty (the
+  header shows the size). It never reflows what it drew: the service sends a fresh snapshot
+  whenever the size changes (two emulators reflow wrapped lines differently). A hidden window
+  detaches (`visibilitychange`), so it never holds the shell small. Closing a pane leaves the shell
+  running (it stays in the palette and on the phone); "End terminal" in the pane's menu closes it
+  on the service. Restart makes a new terminal in the same folder in the same pane. ghostty-web
+  can't change colors after `open()`, so a theme change rebuilds the view and attaches again
+  (`terminalColors`, in the terminal bundle, turns the theme's tokens into the `#rrggbb` its VT core
+  needs; the iPhone sends its tokens and the page computes them too). Restoring a snapshot starts
+  over with RIS (`ESC c`, plus `CSI 3 J`), not `Terminal.reset()`, which frees the VT core while
+  the buffer API keeps reading the freed one; and the scrollback limit is set in bytes
+  (`SCROLLBACK_BYTES`), which is what ghostty-web passes to Ghostty. The shell's title goes into the
+  content (`setTerminalTitle`) for the header, else the folder's name. Keys: ⌘ shortcuts other than
+  ⌘C/⌘V never reach the terminal. ghostty-web marks every key it handles with preventDefault, and a
+  prevented ⌘ key never reaches the native menu, so a capture listener stops them before the terminal
+  and they go unhandled, as from a text field. ⌃⌘ keys (the renderer's own ⌃⌘S) pass through.
+  ghostty-web's custom key handler is the reverse of xterm's: returning true means "handled". ⌘C (and
+  Edit ▸ Copy) copies the selection, and a paste goes through the terminal's bracketed paste.
+  `terminal.open` (the iPhone's New Terminal) reaches the store through the socket's `onMessage`: it
+  adds a pane on the terminal's project board (All projects when it has none) without moving the
+  window, so a person in the middle of something isn't pulled away. The palette lists every terminal
+  (`terminalRow`: title or program, then folder and program as a subtitle; matched on all three), and
+  choosing one focuses its pane on whichever board has it, else opens a pane on its project's board
+  and goes there (`showTerminal`). `scripts/terminal-pane-check.ts [--packaged]` drives all of this
+  in the real app over CDP, with real key events.
+- **Terminals (service).** The service hosts the shells (`service/src/terminals/`), so the Mac and
+  the iPhone share them; they live in memory and end when the service restarts. A terminal is
+  `{ id, cwd, title, process, projectId, state, exitCode, createdAt, createdBy, cols, rows }`
+  (`TerminalInfo`): standalone, not tied to a ticket, `projectId` only says which board it was made
+  on (null = All projects). `GET /terminals` (`?refresh=1` looks up every terminal's folder and
+  program first, what a palette opening does), `POST /terminals` (`cwd` starts in `~` by default,
+  `openOnMac` asks the connected Mac to open a pane) and `DELETE /terminals/:id`; `terminal.created`
+  / `updated` / `removed` events keep clients' lists live (`updated` at most once a second per
+  terminal, only on a change). `TerminalRegistry` (`registry.ts`) owns them: a login shell
+  (`$SHELL -l`, else `/bin/zsh`, `TERM=xterm-256color`, the service's own `HARNESS_*`, `BUN_*`,
+  `ELECTRON_*` and `NODE_OPTIONS` removed) on a PTY from `Bun.spawn({ terminal })` (`pty.ts`; Bun
+  1.3.5 or newer, which works under `bun run` and in the compiled `harness-service`, so there's no
+  native addon). At most 24 run at once; an exited terminal is listed for 10 minutes; one nobody
+  has attached to for 24 hours with only the shell in the foreground is ended; nothing is killed
+  because a device stops looking at it. Shutdown sends SIGHUP to every shell.
+  **The service outlives any shell.** Callbacks from the PTY, timers and the WebSocket handler catch
+  and log what they throw; `daemon.ts` logs uncaught exceptions and unhandled rejections in every
+  run mode instead of exiting, and ignores SIGHUP (a shell's parent is the service). Input is capped
+  at 1 MiB a message and 4 MiB a second per terminal, because a shell that isn't reading leaves it
+  queued in the service; sizes clamp to 500×300 so a snapshot stays cheap. A write to a master that
+  just closed reads as the terminal ending. `POST /terminals/:id/restart` starts a new shell in an
+  exited terminal (same id, screen and scrollback; the old shell's late callbacks are ignored).
+  A shell can still `kill -9` the service: it runs as the same user.
+  Beside each PTY runs a headless emulator (`emulator.ts`, `@xterm/headless` and its serialize
+  addon; chosen because it runs under Bun and in the compiled binary and its snapshot restores
+  into ghostty-web) that reads the output and never writes to the PTY. It holds the screen, scrollback
+  (5 000 lines) and modes, and reports the title (OSC 0/2) and folder (OSC 7). Where the shell sends
+  no OSC 7, a poller (`poller.ts`) fills in folder and foreground program with one `ps` and one
+  `lsof` for every terminal that has a client (every 5 s) or all of them on `?refresh=1`.
+  Over the WebSocket (`terminal.attach { id, deviceId, cols, rows }`, `detach`, `resize`, `write`;
+  per-socket, never the all-clients event broadcast) a client gets `terminal.snapshot` (escape
+  sequences that restore the screen at the shell's size, and the byte offset to continue from), then
+  `terminal.output` chunks (UTF-8 decoded whole, offsets in bytes, a chunk at or before the offset is
+  dropped and a gap means "resync"). A snapshot is also sent when the size changes and when a slow
+  client has to resync: past a high-water mark (1 MiB queued) that client's output is dropped
+  and it gets a fresh snapshot once its socket drains, so a slow phone never stalls the shell or
+  the others. An unknown or ended terminal answers `terminal.exit`.
+  **Sizing** (`sizing.ts`) is tmux-style: the PTY and the emulator are the componentwise minimum
+  of the attached clients' viewports (floor 20×5; a 0×0 or NaN report is dropped). The first client
+  to attach to a terminal nobody watches gets its own size at once; otherwise shrinks apply
+  immediately and grows wait 1.5 s, reports are debounced (100 ms, leading and trailing, so 50
+  reports make at most two resizes) and nothing resizes when the size is unchanged. A client that
+  stops sending anything for 15 s drops out (clients ping every 5 s while attached), a device that
+  reconnects under the same device id replaces its old socket instead of counting twice, and the
+  size is kept when nobody is attached. Clients detach when hidden (the Mac on
+  `visibilitychange`, the iPhone when the app is backgrounded or the sheet closes).
+  **Terminal queries** (cursor position, device attributes, colors, focus, mode reports) are
+  answered by every attached client's emulator, so only the primary client's answers reach the
+  shell: the one that most recently typed (`isTerminalReply` tells a reply from typing).
+  **`terminal.open`** (`POST /terminals { openOnMac }`) goes once to each Mac connected right now,
+  to its visible window when it has several, and is never queued or replayed. The service token is
+  the only gate: any paired device can create one.
 
 ## iPhone and iPad app (`ios/`)
 

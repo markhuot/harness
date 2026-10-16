@@ -4503,6 +4503,96 @@ function interactionChains(s: Seeded): Chain[] {
         return `${GREETINGS_PATH}, ${range}`;
       });
     }),
+    chain("terminal", ["hello"], 40, async (udid) => {
+      let terminalId = "";
+      await check("a terminal made on the service is in the palette (folder and program) and opens in a sheet that draws its screen", async () => {
+        const made = await api<{ id: string }>("POST", "/terminals", { cwd: "/tmp", deviceId: "sim-check-mac" });
+        terminalId = made.id;
+        await goto(udid, BOARD);
+        await atRest(udid, 500);
+        await tapHeader(udid, "Command palette", { x: 192, y: 811 });
+        await until("the palette", async () => (await labels(udid)).some((x) => x.startsWith("New Terminal")), 8000);
+        await axe("type", "tmp", "--udid", udid);
+        const row = await until("the terminal's row", async () => ((l) => (l.find((x) => x.includes("/tmp") && x.includes("Terminal")) ? l : null))(await labels(udid)), 8000);
+        await shot(udid, "terminal-palette-light");
+        await tapWhere(udid, (x) => x.includes("/tmp") && x.includes("Terminal"));
+        const state = await probeUntil(udid, "the terminal drawn and attached", (x) => x.router.ticketSheet === "presented" && x.router.dock[0]?.kind === "terminal" && x.terminal?.synced === true && x.terminal.cols > 0).catch(async (e) => {
+          await shot(udid, "terminal-sheet-failed");
+          throw e;
+        });
+        await atRest(udid, 800);
+        await shot(udid, "terminal-sheet-light");
+        return `${row.length} rows, drawn at ${state.terminal!.cols}×${state.terminal!.rows}`;
+      });
+      const terminalRows = async () => (await api<{ id: string; rows: number }[]>("GET", "/terminals")).find((t) => t.id === terminalId)!.rows;
+      await check("typing in the sheet reaches the shell and its output is drawn", async () => {
+        const state = await probe(udid);
+        const t = state!.terminal!;
+        // Tap the terminal to give it the keyboard, then type like a person.
+        await axe("tap", "-x", "195", "-y", "300", "--udid", udid);
+        await atRest(udid, 1200);
+        await axe("type", "echo marker-$((6*7))", "--udid", udid);
+        await axe("key", "40", "--udid", udid); // Return
+        const done = await probeUntil(udid, "the shell's output on screen", (x) => (x.terminal?.screen ?? []).some((l) => l === "marker-42")).catch(async (e) => {
+          await shot(udid, "terminal-typed-failed");
+          throw new Error(`${(e as Error).message}; screen: ${JSON.stringify((await probe(udid))?.terminal?.screen.filter((l) => l))}`);
+        });
+        await shot(udid, "terminal-typed-light", true);
+        // The keyboard covers the sheet instead of resizing the shell: the rows the phone reports don't change.
+        await atRest(udid, 1500);
+        const after = await terminalRows();
+        if (after !== t.rows) throw new Error(`the shell's rows changed from ${t.rows} to ${after} with the keyboard up: ${JSON.stringify(((x) => ({ container: x?.container, webView: x?.webView, keyboardInset: x?.keyboardInset }))((await probe(udid))?.terminal))} before ${JSON.stringify({ container: t.container, webView: t.webView })}`);
+        return `${done.terminal!.screen.filter((l) => l).length} lines, ${t.cols}×${t.rows}, unchanged with the keyboard`;
+      });
+      const wsUrl = () => `${base.replace(/^http/, "ws")}/ws?token=${encodeURIComponent(token)}`;
+      const terminalNow = async () => (await api<{ id: string; cols: number; rows: number }[]>("GET", "/terminals")).find((t) => t.id === terminalId)!;
+      await check("a Mac attached at a bigger size sees the phone's output and the shell stays at the phone's size; backgrounding the app gives it back the Mac's size", async () => {
+        const phone = await terminalNow();
+        const mac = new WebSocket(wsUrl());
+        const seen: string[] = [];
+        mac.onmessage = (m) => {
+          const j = JSON.parse(String(m.data));
+          if (j.type === "terminal.snapshot" || j.type === "terminal.output") seen.push(j.data);
+        };
+        await new Promise<void>((r) => (mac.onopen = () => r()));
+        mac.send(JSON.stringify({ type: "terminal.attach", id: terminalId, deviceId: "sim-check-mac", cols: 120, rows: 80 }));
+        await until("the Mac's snapshot with what the phone typed", async () => seen.join("").includes("marker-42"), 8000);
+        await atRest(udid, 2500); // past the grow delay: a bigger client never enlarges a smaller one
+        const shared = await terminalNow();
+        if (shared.cols !== phone.cols || shared.rows !== phone.rows) throw new Error(`the shell is ${shared.cols}×${shared.rows} with a bigger Mac attached, the phone's is ${phone.cols}×${phone.rows}`);
+        await axe("button", "home", "--udid", udid);
+        await until("the shell back at the Mac's size once the phone is backgrounded", async () => (await terminalNow()).cols === 120, 12000);
+        await simctl("launch", udid, BUNDLE);
+        await until("the shell at the phone's size again", async () => (await terminalNow()).cols === phone.cols, 12000);
+        const again = await probeUntil(udid, "the sheet re-synced after foregrounding", (x) => x.terminal?.synced === true && (x.terminal.screen ?? []).some((l) => l === "marker-42"));
+        mac.close();
+        return `${phone.cols}×${phone.rows} shared, 120×80 alone, back to ${again.terminal!.cols}×${again.terminal!.rows} with the screen restored`;
+      });
+      await check("New Terminal in the palette makes a terminal in the board's project, asks a connected Mac to open it, and opens it here", async () => {
+        const macOpens: string[] = [];
+        const mac = new WebSocket(wsUrl());
+        mac.onmessage = (m) => {
+          const j = JSON.parse(String(m.data));
+          if (j.type === "terminal.open") macOpens.push(j.id);
+        };
+        await new Promise<void>((r) => (mac.onopen = () => r()));
+        mac.send(JSON.stringify({ type: "presence", deviceId: "sim-check-mac", platform: "mac", visible: true, tickets: [] }));
+        await clearDock(udid).catch(() => {});
+        await goto(udid, BOARD);
+        await atRest(udid, 500);
+        const before = (await api<{ id: string }[]>("GET", "/terminals")).map((t) => t.id);
+        await tapHeader(udid, "Command palette", { x: 192, y: 811 });
+        await until("the palette", async () => (await labels(udid)).some((x) => x.startsWith("New Terminal")), 8000);
+        await tapWhere(udid, (x) => x.startsWith("New Terminal"));
+        const opened = await probeUntil(udid, "the new terminal's sheet", (x) => x.router.dock[0]?.kind === "terminal" && x.terminal?.synced === true);
+        const made = (await api<{ id: string; projectId: string | null }[]>("GET", "/terminals")).filter((t) => !before.includes(t.id));
+        if (made.length !== 1) throw new Error(`${made.length} terminals were made`);
+        await until("the Mac told to open it", async () => macOpens.includes(made[0]!.id), 8000);
+        mac.close();
+        await shot(udid, "terminal-new-light");
+        return `${made[0]!.id} for project ${made[0]!.projectId}, Mac asked, sheet ${opened.terminal!.cols}×${opened.terminal!.rows}`;
+      });
+    }),
     chain("palette", ["fileLink"], 8, async (udid) => {
       const PALETTE = (l: string[]) => l.includes("New Session…, General") || l.some((x) => x.startsWith("New Session…"));
       const row = (prefix: string) => (l: string) => l.startsWith(prefix);

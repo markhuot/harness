@@ -1102,6 +1102,48 @@ What Settings, Project settings, the watcher form and Prompts share (HARNESS-144
 - File/Diff is two labeled buttons, not a segmented Picker, because sim-check taps the label that
   starts with "Diff". The counts use `Text(verbatim:)`, so 25000 doesn't render as "25,000".
 
+## Terminals (Features/Terminal)
+
+A terminal is a shell the service hosts, shared with the Mac (DESIGN.md "Terminals (service)"). The
+phone shows it in a sheet, drawn by the same ghostty-web the Mac pane uses, in a web view.
+
+- **The bundle.** `terminal/` (repo root) builds `terminal.js` (`terminal/scripts/build.ts`, an IIFE
+  exposing `HarnessTerminal.mount`) in the "Bundle terminal" build phase (`project.yml`, inputs in
+  `build/bundle-terminal.xcfilelist` from `Tools/build-cache.ts`), beside `Resources/terminal.html`.
+  ghostty-web's WASM is inlined in the module, so the page needs no other file.
+- **The bridge** (`HarnessKit/Logic/TerminalBridge.swift`, WebKit-free, tested): `TerminalCommand`
+  (`open` with the theme tokens, `message` for each `terminal.*` message, `reconnecting`, `theme`,
+  `focus`, `paste`, `ctrl`, `inset`, `frame`) goes to the page through `evaluateJavaScript`;
+  `TerminalEvent` (`ready`, `input`, `viewport`, `title`, `exit`, `resync`, `ctrl`, `error`) comes
+  back through the `terminal` message handler. `TerminalWebHost` (modeled on `EditorWebHost`) is the
+  native end. The socket stays in Swift: `HarnessSocket` remembers each `terminal.attach` and sends
+  it again after a reconnect, pings every 5 s while one is attached, and yields the `terminal.*`
+  messages on `terminalMessages`; `BoardStore` keeps the terminal list (`terminals`, `GET /terminals`
+  and events) and offers `attachTerminal` / `detachTerminal` / `resizeTerminal` / `writeTerminal`
+  and `onTerminalMessage`.
+- **Attaching** (`TerminalAttachRules`, pure): the sheet attaches once it is on screen, the app is
+  active and the page has measured its viewport; it detaches when the app goes to the background or
+  the sheet goes away (so a sleeping phone never holds the shell small), attaches again at the latest
+  size on foregrounding or a rebuilt socket, and a `resync` from the page is detach then attach. The
+  service sizes the shell to the smallest visible client, so the page draws at the size it gets,
+  centered.
+- **The keyboard** never changes the rows reported: the web view ignores the keyboard's safe area,
+  the page is exactly the web view's size (`frame`; a shrink of at most 120 pt, the keyboard's
+  accessory or the home indicator's inset, keeps the height it had: `TerminalViewportRules`), and the
+  page pans to keep the cursor above the keyboard (`inset`). A tap focuses the terminal inside its own
+  event, which is what brings the keyboard up. The accessory bar above the keyboard has Esc, Ctrl
+  (armed for one key), Tab, the arrows and `|`.
+- **The sheet** is `TicketSheet.Root.terminal(id:)`: it docks, persists in the dock's UserDefaults
+  list and restores like a ticket or a file; one already open comes forward (`Router.openTerminal`).
+  A card shows the title (else the program) and folder; a terminal the list no longer has shows
+  "ended". The palette lists terminals (`PaletteRows` content `.terminal`) with a New Terminal command
+  that creates one in the board's project (All projects when none) with `openOnMac`, so a connected
+  Mac opens a pane for it at once.
+- **Checks:** `TerminalBridgeTests`, the socket and router tests in HarnessKit; the snapshot tests
+  `testPaletteTerminals`, `testTerminalSheet` and `testDockWithTerminal`; and sim-check's `terminal`
+  chain (palette → sheet, typing through the keyboard, a Mac sharing the shell, backgrounding, New
+  Terminal), which reads the page through `DebugState.terminal`.
+
 ## Snapshot tests (HarnessSnapshotTests)
 
 `ios/HarnessSnapshotTests` renders the app's main screens in-process from fixture models and compares

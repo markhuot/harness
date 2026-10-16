@@ -29,9 +29,8 @@ import {
   minSize,
   movePane,
   newComposeContent,
-  newTerminalContent,
+  terminalContent,
   normalize,
-  orphanSessions,
   openCompose,
   openFile,
   openTerminal,
@@ -1274,9 +1273,8 @@ describe("openTerminal", () => {
 
   test("every new terminal is another pane, each with its own session", () => {
     let s = defaultPanes();
-    let n = 0;
-    for (let i = 0; i < 3; i++) s = valid(openTerminal(s, newTerminalContent("~", () => `uuid-${++n}`)));
-    expect(sessionsOf(s).sort()).toEqual(["t:uuid-1", "t:uuid-2", "t:uuid-3"]);
+    for (const id of ["t-1", "t-2", "t-3"]) s = valid(openTerminal(s, terminalContent({ id, cwd: "~" })));
+    expect(sessionsOf(s).sort()).toEqual(["t-1", "t-2", "t-3"]);
     expect(new Set(leaves(s.root).map((l) => l.id)).size).toBe(4);
   });
 
@@ -1293,12 +1291,9 @@ describe("openTerminal", () => {
     expect(focusedLabel(s)).toBe("$t:1");
   });
 
-  test("newTerminalContent mints t:<uuid> session ids, which the main process accepts", () => {
-    const a = newTerminalContent("/p");
-    const b = newTerminalContent("/p");
-    expect(a.sessionId).not.toBe(b.sessionId);
-    for (const id of [a.sessionId, b.sessionId]) expect(id).toMatch(/^t:[0-9a-f-]{36}$/);
-    expect(a.cwd).toBe("/p");
+  test("terminalContent shows the service's terminal under its id, keeping a known title", () => {
+    expect(terminalContent({ id: "t-abc", cwd: "/p" })).toEqual({ kind: "terminal", sessionId: "t-abc", cwd: "/p" });
+    expect(terminalContent({ id: "t-abc", cwd: "/p", title: "vim" })).toMatchObject({ title: "vim" });
   });
 });
 
@@ -1412,12 +1407,6 @@ describe("closedSessions (which shells to kill)", () => {
     expect(closedSessions(before, forgetProject(before, "p1", "P")).sort()).toEqual(["t:1", "t:2"]);
     expect(closedSessions(before, retainScopes(before, (s) => s !== "p1")).sort()).toEqual(["t:1", "t:2"]);
   });
-});
-
-test("orphanSessions: pane shells no scope shows, never a shell with another kind of id", () => {
-  const store: PaneStore = { scopes: { a: normalize(st(row("r", [B, TT("t:open")]))) } };
-  expect(orphanSessions(["t:open", "t:gone", "t1", "debug"], store)).toEqual(["t:gone"]);
-  expect(orphanSessions([], store)).toEqual([]);
 });
 
 describe("paneLabel / cwdName", () => {

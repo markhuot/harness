@@ -2,7 +2,7 @@
   "name": "harness",
   "private": true,
   "type": "module",
-  "workspaces": ["shared", "editor", "service", "app", "ios", "release", "plugins/*"],
+  "workspaces": ["shared", "editor", "terminal", "service", "app", "ios", "release", "plugins/*"],
   "scripts": {
     "test": "bun scripts/test.ts",
     "service": "bun run service/src/daemon.ts",

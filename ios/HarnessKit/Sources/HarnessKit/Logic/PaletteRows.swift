@@ -8,6 +8,8 @@ import Foundation
 public struct PaletteCommand: PaletteRankable, Identifiable, Equatable, Sendable {
     public enum Action: Equatable, Sendable {
         case newSession
+        /// A terminal in the project being viewed (All projects when none), opened in a sheet and on the Mac.
+        case newTerminal
         case toggleChildren
         case goAllProjects, goInbox, goSettings
         case goGroup(String)
@@ -49,13 +51,15 @@ public enum PaletteCommands {
 
     /// The commands for now: the focused ticket's actions first (as on the Mac), then the general
     /// ones, then the "Go to" rows. Left out because they mean nothing on a phone: panes, pop out,
-    /// the sidebar, terminals and the keyboard-only rows.
+    /// the sidebar and the keyboard-only rows. (Terminals are here: New Terminal, and each terminal
+    /// the service hosts as a row of its own, see `PaletteRows.rows`.)
     /// - `focused`: the ticket the palette opened over (a ticket sheet, presented or docked).
     /// - `canOpenFile`: there's a folder to search (`PaletteFileRoot.pick` found one).
     public static func build(_ state: BoardState, prefs: Prefs, focused: Ticket?, canOpenFile: Bool) -> [PaletteCommand] {
         var out: [PaletteCommand] = []
         if let t = focused { out += ticketCommands(t, state) }
         out.append(PaletteCommand(id: "new-session", label: "New Session…", group: "General", symbol: "square.and.pencil", action: .newSession))
+        out.append(PaletteCommand(id: "new-terminal", label: "New Terminal", group: "General", keywords: ["shell", "console"], symbol: "terminal", action: .newTerminal))
         if canOpenFile {
             out.append(PaletteCommand(id: "open-file", label: "Open File…", group: "General", keywords: ["file", "find file", "go to file"], symbol: "doc.text.magnifyingglass", action: .openFile))
         }
@@ -142,10 +146,19 @@ public struct PaletteRow: Identifiable, Equatable, Sendable {
     public enum Content: Equatable, Sendable {
         case command(PaletteCommand)
         case ticket(Ticket)
+        /// A terminal the service hosts (this phone's and the Mac's).
+        case terminal(TerminalInfo)
     }
     public var id: String
     public var content: Content
     public var ranges: [Range<Int>]
+}
+
+/// A terminal as a palette item: named by its title (else its program), found by title, program and folder.
+struct PaletteTerminal: PaletteRankable {
+    let terminal: TerminalInfo
+    var label: String { TerminalList.label(terminal) }
+    var keywords: [String] { ["terminal"] + TerminalList.keywords(terminal) }
 }
 
 public enum PaletteRows {
@@ -155,13 +168,20 @@ public enum PaletteRows {
     /// tickets (the loaded ones ranked, then the server's other matches). A ">" query lists
     /// commands only and "#" tickets only, so a command search never shows a ticket or a file.
     /// `searchIDs` is `BoardState.search`'s result for this same query (no second request).
-    public static func rows(_ query: PaletteQuery, commands: [PaletteCommand], state: BoardState, searchIDs: [String]?, recents: [String: Int] = [:]) -> [PaletteRow] {
+    public static func rows(_ query: PaletteQuery, commands: [PaletteCommand], state: BoardState, searchIDs: [String]?, recents: [String: Int] = [:], terminals: [TerminalInfo] = []) -> [PaletteRow] {
         var out: [PaletteRow] = []
         if query.wantsCommands {
             var cs = commands
             for i in cs.indices { cs[i].recentRank = recents[cs[i].id] }
             for m in PaletteRanker.rank(query.text, cs) {
                 out.append(PaletteRow(id: "cmd:\(cs[m.index].id)", content: .command(cs[m.index]), ranges: m.ranges))
+            }
+        }
+        if query.wantsCommands && !terminals.isEmpty {
+            // Newest first, so an empty query lists the terminal just made on top.
+            let items = terminals.sorted { $0.createdAt > $1.createdAt }.map(PaletteTerminal.init)
+            for m in PaletteRanker.rank(query.text, items) {
+                out.append(PaletteRow(id: "terminal:\(items[m.index].terminal.id)", content: .terminal(items[m.index].terminal), ranges: m.ranges))
             }
         }
         if query.wantsTickets && (query.mode == .tickets || !query.text.isEmpty) {

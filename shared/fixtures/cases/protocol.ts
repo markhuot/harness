@@ -968,6 +968,18 @@ export const PluginFrameMessage: P.PluginFrameMessage[] = [
 // Events and WebSocket messages
 // ---------------------------------------------------------------------------
 
+export const TerminalInfo: P.TerminalInfo[] = [
+  { id: "t-9f3c2a1b7d4e", cwd: "/Users/mark", title: "", process: "zsh", projectId: null, state: "running", exitCode: null, createdAt: T0, createdBy: "8C0F4E2A-3B1D-4C6E-9F7A-2D5B8E1C4A90", cols: 80, rows: 24 },
+  { id: "t-0a1b2c3d4e5f", cwd: "/Users/mark/Sites/harness", title: "vim DESIGN.md", process: "vim", projectId: "prj_00a1", state: "running", exitCode: null, createdAt: T0 + 5000, createdBy: "", cols: 62, rows: 18 },
+  { id: "t-ffeeddccbbaa", cwd: "/tmp", title: "", process: "zsh", projectId: "prj_00a1", state: "exited", exitCode: 0, createdAt: T0 + 9000, createdBy: "d1", cols: 80, rows: 24 },
+];
+
+export const CreateTerminalBody: P.CreateTerminalBody[] = [
+  {},
+  { cwd: "~/Sites", projectId: "prj_00a1", deviceId: "8C0F4E2A-3B1D-4C6E-9F7A-2D5B8E1C4A90", cols: 62, rows: 18, openOnMac: true },
+  { projectId: null },
+];
+
 /** One sample per HarnessEvent kind (18). */
 export const HarnessEvent: P.HarnessEvent[] = [
   { kind: "project.upserted", project },
@@ -997,6 +1009,9 @@ export const HarnessEvent: P.HarnessEvent[] = [
   { kind: "browser.state", sessionId: "ses_31", state: BrowserState[0]!, viewerId: "v:spec-2" },
   { kind: "service.status", status: ServiceStatus[0]! },
   { kind: "usage.updated", usage: PlanUsageReport[0]! },
+  { kind: "terminal.created", terminal: TerminalInfo[0]! },
+  { kind: "terminal.updated", terminal: TerminalInfo[1]! },
+  { kind: "terminal.removed", id: "t-ffeeddccbbaa" },
 ];
 
 export const BrowserInput: P.BrowserInput[] = [
@@ -1036,6 +1051,10 @@ export const ClientMessage: P.ClientMessage[] = [
   { type: "browser.input", sessionId: "ses_31", input: { type: "back" }, viewerId: "v:spec-2" },
   { type: "presence", deviceId: "8C0F4E2A-3B1D-4C6E-9F7A-2D5B8E1C4A90", platform: "ios", visible: true, tickets: ["NYTIMES-12", "NYTIMES-31"] },
   { type: "presence", deviceId: "8C0F4E2A-3B1D-4C6E-9F7A-2D5B8E1C4A90", platform: "mac", visible: false, tickets: [] },
+  { type: "terminal.attach", id: "t-9f3c2a1b7d4e", deviceId: "8C0F4E2A-3B1D-4C6E-9F7A-2D5B8E1C4A90", cols: 62, rows: 18 },
+  { type: "terminal.detach", id: "t-9f3c2a1b7d4e" },
+  { type: "terminal.resize", id: "t-9f3c2a1b7d4e", cols: 70, rows: 20 },
+  { type: "terminal.write", id: "t-9f3c2a1b7d4e", data: "ls -la\r" },
   { type: "ping" },
 ];
 
@@ -1044,6 +1063,12 @@ export const ServerMessage: P.ServerMessage[] = [
   { type: "event", event: HarnessEvent[2]! },
   { type: "pong" },
   { type: "error", message: "Unknown message type" },
+  { type: "terminal.snapshot", id: "t-9f3c2a1b7d4e", data: "hello\r\n\u001b[31mred\u001b[0m", offset: 17, cols: 80, rows: 24, truncated: false },
+  { type: "terminal.output", id: "t-9f3c2a1b7d4e", data: "wörld\r\n", offset: 25 },
+  { type: "terminal.exit", id: "t-9f3c2a1b7d4e", exitCode: 0 },
+  { type: "terminal.exit", id: "t-9f3c2a1b7d4e", exitCode: null },
+  { type: "terminal.open", id: "t-9f3c2a1b7d4e", projectId: "prj_00a1" },
+  { type: "terminal.open", id: "t-9f3c2a1b7d4e", projectId: null },
 ];
 
 // ---------------------------------------------------------------------------
@@ -1252,11 +1277,14 @@ export const discriminators: Record<string, string[]> = {
     "browser.state": true,
     "service.status": true,
     "usage.updated": true,
+    "terminal.created": true,
+    "terminal.updated": true,
+    "terminal.removed": true,
   }),
   TranscriptContent: all<P.TranscriptContent["type"]>({ text: true, thinking: true, tool_call: true, tool_result: true, status: true, error: true }),
   ToolResultContent: all<P.ToolResultContent["type"]>({ text: true, image: true }),
-  ClientMessage: all<P.ClientMessage["type"]>({ hello: true, "browser.subscribe": true, "browser.unsubscribe": true, "browser.input": true, presence: true, ping: true }),
-  ServerMessage: all<P.ServerMessage["type"]>({ welcome: true, event: true, pong: true, error: true }),
+  ClientMessage: all<P.ClientMessage["type"]>({ hello: true, "browser.subscribe": true, "browser.unsubscribe": true, "browser.input": true, presence: true, "terminal.attach": true, "terminal.detach": true, "terminal.resize": true, "terminal.write": true, ping: true }),
+  ServerMessage: all<P.ServerMessage["type"]>({ welcome: true, event: true, pong: true, error: true, "terminal.snapshot": true, "terminal.output": true, "terminal.exit": true, "terminal.open": true }),
   BrowserInput: all<P.BrowserInput["type"]>({ mouse: true, key: true, text: true, navigate: true, back: true, forward: true, reload: true, resize: true, device: true, size: true, responsive: true, newTab: true, closeTab: true, auth: true, authCancel: true }),
   PluginHostMessage: all<P.PluginHostMessage["type"]>({ "harness:init": true, "harness:theme": true, "harness:ticket": true }),
   PluginFrameMessage: all<P.PluginFrameMessage["type"]>({ "harness:ready": true, "harness:openExternal": true, "harness:navigate": true }),

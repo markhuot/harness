@@ -24,6 +24,7 @@ struct PaletteScreen: View {
     @Environment(\.openURL) private var openURL
 
     @State private var raw = ""
+    @State private var terminalError: String?
     @State private var runner = TicketActionRunner()
     /// Set once an action asked for input (notes, a confirmation): the palette goes when that's answered.
     @State private var awaitingInput = false
@@ -63,7 +64,7 @@ struct PaletteScreen: View {
     private var rows: [PaletteRow] {
         let state = store.state
         let search = state.search.flatMap { $0.q == query.text ? $0.ids : nil }
-        return PaletteRows.rows(query, commands: commands, state: state, searchIDs: search, recents: commandRecents)
+        return PaletteRows.rows(query, commands: commands, state: state, searchIDs: search, recents: commandRecents, terminals: store.terminals)
     }
 
     private var fileRows: [FileRow] {
@@ -114,6 +115,10 @@ struct PaletteScreen: View {
         .task(id: FilesTaskKey(wants: query.wantsFiles, root: root, search: fileQuery.search)) { await searchFiles() }
         .onChange(of: runner.prompt?.id) { _, _ in dismissWhenAnswered() }
         .onChange(of: runner.confirm == nil) { _, _ in dismissWhenAnswered() }
+        .task { await store.refreshTerminals() }
+        .alert("Couldn't start a terminal", isPresented: Binding(get: { terminalError != nil }, set: { if !$0 { terminalError = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: { Text(terminalError ?? "") }
     }
 
     // MARK: Field
@@ -200,6 +205,28 @@ struct PaletteScreen: View {
                 Text(cmd.group).font(.scaled(size: 12)).foregroundStyle(c.text3).lineLimit(1)
             }
             .accessibilityElement(children: .combine)
+        case let .terminal(t):
+            HStack(spacing: 12) {
+                Image(systemName: "terminal")
+                    .font(.system(size: 15, weight: .medium))
+                    .frame(width: 22)
+                    .foregroundStyle(t.state == .exited ? c.text3 : c.accent)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(Self.highlight(TerminalList.label(t), row.ranges, c))
+                        .font(.scaled(size: 16))
+                        .foregroundStyle(c.text)
+                        .lineLimit(1)
+                    Text(TerminalList.subtitle(t))
+                        .font(.scaled(size: 12))
+                        .foregroundStyle(c.text3)
+                        .lineLimit(1)
+                        .truncationMode(.head)
+                }
+                Spacer(minLength: 8)
+                Text("Terminal").font(.scaled(size: 12)).foregroundStyle(c.text3).lineLimit(1)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("palette-terminal-\(t.id)")
         case let .ticket(t):
             HStack(spacing: 10) {
                 StatusDot(status: t.status)
@@ -256,6 +283,8 @@ struct PaletteScreen: View {
         switch row.content {
         case let .ticket(t):
             router.openTicket(key: t.key, tab: nil)
+        case let .terminal(t):
+            router.openTerminal(id: t.id)
         case let .command(cmd):
             commandRecents = PaletteCommandRecents.push(cmd.id)
             run(cmd)
@@ -269,6 +298,18 @@ struct PaletteScreen: View {
             raw = "@"
         case .newSession:
             router.present(.newSession(projectId: WindowShortcuts.boardProject(store.state, app.prefs), key: nil))
+        case .newTerminal:
+            // In the project being viewed (All projects when none), and a pane on the Mac at once.
+            let project = WindowShortcuts.boardProject(store.state, app.prefs)
+            let device = app.deviceId()
+            Task {
+                do {
+                    let info = try await store.createTerminal(projectId: project, deviceId: device, openOnMac: true)
+                    router.openTerminal(id: info.id)
+                } catch {
+                    terminalError = Connection.describeError(error, baseUrl: store.baseUrl)
+                }
+            }
         case .toggleChildren:
             app.setPref(\.hideChildren, !app.prefs.hideChildren)
             close()

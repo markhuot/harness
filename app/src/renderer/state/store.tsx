@@ -1,7 +1,7 @@
 // React wiring for the store: connection → HarnessClient + HarnessSocket → reducer.
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
-import { HarnessClient, projectGroups, type FileLink, type HarnessEvent, type HarnessSocket } from "@harness/shared";
+import { HarnessClient, projectGroups, type FileLink, type HarnessEvent, type HarnessSocket, type ServerMessage, type TerminalInfo } from "@harness/shared";
 import {
   canLoadMoreDone,
   canLoadMoreSearch,
@@ -24,7 +24,6 @@ import {
 } from "@harness/shared/state";
 import { boardRoute, formatRoute, mirrorRoute, paneScopeOf, parseRoute, type Route } from "./route";
 import {
-  closedSessions,
   focusedTicket,
   forgetProjectPanes,
   getPanes,
@@ -33,29 +32,27 @@ import {
   isPopoutScope,
   leaves,
   newComposeContent,
-  newTerminalContent,
+  terminalContent,
+  terminalScopeOf,
   openCompose as openComposePane,
   openFile as openFilePane,
   openTerminal as openTerminalPane,
-  orphanSessions,
   openTicket,
   pruneTickets,
   retainPaneScopes,
   storedPaneStore,
-  terminalSessions,
   updateAllPanes,
   updatePanes,
   usePanes,
-  watchPaneStore,
   type FileContent,
 } from "./panes";
 import { confirmLeave } from "../components/draftClose";
-import { terminalCwd, terminalScope } from "./terminal";
+import { applyTerminalEvent, terminalCwd, terminalOpenScope, terminalScope } from "./terminal";
 import { fileContentFor, type FileLinkContext } from "./fileOpen";
 import type { HarnessBridge } from "../../main/types";
 import { isServiceStale, serviceCodeOf, type ServiceCode } from "./service";
 import { widgetSignature } from "./widgets";
-import { usePresence } from "./usePresence";
+import { deviceIdNow, usePresence } from "./usePresence";
 
 declare global {
   interface Window {
@@ -100,6 +97,17 @@ export interface Store {
    * edge at 70em, like New session.
    */
   openTerminal: (projectId?: string | null) => void;
+  /** The service's terminals, kept live (terminal.* events). */
+  terminals: readonly TerminalInfo[];
+  /** Subscribe to terminal.snapshot / output / size / exit messages (a pane's attach reads them). */
+  onTerminalMessage: (fn: (msg: ServerMessage) => void) => () => void;
+  /**
+   * Go to a terminal: its pane when this device has one (on whichever board it's on), else a new
+   * pane on its project's board (All projects when it has none), going to that board.
+   */
+  showTerminal: (terminal: TerminalInfo) => void;
+  /** End a terminal's shell on the service (every device's view of it ends). */
+  endTerminal: (id: string) => Promise<void>;
   /**
    * Open a New session pane (views/DraftEditor.tsx) on the board on screen (from elsewhere, the
    * board last shown, which it goes to), at the window's right edge at 70em. `projectId` presets
@@ -138,39 +146,6 @@ export function useStore(): Store {
 
 /** The store, or null outside the provider (for pieces also rendered standalone, like Markdown). */
 export const useOptionalStore = (): Store | null => useContext(Ctx);
-
-/**
- * Keep the shells in the main process in step with the terminal panes: when a change (closing a
- * pane, removing a project, another window's edit) leaves a session in no scope, its shell is
- * killed. At startup, pane shells no stored pane shows (left over from before a reload) are killed
- * too. Only pane session ids (`t:<uuid>`) count: a shell something else made isn't ours to kill.
- * Every window does this against the same stored panes, so a second kill of a session is a no-op.
- */
-function useTerminalLifecycle() {
-  useEffect(() => {
-    const terminal = window.harness?.terminal;
-    if (!terminal) return;
-    const kill = (id: string) => void terminal.kill(id).catch(() => {});
-    const unwatch = watchPaneStore((before, after) => closedSessions(before, after).forEach(kill));
-    let live = true;
-    void terminal
-      .list()
-      .then((ids) => {
-        if (!live) return;
-        // Also check what's stored: another window may have a terminal this one hasn't heard about
-        // yet. (Read, not adopted: adopting it would drop this window's New session panes.)
-        const stored = terminalSessions(storedPaneStore());
-        orphanSessions(ids, getPaneStore())
-          .filter((id) => !stored.has(id))
-          .forEach(kill);
-      })
-      .catch(() => {});
-    return () => {
-      live = false;
-      unwatch();
-    };
-  }, []);
-}
 
 /** Arriving at a board link to a ticket opens it in a pane of that board (or focuses the pane it's already in). */
 function openFromRoute(r: Route) {
@@ -320,10 +295,20 @@ export function StoreProvider({
     }
   }, [client, toast]);
 
+  const [terminals, setTerminals] = useState<readonly TerminalInfo[]>([]);
+  const terminalListeners = useRef(new Set<(msg: ServerMessage) => void>());
+  /** terminal.open from the service: filled in below, once the pane operations exist. */
+  const openFromService = useRef<(id: string) => void>(() => {});
+
   const socket = useMemo(() => {
     let first = true;
     return client.connect({
+      onMessage: (msg) => {
+        if (msg.type === "terminal.open") openFromService.current(msg.id);
+        else for (const fn of terminalListeners.current) fn(msg);
+      },
       onEvent: (e) => {
+        if (e.kind === "terminal.created" || e.kind === "terminal.updated" || e.kind === "terminal.removed") setTerminals((list) => applyTerminalEvent(list, e));
         // Panes of every board follow deletions (read before the reducer forgets the key).
         if (e.kind === "ticket.deleted") {
           const key = stateRef.current.tickets[e.id]?.key;
@@ -345,6 +330,7 @@ export function StoreProvider({
           first = false;
           // A reconnect may be a restarted service (new code): ask again every time.
           client.health().then((h) => setServiceCode(serviceCodeOf(h)), () => {});
+          client.terminals().then(setTerminals, () => {});
           void refresh().then(() => again && setEpoch((n) => n + 1));
         }
       },
@@ -498,7 +484,22 @@ export function StoreProvider({
   const workspaceWidth = () => document.querySelector<HTMLElement>(".pane-workspace")?.clientWidth || window.innerWidth;
 
   // --- Terminals ---------------------------------------------------------------------------
-  useTerminalLifecycle();
+  const terminalsRef = useRef(terminals);
+  terminalsRef.current = terminals;
+  const onTerminalMessage = useCallback((fn: (msg: ServerMessage) => void) => {
+    terminalListeners.current.add(fn);
+    return () => void terminalListeners.current.delete(fn);
+  }, []);
+
+  /** Show terminal `info` in a pane of `scope`, going to that board unless `quiet` (the pane is added where it is, focus stays). */
+  const openTerminalIn = useCallback(
+    (info: TerminalInfo, scope: string, quiet = false) => {
+      updatePanes(scope, (s) => openTerminalPane(s, terminalContent(info), workspaceWidth()));
+      if (!quiet && paneScopeOf(parseRoute(location.hash)) !== scope) navigate(boardRoute(scope));
+    },
+    [navigate],
+  );
+
   const openTerminal = useCallback(
     (projectId?: string | null) => {
       const r = parseRoute(location.hash);
@@ -509,11 +510,36 @@ export function StoreProvider({
       const focused = projectId === undefined && r.view === "board" ? focusedTicket(getPanes(scope)) : null;
       const { projects, tickets } = stateRef.current;
       const cwd = terminalCwd(scope, projects, focused ? (tickets[focused.ticketKey] ?? null) : null);
-      updatePanes(scope, (s) => openTerminalPane(s, newTerminalContent(cwd), workspaceWidth()));
-      if (paneScopeOf(r) !== scope) navigate(boardRoute(scope));
+      void (async () => {
+        try {
+          const info = await client.createTerminal({ cwd, projectId: projects[scope] ? scope : null, deviceId: await deviceIdNow() });
+          openTerminalIn(info, scope);
+        } catch (e) {
+          toast(`Couldn't start a terminal: ${(e as Error).message}`, "error");
+        }
+      })();
     },
-    [navigate],
+    [client, openTerminalIn, toast],
   );
+
+  const showTerminal = useCallback(
+    (info: TerminalInfo) => {
+      const have = terminalScopeOf(getPaneStore(), info.id);
+      openTerminalIn(info, have ?? terminalOpenScope(info, stateRef.current.projects));
+    },
+    [openTerminalIn],
+  );
+
+  const endTerminal = useCallback((id: string) => client.closeTerminal(id).then(() => {}), [client]);
+
+  // The service asked this Mac to open a pane (a terminal made on the iPhone): add it to its
+  // project's board without moving the window, so a person in the middle of something isn't pulled away.
+  openFromService.current = (id) => {
+    void (async () => {
+      const info = terminalsRef.current.find((t) => t.id === id) ?? (await client.terminals().catch(() => [] as TerminalInfo[])).find((t) => t.id === id);
+      if (info) openTerminalIn(info, terminalOpenScope(info, stateRef.current.projects), true);
+    })();
+  };
 
   const openCompose = useCallback(
     (projectId: string | null = null) => {
@@ -570,10 +596,14 @@ export function StoreProvider({
       retryService,
       restartService,
       openTerminal,
+      terminals,
+      onTerminalMessage,
+      showTerminal,
+      endTerminal,
       openCompose,
       openFile,
     }),
-    [state, client, socket, onEvent, epoch, route, navigate, refresh, toast, reconnect, boardProjectId, boardScope, loadMoreDone, setSearch, loadMoreSearch, serviceCode, serviceStale, serviceDeferred, serviceDownSince, retryService, restartService, openTerminal, openCompose, openFile],
+    [state, client, socket, onEvent, epoch, route, navigate, refresh, toast, reconnect, boardProjectId, boardScope, loadMoreDone, setSearch, loadMoreSearch, serviceCode, serviceStale, serviceDeferred, serviceDownSince, retryService, restartService, openTerminal, terminals, onTerminalMessage, showTerminal, endTerminal, openCompose, openFile],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

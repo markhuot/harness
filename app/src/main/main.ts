@@ -10,10 +10,8 @@ import { dirname, join } from "node:path";
 import { HarnessClient } from "@harness/shared";
 import { apnsEnvironment, loadDeviceId, PushRegistrar, ticketKeyFromDelivered, ticketKeyFromPush, ticketRoute } from "./push";
 import { routeForLink, WIDGET_RELOAD_HELPER, widgetGroupDir, widgetHost, WidgetReloader, writeWidgetHost } from "./widgets";
-import { nodePtySpawn } from "./pty";
 import { AwayState } from "./awayState";
 import { reloadToken, ServiceManager, type LoginItemAgent } from "./service";
-import { TerminalManager } from "./terminals";
 import type { ContextMenuItem, ConnectionResult, MenuCommand, PickDirectoryOptions, PopoutOpenOptions, ThemePatch, ThemeState } from "./types";
 import { commandGoesToMain, parsePopoutOptions, POPOUT_MIN, popoutBounds } from "./popouts";
 import { COMMAND_BY_ID, commandAccelerator } from "../renderer/state/keys";
@@ -669,23 +667,11 @@ ipcMain.handle("harness:popout:showMain", (_e, route: unknown) => {
 });
 ipcMain.handle("harness:popout:list", () => [...popouts.keys()]);
 
-// Terminals: PTYs live here, keyed by the renderer's pane leaf id, and outlive pane remounts.
-// Output and exits go to every window; the renderer picks its ids. node-pty loads on first use.
+// Output of broadcast channels goes to every window.
 const broadcast = (channel: string, ...args: unknown[]) => {
   for (const w of BrowserWindow.getAllWindows()) if (!w.webContents.isDestroyed()) w.webContents.send(channel, ...args);
 };
 const awayState = new AwayState({ monitor: powerMonitor, onChange: (away) => broadcast("away", away) });
-let terminalManager: TerminalManager | null = null;
-const terminals = () =>
-  (terminalManager ??= new TerminalManager({
-    spawn: nodePtySpawn(),
-    events: { data: (id, data, end) => broadcast("terminal:data", id, data, end), exit: (id, exit) => broadcast("terminal:exit", id, exit) },
-  }));
-ipcMain.handle("harness:terminal:ensure", (_e, id: unknown, opts: unknown) => terminals().ensure(id, opts));
-ipcMain.handle("harness:terminal:write", (_e, id: unknown, data: unknown) => terminals().write(id, data));
-ipcMain.handle("harness:terminal:resize", (_e, id: unknown, cols: unknown, rows: unknown) => terminals().resize(id, cols, rows));
-ipcMain.handle("harness:terminal:kill", (_e, id: unknown) => terminalManager?.kill(id) ?? false);
-ipcMain.handle("harness:terminal:list", () => terminalManager?.list() ?? []);
 
 // ---------------------------------------------------------------------------
 // Lifecycle
@@ -734,8 +720,6 @@ app.whenReady().then(() => {
 });
 
 // Never leave shells behind: SIGHUP every PTY on the way out (closing the PTYs hangs up the rest).
-app.on("will-quit", () => terminalManager?.killAll());
-process.on("exit", () => terminalManager?.killAll());
 
 // The service the app runs as its child stops with it. Agents mid-run would be cancelled, so ask
 // first, and wait for the service to shut down cleanly (it closes Chrome) before exiting.

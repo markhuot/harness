@@ -28,6 +28,8 @@ final class DebugProbe {
     private static let ambientAfter: TimeInterval = 2
 
     private struct WeakHost { weak var host: EditorWebHost? }
+    private struct WeakTerminalHost { weak var host: TerminalWebHost? }
+    private var terminalHosts: [WeakTerminalHost] = []
 
     /// Starts writing for the main window's router (a ticket window's router is ignored).
     func attach(_ router: Router) {
@@ -45,6 +47,11 @@ final class DebugProbe {
     func register(_ host: EditorWebHost) {
         hosts.removeAll { $0.host == nil }
         hosts.append(WeakHost(host: host))
+    }
+
+    func register(_ host: TerminalWebHost) {
+        terminalHosts.removeAll { $0.host == nil }
+        terminalHosts.append(WeakTerminalHost(host: host))
     }
 
     /// What is moving on screen, in any of the app's windows (the keyboard's and a sheet's included):
@@ -100,7 +107,12 @@ final class DebugProbe {
         var state = DebugState(router: DebugState.router(router))
         state.dockMounts = dockMounts
         if onScreen.contains(where: { !$0.ready }) { state.busy.append("editor") }
+        let terminalsOnScreen = terminalHosts.compactMap(\.host).filter { $0.webView.window != nil }
+        if terminalsOnScreen.contains(where: { !$0.ready }) { state.busy.append("terminal") }
         state.busy += motion()
+        for host in terminalsOnScreen where host.ready {
+            if let terminal = await host.probe() { state.terminal = terminal; break }
+        }
         for host in onScreen where host.ready {
             if let editor = await host.probe() { state.editor = editor; break }
         }

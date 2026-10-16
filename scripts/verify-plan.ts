@@ -6,6 +6,9 @@
 // typecheck" for the whole diff, so a new directory is never silently unchecked. A rule with no
 // layers (docs) claims a file on purpose.
 
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+
 export type LayerKind = "light" | "app" | "sim";
 
 export interface Layer {
@@ -50,7 +53,7 @@ export const RENDERER_CHECKS: [RegExp, string][] = [
   [/views\/ActivityTab\.tsx$|state\/activity\.|components\/Markdown\.tsx$/, "spec-activity"],
   [/components\/Markdown\.tsx$|views\/SpecTab\.tsx$/, "spec-headings-check"],
   [/views\/TicketDetails\.tsx$/, "agent-notes-check"],
-  [/views\/TerminalPane\.tsx$/, "terminal-pane-check"],
+  [/views\/TerminalPane\.tsx$|state\/terminal\./, "terminal-pane-check"],
   [/views\/Board\.tsx$|components\/PaneWorkspace\.tsx$|state\/panes/, "cmd-click-check"],
   [/views\/BrowserView\.tsx$|state\/browser/, "browser-size-check"],
   [/components\/Annotat|annotationDraw/, "annotate-check"],
@@ -76,6 +79,7 @@ export const RENDERER_FALLBACK = "smoke";
 export const IOS_FEATURE_CHECKS: [RegExp, string[], string][] = [
   [/^ios\/Harness\/(App\/(TicketSheetHost|DockedTickets|DockHold|TicketSidePanel)|Features\/Ticket\/TearOff)/, ["--sheets"], "--sheets (the ticket sheet and dock)"],
   [/^ios\/Harness\/Features\/Files\//, ["--only=file-link,save-on-blur,file-edit"], "--only=file-link,save-on-blur,file-edit"],
+  [/^ios\/Harness\/Features\/(Terminal|Palette)\/|^ios\/Harness\/Resources\/terminal\.html$/, ["--only=terminal"], "--only=terminal"],
   [/^ios\/Harness\/Features\/Prompts\//, ["--only=prompt-editor"], "--only=prompt-editor"],
   [/^ios\/Harness\/Features\/NewSession\//, ["--mentions"], "--mentions"],
   [/^ios\/Harness\/Features\/Pickers\/ModelPicker/, ["--only=models-picker"], "--only=models-picker"],
@@ -124,7 +128,9 @@ export const RULES: Rule[] = [
   {
     name: "app check script",
     match: /^app\/scripts\/[^/]+-check\.ts$|^app\/scripts\/(smoke|spec-activity|changes|shoot|ticket-header|browser-tabs)\.ts$/,
-    layers: (f) => [bunIn("app"), typecheck, appBuild, appCheck(f.replace(/^app\/scripts\/|\.ts$/g, ""))],
+    // A check that was deleted has nothing to run.
+    layers: (f) =>
+      existsSync(join(import.meta.dir, "..", f)) ? [bunIn("app"), typecheck, appBuild, appCheck(f.replace(/^app\/scripts\/|\.ts$/g, ""))] : [bunIn("app"), typecheck],
   },
   { name: "app build and packaging scripts", match: /^app\/(scripts|package\.json|vite|tsconfig)/, layers: () => [bunIn("app"), typecheck] },
   { name: "HarnessKit tests", match: /^ios\/HarnessKit\/Tests\//, layers: () => [swiftTest] },

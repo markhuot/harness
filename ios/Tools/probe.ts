@@ -18,7 +18,7 @@ export interface DebugState {
     sheet: string | null;
     cover: string | null;
     ticketSheet: "presented" | "docked" | "gone";
-    dock: { id: number; kind: "ticket" | "newSession" | "file"; title: string; path: string[] }[];
+    dock: { id: number; kind: "ticket" | "newSession" | "file" | "terminal"; title: string; path: string[] }[];
   };
   /** How many times the dock has mounted since launch: 1, however tickets open, switch or dock. */
   dockMounts: number;
@@ -30,6 +30,20 @@ export interface DebugState {
     lineCount: number;
     /** How many colors the drawn code carries: 0 is plain text. */
     colors: number;
+  };
+  /** The terminal on screen, absent when none is. */
+  terminal?: {
+    cols: number;
+    rows: number;
+    /** A snapshot has been drawn and output is flowing. */
+    synced: boolean;
+    offset: number;
+    /** The visible screen, one string per row. */
+    screen: string[];
+    ctrl: boolean;
+    keyboardInset: number;
+    container: { width: number; height: number };
+    webView?: { width: number; height: number };
   };
 }
 

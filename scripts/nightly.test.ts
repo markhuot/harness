@@ -68,7 +68,7 @@ describe("layers", () => {
   test("listAppChecks finds smoke and every real *-check script", () => {
     const checks = listAppChecks(join(import.meta.dir, "..", "app", "scripts"));
     expect(checks[0]).toBe("smoke");
-    expect(checks).toContain("terminal-check");
+    expect(checks).toContain("terminal-pane-check");
     expect(checks.every((c) => c === "smoke" || c.endsWith("-check"))).toBe(true);
   });
 

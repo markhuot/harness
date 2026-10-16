@@ -79,6 +79,22 @@ targets:
             exit 1
           fi
           "$BUN" "$SRCROOT/../editor/scripts/build.ts" --out "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/editor.js"
+      # The terminal sheet's ghostty-web bundle (terminal/, built by terminal/scripts/build.ts), beside
+      # Resources/terminal.html, which loads it (ARCHITECTURE.md § Terminals).
+      - name: Bundle terminal
+        inputFileLists: [build/bundle-terminal.xcfilelist]
+        outputFiles: ["$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/terminal.js"]
+        showEnvVars: false
+        script: |
+          BUN="$(command -v bun || true)"
+          for c in "$HOME/.bun/bin/bun" /opt/homebrew/bin/bun /usr/local/bin/bun; do
+            if [ -z "$BUN" ] && [ -x "$c" ]; then BUN="$c"; fi
+          done
+          if [ -z "$BUN" ]; then
+            echo "error: bun (https://bun.sh) is needed to bundle the terminal. Install it, then run bun install at the repo root."
+            exit 1
+          fi
+          "$BUN" "$SRCROOT/../terminal/scripts/build.ts" --out "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/terminal.js"
     info:
       path: Harness/Info.plist
       properties:

@@ -1,32 +1,28 @@
-// A terminal pane: a ghostty-web terminal (Ghostty's VT core compiled to WASM, drawn on a canvas)
-// showing a login shell that lives in the main process (window.harness.terminal, main/terminals.ts).
+// A terminal pane: a view of a shell the service hosts, drawn by ghostty-web (Ghostty's VT core
+// compiled to WASM, on a canvas) through the shared terminal bundle (terminal/). The iPhone attaches
+// to the same shell: the service restores the screen with a snapshot, then streams output, and sizes
+// the shell to the smallest visible client. This pane draws at that size, centered, so it can be
+// smaller than the pane when a phone is attached.
 //
-// The shell outlives the pane's component. Switching boards, moving the pane or changing the theme
-// unmounts or recreates the terminal, and the next mount re-attaches to the same shell by the
-// content's sessionId, replaying its scrollback (createAttach in state/terminal.ts has the rules).
-// Closing the pane is what ends the shell (the store's terminal lifecycle kills it).
+// The shell outlives the pane. Closing the pane leaves it running (it is still in the palette and on
+// the phone); "End terminal" in the menu hangs it up. A terminal the service no longer has (it
+// restarted) reads as ended.
 //
-// ghostty-web can't change colors after open(), so a theme change disposes the terminal and makes
-// a new one; re-attaching makes that look like nothing happened.
+// ghostty-web can't change colors after open(), so a theme change rebuilds the view; attaching again
+// makes that look like nothing happened.
 
 import { useEffect, useRef, useState } from "react";
-import type { Terminal } from "ghostty-web";
-import type { TerminalExit } from "../../main/types";
+import { createTerminalView, isTerminalMessage, loadGhostty, type TerminalView } from "@harness/terminal";
 import { Icon } from "../components/Icon";
 import { MenuButton } from "../components/bits";
 import { usePaneScope, usePopout } from "../components/paneContext";
 import { MovePaneItems, PaneGrip, PaneWindowButton } from "../components/paneHeader";
-import { closePane, cwdName, paneLabel, setTerminalTitle, toggleZoom, updatePanes, type TerminalContent } from "../state/panes";
-import { appOwnsKey, createAttach, exitLabel, menuKey, terminalColors } from "../state/terminal";
+import { closePane, cwdName, paneLabel, replaceContent, setTerminalTitle, terminalContent, toggleZoom, updatePanes, type TerminalContent } from "../state/panes";
+import { useStore } from "../state/store";
+import { appOwnsKey, exitLabel, menuKey, terminalColors } from "../state/terminal";
 import { currentColorTheme, currentTheme, useTheme } from "../state/theme";
+import { deviceIdNow } from "../state/usePresence";
 import "./terminal.css";
-
-/**
- * ghostty-web and its WASM core (~420 KB, inlined as a data: URL) load on the first terminal, in
- * their own chunk, so the app's startup bundle doesn't carry them. init() runs once per page.
- */
-let ghostty: Promise<typeof import("ghostty-web")> | null = null;
-const loadGhostty = () => (ghostty ??= import("ghostty-web").then(async (m) => (await m.init(), m)));
 
 const FONT_SIZE = 12;
 
@@ -37,28 +33,26 @@ function monoFont(): string {
 export function TerminalPane({ paneId, content, zoomed, focused }: { paneId: string; content: TerminalContent; zoomed: boolean; focused: boolean }) {
   const scope = usePaneScope();
   const popout = usePopout();
+  const { client, socket, onTerminalMessage, endTerminal, terminals } = useStore();
   const { sessionId, cwd } = content;
   const hostRef = useRef<HTMLDivElement>(null);
-  const termRef = useRef<Terminal | null>(null);
+  const viewRef = useRef<TerminalView | null>(null);
   const focusedRef = useRef(focused);
   focusedRef.current = focused;
-  const [exit, setExit] = useState<TerminalExit | null>(null);
+  /** null while it runs; the exit code (or null for one the service lost) once it has ended. */
+  const [exit, setExit] = useState<{ code: number | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // Bumped by Restart: the effect below makes a new terminal and ensures a new shell.
-  const [generation, setGeneration] = useState(0);
+  /** "62×18" while the shell is smaller than this pane could show (another device is smaller). */
+  const [shared, setShared] = useState<string | null>(null);
   const theme = useTheme();
   const themeKey = `${theme.themeId}/${theme.resolved}`;
+  const info = terminals.find((t) => t.id === sessionId);
 
   useEffect(() => {
     const host = hostRef.current;
-    const bridge = window.harness?.terminal;
     if (!host) return;
-    if (!bridge) {
-      setError("Terminals need the Harness desktop app.");
-      return;
-    }
     let disposed = false;
-    let term: Terminal | null = null;
+    let view: TerminalView | null = null;
     const offs: (() => void)[] = [];
     // Capture phase on the terminal's parent, so the terminal (listening on `host`) never sees these.
     const body = host.parentElement!;
@@ -67,68 +61,97 @@ export function TerminalPane({ paneId, content, zoomed, focused }: { paneId: str
     offs.push(() => body.removeEventListener("keydown", keepMenuKey, true));
     setExit(null);
     setError(null);
-    const attach = createAttach({
-      write: (data) => term?.write(data),
-      resizePty: (cols, rows) => void bridge.resize(sessionId, cols, rows).catch(() => {}),
-      exited: (e) => setExit(e),
-    });
-    // Subscribed before ensure(), so nothing between its reply and the first live chunk is missed;
-    // the attach holds what arrives before the reply and keeps only what the scrollback lacks.
-    offs.push(bridge.onData((id, data, end) => id === sessionId && attach.data(data, end)));
-    offs.push(bridge.onExit((id, e) => id === sessionId && attach.exit(e)));
 
     void (async () => {
-      const { Terminal, FitAddon } = await loadGhostty();
+      const [ghostty, deviceId] = await Promise.all([loadGhostty(), deviceIdNow()]);
       if (disposed) return;
-      term = new Terminal({
+      let viewport: { cols: number; rows: number } | null = null;
+      let attached = false;
+      const attach = () => {
+        if (!viewport || document.visibilityState !== "visible") return;
+        socket.attachTerminal(sessionId, deviceId, viewport.cols, viewport.rows);
+        attached = true;
+      };
+      const detach = () => {
+        if (!attached) return;
+        socket.detachTerminal(sessionId);
+        attached = false;
+      };
+      const noteSize = () => {
+        const v = view?.viewport();
+        const t = view?.term;
+        setShared(v && t && (t.cols < v.cols || t.rows < v.rows) ? `${t.cols}×${t.rows}` : null);
+      };
+      view = createTerminalView(ghostty, {
+        container: host,
+        id: sessionId,
+        theme: terminalColors(currentColorTheme().tokens, currentTheme()),
         fontFamily: monoFont(),
         fontSize: FONT_SIZE,
-        cursorBlink: true,
-        theme: terminalColors(currentColorTheme().tokens, currentTheme()),
+        onData: (data) => socket.writeTerminal(sessionId, data),
+        onViewport: (v) => {
+          viewport = v;
+          if (attached) socket.resizeTerminal(sessionId, v.cols, v.rows);
+          else attach();
+          noteSize();
+        },
+        onTitle: (title) => updatePanes(scope, (s) => setTerminalTitle(s, paneId, title.trim())),
+        onResync: () => {
+          detach();
+          attach();
+        },
+        onExit: (code) => setExit({ code }),
+        // ghostty-web's contract is inverted from xterm's: true means "handled, don't process". Menu
+        // keys never get here (keepMenuKey); this keeps ⌃⌘ shortcuts from the shell.
+        keyHandler: (e) => appOwnsKey(e),
       });
-      termRef.current = term;
+      viewRef.current = view;
       // For scripts/terminal-pane-check.ts, which reads the screen (a canvas) through the buffer API.
-      (host as HTMLElement & { harnessTerminal?: Terminal }).harnessTerminal = term;
-      const fit = new FitAddon();
-      term.loadAddon(fit);
-      term.open(host);
-      fit.fit();
-      fit.observeResize();
-      // ghostty-web's contract is inverted from xterm's: true means "handled, don't process". Menu
-      // keys never get here (keepMenuKey); this keeps ⌃⌘ shortcuts from the shell.
-      term.attachCustomKeyEventHandler((e) => appOwnsKey(e));
-      term.onData((data) => attach.isAttached && void bridge.write(sessionId, data).catch(() => {}));
-      term.onResize(({ cols, rows }) => attach.isAttached && void bridge.resize(sessionId, cols, rows).catch(() => {}));
-      term.onTitleChange((title) => updatePanes(scope, (s) => setTerminalTitle(s, paneId, title.trim())));
-      const session = await bridge.ensure(sessionId, { cwd, cols: term.cols, rows: term.rows });
-      if (disposed) return;
-      attach.attached(session, { cols: term.cols, rows: term.rows });
-      if (focusedRef.current) term.focus();
+      (host as HTMLElement & { harnessTerminal?: unknown; harnessTerminalView?: TerminalView }).harnessTerminal = view.term;
+      (host as HTMLElement & { harnessTerminalView?: TerminalView }).harnessTerminalView = view;
+      view.term.onResize(noteSize);
+      offs.push(
+        onTerminalMessage((msg) => {
+          if (isTerminalMessage(msg)) view?.handle(msg);
+        }),
+      );
+      // A hidden window doesn't count toward the shell's size (it would shrink it for nobody to see).
+      const onVisibility = () => (document.visibilityState === "visible" ? attach() : detach());
+      document.addEventListener("visibilitychange", onVisibility);
+      offs.push(() => document.removeEventListener("visibilitychange", onVisibility));
+      offs.push(detach);
+      attach();
+      if (focusedRef.current) view.focus();
     })().catch((e: unknown) => !disposed && setError(`Couldn't start the terminal: ${(e as Error).message ?? e}`));
 
     return () => {
       disposed = true;
       for (const off of offs) off();
-      termRef.current = null;
-      term?.dispose();
+      viewRef.current = null;
+      view?.dispose();
     };
-    // cwd only matters when the shell is first spawned; a changed cwd never re-attaches.
-  }, [sessionId, themeKey, generation]);
+  }, [sessionId, themeKey, socket, onTerminalMessage]);
 
   // Focusing the pane (a click, Tab, opening it) puts the keyboard in the terminal.
   useEffect(() => {
-    if (focused && !exit) termRef.current?.focus();
+    if (focused && !exit) viewRef.current?.focus();
   }, [focused, exit]);
 
   const close = () => updatePanes(scope, (s) => closePane(s, paneId));
   const zoom = () => updatePanes(scope, (s) => toggleZoom(s, paneId));
+  // A new shell in the same folder, in this pane.
   const restart = async () => {
-    await window.harness?.terminal.kill(sessionId).catch(() => false);
-    setGeneration((g) => g + 1);
+    try {
+      const next = await client.createTerminal({ cwd, projectId: info?.projectId ?? null, deviceId: await deviceIdNow() });
+      updatePanes(scope, (s) => replaceContent(s, paneId, terminalContent(next)));
+    } catch (e) {
+      setError(`Couldn't start a terminal: ${(e as Error).message}`);
+    }
   };
+  const end = () => void endTerminal(sessionId).catch(() => {});
   // Edit → Copy (and ⌘C) with a selection copies it; the canvas has no DOM selection of its own.
   const copy = (e: React.ClipboardEvent) => {
-    const term = termRef.current;
+    const term = viewRef.current?.term;
     if (!term?.hasSelection()) return;
     e.clipboardData.setData("text/plain", term.getSelection());
     e.preventDefault();
@@ -144,6 +167,11 @@ export function TerminalPane({ paneId, content, zoomed, focused }: { paneId: str
           {label}
         </span>
         {content.title && <span className="terminal-cwd truncate mono" title={cwd}>{cwdName(cwd)}</span>}
+        {shared && (
+          <span className="terminal-shared mono" data-testid="terminal-shared" title="Another device is attached at a smaller size, so this terminal is drawn smaller than the pane">
+            {shared}
+          </span>
+        )}
         <div className="grow" />
         <MenuButton
           trigger={(toggle) => (
@@ -162,8 +190,11 @@ export function TerminalPane({ paneId, content, zoomed, focused }: { paneId: str
               </button>
               <hr />
               <MovePaneItems paneId={paneId} onDone={closeMenu} />
-              <button className="danger" onClick={() => (closeMenu(), close())}>
-                <Icon name="x" /> Close terminal
+              <button onClick={() => (closeMenu(), close())}>
+                <Icon name="x" /> Close pane
+              </button>
+              <button className="danger" onClick={() => (closeMenu(), end(), close())}>
+                <Icon name="x" /> End terminal
               </button>
             </>
           )}
@@ -181,7 +212,7 @@ export function TerminalPane({ paneId, content, zoomed, focused }: { paneId: str
             <Icon name={zoomed ? "shrink" : "expand"} />
           </button>
         )}
-        <button className="btn btn-ghost btn-icon" data-testid="pane-close" onClick={close} title="Close terminal" aria-label="Close pane">
+        <button className="btn btn-ghost btn-icon" data-testid="pane-close" onClick={close} title="Close pane (the shell keeps running)" aria-label="Close pane">
           <Icon name="x" />
         </button>
       </div>
@@ -190,7 +221,7 @@ export function TerminalPane({ paneId, content, zoomed, focused }: { paneId: str
         {(exit || error) && (
           <div className="terminal-exit" data-testid="terminal-exit" role="status">
             <Icon name={error ? "alert" : "terminal"} />
-            <span className="grow">{error ?? exitLabel(exit!)}</span>
+            <span className="grow">{error ?? exitLabel(exit!.code)}</span>
             {!error && (
               <button className="btn btn-sm" data-testid="terminal-restart" onClick={() => void restart()}>
                 <Icon name="refresh" /> Restart

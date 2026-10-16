@@ -559,6 +559,31 @@ struct RouterSheetTests {
         FileRouteParams(path: path, ticket: ticket, start: start)
     }
 
+    @Test func aTerminalOpensAsItsOwnSheetAndComesForwardInsteadOfOpeningTwice() {
+        let r = sheeted()
+        r.push(t("A-1"))
+        r.openTerminal(id: "t-1")
+        #expect(r.dockedSheets.count == 2)
+        #expect(r.ticketSheet?.root == .terminal(id: "t-1"))
+        #expect(r.ticketSheet?.terminalID == "t-1" && r.ticketSheet?.title == "Terminal")
+        #expect(r.ticketSheet?.topTicket == nil && r.ticketSheet?.isFile == false)
+        r.openTerminal(id: "t-2")
+        r.dockSheet()
+        // Opening one that is already docked brings it forward, presented, with nothing duplicated.
+        r.openTerminal(id: "t-1")
+        #expect(r.dockedSheets.count == 3)
+        #expect(r.ticketSheetState == .presented && r.ticketSheet?.terminalID == "t-1")
+        #expect(r.dockedSheets.map(\.terminalID) == ["t-1", "t-2", nil])
+    }
+
+    @Test func openingATerminalFromThePaletteClosesThePalette() {
+        let r = sheeted()
+        r.present(.palette(files: false))
+        #expect(r.sheet == .palette(files: false))
+        r.openTerminal(id: "t-1")
+        #expect(r.sheet == nil && r.ticketSheet?.terminalID == "t-1")
+    }
+
     @Test func aFileOpensAsItsOwnSheetNextToTheTickets() {
         let r = sheeted()
         r.push(t("A-1"))

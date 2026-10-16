@@ -1,0 +1,23 @@
+{
+  "name": "@harness/terminal",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "test": "bun test src scripts",
+    "build": "bun scripts/build.ts"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./bridge": "./src/bridge.ts"
+  },
+  "dependencies": {
+    "@harness/shared": "workspace:*",
+    "ghostty-web": "0.4.0-next.20.g1858a59"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
+}

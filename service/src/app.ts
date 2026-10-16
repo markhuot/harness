@@ -19,6 +19,8 @@ import { CodeWatch } from "./code-watch";
 import { BUILTIN_PLUGINS_DIR } from "./runtime";
 import { PresenceRegistry } from "./notifications/presence";
 import { NotificationService } from "./notifications/dispatcher";
+import { TerminalRegistry } from "./terminals/registry";
+import { spawnBunPty, type SpawnPty } from "./terminals/pty";
 import { ApnsClient, Http2Transport, type ApnsTransport } from "./notifications/apns";
 
 export interface CreateHarnessOptions {
@@ -58,6 +60,8 @@ export interface CreateHarnessOptions {
   restart?: () => void;
   /** How pushes reach APNs (tests inject a fake); defaults to HTTP/2 to Apple. */
   apnsTransport?: ApnsTransport;
+  /** How shells get their PTY (tests inject a fake); defaults to Bun's built-in one. */
+  spawnPty?: SpawnPty;
 }
 
 export interface Harness {
@@ -73,6 +77,7 @@ export interface Harness {
   plugins: PluginHost;
   codeWatch: CodeWatch | null;
   notifications: NotificationService;
+  terminals: TerminalRegistry;
   stop(): Promise<void>;
 }
 
@@ -123,6 +128,9 @@ export async function createHarness(opts: CreateHarnessOptions): Promise<Harness
     log: opts.log,
   });
   notifications.start();
+
+  const terminals = new TerminalRegistry({ bus, spawn: opts.spawnPty ?? spawnBunPty, log: opts.log });
+  terminals.start();
 
   const plugins = new PluginHost({
     dirs: opts.pluginDirs ?? [
@@ -177,12 +185,14 @@ export async function createHarness(opts: CreateHarnessOptions): Promise<Harness
     stopping: () => stopped,
     presence,
     notifications,
+    terminals,
   });
   orchestrator.planUsage.start(() => http.connectedClients() > 0);
   try {
     await network.boot();
   } catch (err) {
     notifications.stop();
+    terminals.shutdown();
     await orchestrator.stop();
     await plugins.stop();
     if (ownsBrowser) await browser.shutdown().catch(() => {});
@@ -207,9 +217,11 @@ export async function createHarness(opts: CreateHarnessOptions): Promise<Harness
     plugins,
     codeWatch,
     notifications,
+    terminals,
     async stop() {
       if (stopped) return;
       stopped = true;
+      terminals.shutdown();
       codeWatch?.stop();
       orchestrator.planUsage.stop();
       notifications.stop();

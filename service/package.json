@@ -3,14 +3,18 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "bin": { "harness": "src/cli.ts" },
+  "bin": {
+    "harness": "src/cli.ts"
+  },
   "scripts": {
     "test": "bun ../shared/src/testing/parallel.ts",
     "start": "bun run src/daemon.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "latest",
     "@harness/shared": "workspace:*",
-    "@anthropic-ai/sdk": "latest"
+    "@xterm/addon-serialize": "^0.14.0",
+    "@xterm/headless": "^6.0.0"
   },
   "devDependencies": {
     "@pierre/diffs": "1.5.1",

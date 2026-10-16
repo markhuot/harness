@@ -10,6 +10,8 @@
 export interface PaletteItem {
   id: string;
   label: string;
+  /** A dimmer second line of the row (a terminal's folder and program). */
+  subtitle?: string;
   group?: string;
   /** Other words it answers to (a project's key). A keyword match ranks below a label match of the same tier. */
   keywords?: string[];

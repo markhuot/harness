@@ -35,7 +35,7 @@ public struct DebugState: Codable, Equatable, Sendable {
     public var settled = false
     /// How long the state (everything but `seq`, `settled` and `quietMs`) has stayed the same.
     public var quietMs = 0
-    /// What keeps the screen from being at rest: "editor" (a page that hasn't said ready),
+    /// What keeps the screen from being at rest: "editor" or "terminal" (a page that hasn't said ready),
     /// "animating:<layer>:<key>" (an animation in flight) and "scrolling" (a scroll view being
     /// dragged or coasting).
     public var busy: [String] = []
@@ -45,11 +45,42 @@ public struct DebugState: Codable, Equatable, Sendable {
     public var dockMounts = 0
     /// The editor on screen, nil when none is.
     public var editor: EditorState?
+    /// The terminal on screen, nil when none is.
+    public var terminal: TerminalState?
 
-    public init(busy: [String] = [], router: RouterState, editor: EditorState? = nil) {
+    public init(busy: [String] = [], router: RouterState, editor: EditorState? = nil, terminal: TerminalState? = nil) {
         self.busy = busy
         self.router = router
         self.editor = editor
+        self.terminal = terminal
+    }
+
+    /// What the terminal page reports (terminal's `BridgeProbe`).
+    public struct TerminalState: Codable, Equatable, Sendable {
+        public var cols: Int
+        public var rows: Int
+        /// A snapshot has been drawn and output is flowing.
+        public var synced: Bool
+        public var offset: Int
+        /// The visible screen, one string per row.
+        public var screen: [String]
+        /// The Ctrl accessory key is armed.
+        public var ctrl: Bool
+        public var keyboardInset: Double
+        /// What the page could show, in points: the rows are counted from its height, which stays the
+        /// web view's own whatever the keyboard does.
+        public var container: Size
+        /// The web view's own size, from the app.
+        public var webView: Size?
+
+        public struct Size: Codable, Equatable, Sendable {
+            public var width: Double
+            public var height: Double
+            public init(width: Double, height: Double) {
+                self.width = width
+                self.height = height
+            }
+        }
     }
 
     public struct RouterState: Codable, Equatable, Sendable {
@@ -66,7 +97,7 @@ public struct DebugState: Codable, Equatable, Sendable {
 
     public struct DockEntry: Codable, Equatable, Sendable {
         public var id: Int
-        /// "ticket", "newSession" or "file".
+        /// "ticket", "newSession", "file" or "terminal".
         public var kind: String
         public var title: String
         /// The screens pushed above its root.
@@ -111,6 +142,7 @@ public struct DebugState: Codable, Equatable, Sendable {
         case .ticket: "ticket"
         case .newSession: "newSession"
         case .file: "file"
+        case .terminal: "terminal"
         }
     }
 

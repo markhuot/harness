@@ -26,6 +26,11 @@ function storedDeviceId(): string {
   }
 }
 
+/** This install's device id, for the terminals it creates and attaches (the same one presence reports). */
+export function deviceIdNow(): Promise<string> {
+  return window.harness?.deviceId ? window.harness.deviceId().catch(() => storedDeviceId()) : Promise.resolve(storedDeviceId());
+}
+
 /** The install's device id: the main process's (shared by every window), else this origin's. */
 function useDeviceId(): string | null {
   const [id, setId] = useState<string | null>(() => (window.harness?.deviceId ? null : storedDeviceId()));

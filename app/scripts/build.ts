@@ -20,8 +20,7 @@ for (const entry of ["main", "preload"]) {
     outdir: join(appDir, "dist/main"),
     target: "node",
     format: "cjs",
-    // node-pty is a native addon: loaded from node_modules at runtime, shipped by package.ts.
-    external: ["electron", "node-pty"],
+    external: ["electron"],
     naming: `${entry}.cjs`,
     sourcemap: "linked",
   });

@@ -1,0 +1,29 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<!-- The terminal sheet's page (terminal/src/bridge.ts through the app's TerminalWebHost). The colors
+     arrive from the host with `open`; these are only the first paint. The page itself never scrolls:
+     the terminal draws on a canvas, centered at the size the service gives it. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<style>
+  html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; -webkit-text-size-adjust: 100%; }
+  body { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; position: fixed; inset: 0; }
+  .terminal-stage, .terminal-stage :focus { outline: none; }
+</style>
+</head>
+<body>
+<script>
+  // Anything that goes wrong before the bundle can say so itself reaches the sheet as an error.
+  function report(message) { window.webkit.messageHandlers.terminal.postMessage(JSON.stringify({ type: "error", message: String(message) })); }
+  window.addEventListener("error", function (e) { report(e.message || "script error"); });
+  window.addEventListener("unhandledrejection", function (e) { report(e.reason && e.reason.message || e.reason); });
+</script>
+<script src="terminal.js"></script>
+<script>
+  window.harnessTerminal = HarnessTerminal.mount(window, function (event) {
+    window.webkit.messageHandlers.terminal.postMessage(JSON.stringify(event));
+  });
+</script>
+</body>
+</html>

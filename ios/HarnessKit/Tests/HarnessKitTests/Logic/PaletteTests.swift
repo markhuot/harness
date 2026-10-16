@@ -24,6 +24,42 @@ struct PaletteTests {
         return s
     }
 
+    // MARK: Terminals
+
+    static func terminal(_ id: String, cwd: String = "/Users/me/Sites", title: String = "", process: String = "zsh", createdAt: Double = 0) -> TerminalInfo {
+        TerminalInfo(id: id, cwd: cwd, title: title, process: process, createdAt: createdAt)
+    }
+
+    @Test func terminalsAreRowsOfTheirOwnAndNewTerminalIsACommand() {
+        let s = Self.state([])
+        let commands = PaletteCommands.build(s, prefs: .defaults, focused: nil, canOpenFile: false)
+        #expect(commands.contains { $0.id == "new-terminal" && $0.action == .newTerminal })
+        let terms = [Self.terminal("old", createdAt: 1), Self.terminal("new", title: "npm run dev", process: "node", createdAt: 2)]
+        let rows = PaletteRows.rows(PaletteQuery.parse(""), commands: commands, state: s, searchIDs: nil, terminals: terms)
+        let ids = rows.map(\.id)
+        #expect(ids.filter { $0.hasPrefix("terminal:") } == ["terminal:new", "terminal:old"])
+        #expect(ids.firstIndex(of: "terminal:new")! > ids.firstIndex(of: "cmd:new-terminal")!)
+    }
+
+    @Test func aTerminalMatchesOnItsTitleProgramAndFolder() {
+        let s = Self.state([])
+        let terms = [Self.terminal("a", cwd: "/Users/me/Sites/harness", title: "vim DESIGN.md", process: "vim"), Self.terminal("b", cwd: "/tmp", process: "sleep")]
+        func found(_ q: String) -> [String] {
+            PaletteRows.rows(PaletteQuery.parse(q), commands: [], state: s, searchIDs: nil, terminals: terms).compactMap { if case let .terminal(t) = $0.content { t.id } else { nil } }
+        }
+        #expect(found("design") == ["a"])
+        #expect(found("sleep") == ["b"])
+        #expect(found("harness") == ["a"])
+        #expect(found("terminal").sorted() == ["a", "b"]) // the word "terminal" lists them all
+        #expect(found("zzz").isEmpty)
+    }
+
+    @Test func aTicketOnlyQueryNeverListsTerminals() {
+        let s = Self.state([Self.ticket("1", "vim keybindings")])
+        let rows = PaletteRows.rows(PaletteQuery.parse("# vim"), commands: [], state: s, searchIDs: nil, terminals: [Self.terminal("a", process: "vim")])
+        #expect(rows.map(\.id) == ["ticket:K-1"])
+    }
+
     // MARK: Ranking
 
     @Test func tiersPrefixThenWordThenRunThenScattered() {

@@ -4,7 +4,7 @@ import Foundation
 // Events (service → client over WebSocket)
 // ---------------------------------------------------------------------------
 
-/// A change the service broadcasts, discriminated by `kind` (19 kinds). An unknown `kind`
+/// A change the service broadcasts, discriminated by `kind` (23 kinds). An unknown `kind`
 /// decodes to `.unknown(kind:raw:)` and re-encodes `raw` unchanged.
 public enum HarnessEvent: Codable, Sendable, Equatable {
     case projectUpserted(project: Project)
@@ -36,6 +36,10 @@ public enum HarnessEvent: Codable, Sendable, Equatable {
     case serviceStatus(status: ServiceStatus)
     /// Plan usage (GET /usage) was fetched again
     case usageUpdated(usage: PlanUsageReport)
+    /// A terminal was created, or its title, cwd, process, size or state changed (about once a second at most).
+    case terminalCreated(terminal: TerminalInfo)
+    case terminalUpdated(terminal: TerminalInfo)
+    case terminalRemoved(id: String)
     case unknown(kind: String, raw: JSONValue)
 
     /// Every `kind` this build knows, in protocol.ts order.
@@ -44,6 +48,7 @@ public enum HarnessEvent: Codable, Sendable, Equatable {
         "session.deleted", "run.upserted", "transcript.appended", "subagent.upserted", "transcript.delta",
         "activity.added", "spec.revised", "watcher.upserted", "watcher.deleted", "settings.updated", "devices.changed",
         "browser.frame", "browser.state", "service.status", "usage.updated",
+        "terminal.created", "terminal.updated", "terminal.removed",
     ]
 
     /// The wire discriminator.
@@ -69,6 +74,9 @@ public enum HarnessEvent: Codable, Sendable, Equatable {
         case .browserState: "browser.state"
         case .serviceStatus: "service.status"
         case .usageUpdated: "usage.updated"
+        case .terminalCreated: "terminal.created"
+        case .terminalUpdated: "terminal.updated"
+        case .terminalRemoved: "terminal.removed"
         case let .unknown(kind, _): kind
         }
     }
@@ -110,6 +118,9 @@ public enum HarnessEvent: Codable, Sendable, Equatable {
                 sessionId: try field("sessionId"), state: try field("state"), viewerId: try c.decodeIfPresent(String.self, forKey: "viewerId"))
         case "service.status": self = .serviceStatus(status: try field("status"))
         case "usage.updated": self = .usageUpdated(usage: try field("usage"))
+        case "terminal.created": self = .terminalCreated(terminal: try field("terminal"))
+        case "terminal.updated": self = .terminalUpdated(terminal: try field("terminal"))
+        case "terminal.removed": self = .terminalRemoved(id: try field("id"))
         default: self = .unknown(kind: kind, raw: try JSONValue(from: decoder))
         }
     }
@@ -120,7 +131,7 @@ public enum HarnessEvent: Codable, Sendable, Equatable {
         try c.encode(kind, forKey: "kind")
         switch self {
         case let .projectUpserted(project): try c.encode(project, forKey: "project")
-        case let .projectDeleted(id), let .ticketDeleted(id), let .sessionDeleted(id), let .watcherDeleted(id):
+        case let .projectDeleted(id), let .ticketDeleted(id), let .sessionDeleted(id), let .watcherDeleted(id), let .terminalRemoved(id):
             try c.encode(id, forKey: "id")
         case let .ticketUpserted(ticket): try c.encode(ticket, forKey: "ticket")
         case let .sessionUpserted(session): try c.encode(session, forKey: "session")
@@ -155,6 +166,7 @@ public enum HarnessEvent: Codable, Sendable, Equatable {
             try c.encodeIfPresent(viewerId, forKey: "viewerId")
         case let .serviceStatus(status): try c.encode(status, forKey: "status")
         case let .usageUpdated(usage): try c.encode(usage, forKey: "usage")
+        case let .terminalCreated(terminal), let .terminalUpdated(terminal): try c.encode(terminal, forKey: "terminal")
         case .devicesChanged, .unknown: break
         }
     }
@@ -178,6 +190,12 @@ public enum ClientMessage: Codable, Sendable, Equatable {
     /// What this socket shows; replaces its earlier presence. Notifications for tickets a visible
     /// presence lists are suppressed.
     case presence(Presence)
+    /// Watch a terminal and report this client's viewport: the service answers with a snapshot, then
+    /// live output. The client counts toward the shell's size while attached; detach removes it.
+    case terminalAttach(id: String, deviceId: String, cols: Int, rows: Int)
+    case terminalDetach(id: String)
+    case terminalResize(id: String, cols: Int, rows: Int)
+    case terminalWrite(id: String, data: String)
     case ping
     case unknown(type: String, raw: JSONValue)
 
@@ -188,6 +206,10 @@ public enum ClientMessage: Codable, Sendable, Equatable {
         case .browserUnsubscribe: "browser.unsubscribe"
         case .browserInput: "browser.input"
         case .presence: "presence"
+        case .terminalAttach: "terminal.attach"
+        case .terminalDetach: "terminal.detach"
+        case .terminalResize: "terminal.resize"
+        case .terminalWrite: "terminal.write"
         case .ping: "ping"
         case let .unknown(type, _): type
         }
@@ -210,6 +232,11 @@ public enum ClientMessage: Codable, Sendable, Equatable {
                 sessionId: try c.decode(String.self, forKey: "sessionId"), tabId: try c.decodeIfPresent(Int.self, forKey: "tabId"),
                 input: try c.decode(BrowserInput.self, forKey: "input"), viewerId: try c.decodeIfPresent(String.self, forKey: "viewerId"))
         case "presence": self = .presence(try Presence(from: decoder))
+        case "terminal.attach":
+            self = .terminalAttach(id: try c.decode(String.self, forKey: "id"), deviceId: try c.decode(String.self, forKey: "deviceId"), cols: try c.decode(Int.self, forKey: "cols"), rows: try c.decode(Int.self, forKey: "rows"))
+        case "terminal.detach": self = .terminalDetach(id: try c.decode(String.self, forKey: "id"))
+        case "terminal.resize": self = .terminalResize(id: try c.decode(String.self, forKey: "id"), cols: try c.decode(Int.self, forKey: "cols"), rows: try c.decode(Int.self, forKey: "rows"))
+        case "terminal.write": self = .terminalWrite(id: try c.decode(String.self, forKey: "id"), data: try c.decode(String.self, forKey: "data"))
         case "ping": self = .ping
         default: self = .unknown(type: type, raw: try JSONValue(from: decoder))
         }
@@ -239,6 +266,19 @@ public enum ClientMessage: Codable, Sendable, Equatable {
             try c.encodeIfPresent(tabId, forKey: "tabId")
             try c.encode(input, forKey: "input")
             try c.encodeIfPresent(viewerId, forKey: "viewerId")
+        case let .terminalAttach(id, deviceId, cols, rows):
+            try c.encode(id, forKey: "id")
+            try c.encode(deviceId, forKey: "deviceId")
+            try c.encode(cols, forKey: "cols")
+            try c.encode(rows, forKey: "rows")
+        case let .terminalDetach(id): try c.encode(id, forKey: "id")
+        case let .terminalResize(id, cols, rows):
+            try c.encode(id, forKey: "id")
+            try c.encode(cols, forKey: "cols")
+            try c.encode(rows, forKey: "rows")
+        case let .terminalWrite(id, data):
+            try c.encode(id, forKey: "id")
+            try c.encode(data, forKey: "data")
         case .presence, .ping, .unknown: break
         }
     }
@@ -250,6 +290,13 @@ public enum ServerMessage: Codable, Sendable, Equatable {
     case event(HarnessEvent)
     case pong
     case error(message: String)
+    /// The screen to restore (escape sequences for an empty emulator at cols × rows); live output continues at `offset`.
+    case terminalSnapshot(id: String, data: String, offset: Int, cols: Int, rows: Int, truncated: Bool)
+    /// Live output; `offset` is the byte offset just past `data`.
+    case terminalOutput(id: String, data: String, offset: Int)
+    case terminalExit(id: String, exitCode: Int?)
+    /// Open a pane for this terminal (sent once, only to Mac clients).
+    case terminalOpen(id: String, projectId: String?)
     case unknown(type: String, raw: JSONValue)
 
     public var type: String {
@@ -258,6 +305,10 @@ public enum ServerMessage: Codable, Sendable, Equatable {
         case .event: "event"
         case .pong: "pong"
         case .error: "error"
+        case .terminalSnapshot: "terminal.snapshot"
+        case .terminalOutput: "terminal.output"
+        case .terminalExit: "terminal.exit"
+        case .terminalOpen: "terminal.open"
         case let .unknown(type, _): type
         }
     }
@@ -270,6 +321,14 @@ public enum ServerMessage: Codable, Sendable, Equatable {
         case "event": self = .event(try c.decode(HarnessEvent.self, forKey: "event"))
         case "pong": self = .pong
         case "error": self = .error(message: try c.decode(String.self, forKey: "message"))
+        case "terminal.snapshot":
+            self = .terminalSnapshot(
+                id: try c.decode(String.self, forKey: "id"), data: try c.decode(String.self, forKey: "data"), offset: try c.decode(Int.self, forKey: "offset"),
+                cols: try c.decode(Int.self, forKey: "cols"), rows: try c.decode(Int.self, forKey: "rows"), truncated: try c.decode(Bool.self, forKey: "truncated"))
+        case "terminal.output":
+            self = .terminalOutput(id: try c.decode(String.self, forKey: "id"), data: try c.decode(String.self, forKey: "data"), offset: try c.decode(Int.self, forKey: "offset"))
+        case "terminal.exit": self = .terminalExit(id: try c.decode(String.self, forKey: "id"), exitCode: try c.decodeIfPresent(Int.self, forKey: "exitCode"))
+        case "terminal.open": self = .terminalOpen(id: try c.decode(String.self, forKey: "id"), projectId: try c.decodeIfPresent(String.self, forKey: "projectId"))
         default: self = .unknown(type: type, raw: try JSONValue(from: decoder))
         }
     }
@@ -282,6 +341,23 @@ public enum ServerMessage: Codable, Sendable, Equatable {
         case let .welcome(version): try c.encode(version, forKey: "version")
         case let .event(event): try c.encode(event, forKey: "event")
         case let .error(message): try c.encode(message, forKey: "message")
+        case let .terminalSnapshot(id, data, offset, cols, rows, truncated):
+            try c.encode(id, forKey: "id")
+            try c.encode(data, forKey: "data")
+            try c.encode(offset, forKey: "offset")
+            try c.encode(cols, forKey: "cols")
+            try c.encode(rows, forKey: "rows")
+            try c.encode(truncated, forKey: "truncated")
+        case let .terminalOutput(id, data, offset):
+            try c.encode(id, forKey: "id")
+            try c.encode(data, forKey: "data")
+            try c.encode(offset, forKey: "offset")
+        case let .terminalExit(id, exitCode):
+            try c.encode(id, forKey: "id")
+            if let exitCode { try c.encode(exitCode, forKey: "exitCode") } else { try c.encodeNil(forKey: "exitCode") }
+        case let .terminalOpen(id, projectId):
+            try c.encode(id, forKey: "id")
+            if let projectId { try c.encode(projectId, forKey: "projectId") } else { try c.encodeNil(forKey: "projectId") }
         case .pong, .unknown: break
         }
     }

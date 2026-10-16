@@ -110,10 +110,17 @@ struct SnapshotWorld {
         store.dispatch(.activity(sessionId: "s-7", activity: Self.activity))
         store.dispatch(.specRevisions(ticketId: "t-7", revisions: Self.specRevisions))
         if let last = Self.specRevisions.last { store.dispatch(.specRevision(ticketId: "t-7", revision: SpecRevision(last, body: Self.spec))) }
+        store.setTerminals(Self.terminals)
         self.app = app
         self.store = store
         self.transport = transport
     }
+
+    /// The service's terminals: one made on the Mac running a program, one at a prompt.
+    static let terminals: [TerminalInfo] = [
+        TerminalInfo(id: "t-dev", cwd: "/Users/mark/Sites/harness", title: "npm run dev", process: "node", projectId: "p-1", createdAt: 2, cols: 62, rows: 24),
+        TerminalInfo(id: "t-home", cwd: "/Users/mark", process: "zsh", createdAt: 1),
+    ]
 
     /// Answers `GET path` (the query is ignored) with `{ "data": value }`.
     func serve<T: Encodable>(_ path: String, _ value: T) {

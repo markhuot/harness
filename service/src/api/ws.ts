@@ -15,6 +15,8 @@ import type { BrowserService } from "../browser/types";
 import type { EventBus } from "../events";
 import { VERSION } from "../config";
 import { parsePresence, type PresenceRegistry } from "../notifications/presence";
+import { HarnessError } from "../orchestrator/errors";
+import type { TerminalRegistry } from "../terminals/registry";
 
 export interface WsData {
   id: string;
@@ -39,8 +41,8 @@ function send(ws: ServerWebSocket<WsData>, msg: ServerMessage) {
   } catch {}
 }
 
-export function createWsHandlers(opts: { bus: EventBus; browser: BrowserService; presence?: PresenceRegistry }) {
-  const { bus, browser, presence } = opts;
+export function createWsHandlers(opts: { bus: EventBus; browser: BrowserService; presence?: PresenceRegistry; terminals?: TerminalRegistry }) {
+  const { bus, browser, presence, terminals } = opts;
   const sockets = new Set<ServerWebSocket<WsData>>();
 
   const unsubscribe = (ws: ServerWebSocket<WsData>, sessionId: string, viewerId: string) => {
@@ -63,6 +65,7 @@ export function createWsHandlers(opts: { bus: EventBus; browser: BrowserService;
       });
     },
     async message(ws, raw) {
+      terminals?.touch(ws.data.id);
       let msg: ClientMessage;
       try {
         msg = JSON.parse(typeof raw === "string" ? raw : new TextDecoder().decode(raw));
@@ -80,6 +83,38 @@ export function createWsHandlers(opts: { bus: EventBus; browser: BrowserService;
           presence?.set(ws.data.id, p);
           return;
         }
+        case "terminal.attach": {
+          if (!terminals || typeof msg.id !== "string") return;
+          try {
+            await terminals.attach(
+              { id: ws.data.id, send: (m) => send(ws, m), buffered: () => ws.getBufferedAmount() },
+              msg.id,
+              typeof msg.deviceId === "string" ? msg.deviceId.slice(0, 128) : "",
+              msg.cols,
+              msg.rows,
+            );
+          } catch (err) {
+            // A terminal that is gone (the service restarted, it was closed) reads as ended.
+            send(ws, { type: "terminal.exit", id: msg.id, exitCode: null });
+            if (!(err instanceof HarnessError && err.status === 404)) send(ws, { type: "error", message: `terminal.attach failed: ${err instanceof Error ? err.message : String(err)}` });
+          }
+          return;
+        }
+        case "terminal.detach":
+          if (typeof msg.id === "string") terminals?.detach(ws.data.id, msg.id);
+          return;
+        case "terminal.resize":
+          if (typeof msg.id === "string") terminals?.resize(ws.data.id, msg.id, msg.cols, msg.rows);
+          return;
+        case "terminal.write":
+          if (typeof msg.id !== "string") return;
+          try {
+            terminals?.write(ws.data.id, msg.id, msg.data);
+          } catch (err) {
+            if (err instanceof HarnessError && err.status === 404) send(ws, { type: "terminal.exit", id: String(msg.id), exitCode: null });
+            else send(ws, { type: "error", message: `terminal.write failed: ${err instanceof Error ? err.message : String(err)}` });
+          }
+          return;
         case "browser.subscribe": {
           const sid = msg.sessionId;
           if (typeof sid !== "string") return;
@@ -129,15 +164,44 @@ export function createWsHandlers(opts: { bus: EventBus; browser: BrowserService;
     close(ws) {
       sockets.delete(ws);
       presence?.drop(ws.data.id);
+      terminals?.dropClient(ws.data.id);
       ws.data.off?.();
       ws.data.off = null;
       for (const [sid, viewers] of [...ws.data.subs]) for (const v of [...viewers]) unsubscribe(ws, sid, v);
     },
   };
 
+  // A rejection from the async handler would end a Bun process with nothing to catch it: nothing a
+  // client sends may take the service down, so whatever escapes is logged and the socket carries on.
+  const handleMessage = websocket.message!;
+  websocket.message = (ws, raw) => {
+    const swallow = (err: unknown) => console.error("websocket message failed:", err);
+    try {
+      return Promise.resolve(handleMessage.call(websocket, ws, raw)).catch(swallow);
+    } catch (err) {
+      swallow(err);
+    }
+  };
+
   return {
     websocket,
     connected: () => sockets.size,
+    /**
+     * Ask a Mac to open a pane for a terminal: one socket per Mac device (windows of one app share
+     * a device id), the visible one when there is one, and only sockets connected right now. Nothing
+     * is queued for a Mac that isn't. Returns how many sockets were asked.
+     */
+    openOnMac(terminal: { id: string; projectId: string | null }): number {
+      const byDevice = new Map<string, ServerWebSocket<WsData>>();
+      for (const ws of sockets) {
+        const p = presence?.get(ws.data.id);
+        if (!p || p.platform !== "mac") continue;
+        const best = byDevice.get(p.deviceId);
+        if (!best || (p.visible && !presence?.get(best.data.id)?.visible)) byDevice.set(p.deviceId, ws);
+      }
+      for (const ws of byDevice.values()) send(ws, { type: "terminal.open", id: terminal.id, projectId: terminal.projectId });
+      return byDevice.size;
+    },
     newData: (): WsData => ({ id: randomUUID(), subs: new Map(), off: null }),
     /** Close every open socket (token rotation: they authenticated with the old token). */
     closeAll(code = 4001, reason = "token rotated") {
