@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type { HarnessEvent, Project, Ticket } from "@harness/shared";
 import { ensureHome } from "../../service/src/config";
 import { openDb } from "../../service/src/db";
+import type { Driver } from "../../service/src/drivers/types";
 import { EventBus } from "../../service/src/events";
 import { Orchestrator, type OrchestratorOptions } from "../../service/src/orchestrator/orchestrator";
 import { Store } from "../../service/src/store";
@@ -11,11 +12,11 @@ import { fakeClock, type FakeClock } from "../builders/clock";
 import { tempDir } from "../builders/tmp";
 import { FakeDriver, toolCall, type Step } from "./fake-driver";
 
-export interface OrchestratorRig {
+export interface OrchestratorRig<D extends Driver = FakeDriver> {
   orch: Orchestrator;
   store: Store;
   bus: EventBus;
-  driver: FakeDriver;
+  driver: D;
   clock: FakeClock;
   project: Project;
   home: string;
@@ -33,13 +34,13 @@ export interface OrchestratorRig {
  * The project doesn't use worktrees, so no git runs. The caller stops it with `stop()` through
  * `afterEach(stopAll)`.
  */
-export function makeOrchestrator(opts: Partial<OrchestratorOptions> & { driver?: FakeDriver; startedAt?: number } = {}): OrchestratorRig {
+export function makeOrchestrator<D extends Driver = FakeDriver>(opts: Partial<OrchestratorOptions> & { driver?: D; startedAt?: number } = {}): OrchestratorRig<D> {
   const home = tempDir("h-orch-");
   const paths = ensureHome(home);
   const clock = fakeClock(opts.startedAt ?? 1_700_000_000_000);
   const store = new Store(openDb(":memory:", { attachmentsDir: paths.attachmentsDir, uploadsDir: paths.uploadsDir, now: clock }), clock);
   const bus = new EventBus();
-  const driver = opts.driver ?? new FakeDriver();
+  const driver = (opts.driver ?? new FakeDriver()) as D;
   const phase = { driver: driver.id, model: null };
   store.settings.set({ phaseModels: { plan: phase, work: phase, review: phase, adviser: phase, complete: phase } });
   const events: HarnessEvent[] = [];
@@ -64,7 +65,7 @@ export function makeOrchestrator(opts: Partial<OrchestratorOptions> & { driver?:
   const dir = join(home, "proj", "acme");
   mkdirSync(dir, { recursive: true });
   const project = orch.createProject({ path: dir, name: "Acme", key: "ACME", useWorktrees: false });
-  const rig: OrchestratorRig = {
+  const rig: OrchestratorRig<D> = {
     orch,
     store,
     bus,
@@ -86,7 +87,7 @@ export function makeOrchestrator(opts: Partial<OrchestratorOptions> & { driver?:
     },
     ticket: (key) => store.tickets.getByKey(key)!,
   };
-  rigs.push(rig);
+  rigs.push(rig as unknown as OrchestratorRig);
   return rig;
 }
 
