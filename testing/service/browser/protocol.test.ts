@@ -248,12 +248,12 @@ test("the registry keeps what the user added in a file, replaces by ID, ignores 
 test("an extension is described from its manifest when it can be read, and an unpacked one whose folder is gone is an error", () => {
   const dir = extensionDir({ name: "Fresh name", version: "2", action: {}, options_page: "/opts.html" });
   const entry: StoredExtension = { id: ID, name: "Old name", version: "1", source: "unpacked", path: dir, enabled: true, addedAt: 5 };
-  expect(describeExtension(entry, dir, { status: "ready" })).toMatchObject({ name: "Fresh name", version: "2", hasAction: true, optionsUrl: `chrome-extension://${ID}/opts.html`, status: "ready", addedAt: 5 });
-  const missing = describeExtension(entry, join(dir, "gone"), { status: "ready" });
+  expect(describeExtension(entry, dir, { status: "loaded" })).toMatchObject({ name: "Fresh name", version: "2", hasAction: true, optionsUrl: `chrome-extension://${ID}/opts.html`, status: "loaded", addedAt: 5 });
+  const missing = describeExtension(entry, join(dir, "gone"), { status: "loaded" });
   expect(missing).toMatchObject({ name: "Old name", status: "error" });
   expect(missing.error).toContain("is missing or has no readable manifest.json");
   // A Web Store extension Chrome hasn't installed yet isn't an error.
-  expect(describeExtension({ ...entry, source: "webstore", path: undefined }, null, { status: "installing" })).toMatchObject({ status: "installing", error: undefined });
+  expect(describeExtension({ ...entry, source: "webstore", path: undefined }, null, { status: "pending" })).toMatchObject({ status: "pending", error: undefined });
 });
 
 // ---- waits and frames ----

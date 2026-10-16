@@ -150,11 +150,11 @@ test("deleting a session removes its transcript, runs, activity and calls", () =
 test("session list filters by kind, newest first, and busy tracks open runs", () => {
   const { clock, store, project, ticket } = setup();
   clock.advance(1);
-  const chat = store.sessions.create({ key: "CHAT-1", kind: "chat", ticketId: null, driver: "d", cwd: project.path, title: "c" });
+  const chat = store.sessions.create({ key: "CHAT-1", kind: "triage", ticketId: null, driver: "d", cwd: project.path, title: "c" });
   expect(store.sessions.list().map((s) => s.id)).toEqual([chat.id, ticket.sessionId]);
   expect(store.sessions.list("ticket").map((s) => s.id)).toEqual([ticket.sessionId]);
   expect(store.sessions.get(chat.id)!.busy).toBe(false);
-  store.runs.create({ sessionId: chat.id, kind: "chat", driver: "d", prompt: "p" });
+  store.runs.create({ sessionId: chat.id, kind: "triage", driver: "d", prompt: "p" });
   expect(store.sessions.get(chat.id)!.busy).toBe(true);
   expect(store.sessions.update(chat.id, { title: "t2", outcome: "done" })).toMatchObject({ title: "t2", outcome: "done", updatedAt: 1_001 });
 });
@@ -230,7 +230,7 @@ test("background task output: agents have none, a task's file path and saved tai
   const { store, ticket } = setup();
   const s = ticket.sessionId;
   store.subagents.upsert(s, "r", { id: "agent" });
-  store.subagents.upsert(s, "r", { id: "task", kind: "shell", command: "make", outputPath: "/tmp/out" });
+  store.subagents.upsert(s, "r", { id: "task", kind: "bash", command: "make", outputPath: "/tmp/out" });
   expect(store.subagents.outputSource(s, "agent")).toBeNull();
   expect(store.subagents.outputSource(s, "nope")).toBeNull();
   expect(store.subagents.outputSource(s, "task")).toEqual({ path: "/tmp/out", snapshot: null });

@@ -9,22 +9,22 @@ test("kind listeners only hear their kind; all-listeners hear everything", () =>
   const all: string[] = [];
   const only: string[] = [];
   bus.on((e) => all.push(e.kind));
-  bus.onKind("ticket.updated" as never, (e) => only.push(e.kind));
-  bus.emit(ev("ticket.updated"));
-  bus.emit(ev("run.updated"));
-  expect(all).toEqual(["ticket.updated", "run.updated"]);
-  expect(only).toEqual(["ticket.updated"]);
+  bus.onKind("ticket.upserted", (e) => only.push(e.kind));
+  bus.emit(ev("ticket.upserted"));
+  bus.emit(ev("run.upserted"));
+  expect(all).toEqual(["ticket.upserted", "run.upserted"]);
+  expect(only).toEqual(["ticket.upserted"]);
 });
 
 test("unsubscribing stops delivery and drops the listener count", () => {
   const bus = new EventBus();
   const seen: string[] = [];
   const off = bus.on((e) => seen.push(e.kind));
-  const offKind = bus.onKind("run.updated" as never, () => seen.push("kind"));
+  const offKind = bus.onKind("run.upserted" as never, () => seen.push("kind"));
   expect(bus.listenerCount).toBe(2);
   off();
   offKind();
-  bus.emit(ev("run.updated"));
+  bus.emit(ev("run.upserted"));
   expect(seen).toEqual([]);
   expect(bus.listenerCount).toBe(0);
 });
@@ -38,8 +38,8 @@ test("a throwing listener is logged and does not stop the others", () => {
       throw new Error("bad listener");
     });
     bus.on((e) => seen.push(e.kind));
-    bus.emit(ev("run.updated"));
-    expect(seen).toEqual(["run.updated"]);
+    bus.emit(ev("run.upserted"));
+    expect(seen).toEqual(["run.upserted"]);
     expect(log).toHaveBeenCalledTimes(1);
   } finally {
     log.mockRestore();
@@ -54,7 +54,7 @@ test("a listener that unsubscribes itself mid-emit doesn't skip its neighbour", 
     off();
   });
   bus.on(() => seen.push("second"));
-  bus.emit(ev("run.updated"));
-  bus.emit(ev("run.updated"));
+  bus.emit(ev("run.upserted"));
+  bus.emit(ev("run.upserted"));
   expect(seen).toEqual(["first", "second", "second"]);
 });

@@ -80,18 +80,26 @@ test("page walks a column by keyset with no duplicates or gaps even when a ticke
   expect(third.nextCursor).toBeNull();
 });
 
-test("the done column pages newest completion first", () => {
+test("a ticket's completion time is when it last entered done, from the clock, and the done column pages newest first", () => {
   const { clock, store, project } = setup();
-  const ids: string[] = [];
-  for (let i = 0; i < 3; i++) {
-    const t = addTicketWith(store, project, { status: "done" });
+  const tickets = Array.from({ length: 3 }, () => addTicketWith(store, project));
+  const finish = (i: number) => {
     clock.advance(10);
-    store.tickets.update(t.id, { completedAt: clock() });
-    ids.push(t.id);
-  }
+    store.tickets.update(tickets[i]!.id, { status: "done" });
+  };
+  finish(0);
+  finish(2);
+  finish(1);
+  expect(store.tickets.get(tickets[2]!.id)!.completedAt).toBe(10_020);
   const page = store.tickets.page({ status: "done", limit: 2 });
-  expect(page.tickets.map((t) => t.id)).toEqual([ids[2]!, ids[1]!]);
-  expect(store.tickets.page({ status: "done", limit: 2, cursor: page.nextCursor }).tickets.map((t) => t.id)).toEqual([ids[0]!]);
+  expect(page.tickets.map((t) => t.id)).toEqual([tickets[1]!.id, tickets[2]!.id]);
+  expect(store.tickets.page({ status: "done", limit: 2, cursor: page.nextCursor }).tickets.map((t) => t.id)).toEqual([tickets[0]!.id]);
+  // Leaving done clears it; coming back stamps the new time, so it jumps to the top.
+  store.tickets.update(tickets[0]!.id, { status: "review" });
+  expect(store.tickets.get(tickets[0]!.id)!.completedAt).toBeNull();
+  clock.advance(10);
+  store.tickets.update(tickets[0]!.id, { status: "done" });
+  expect(store.tickets.page({ status: "done" }).tickets[0]!.id).toBe(tickets[0]!.id);
 });
 
 test("a cursor from another listing is refused", () => {

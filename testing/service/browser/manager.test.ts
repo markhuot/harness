@@ -50,7 +50,7 @@ test("tabs stored by an earlier process come back suspended, lowest id first, wi
   expect(tabs[1]!.size).toMatchObject({ device: "desktop", responsive: true });
   const state = await r.manager.state(r.sessionId);
   expect(state).toMatchObject({ tabId: 2, suspended: true, loading: false, url: "https://a.test/", sessionId: r.sessionId });
-  expect(state!.tabs.map((t) => t.id)).toEqual([2, 4]);
+  expect((state!.tabs ?? []).map((t) => t.id)).toEqual([2, 4]);
   expect(await r.manager.state(r.sessionId, { tab: 4 })).toMatchObject({ tabId: 4, title: "B" });
   expect(await r.manager.state(r.sessionId, { tab: 99 })).toBeNull();
   expect(r.manager.chromePid).toBeUndefined();

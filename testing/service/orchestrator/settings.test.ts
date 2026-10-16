@@ -125,8 +125,8 @@ test("resolveSettings applies legacy model keys over phaseModels and derives the
 
 test("stored prompt overrides: unknown ids are dropped, blank ones ignored", () => {
   const s = resolveSettings({ prompts: { "not-a-prompt": "x", plan: "   " } });
-  expect(Object.values(s.prompts).every((v) => v === null)).toBe(true);
-  expect("not-a-prompt" in s.prompts).toBe(false);
+  expect(Object.values(s.prompts ?? {}).every((v) => v === null)).toBe(true);
+  expect("not-a-prompt" in (s.prompts ?? {})).toBe(false);
 });
 
 test("toPublicSettings hides secrets and reports whether each is set", () => {

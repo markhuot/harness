@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { callTools, makeOrchestrator, stopAll } from "../orchestrator-harness";
+import { callTools, makeOrchestrator, stopAll, type OrchestratorRig } from "../orchestrator-harness";
 
 afterEach(stopAll);
 
@@ -103,7 +103,7 @@ test("in a read-only ticket a gated tool is denied outright", async () => {
 });
 
 /** The agent makes the same gated call twice in two runs, with the human's allow-once in between. */
-async function approvedOnce(h: ReturnType<typeof makeOrchestrator>, call: [string, unknown]) {
+async function approvedOnce(h: OrchestratorRig, call: [string, unknown]) {
   const first = callTools([call]);
   const retry = callTools([call]);
   h.driver.script(first.steps, retry.steps);
