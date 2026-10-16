@@ -1,7 +1,11 @@
-import { expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, test } from "bun:test";
+import { assertNoTimerLeaks, trackTimers } from "../leaks";
 import type { Watcher, WatcherLive } from "@harness/shared";
 import { findKeys, loginShell, MAX_OUTPUT_CHARS, toOutput, watcherArgv, WatcherRunner, type SpawnedProcess, type SpawnFn, type WatcherOutput } from "../../../service/src/orchestrator/watchers";
 import { fakeClock } from "../../builders/clock";
+
+beforeEach(trackTimers);
+afterEach(assertNoTimerLeaks);
 
 test("toOutput trims, drops whitespace-only output and caps long output, marking it truncated", () => {
   expect(toOutput("  hello \n")).toEqual({ text: "hello", truncated: false });

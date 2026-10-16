@@ -11,6 +11,7 @@ import { QuietBrowser } from "../builders/harness";
 import { fakeClock, type FakeClock } from "../builders/clock";
 import { tempDir } from "../builders/tmp";
 import { FakeDriver, toolCall, type Step } from "./fake-driver";
+import { assertNoTimerLeaks, trackTimers } from "./leaks";
 
 export interface OrchestratorRig<D extends Driver = FakeDriver> {
   orch: Orchestrator;
@@ -35,6 +36,7 @@ export interface OrchestratorRig<D extends Driver = FakeDriver> {
  * `afterEach(stopAll)`.
  */
 export function makeOrchestrator<D extends Driver = FakeDriver>(opts: Partial<OrchestratorOptions> & { driver?: D; startedAt?: number } = {}): OrchestratorRig<D> {
+  trackTimers();
   const home = tempDir("h-orch-");
   const paths = ensureHome(home);
   const clock = fakeClock(opts.startedAt ?? 1_700_000_000_000);
@@ -93,12 +95,13 @@ export function makeOrchestrator<D extends Driver = FakeDriver>(opts: Partial<Or
 
 const rigs: OrchestratorRig[] = [];
 
-/** Stop every orchestrator the test made (aborting runs still going) and close its database. Call from `afterEach`. */
+/** Stop every orchestrator the test made (aborting runs still going), close its database, and fail if a timer it started is still pending. Call from `afterEach`. */
 export async function stopAll() {
   for (const rig of rigs.splice(0)) {
     await rig.orch.stop();
     rig.store.db.close();
   }
+  assertNoTimerLeaks();
 }
 
 /** The kinds of the events seen so far, for asserting an order. */

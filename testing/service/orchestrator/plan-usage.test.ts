@@ -1,10 +1,14 @@
-import { expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, test } from "bun:test";
+import { assertNoTimerLeaks, trackTimers } from "../leaks";
 import type { PlanWindow } from "@harness/shared";
 import { PlanUsageError, type Driver } from "../../../service/src/drivers/types";
 import { EventBus } from "../../../service/src/events";
 import { BACKOFF_MS, MAX_BACKOFF_MS, PlanUsageTracker, POLL_MS } from "../../../service/src/orchestrator/plan-usage";
 import { fakeClock } from "../../builders/clock";
 import { FakeDriver } from "../fake-driver";
+
+beforeEach(trackTimers);
+afterEach(assertNoTimerLeaks);
 
 const win = (usedPercent: number, id: PlanWindow["id"] = "five_hour"): PlanWindow => ({ id, label: "5-hour", usedPercent, resetsAt: 0, windowSeconds: 18000 });
 

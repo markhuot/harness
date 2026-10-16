@@ -1,10 +1,14 @@
-import { expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, test } from "bun:test";
+import { assertNoTimerLeaks, trackTimers } from "../leaks";
 import type { HarnessEvent } from "@harness/shared";
 import { EventBus } from "../../../service/src/events";
 import { HarnessError } from "../../../service/src/orchestrator/errors";
 import { isTerminalReply, loginShell, MAX_EXITED_TERMINALS, MAX_WRITE, MAX_WRITE_PER_SECOND, resolveCwd, shellEnv, TerminalRegistry } from "../../../service/src/terminals/registry";
 import { tempDir } from "../../builders/tmp";
 import { FakeClient, fakeEmulators, fakeSpawn, manualTimers } from "./fakes";
+
+beforeEach(trackTimers);
+afterEach(assertNoTimerLeaks);
 
 function rig(opts: { maxRunning?: number; exitedGraceMs?: number; idleMs?: number; poll?: ConstructorParameters<typeof TerminalRegistry>[0]["poll"]; highWater?: number } = {}) {
   const clock = manualTimers(1_000_000);

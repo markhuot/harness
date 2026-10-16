@@ -1,4 +1,5 @@
-import { expect, spyOn, test } from "bun:test";
+import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
+import { assertNoTimerLeaks, trackTimers } from "../leaks";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { CdpClient, CdpClosedError, CdpError } from "../../../service/src/browser/cdp";
@@ -7,6 +8,9 @@ import { frameChain, frameLabel, FrameError } from "../../../service/src/browser
 import { checkCondition, describeCondition, effectiveState, seconds, timeoutMs, urlMatcher, WAIT_MAX_TIMEOUT_S } from "../../../service/src/browser/wait";
 import type { MessageTransport } from "../../../service/src/browser/websocket";
 import { tempDir } from "../../builders/tmp";
+
+beforeEach(trackTimers);
+afterEach(assertNoTimerLeaks);
 
 // ---- CDP over a transport the test drives ----
 
@@ -144,8 +148,10 @@ test("a session sends with its own id and only hears its own events", async () =
   const s = cdp.session("s9");
   const heard: unknown[] = [];
   s.on("Log.entryAdded", (p) => heard.push(p));
-  void s.send("Log.enable");
+  const enabled = s.send("Log.enable");
   expect(transport.sent[0]).toMatchObject({ sessionId: "s9" });
+  transport.receive({ id: 1, result: {} });
+  await enabled;
   transport.receive({ method: "Log.entryAdded", params: { n: 1 }, sessionId: "s9" });
   transport.receive({ method: "Log.entryAdded", params: { n: 2 }, sessionId: "s8" });
   expect(heard).toEqual([{ n: 1 }]);

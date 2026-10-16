@@ -1,4 +1,5 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, test } from "bun:test";
+import { assertNoTimerLeaks, trackTimers } from "../leaks";
 import { mkdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Project } from "@harness/shared";
@@ -7,6 +8,9 @@ import { needsBuild, parseManifest, PluginHost, type PluginDir } from "../../../
 import { tempDir } from "../../builders/tmp";
 import { makeTicket } from "../../builders/ticket";
 import { writeFile } from "../files";
+
+beforeEach(trackTimers);
+afterEach(assertNoTimerLeaks);
 
 const hosts: PluginHost[] = [];
 afterEach(async () => {

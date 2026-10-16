@@ -1,9 +1,13 @@
-import { expect, test } from "bun:test";
+import { afterEach, beforeEach, expect, test } from "bun:test";
+import { assertNoTimerLeaks, trackTimers } from "./leaks";
 import { existsSync } from "node:fs";
 import { createHarness } from "../../service/src/app";
 import { QuietBrowser } from "../builders/harness";
 import { tempDir } from "../builders/tmp";
 import { FakeDriver, replyScript } from "./fake-driver";
+
+beforeEach(trackTimers);
+afterEach(assertNoTimerLeaks);
 
 /** The in-memory composition L1 smoke-tests: everything wired, nothing outside the process. L2 owns what the API does. */
 async function boot() {
