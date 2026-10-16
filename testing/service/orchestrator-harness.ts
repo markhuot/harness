@@ -9,7 +9,7 @@ import { Store } from "../../service/src/store";
 import { QuietBrowser } from "../builders/harness";
 import { fakeClock, type FakeClock } from "../builders/clock";
 import { tempDir } from "../builders/tmp";
-import { FakeDriver } from "./fake-driver";
+import { FakeDriver, toolCall, type Step } from "./fake-driver";
 
 export interface OrchestratorRig {
   orch: Orchestrator;
@@ -102,3 +102,15 @@ export async function stopAll() {
 
 /** The kinds of the events seen so far, for asserting an order. */
 export const kindsOf = (events: HarnessEvent[]) => events.map((e) => e.kind);
+
+/**
+ * Steps for one agent run that calls these tools in order, and the results it saw (text and error
+ * flag). Pass the steps to `driver.script(...)` before the run starts.
+ */
+export function callTools(calls: [name: string, input: unknown][]): { steps: Step[]; results: { text: string; isError: boolean }[] } {
+  const results: { text: string; isError: boolean }[] = [];
+  const steps = calls.flatMap(([name, input]) =>
+    toolCall(name, input, (r) => results.push({ text: r.content.map((c) => (c.type === "text" ? c.text : "")).join(""), isError: !!r.isError })),
+  );
+  return { steps, results };
+}
