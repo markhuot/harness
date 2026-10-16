@@ -3,7 +3,7 @@
 
 export { createTerminalView, loadGhostty, type GhosttyModule, type TerminalTheme, type TerminalView, type ViewOptions } from "./view";
 export { TerminalFeed, dropBytes, isTerminalMessage, type TerminalMessage, type TerminalSink } from "./session";
-export { ctrlChar, keyboardPan, viewportFor, SCROLLBAR_WIDTH, type CellSize } from "./layout";
+export { ctrlChar, visibleHeight, viewportFor, SCROLLBAR_WIDTH, type CellSize } from "./layout";
 export { terminalColors, type TerminalColors } from "./colors";
 export { mount, type BridgeCommand, type BridgeEvent, type BridgeProbe, type Mounted } from "./bridge";
 

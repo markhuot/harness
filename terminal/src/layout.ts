@@ -18,15 +18,12 @@ export function viewportFor(width: number, height: number, cell: CellSize, reser
 }
 
 /**
- * How far to lift the terminal so the cursor row stays visible above the soft keyboard. The
- * keyboard never changes the rows the terminal reports; the page just pans. `cursorBottom` is the
- * cursor row's bottom edge in the stage, `stageTop` the stage's offset in the viewport and
- * `viewportHeight` the web view's full height.
+ * The height the terminal gets while the soft keyboard (and the key bar above it) covers `keyboardInset`
+ * points of a web view `frameHeight` tall. The terminal shrinks to what's left, so its rows follow the
+ * keyboard and the cursor row stays on screen.
  */
-export function keyboardPan(cursorBottom: number, stageTop: number, viewportHeight: number, keyboardInset: number): number {
-  if (keyboardInset <= 0) return 0;
-  const visibleBottom = viewportHeight - keyboardInset;
-  return Math.max(0, stageTop + cursorBottom - visibleBottom);
+export function visibleHeight(frameHeight: number, keyboardInset: number): number {
+  return Math.max(0, frameHeight - Math.max(0, keyboardInset));
 }
 
 /** The control character for a typed key (Ctrl+C → "\x03"), or null when Ctrl doesn't change it. */

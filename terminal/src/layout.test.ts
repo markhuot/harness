@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { ctrlChar, keyboardPan, viewportFor } from "./layout";
+import { ctrlChar, visibleHeight, viewportFor } from "./layout";
 
 describe("viewportFor", () => {
   test("whole cells that fit, less the scrollbar", () => {
@@ -13,12 +13,12 @@ describe("viewportFor", () => {
   });
 });
 
-describe("keyboardPan", () => {
-  test("pans only as far as the cursor needs", () => {
-    expect(keyboardPan(500, 0, 800, 0)).toBe(0);
-    expect(keyboardPan(400, 0, 800, 300)).toBe(0); // cursor at 400, visible area ends at 500
-    expect(keyboardPan(560, 0, 800, 300)).toBe(60);
-    expect(keyboardPan(560, 20, 800, 300)).toBe(80);
+describe("visibleHeight", () => {
+  test("the keyboard takes its inset from the frame, never going below zero", () => {
+    expect(visibleHeight(800, 0)).toBe(800);
+    expect(visibleHeight(800, 300)).toBe(500);
+    expect(visibleHeight(800, -5)).toBe(800);
+    expect(visibleHeight(200, 300)).toBe(0);
   });
 });
 

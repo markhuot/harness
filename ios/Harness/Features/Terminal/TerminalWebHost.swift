@@ -51,8 +51,8 @@ final class TerminalWebHost: NSObject {
         // A keyboard change that came while the web view was out of a window (docked, switched away) was
         // recorded but not applied: apply what the keyboard is now as soon as the web view is back.
         webView.onWindowChange = { [weak self] in MainActor.assumeIsolated { self?.keyboardChanged(nil) } }
-        // The keyboard covers the web view instead of resizing it, so the rows the page reports never
-        // change with it; the page pans to keep the cursor visible above `inset`.
+        // The keyboard covers the web view instead of resizing it; the page shrinks the terminal by `inset`,
+        // so the rows it reports follow the keyboard.
         keyboardObserver = NotificationCenter.default.addObserver(
             forName: UIResponder.keyboardWillChangeFrameNotification, object: nil, queue: .main
         ) { [weak self] note in

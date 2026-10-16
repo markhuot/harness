@@ -6,7 +6,6 @@
 
 import type { ITheme, Terminal } from "ghostty-web";
 import { hardenInput } from "./input";
-import { createRepaintTimer, forceRedraw, type RedrawTerm } from "./repaint";
 import { viewportFor, type CellSize } from "./layout";
 import { TerminalFeed, type TerminalMessage, type TerminalSink } from "./session";
 
@@ -56,10 +55,6 @@ export interface TerminalView {
   /** The container's capacity now, or null before it can be measured. */
   viewport(): { cols: number; rows: number } | null;
   handle(msg: TerminalMessage): void;
-  /** Shift the stage up by this many pixels (the soft keyboard is covering the lower part). */
-  pan(px: number): void;
-  /** The cursor row's bottom edge in the stage, in pixels. */
-  cursorBottom(): number;
   focus(): void;
   dispose(): void;
 }
@@ -73,7 +68,6 @@ export function createTerminalView(ghostty: GhosttyModule, o: ViewOptions): Term
   const stage = document.createElement("div");
   stage.className = "terminal-stage";
   stage.style.flex = "none";
-  stage.style.transition = "transform 0.15s";
   container.append(stage);
 
   const term = new ghostty.Terminal({ fontFamily: o.fontFamily, fontSize: o.fontSize, cursorBlink: true, theme: o.theme, scrollback: SCROLLBACK_BYTES });
@@ -135,30 +129,14 @@ export function createTerminalView(ghostty: GhosttyModule, o: ViewOptions): Term
   };
   const feed = new TerminalFeed(o.id, sink, o.onResync);
 
-  const redraw = () => forceRedraw(term as unknown as RedrawTerm);
-  const repaint = createRepaintTimer(redraw, 200);
-
   return {
     term,
     feed,
     viewport,
     handle: (msg) => feed.handle(msg),
-    pan(px) {
-      const next = px > 0 ? `translateY(${-px}px)` : "";
-      if (stage.style.transform === next) return;
-      stage.style.transform = next;
-      // The pan is a transition: repaint once it has settled (transitionend doesn't fire if it's interrupted or the stage is hidden).
-      repaint.schedule();
-    },
-    cursorBottom() {
-      const c = cell();
-      const buffer = term.buffer.active;
-      return c ? (buffer.cursorY + 1) * c.height : 0;
-    },
     focus: () => term.focus(),
     dispose() {
       if (timer) clearTimeout(timer);
-      repaint.cancel();
       observer.disconnect();
       container.removeEventListener("pointerup", tap);
       term.dispose();

@@ -5,16 +5,12 @@ import { createTerminalView } from "./view";
 
 // A stand-in for ghostty-web that does what its open() does to the DOM: the stage becomes the
 // contenteditable focus target and a hidden textarea is added.
-let renders = 0;
 class FakeTerminal {
   element?: HTMLElement;
   textarea?: HTMLTextAreaElement;
   cols = 80;
   rows = 24;
-  viewportY = 0;
-  scrollbarOpacity = 0;
-  wasmTerm = {};
-  renderer = { getMetrics: () => ({ width: 8, height: 16 }), render: () => void renders++ };
+  renderer = { getMetrics: () => ({ width: 8, height: 16 }) };
   open(stage: HTMLElement) {
     this.element = stage;
     stage.setAttribute("contenteditable", "true");
@@ -62,18 +58,4 @@ test("the contenteditable stage and ghostty's textarea both get the hardened inp
     expect(el.getAttribute("spellcheck")).toBe("false");
   }
   expect(view.term.element!.getAttribute("contenteditable")).toBe("true");
-});
-
-test("a pan repaints once after its transition; the same pan again does not re-arm it; dispose cancels it", () => {
-  renders = 0;
-  const view = make();
-  view.pan(100);
-  jest.advanceTimersByTime(150);
-  view.pan(100);
-  jest.advanceTimersByTime(100);
-  expect(renders).toBe(1);
-  view.pan(0);
-  view.dispose();
-  jest.advanceTimersByTime(1000);
-  expect(renders).toBe(1);
 });

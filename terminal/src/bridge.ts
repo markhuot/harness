@@ -8,7 +8,7 @@ import type { ResolvedTheme } from "@harness/shared/state";
 import type { ThemeTokens } from "@harness/shared/themes";
 import { terminalColors } from "./colors";
 import { createTerminalView, loadGhostty, type TerminalView } from "./view";
-import { ctrlChar, keyboardPan } from "./layout";
+import { ctrlChar, visibleHeight } from "./layout";
 import { isTerminalMessage } from "./session";
 
 /** The app theme the host sends: the page turns it into the terminal's colors (colors.ts). */
@@ -125,10 +125,15 @@ export function mount(win: Window, post: (event: BridgeEvent) => void, parent?: 
     });
   };
 
-  const pan = () => {
-    if (!view) return;
-    const rect = root.firstElementChild?.getBoundingClientRect();
-    view.pan(keyboardPan(view.cursorBottom(), rect?.top ?? 0, win.innerHeight, inset));
+  // The web view's own size, and the keyboard's cover of it. The terminal gets what the keyboard leaves,
+  // so its rows shrink and grow with the keyboard.
+  let frame: { width: number; height: number } | null = null;
+  const layout = () => {
+    if (!frame) return;
+    root.style.right = "auto";
+    root.style.bottom = "auto";
+    root.style.width = `${frame.width}px`;
+    root.style.height = `${visibleHeight(frame.height, inset)}px`;
   };
 
   const fail = (e: unknown) => post({ type: "error", message: e instanceof Error ? e.message : String(e) });
@@ -145,7 +150,6 @@ export function mount(win: Window, post: (event: BridgeEvent) => void, parent?: 
           return;
         case "message":
           if (isTerminalMessage(command.message)) view?.handle(command.message);
-          if (command.message.type === "terminal.snapshot") pan();
           return;
         case "reconnecting":
           view?.feed.reconnecting();
@@ -176,15 +180,13 @@ export function mount(win: Window, post: (event: BridgeEvent) => void, parent?: 
           return;
         case "inset":
           inset = command.bottom;
-          pan();
+          layout();
           return;
         case "frame":
           // The web view's own size: the page's viewport shrinks when the keyboard (or its accessory)
-          // comes up, and the rows reported must not follow it.
-          root.style.right = "auto";
-          root.style.bottom = "auto";
-          root.style.width = `${command.width}px`;
-          root.style.height = `${command.height}px`;
+          // comes up, so the page measures the keyboard itself (`inset`) instead of following that.
+          frame = { width: command.width, height: command.height };
+          layout();
           return;
       }
     },

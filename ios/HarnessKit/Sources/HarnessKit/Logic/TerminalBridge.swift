@@ -176,7 +176,7 @@ public struct TerminalKeyboardTracker: Equatable, Sendable {
 /// Which layout changes of the terminal's web view reach the rows the shell is given.
 public enum TerminalViewportRules {
     /// A height drop of at most this many points is the keyboard's accessory or the home indicator's
-    /// inset, not a different amount of room (a soft keyboard covers the page without resizing it).
+    /// inset, not a different amount of room (the page takes the keyboard's cover off itself, from `inset`).
     public static let keyboardShrink = 120.0
 
     /// Whether going from `old` to `new` points tall (at the same width) is such a shrink, which keeps `old`.

@@ -4524,7 +4524,7 @@ function interactionChains(s: Seeded): Chain[] {
         await shot(udid, "terminal-sheet-light");
         return `${row.length} rows, drawn at ${state.terminal!.cols}×${state.terminal!.rows}`;
       });
-      await check("the key bar's keyboard key hides the keyboard, the page re-pans, and the rows the shell is given stay the same", async () => {
+      await check("the key bar's keyboard key hides the keyboard, and the page is as tall as the web view less what the keyboard covers", async () => {
         // A headless simulator keeps the software keyboard minimized to a bar next to its hardware keyboard, so this
         // reads the key's own state (the page has the keyboard) rather than how far a keyboard covers the page.
         await tapWhere(udid, (x) => x === "Show keyboard").catch(async () => {
@@ -4536,13 +4536,14 @@ function interactionChains(s: Seeded): Chain[] {
         await until("the key turning into Show keyboard", async () => (await labels(udid)).includes("Show keyboard"), 8000);
         await atRest(udid, 800);
         const t = (await probe(udid))!.terminal!;
-        if (t.rows !== before.rows) throw new Error(`rows went from ${before.rows} to ${t.rows} when the keyboard hid`);
-        // The key bar is below the web view, so every row the page counts is on screen: the page is the web view's height.
-        if (Math.abs((t.webView?.height ?? 0) - t.container.height) > 1) throw new Error(`the page is ${t.container.height}pt tall in a ${t.webView?.height}pt web view`);
+        // The page is the web view less the keyboard's cover (the key bar riding above the web view's bottom), so with the keyboard down it is the whole web view.
+        if (Math.abs((t.webView?.height ?? 0) - t.keyboardInset - t.container.height) > 1) throw new Error(`the page is ${t.container.height}pt tall in a ${t.webView?.height}pt web view with ${t.keyboardInset}pt covered`);
+        const covered = before.keyboardInset;
+        if (Math.abs((before.webView?.height ?? 0) - covered - before.container.height) > 1) throw new Error(`with the keyboard up the page is ${before.container.height}pt tall in a ${before.webView?.height}pt web view with ${covered}pt covered`);
         await shot(udid, "terminal-keyboard-hidden-light", true);
         await tapWhere(udid, (x) => x === "Show keyboard");
         await until("the keyboard back", async () => (await labels(udid)).includes("Hide keyboard"), 8000);
-        return `Hide ⇄ Show keyboard, ${t.rows} rows throughout, page ${t.container.height}pt in the web view`;
+        return `Hide ⇄ Show keyboard, ${before.rows} rows up and ${t.rows} down, page ${t.container.height}pt in the web view`;
       });
       const terminalRows = async () => (await api<{ id: string; rows: number }[]>("GET", "/terminals")).find((t) => t.id === terminalId)!.rows;
       await check("typing in the sheet reaches the shell and its output is drawn", async () => {
@@ -4561,11 +4562,13 @@ function interactionChains(s: Seeded): Chain[] {
         // The element holding the keyboard draws no native caret (the large tinted one) and takes no autocapitalization.
         const input = (await probe(udid))?.terminal?.input;
         if (!input || !["transparent", "rgba(0, 0, 0, 0)"].includes(input.caretColor) || input.autocapitalize !== "none" || input.autocorrect !== "off") throw new Error(`the focused input is ${JSON.stringify(input)}`);
-        // The keyboard covers the sheet instead of resizing the shell: the rows the phone reports don't change.
+        // The terminal is resized to what the keyboard leaves: the page is the web view less the keyboard's cover.
         await atRest(udid, 1500);
+        const now = (await probe(udid))!.terminal!;
+        if (Math.abs((now.webView?.height ?? 0) - now.keyboardInset - now.container.height) > 1) throw new Error(`the page is ${now.container.height}pt tall in a ${now.webView?.height}pt web view with ${now.keyboardInset}pt covered`);
         const after = await terminalRows();
-        if (after !== t.rows) throw new Error(`the shell's rows changed from ${t.rows} to ${after} with the keyboard up: ${JSON.stringify(((x) => ({ container: x?.container, webView: x?.webView, keyboardInset: x?.keyboardInset }))((await probe(udid))?.terminal))} before ${JSON.stringify({ container: t.container, webView: t.webView })}`);
-        return `${done.terminal!.screen.filter((l) => l).length} lines, ${t.cols}×${t.rows}, unchanged with the keyboard`;
+        if (after !== now.rows) throw new Error(`the shell has ${after} rows but the page draws ${now.rows}`);
+        return `${done.terminal!.screen.filter((l) => l).length} lines, ${t.cols}×${t.rows} then ${now.rows} rows with ${now.keyboardInset}pt covered`;
       });
       const wsUrl = () => `${base.replace(/^http/, "ws")}/ws?token=${encodeURIComponent(token)}`;
       const terminalNow = async () => (await api<{ id: string; cols: number; rows: number }[]>("GET", "/terminals")).find((t) => t.id === terminalId)!;

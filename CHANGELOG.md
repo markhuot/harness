@@ -9,6 +9,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Changed
+
+- The iPhone and iPad terminal now resizes when the keyboard appears or goes away: the shell gets fewer rows while the keyboard is up and the cursor stays on screen, instead of the terminal sliding up. The extra full redraw after the keyboard moves is gone.
+
 ## [app-20261016.1141](https://github.com/markhuot/harness/releases/tag/app-20261016.1141) - 2026-10-16
 
 ### Fixed
