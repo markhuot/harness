@@ -17,7 +17,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
-- The iPhone terminal no longer stays shifted up with an empty band under it after the keyboard has gone: a keyboard change that arrived while the sheet was docked or switched away is applied when it comes back, and the web view can't be left scrolled by WebKit.
+- Two possible causes of the iPhone terminal staying short or shifted up after the keyboard has gone are closed off, though neither is confirmed as the cause of a reported case: a keyboard change that arrived while the sheet was docked or switched away is now applied when it comes back, and the web view is put back at its origin if WebKit scrolls it.
 - The iPhone terminal no longer hides its bottom rows under the key bar: the bar sits below the terminal, so every row shows.
 
 ## [app-20261016.0011](https://github.com/markhuot/harness/releases/tag/app-20261016.0011) - 2026-10-16

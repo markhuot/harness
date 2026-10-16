@@ -98,4 +98,29 @@ struct TerminalAttachRulesTests {
         // Keyboard up: the bar rides up by the overlap, and the page pans clear of the same amount.
         #expect(TerminalKeyBarRules.cover(webViewBottom: 700, barHeight: 48, keyboardTop: 500) == 248)
     }
+
+    @Test func aKeyboardShownWhileOffWindowIsAppliedWhenTheWindowReturns() {
+        var tracker = TerminalKeyboardTracker()
+        tracker.record(keyboardTop: 500)
+        // Off-window nothing is applied, and the recorded frame survives for later.
+        #expect(tracker.cover(inWindow: false, webViewBottom: 700, barHeight: 48) == nil)
+        #expect(tracker.cover(inWindow: true, webViewBottom: 700, barHeight: 48) == 248)
+    }
+
+    @Test func aKeyboardHiddenWhileOffWindowClearsTheCoverWhenTheWindowReturns() {
+        var tracker = TerminalKeyboardTracker()
+        tracker.record(keyboardTop: 500)
+        tracker.record(keyboardTop: 852) // hidden: its top is the screen's bottom
+        #expect(tracker.cover(inWindow: true, webViewBottom: 700, barHeight: 48) == 0)
+    }
+
+    @Test func withNoKeyboardRecordedThereIsNothingToApply() {
+        var tracker = TerminalKeyboardTracker()
+        #expect(tracker.cover(inWindow: true, webViewBottom: 700, barHeight: 48) == nil)
+        tracker.record(keyboardTop: nil)
+        #expect(tracker.cover(inWindow: true, webViewBottom: 700, barHeight: 48) == nil)
+        tracker.record(keyboardTop: 500)
+        tracker.record(keyboardTop: nil) // a missing frame doesn't forget the last one
+        #expect(tracker.cover(inWindow: true, webViewBottom: 700, barHeight: 48) == 248)
+    }
 }

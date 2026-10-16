@@ -50,7 +50,7 @@ final class TerminalWebHost: NSObject {
         webView.onLayout = { [weak self] size in MainActor.assumeIsolated { self?.sizeChanged(size) } }
         // A keyboard change that came while the web view was out of a window (docked, switched away) was
         // recorded but not applied: apply what the keyboard is now as soon as the web view is back.
-        webView.onWindowChange = { [weak self] in MainActor.assumeIsolated { self?.keyboardChanged(self?.lastKeyboard) } }
+        webView.onWindowChange = { [weak self] in MainActor.assumeIsolated { self?.keyboardChanged(nil) } }
         // The keyboard covers the web view instead of resizing it, so the rows the page reports never
         // change with it; the page pans to keep the cursor visible above `inset`.
         keyboardObserver = NotificationCenter.default.addObserver(
@@ -68,16 +68,16 @@ final class TerminalWebHost: NSObject {
     /// Points of the web view the keyboard and the key bar riding above it cover, as last told to the page.
     private(set) var keyboardInset: Double = 0
     /// The key bar's height; it sits below the web view and rides up over it with the keyboard.
-    var barHeight: Double = 0 { didSet { if barHeight != oldValue { keyboardChanged(lastKeyboard) } } }
+    var barHeight: Double = 0 { didSet { if barHeight != oldValue { keyboardChanged(nil) } } }
     /// How far the keyboard pushes the key bar up from below the web view (0 with the keyboard down).
     private(set) var keyboardCover: Double = 0
-    private var lastKeyboard: CGRect?
+    private var keyboard = TerminalKeyboardTracker()
 
     private func keyboardChanged(_ end: CGRect?) {
-        lastKeyboard = end
-        guard webView.window != nil, let end else { return }
+        keyboard.record(keyboardTop: end.map { Double($0.minY) })
         let frame = webView.convert(webView.bounds, to: nil)
-        keyboardCover = TerminalKeyBarRules.cover(webViewBottom: frame.maxY, barHeight: barHeight, keyboardTop: end.minY)
+        guard let cover = keyboard.cover(inWindow: webView.window != nil, webViewBottom: frame.maxY, barHeight: barHeight) else { return }
+        keyboardCover = cover
         sendInset()
     }
 

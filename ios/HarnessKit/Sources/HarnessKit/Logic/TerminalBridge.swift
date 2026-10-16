@@ -152,6 +152,27 @@ public enum TerminalKeyBarRules {
     }
 }
 
+/// Remembers where the keyboard last said it was, so a change that arrives while the web view is out
+/// of a window (docked, a sheet switched away) is applied once the web view is back.
+public struct TerminalKeyboardTracker: Equatable, Sendable {
+    /// The top edge of the keyboard's last reported frame, in window coordinates.
+    public private(set) var keyboardTop: Double?
+
+    public init() {}
+
+    /// The keyboard reported a new frame (nil: no frame to go by, keep what was recorded).
+    public mutating func record(keyboardTop: Double?) {
+        if let keyboardTop { self.keyboardTop = keyboardTop }
+    }
+
+    /// How far the keyboard covers the web view now, or nil when there's nothing to apply: the web view
+    /// is out of a window (its frame means nothing there) or no keyboard frame was ever recorded.
+    public func cover(inWindow: Bool, webViewBottom: Double, barHeight: Double) -> Double? {
+        guard inWindow, let keyboardTop else { return nil }
+        return TerminalKeyBarRules.cover(webViewBottom: webViewBottom, barHeight: barHeight, keyboardTop: keyboardTop)
+    }
+}
+
 /// Which layout changes of the terminal's web view reach the rows the shell is given.
 public enum TerminalViewportRules {
     /// A height drop of at most this many points is the keyboard's accessory or the home indicator's
