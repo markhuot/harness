@@ -226,6 +226,7 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
       if (b.openOnMac) openOnMac?.(terminal);
       return terminal;
     });
+    add("GET", "/terminals/:id/size", ({ params }) => terminals.sizeReports(params.id!));
     add("POST", "/terminals/:id/restart", ({ params }) => terminals.restart(params.id!));
     add("DELETE", "/terminals/:id", ({ params }) => {
       terminals.close(params.id!);

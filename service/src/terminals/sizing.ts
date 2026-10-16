@@ -77,6 +77,12 @@ export class SizeCoordinator {
     return this.clients.size;
   }
 
+  /** Each counted client's last viewport and how long ago its socket was heard from (a debug view of who holds the size). */
+  reports(): { clientId: string; cols: number; rows: number; ageMs: number }[] {
+    const now = this.opts.now();
+    return [...this.clients].map(([clientId, c]) => ({ clientId, cols: c.cols, rows: c.rows, ageMs: now - c.seen }));
+  }
+
   /** A client's viewport (attach or resize). False when the report was unusable. */
   report(clientId: string, cols: unknown, rows: unknown): boolean {
     const size = clampSize(cols, rows);

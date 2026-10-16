@@ -190,6 +190,14 @@ export class TerminalRegistry {
     return t ? { ...t.info } : null;
   }
 
+  /** Who the shell's size is taken from: the size it is at, and each counted client's last viewport with its device. */
+  sizeReports(id: string) {
+    const term = this.terms.get(id);
+    if (!term) throw notFound(`No terminal ${id}`);
+    const clients = term.size.reports().map((r) => ({ ...r, deviceId: term.clients.get(r.clientId)?.deviceId ?? null }));
+    return { cols: term.info.cols, rows: term.info.rows, clients };
+  }
+
   create(body: CreateTerminalBody = {}): TerminalInfo {
     const running = [...this.terms.values()].filter((t) => t.info.state === "running").length;
     if (running >= this.o.maxRunning) throw conflict(`There are already ${this.o.maxRunning} terminals running; close one first`);

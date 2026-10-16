@@ -13,8 +13,11 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 - The iPhone terminal's key bar has a keyboard key at the end that hides the keyboard, and shows it again when it's down.
 
+- `GET /terminals/:id/size` on the service lists which devices a terminal's size is taken from and the viewport each reported, so you can see which one is holding a shell small.
+
 ### Fixed
 
+- The iPhone terminal no longer stays shifted up with an empty band under it after the keyboard has gone: a keyboard change that arrived while the sheet was docked or switched away is applied when it comes back, and the web view can't be left scrolled by WebKit.
 - The iPhone terminal no longer hides its bottom rows under the key bar: the bar sits below the terminal, so every row shows.
 
 ## [app-20261016.0011](https://github.com/markhuot/harness/releases/tag/app-20261016.0011) - 2026-10-16

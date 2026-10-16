@@ -252,6 +252,20 @@ describe("attach, output and snapshots", () => {
     registry.shutdown();
   });
 
+  test("sizeReports names each attached device with its viewport, and a missing terminal is a 404", async () => {
+    const { registry } = setup();
+    const { id } = registry.create({ cols: 80, rows: 24 });
+    await registry.attach(new FakeClient("s-mac"), id, "mac", 150, 50);
+    await registry.attach(new FakeClient("s-phone"), id, "iphone", 40, 20);
+    const { clients } = registry.sizeReports(id);
+    expect(clients.map(({ clientId, deviceId, cols, rows }) => ({ clientId, deviceId, cols, rows }))).toEqual([
+      { clientId: "s-mac", deviceId: "mac", cols: 150, rows: 50 },
+      { clientId: "s-phone", deviceId: "iphone", cols: 40, rows: 20 },
+    ]);
+    expect(() => registry.sizeReports("t-nope")).toThrow();
+    registry.shutdown();
+  });
+
   test("attaching to a terminal that doesn't exist is a 404", async () => {
     const { registry } = setup();
     await expect(registry.attach(new FakeClient("s"), "t-nope", "d", 80, 24)).rejects.toMatchObject({ status: 404 });

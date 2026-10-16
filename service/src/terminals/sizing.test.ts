@@ -67,6 +67,21 @@ describe("SizeCoordinator", () => {
     expect(size.size).toEqual({ cols: 120, rows: 40 });
   });
 
+  test("reports lists each counted client's viewport and its age, and drops expired ones", () => {
+    const { clock, size } = setup();
+    size.report("mac", 120, 40);
+    clock.advance(10_000);
+    size.report("phone", 40, 15);
+    clock.advance(6000);
+    size.touch("phone");
+    expect(size.reports()).toEqual([
+      { clientId: "mac", cols: 120, rows: 40, ageMs: 16_000 },
+      { clientId: "phone", cols: 40, rows: 15, ageMs: 0 },
+    ]);
+    size.sweep();
+    expect(size.reports().map((r) => r.clientId)).toEqual(["phone"]);
+  });
+
   test("touching a client keeps it alive", () => {
     const { clock, size } = setup();
     size.report("phone", 40, 15);

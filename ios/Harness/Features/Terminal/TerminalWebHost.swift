@@ -48,6 +48,9 @@ final class TerminalWebHost: NSObject {
         webView.navigationDelegate = self
         webView.onFocusChange = { [weak self] focused in MainActor.assumeIsolated { self?.editing = focused } }
         webView.onLayout = { [weak self] size in MainActor.assumeIsolated { self?.sizeChanged(size) } }
+        // A keyboard change that came while the web view was out of a window (docked, switched away) was
+        // recorded but not applied: apply what the keyboard is now as soon as the web view is back.
+        webView.onWindowChange = { [weak self] in MainActor.assumeIsolated { self?.keyboardChanged(self?.lastKeyboard) } }
         // The keyboard covers the web view instead of resizing it, so the rows the page reports never
         // change with it; the page pans to keep the cursor visible above `inset`.
         keyboardObserver = NotificationCenter.default.addObserver(
@@ -166,6 +169,7 @@ extension TerminalWebHost: WKNavigationDelegate {
 final class TerminalWebView: WKWebView {
     var onLayout: (CGSize) -> Void = { _ in }
     var onFocusChange: (Bool) -> Void = { _ in }
+    var onWindowChange: () -> Void = {}
 
     /// No ‹ › ✓ form bar above the keyboard: a terminal has no fields to step through, and the key bar does its job.
     override var inputAccessoryView: UIView? { nil }
@@ -182,8 +186,17 @@ final class TerminalWebView: WKWebView {
         return resigned
     }
 
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        if window != nil { onWindowChange() }
+    }
+
     override func layoutSubviews() {
         super.layoutSubviews()
+        // WebKit scrolls a focused field into view above the keyboard, and doesn't always scroll back
+        // once it hides, which leaves the page shifted up with an empty band under it. The terminal
+        // pans itself (bridge.ts `pan`), so the web view never scrolls.
+        if scrollView.contentOffset != .zero { scrollView.contentOffset = .zero }
         onLayout(bounds.size)
     }
 }
