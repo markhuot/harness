@@ -95,6 +95,7 @@ try {
   check("the service lists it, on this project", listed1.some((t) => t.id === t1 && t.projectId === project.id), JSON.stringify(listed1));
   await until("prompt", () => hasOutput(t1), 10000);
   check("a new terminal takes the keyboard", await js<boolean>(`!!document.activeElement?.closest('[data-terminal="${t1}"]')`));
+  check("the focused terminal draws no native caret and takes no autocapitalization", await js<boolean>(`(() => { const e = document.activeElement; const c = getComputedStyle(e).caretColor; return (c === "transparent" || c === "rgba(0, 0, 0, 0)") && e.getAttribute("autocapitalize") === "none" && e.getAttribute("autocorrect") === "off"; })()`));
   await typeKeys("echo PID=$$; pwd\n");
   await waitLine(t1, projectDir);
   check("pwd on a project board is the project's folder", true, projectDir);

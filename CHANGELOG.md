@@ -9,6 +9,14 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- The iPhone and iPad terminal redraws itself in full once the keyboard has moved it, so it can't be left blank when the keyboard comes up or goes away.
+
+- Terminals no longer show a stray caret: no large tinted caret to the left of the terminal on iPhone and iPad, and no blinking caret at the top left of the terminal on the Mac. Only the terminal's own cursor shows.
+
+- The iPhone and iPad terminal no longer capitalizes the first letter of a command, and autocorrect and suggestions are off.
+
 ## [app-20261016.1037](https://github.com/markhuot/harness/releases/tag/app-20261016.1037) - 2026-10-16
 
 ### Fixed
