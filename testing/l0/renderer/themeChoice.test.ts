@@ -11,7 +11,7 @@ describe("parseBrowserChoice", () => {
     expect(parseBrowserChoice('{"theme":"dark","darkTheme":"dracula","lightTheme":"dracula"}')).toEqual({ appearance: "dark", lightTheme: "harness-light", darkTheme: "dracula" });
   });
   test("null, junk and unknown bare words are system with defaults", () => {
-    const sys = { appearance: "system", lightTheme: "harness-light", darkTheme: "harness-dark" };
+    const sys = { appearance: "system" as const, lightTheme: "harness-light", darkTheme: "harness-dark" };
     expect(parseBrowserChoice(null)).toEqual(sys);
     expect(parseBrowserChoice("{bad")).toEqual(sys);
     expect(parseBrowserChoice("sepia")).toEqual(sys);

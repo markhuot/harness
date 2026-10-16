@@ -67,7 +67,7 @@ describe("parseLayout", () => {
   });
 
   test("reads a good layout", () => {
-    const stored = { sidebarCollapsed: true, sidebarWidth: 250, browserSizeRow: true, usageFilter: "claude", usageMode: "projected" };
+    const stored = { sidebarCollapsed: true, sidebarWidth: 250, browserSizeRow: true, usageFilter: "claude", usageMode: "projected" as const };
     expect(parseLayout(JSON.stringify(stored))).toEqual(stored);
   });
 

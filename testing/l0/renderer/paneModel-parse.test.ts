@@ -13,7 +13,7 @@ const near = (a: readonly number[], b: readonly number[]) => {
 };
 const json = (v: unknown) => JSON.stringify(v);
 const treeJson = (root: unknown, extra: Record<string, unknown> = {}) => json({ root, ...extra });
-const rawLeaf = (id: string, content: unknown) => ({ type: "leaf", id, content });
+const rawLeaf = (id: string, content: unknown) => ({ type: "leaf" as const, id, content });
 const rawBoard = (id = "B") => rawLeaf(id, { kind: "board" });
 const parseOne = (content: unknown) => {
   const s = parsePanes(treeJson({ type: "split", id: "r", dir: "row", sizes: [0.5, 0.5], children: [rawBoard(), rawLeaf("x", content)] }));
@@ -242,7 +242,7 @@ describe("parsePaneStore", () => {
   });
 
   test("a New session in a stored scope is not read back", () => {
-    const s = parsePaneStore(scoped({ a: tree(row("r", [board("B"), rawLeaf("n", { kind: "compose", id: "n1" })])) }));
+    const s = parsePaneStore(scoped({ a: tree({ type: "split", id: "r", dir: "row", sizes: [1, 1], children: [rawBoard(), rawLeaf("n", { kind: "compose", id: "n1" })] }) }));
     expect(leaves(s.scopes.a!.root)).toHaveLength(1);
   });
 });
