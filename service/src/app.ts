@@ -17,6 +17,7 @@ import { join } from "node:path";
 import { PluginHost, type PluginDir } from "./plugins/host";
 import { CodeWatch } from "./code-watch";
 import { BUILTIN_PLUGINS_DIR } from "./runtime";
+import { systemClock, type Clock } from "./clock";
 import { PresenceRegistry } from "./notifications/presence";
 import { NotificationService } from "./notifications/dispatcher";
 import { TerminalRegistry } from "./terminals/registry";
@@ -26,6 +27,10 @@ import { ApnsClient, Http2Transport, type ApnsTransport } from "./notifications/
 export interface CreateHarnessOptions {
   home: string;
   port: number;
+  /** SQLite file to open (default: the database in `home`); ":memory:" keeps it all in RAM (tests). */
+  dbPath?: string;
+  /** The clock for everything the service stamps (default the real clock; tests inject one). */
+  now?: Clock;
   /** HARNESS_HOST: a listen mode keyword or host that overrides settings.listen (tests / dev). */
   hostname?: string | null;
   /** Tailscale lookup (tests inject one); defaults to the tailscale CLI. */
@@ -88,8 +93,9 @@ export async function createHarness(opts: CreateHarnessOptions): Promise<Harness
     get: () => token,
     rotate: () => (token = rotateToken(paths)),
   };
-  const db = openDb(paths.dbPath, { attachmentsDir: paths.attachmentsDir, uploadsDir: paths.uploadsDir });
-  const store = new Store(db);
+  const now = opts.now ?? systemClock;
+  const db = openDb(opts.dbPath ?? paths.dbPath, { attachmentsDir: paths.attachmentsDir, uploadsDir: paths.uploadsDir, now });
+  const store = new Store(db, now);
   const bus = new EventBus();
   const settings = (): Settings => resolveSettings(store.settings.all());
 
@@ -100,6 +106,7 @@ export async function createHarness(opts: CreateHarnessOptions): Promise<Harness
     extensionsDir: paths.chromeExtensionsDir,
     // Headless unless HARNESS_CHROME_HEADLESS=0 (the manager reads it), to see Chrome and test bot checks.
     tabStore: store.browserTabs,
+    now,
     idleTabMs: () => (settings().browserIdleTabMinutes ?? DEFAULT_BROWSER_IDLE_TAB_MINUTES) * 60_000,
   });
   const mcp: McpHandler = (await import("./api/mcp")).handleMcpRequest;
@@ -115,6 +122,7 @@ export async function createHarness(opts: CreateHarnessOptions): Promise<Harness
     baseUrl: () => baseUrl,
     watchers: opts.watchers,
     log: opts.log,
+    now,
   });
   orchestrator.start();
 
@@ -124,8 +132,9 @@ export async function createHarness(opts: CreateHarnessOptions): Promise<Harness
     bus,
     settings: () => settings().notifications,
     presence,
-    apns: new ApnsClient({ transport: opts.apnsTransport ?? new Http2Transport() }),
+    apns: new ApnsClient({ transport: opts.apnsTransport ?? new Http2Transport(), now }),
     log: opts.log,
+    now,
   });
   notifications.start();
 

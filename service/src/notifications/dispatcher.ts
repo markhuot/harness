@@ -22,6 +22,7 @@ import {
   type TestNotificationResult,
   type Ticket,
 } from "@harness/shared";
+import { type Clock, systemClock } from "../clock";
 import type { EventBus } from "../events";
 import type { Store } from "../store";
 import { publicDevice, type DeviceRecord } from "../store/devices";
@@ -100,6 +101,8 @@ export interface NotificationServiceOptions {
   presence: PresenceRegistry;
   apns: Pick<ApnsClient, "send" | "close">;
   log?: (msg: string) => void;
+  /** The clock for push results (default the real clock) */
+  now?: Clock;
 }
 
 export class NotificationService {
@@ -176,7 +179,7 @@ export class NotificationService {
         } catch (err) {
           r = { ok: false, status: 0, reason: err instanceof Error ? err.message : String(err) };
         }
-        this.lastResult.set(d.environment, { at: Date.now(), ok: r.ok, status: r.status, reason: r.reason });
+        this.lastResult.set(d.environment, { at: (this.opts.now ?? systemClock)(), ok: r.ok, status: r.status, reason: r.reason });
         results.push({ deviceId: d.id, ...r });
         if (r.ok) return;
         this.opts.log?.(`notifications: push to ${d.name} (${d.environment}) failed: ${r.status} ${r.reason ?? ""}`.trim());

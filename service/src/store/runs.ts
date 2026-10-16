@@ -1,6 +1,7 @@
 import type { Database } from "bun:sqlite";
 import type { Attachment, Run, RunKind, RunStatus } from "@harness/shared";
-import { fromJson, newId, now } from "./util";
+import { fromJson, newId } from "./util";
+import { type Clock, systemClock } from "../clock";
 
 interface RunRow {
   id: string;
@@ -42,7 +43,7 @@ const toRun = (r: RunRow): Run => {
 };
 
 export class RunRepo {
-  constructor(private db: Database) {}
+  constructor(private db: Database, private now: Clock = systemClock) {}
 
   get(id: string): Run | null {
     const r = this.db.query("SELECT * FROM runs WHERE id = $id").get({ id }) as RunRow | null;
@@ -73,12 +74,12 @@ export class RunRepo {
         `INSERT INTO runs (id, session_id, kind, status, driver, prompt, attachments, error, created_at, started_at, ended_at)
          VALUES ($id, $sessionId, $kind, 'queued', $driver, $prompt, $attachments, NULL, $t, NULL, NULL)`,
       )
-      .run({ id, ...rest, attachments: JSON.stringify(attachments ?? []), t: now() });
+      .run({ id, ...rest, attachments: JSON.stringify(attachments ?? []), t: this.now() });
     return this.get(id)!;
   }
 
   markRunning(id: string): Run {
-    this.db.query("UPDATE runs SET status = 'running', started_at = $t WHERE id = $id").run({ id, t: now() });
+    this.db.query("UPDATE runs SET status = 'running', started_at = $t WHERE id = $id").run({ id, t: this.now() });
     return this.get(id)!;
   }
 
@@ -103,7 +104,7 @@ export class RunRepo {
   }
 
   finish(id: string, status: Exclude<RunStatus, "queued" | "running">, error: string | null = null): Run {
-    this.db.query("UPDATE runs SET status = $status, error = $error, ended_at = $t WHERE id = $id").run({ id, status, error, t: now() });
+    this.db.query("UPDATE runs SET status = $status, error = $error, ended_at = $t WHERE id = $id").run({ id, status, error, t: this.now() });
     return this.get(id)!;
   }
 }

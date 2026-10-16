@@ -4,7 +4,8 @@ import { legacyWork, isCompletionAction, offeredCompletionActions, projectKeyFro
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { type PullRequestTarget, pullRequestTarget } from "./remotes";
-import { bool, fromJson, int, newId, now, toJson } from "./util";
+import { bool, fromJson, int, newId, toJson } from "./util";
+import { type Clock, systemClock } from "../clock";
 
 interface ProjectRow {
   id: string;
@@ -112,7 +113,7 @@ export interface NewProject {
 }
 
 export class ProjectRepo {
-  constructor(private db: Database) {}
+  constructor(private db: Database, private now: Clock = systemClock) {}
 
   list(): Project[] {
     return (this.db.query("SELECT * FROM projects ORDER BY created_at, key").all() as ProjectRow[]).map(toProject);
@@ -145,7 +146,7 @@ export class ProjectRepo {
 
   create(input: NewProject): Project {
     const id = newId();
-    const t = now();
+    const t = this.now();
     this.db.transaction(() => {
       const key = this.uniqueKey(input.key ? normalizeProjectKey(input.key) : projectKeyFromPath(input.path));
       this.db
@@ -200,7 +201,7 @@ export class ProjectRepo {
         completionAction: patch.completionAction ?? existing.completionAction ?? "merge",
         defaultModels: toJson(legacy.models),
         phaseModels: toJson(phaseModels),
-        t: now(),
+        t: this.now(),
       });
     return this.get(id);
   }
@@ -258,7 +259,7 @@ export class ProjectRepo {
       const conflicts = this.rekeyConflicts(id, newKey);
       if (conflicts.length) throw new Error(`Renaming to ${newKey} would collide with ${conflicts.join(", ")}`);
       const native = this.nativeTicketKeys(id);
-      const t = now();
+      const t = this.now();
       const renameTicket = this.db.query("UPDATE tickets SET key = $to, updated_at = $t WHERE id = $id");
       const renameSession = this.db.query(
         "UPDATE sessions SET key = $to, updated_at = $t WHERE key = $from AND id = (SELECT session_id FROM tickets WHERE id = $id)",
@@ -288,7 +289,7 @@ export class ProjectRepo {
 
   /** Set (or clear, with null) the project's permission-mode override. */
   setPermissionMode(id: string, mode: PermissionMode | null) {
-    this.db.query("UPDATE projects SET permission_mode = $mode, updated_at = $t WHERE id = $id").run({ id, mode, t: now() });
+    this.db.query("UPDATE projects SET permission_mode = $mode, updated_at = $t WHERE id = $id").run({ id, mode, t: this.now() });
   }
 
   delete(id: string) {
@@ -304,7 +305,7 @@ export class ProjectRepo {
     if (!p) throw new Error(`Unknown project ${projectId}`);
     let seq = p.nextSeq;
     while (isTaken(`${p.key}-${seq}`)) seq++;
-    this.db.query("UPDATE projects SET next_seq = $next, updated_at = $t WHERE id = $id").run({ id: projectId, next: seq + 1, t: now() });
+    this.db.query("UPDATE projects SET next_seq = $next, updated_at = $t WHERE id = $id").run({ id: projectId, next: seq + 1, t: this.now() });
     return `${p.key}-${seq}`;
   }
 }

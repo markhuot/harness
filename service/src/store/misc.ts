@@ -1,15 +1,15 @@
 import type { Database } from "bun:sqlite";
-import { now } from "./util";
+import { type Clock, systemClock } from "../clock";
 
 /** Watch items already handled, keyed by (source, key, version). */
 export class SeenRepo {
-  constructor(private db: Database) {}
+  constructor(private db: Database, private now: Clock = systemClock) {}
 
   /** Record the item; returns false when it had been seen before. */
   markSeen(source: string, key: string, version: string | null): boolean {
     const res = this.db
       .query("INSERT OR IGNORE INTO seen_items (source, key, version, created_at) VALUES ($source, $key, $version, $t)")
-      .run({ source, key, version: version ?? "", t: now() });
+      .run({ source, key, version: version ?? "", t: this.now() });
     return res.changes > 0;
   }
 
@@ -20,7 +20,7 @@ export class SeenRepo {
 
 /** Key/value JSON settings. */
 export class SettingsRepo {
-  constructor(private db: Database) {}
+  constructor(private db: Database, private now: Clock = systemClock) {}
 
   all(): Record<string, unknown> {
     const out: Record<string, unknown> = {};
@@ -49,7 +49,7 @@ export class SettingsRepo {
 
 /** Named monotonic counters (e.g. TRIAGE-n). */
 export class CounterRepo {
-  constructor(private db: Database) {}
+  constructor(private db: Database, private now: Clock = systemClock) {}
 
   next(name: string): number {
     const row = this.db

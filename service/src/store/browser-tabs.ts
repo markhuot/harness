@@ -1,10 +1,11 @@
 import type { Database } from "bun:sqlite";
 import type { BrowserTabStore, StoredBrowserTab, StoredBrowserTabs } from "../browser/types";
-import { fromJson, now } from "./util";
+import { fromJson } from "./util";
+import { type Clock, systemClock } from "../clock";
 
 /** Each session's browser tabs (DESIGN.md "Browser tabs"): what reloads once their pages are gone. */
 export class BrowserTabRepo implements BrowserTabStore {
-  constructor(private db: Database) {}
+  constructor(private db: Database, private now: Clock = systemClock) {}
 
   load(sessionId: string): StoredBrowserTabs | null {
     const row = this.db.query("SELECT next_tab_id, tabs FROM browser_tabs WHERE session_id = $id").get({ id: sessionId }) as
@@ -27,7 +28,7 @@ export class BrowserTabRepo implements BrowserTabStore {
         `INSERT INTO browser_tabs (session_id, next_tab_id, tabs, updated_at) VALUES ($id, $next, $tabs, $t)
          ON CONFLICT(session_id) DO UPDATE SET next_tab_id = excluded.next_tab_id, tabs = excluded.tabs, updated_at = excluded.updated_at`,
       )
-      .run({ id: sessionId, next: state.nextTabId, tabs: JSON.stringify(state.tabs.map(({ id, url, title, size }) => (size ? { id, url, title, size } : { id, url, title }))), t: now() });
+      .run({ id: sessionId, next: state.nextTabId, tabs: JSON.stringify(state.tabs.map(({ id, url, title, size }) => (size ? { id, url, title, size } : { id, url, title }))), t: this.now() });
   }
 
   delete(sessionId: string) {

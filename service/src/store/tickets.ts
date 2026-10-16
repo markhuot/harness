@@ -3,7 +3,8 @@ import type { CompletionAction, ExternalRef, MessageDraft, PendingApproval, Perm
 import { isCompletionAction, resolvePhaseChoice } from "@harness/shared";
 import { hasSearchIndex } from "../db";
 import { clampLimit, decodeCursor, DEFAULT_PAGE_LIMIT, DEFAULT_SEARCH_LIMIT, encodeCursor, ftsQuery, keyCandidate, likePattern, searchTerms } from "./search";
-import { bool, fromJson, int, newId, now, toJson } from "./util";
+import { bool, fromJson, int, newId, toJson } from "./util";
+import { type Clock, systemClock } from "../clock";
 import { toContextUsage, type StoredContext } from "../orchestrator/context-usage";
 
 interface TicketRow {
@@ -228,6 +229,7 @@ export class TicketRepo {
   constructor(
     private db: Database,
     private settingsPhaseModels: () => PhaseModels = () => ({}),
+    private now: Clock = systemClock,
   ) {}
 
   /**
@@ -547,7 +549,7 @@ export class TicketRepo {
 
   create(input: NewTicket): Ticket {
     const id = newId();
-    const t = now();
+    const t = this.now();
     // A new ticket takes its key back from any alias: the real key would shadow it anyway, and
     // leaving the row would make the key resolve to the old ticket again if this one is deleted.
     this.db.query("DELETE FROM ticket_key_aliases WHERE key = $key").run({ key: input.key.toUpperCase() });
@@ -602,7 +604,7 @@ export class TicketRepo {
 
   update(id: string, patch: TicketPatch): Ticket | null {
     const sets: string[] = [];
-    const params: Record<string, string | number | null> = { id, t: now() };
+    const params: Record<string, string | number | null> = { id, t: this.now() };
     for (const [field, value] of Object.entries(patch)) {
       const col = COLUMNS[field];
       if (!col || value === undefined) continue;
@@ -633,7 +635,7 @@ export class TicketRepo {
    * named the old key follow. Runs inside the caller's transaction.
    */
   moveToProject(id: string, projectId: string, newKey: string): { from: string; to: string } {
-    const t = now();
+    const t = this.now();
     const row = this.db.query("SELECT key FROM tickets WHERE id = $id").get({ id }) as { key: string } | null;
     if (!row) throw new Error(`Unknown ticket ${id}`);
     const from = row.key;
@@ -659,7 +661,7 @@ export class TicketRepo {
     const externalRef = ref ? { ...ref, key: ref.key.trim().toUpperCase() } : null;
     this.db
       .query("UPDATE tickets SET external_ref = $ref, external_key = $key, updated_at = $t WHERE id = $id")
-      .run({ id, ref: toJson(externalRef), key: externalRef?.key ?? null, t: now() });
+      .run({ id, ref: toJson(externalRef), key: externalRef?.key ?? null, t: this.now() });
     return this.get(id);
   }
 
@@ -676,7 +678,7 @@ export class TicketRepo {
     const next = urls.map((url) => byUrl.get(url) ?? { url, title: null, titleCheckedAt: null });
     const added = urls.filter((url) => !byUrl.has(url));
     const removed = stored.map((pr) => pr.url).filter((url) => !urls.includes(url));
-    this.db.query("UPDATE tickets SET pull_requests = $list, updated_at = $t WHERE id = $id").run({ id, list: toJson(next), t: now() });
+    this.db.query("UPDATE tickets SET pull_requests = $list, updated_at = $t WHERE id = $id").run({ id, list: toJson(next), t: this.now() });
     return { ticket: this.get(id)!, added, removed };
   }
 
@@ -694,7 +696,7 @@ export class TicketRepo {
       if (!titles.has(pr.url)) return pr;
       return { ...pr, title: titles.get(pr.url) ?? pr.title, titleCheckedAt: checkedAt };
     });
-    this.db.query("UPDATE tickets SET pull_requests = $list, updated_at = $t WHERE id = $id").run({ id, list: toJson(stored), t: now() });
+    this.db.query("UPDATE tickets SET pull_requests = $list, updated_at = $t WHERE id = $id").run({ id, list: toJson(stored), t: this.now() });
     return this.get(id);
   }
 
@@ -732,7 +734,7 @@ export class TicketRepo {
   addGrant(ticketId: string, toolName: string, input: unknown) {
     this.db
       .query("INSERT INTO approval_grants (ticket_id, tool_name, input, created_at) VALUES ($ticketId, $toolName, $input, $t)")
-      .run({ ticketId, toolName, input: canonicalJson(input), t: now() });
+      .run({ ticketId, toolName, input: canonicalJson(input), t: this.now() });
   }
 
   /**

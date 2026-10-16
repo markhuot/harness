@@ -2249,7 +2249,7 @@ export class BrowserManager implements BrowserService {
         let met = true;
         if (matchUrl && !matchUrl(tab.url)) met = false;
         if (c.idle) {
-          const now = Date.now();
+          const now = this.now();
           if (tab.loading || inFlight(tab, now).length > 0) quietSince = null;
           else quietSince ??= now;
           if (quietSince === null || now - quietSince < IDLE_QUIET_MS) met = false;
@@ -2288,7 +2288,7 @@ export class BrowserManager implements BrowserService {
         if (Date.now() >= deadline) {
           const busy = check?.busy ?? ((await this.evalValue(tab, `document.querySelectorAll('[aria-busy="true"]').length`).catch(() => 0)) as number);
           // Every open request, long polls included: one of them may be what the page waits on.
-          const pending = inFlight(tab, Date.now(), true);
+          const pending = inFlight(tab, this.now(), true);
           const lines = [
             `Timed out after ${seconds(elapsed)} waiting for ${describeCondition(c)}.`,
             `Now at ${stripUserinfo(tab.url)}; the page is ${tab.loading ? "still loading" : "loaded"}${busy ? `, with ${busy} element${busy === 1 ? "" : "s"} marked aria-busy` : ""}.`,
@@ -2300,7 +2300,7 @@ export class BrowserManager implements BrowserService {
           else if (inPage) lines.push("The last check couldn't read the page.");
           if (c.url !== undefined && matchUrl && !matchUrl(tab.url)) lines.push(`The URL doesn't match ${c.url}.`);
           if (pending.length) {
-            lines.push(`Requests still in flight: ${pending.slice(0, 5).map((r) => `${r.method} ${stripUserinfo(r.url)} (${seconds(Date.now() - r.at)})`).join(", ")}${pending.length > 5 ? `, and ${pending.length - 5} more` : ""}.`);
+            lines.push(`Requests still in flight: ${pending.slice(0, 5).map((r) => `${r.method} ${stripUserinfo(r.url)} (${seconds(this.now() - r.at)})`).join(", ")}${pending.length > 5 ? `, and ${pending.length - 5} more` : ""}.`);
           }
           if (complaints.length) lines.push(`Console errors while waiting: ${complaints.join(" | ")}`);
           return finish(false, lines.join("\n"));

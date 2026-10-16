@@ -1,6 +1,7 @@
 import type { Database } from "bun:sqlite";
 import type { Attachment, TranscriptContent, TranscriptEntry, TranscriptRole } from "@harness/shared";
-import { fromJson, newId, now } from "./util";
+import { fromJson, newId } from "./util";
+import { type Clock, systemClock } from "../clock";
 
 interface EntryRow {
   id: string;
@@ -25,7 +26,7 @@ const toEntry = (r: EntryRow): TranscriptEntry => ({
 });
 
 export class TranscriptRepo {
-  constructor(private db: Database) {}
+  constructor(private db: Database, private now: Clock = systemClock) {}
 
   /**
    * Append an entry with the session's next monotonic seq (1, 2, 3, ...). Seqs are shared by the
@@ -39,7 +40,7 @@ export class TranscriptRepo {
       this.db.query("UPDATE sessions SET next_seq = next_seq + 1 WHERE id = $sessionId").run({ sessionId });
       this.db
         .query("INSERT INTO transcript (id, session_id, run_id, subagent_id, seq, role, content, created_at) VALUES ($id, $sessionId, $runId, $subagentId, $seq, $role, $content, $t)")
-        .run({ id, sessionId, runId, subagentId, seq: row.next_seq, role, content: JSON.stringify(content), t: now() });
+        .run({ id, sessionId, runId, subagentId, seq: row.next_seq, role, content: JSON.stringify(content), t: this.now() });
     })();
     return toEntry(this.db.query("SELECT * FROM transcript WHERE id = $id").get({ id }) as EntryRow);
   }

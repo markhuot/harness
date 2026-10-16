@@ -1,6 +1,7 @@
 import type { Database } from "bun:sqlite";
 import type { ActivityAuthor, ActivityEntry, ActivityKind, ActivityMeta } from "@harness/shared";
-import { fromJson, newId, now } from "./util";
+import { fromJson, newId } from "./util";
+import { type Clock, systemClock } from "../clock";
 
 interface ActivityRow {
   id: string;
@@ -26,7 +27,7 @@ const toEntry = (r: ActivityRow): ActivityEntry => ({
 
 /** A ticket's Activity (DESIGN.md "Activity"): typed entries, oldest first. */
 export class ActivityRepo {
-  constructor(private db: Database) {}
+  constructor(private db: Database, private now: Clock = systemClock) {}
 
   add(input: { sessionId: string; ticketId: string | null; kind: ActivityKind; author: ActivityAuthor; body: string; meta?: ActivityMeta }): ActivityEntry {
     const id = newId();
@@ -42,7 +43,7 @@ export class ActivityRepo {
         author: input.author,
         body: input.body,
         meta: JSON.stringify(input.meta ?? {}),
-        t: now(),
+        t: this.now(),
       });
     return toEntry(this.db.query("SELECT * FROM activity WHERE id = $id").get({ id }) as ActivityRow);
   }

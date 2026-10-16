@@ -12,6 +12,7 @@ import { WatcherRepo } from "./watchers";
 import { CounterRepo, SeenRepo, SettingsRepo } from "./misc";
 import { BrowserTabRepo } from "./browser-tabs";
 import { DeviceRepo } from "./devices";
+import { type Clock, systemClock } from "../clock";
 import { resolveSettings } from "../orchestrator/settings";
 
 export class Store {
@@ -31,23 +32,23 @@ export class Store {
   readonly browserTabs: BrowserTabRepo;
   readonly devices: DeviceRepo;
 
-  constructor(readonly db: Database) {
-    this.projects = new ProjectRepo(db);
+  constructor(readonly db: Database, now: Clock = systemClock) {
+    this.projects = new ProjectRepo(db, now);
     this.settings = new SettingsRepo(db);
     // A ticket's legacy driver follows the settings' choices it inherits.
-    this.tickets = new TicketRepo(db, () => resolveSettings(this.settings.all()).phaseModels ?? {});
-    this.sessions = new SessionRepo(db);
-    this.runs = new RunRepo(db);
-    this.transcript = new TranscriptRepo(db);
-    this.activity = new ActivityRepo(db);
-    this.attachments = new AttachmentRepo(db);
-    this.specs = new SpecRepo(db);
-    this.subagents = new SubagentRepo(db);
-    this.watchers = new WatcherRepo(db);
-    this.seen = new SeenRepo(db);
+    this.tickets = new TicketRepo(db, () => resolveSettings(this.settings.all()).phaseModels ?? {}, now);
+    this.sessions = new SessionRepo(db, now);
+    this.runs = new RunRepo(db, now);
+    this.transcript = new TranscriptRepo(db, now);
+    this.activity = new ActivityRepo(db, now);
+    this.attachments = new AttachmentRepo(db, now);
+    this.specs = new SpecRepo(db, now);
+    this.subagents = new SubagentRepo(db, now);
+    this.watchers = new WatcherRepo(db, now);
+    this.seen = new SeenRepo(db, now);
     this.counters = new CounterRepo(db);
-    this.browserTabs = new BrowserTabRepo(db);
-    this.devices = new DeviceRepo(db);
+    this.browserTabs = new BrowserTabRepo(db, now);
+    this.devices = new DeviceRepo(db, now);
   }
 
   transaction<T>(fn: () => T): T {

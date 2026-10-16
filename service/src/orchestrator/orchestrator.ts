@@ -601,7 +601,7 @@ export class Orchestrator {
         if (w) this.bus.emit({ kind: "watcher.upserted", watcher: this.withLive(w) });
       },
     };
-    this.watcherRunner = opts.watchers === null ? null : opts.watchers ? opts.watchers(handlers) : new WatcherRunner(handlers);
+    this.watcherRunner = opts.watchers === null ? null : opts.watchers ? opts.watchers(handlers) : new WatcherRunner({ ...handlers, now: this.now });
   }
 
   // =========================================================================
@@ -1338,7 +1338,7 @@ export class Orchestrator {
    * are over a day old. "file" sources are only forgotten, never deleted. Returns the upload
    * folders removed.
    */
-  sweepUploads(at = Date.now()): string[] {
+  sweepUploads(at = this.now()): string[] {
     const referenced = this.referencedAttachments();
     const removed = sweepUploads(this.paths.uploadsDir, referenced.paths, ORPHAN_UPLOAD_AGE_MS, at);
     const forget = this.store.attachments
@@ -3835,7 +3835,7 @@ ${numberLines(r.body)}`;
    * A chat's approval leaves the ticket in its column: the card shows wherever the ticket is.
    */
   private openApproval(t: Ticket, runId: string, toolName: string, input: unknown, meta: ApprovalMeta) {
-    const pending: PendingApproval = { id: crypto.randomUUID(), runId, toolName, input, requestedAt: Date.now() };
+    const pending: PendingApproval = { id: crypto.randomUUID(), runId, toolName, input, requestedAt: this.now() };
     if (meta.reason) pending.reason = meta.reason;
     if (meta.source) pending.source = meta.source;
     if (meta.summary) pending.summary = meta.summary;

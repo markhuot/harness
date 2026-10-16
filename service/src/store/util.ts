@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 
 export const newId = () => randomUUID();
-export const now = () => Date.now();
 
 export function toJson(value: unknown): string | null {
   return value === undefined || value === null ? null : JSON.stringify(value);

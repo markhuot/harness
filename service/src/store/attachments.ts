@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
 import type { Attachment, AttachmentKind, AttachmentSource } from "@harness/shared";
-import { now } from "./util";
+import { type Clock, systemClock } from "../clock";
 
 interface AttachmentRow {
   id: string;
@@ -41,7 +41,7 @@ export interface AttachmentRecord extends Attachment {
  * attachments) store a full copy of the record, with that use's annotation.
  */
 export class AttachmentRepo {
-  constructor(private db: Database) {}
+  constructor(private db: Database, private now: Clock = systemClock) {}
 
   /** Register attachments as they are (their ids are given); spec media pass their ticket. */
   add(ticketId: string | null, attachments: readonly Attachment[]) {
@@ -49,7 +49,7 @@ export class AttachmentRepo {
       `INSERT INTO attachments (id, ticket_id, path, name, source, kind, mime_type, size, width, height, created_at)
        VALUES ($id, $ticketId, $path, $name, $source, $kind, $mimeType, $size, $width, $height, $t)`,
     );
-    const t = now();
+    const t = this.now();
     this.db.transaction(() => {
       for (const a of attachments) {
         insert.run({

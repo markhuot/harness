@@ -1,6 +1,7 @@
 import type { Database } from "bun:sqlite";
 import type { RunKind, SpecRevision, SpecRevisionAuthor, SpecRevisionInfo } from "@harness/shared";
-import { bool, newId, now } from "./util";
+import { bool, newId } from "./util";
+import { type Clock, systemClock } from "../clock";
 
 interface RevisionRow {
   id: string;
@@ -52,7 +53,7 @@ export interface SpecWrite {
  * the next one in a single transaction.
  */
 export class SpecRepo {
-  constructor(private db: Database) {}
+  constructor(private db: Database, private now: Clock = systemClock) {}
 
   // Revision 1 is written by TicketRepo.create with the ticket.
 
@@ -72,7 +73,7 @@ export class SpecRepo {
       if (write.baseRevision !== undefined && write.baseRevision !== cur.rev) throw new SpecConflictError(cur.rev, cur.body, write.baseRevision);
       if (write.body === cur.body) return null;
       const rev = cur.rev + 1;
-      const t = now();
+      const t = this.now();
       this.db
         .query(
           `INSERT INTO spec_revisions (id, ticket_id, rev, body, author, run_id, run_kind, note, approved_baseline, created_at)
@@ -86,7 +87,7 @@ export class SpecRepo {
 
   /** A draft's text isn't history yet: it rewrites revision 1 in place (rev stays 1). */
   replaceDraft(ticketId: string, body: string) {
-    const t = now();
+    const t = this.now();
     this.db.transaction(() => {
       this.db.query("UPDATE spec_revisions SET body = $body, created_at = $t WHERE ticket_id = $ticketId AND rev = 1").run({ ticketId, body, t });
       this.db.query("UPDATE tickets SET spec = $body, spec_revision = 1, updated_at = $t WHERE id = $ticketId").run({ ticketId, body, t });

@@ -1,6 +1,7 @@
 import type { Database } from "bun:sqlite";
 import type { Watcher } from "@harness/shared";
-import { bool, fromJson, int, newId, now } from "./util";
+import { bool, fromJson, int, newId } from "./util";
+import { type Clock, systemClock } from "../clock";
 
 interface WatcherRow {
   id: string;
@@ -43,7 +44,7 @@ const toWatcher = (r: WatcherRow): Watcher => ({
 export type WatcherInput = Partial<Omit<Watcher, "id" | "createdAt" | "updatedAt">>;
 
 export class WatcherRepo {
-  constructor(private db: Database) {}
+  constructor(private db: Database, private now: Clock = systemClock) {}
 
   list(): Watcher[] {
     return (this.db.query("SELECT * FROM watchers ORDER BY created_at").all() as WatcherRow[]).map(toWatcher);
@@ -56,7 +57,7 @@ export class WatcherRepo {
 
   create(input: WatcherInput & { name: string; command: string }): Watcher {
     const id = newId();
-    const t = now();
+    const t = this.now();
     this.db
       .query(
         `INSERT INTO watchers (id, name, command, args, prompt, cwd, env, mode, interval_sec, enabled, driver, models, last_run_at, last_error, created_at, updated_at)
@@ -105,7 +106,7 @@ export class WatcherRepo {
         models: JSON.stringify(next.models ?? {}),
         lastRunAt: next.lastRunAt,
         lastError: next.lastError,
-        t: now(),
+        t: this.now(),
       });
     return this.get(id);
   }

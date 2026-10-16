@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
 import type { Subagent, SubagentKind, SubagentStatus } from "@harness/shared";
 import type { SubagentReport } from "../drivers/types";
-import { now } from "./util";
+import { type Clock, systemClock } from "../clock";
 
 interface SubagentRow {
   session_id: string;
@@ -58,7 +58,7 @@ export type SubagentPatch = SubagentReport;
 const FINISHED: SubagentStatus[] = ["succeeded", "failed", "stopped"];
 
 export class SubagentRepo {
-  constructor(private db: Database) {}
+  constructor(private db: Database, private now: Clock = systemClock) {}
 
   get(sessionId: string, id: string): Subagent | null {
     const r = this.db.query("SELECT * FROM subagents WHERE session_id = $sessionId AND id = $id").get({ sessionId, id }) as SubagentRow | null;
@@ -77,7 +77,7 @@ export class SubagentRepo {
    */
   upsert(sessionId: string, runId: string | null, patch: SubagentPatch): Subagent | null {
     const prev = this.get(sessionId, patch.id);
-    const t = now();
+    const t = this.now();
     if (!prev) {
       const status = patch.status ?? "running";
       this.db
@@ -173,7 +173,7 @@ export class SubagentRepo {
   /** Mark a run's sub-agents that are still running as stopped (the run ended); returns them. */
   stopRunning(runId: string): Subagent[] {
     const rows = this.db.query("SELECT * FROM subagents WHERE run_id = $runId AND status = 'running'").all({ runId }) as SubagentRow[];
-    const t = now();
+    const t = this.now();
     this.db.query("UPDATE subagents SET status = 'stopped', ended_at = $t, updated_at = $t WHERE run_id = $runId AND status = 'running'").run({ runId, t });
     return rows.map((r) => toSubagent({ ...r, status: "stopped", ended_at: t, updated_at: t }));
   }

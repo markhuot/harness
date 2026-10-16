@@ -1,0 +1,10 @@
+{
+  "name": "@harness/testing",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "bun test",
+    "stress": "bun run.ts stress",
+    "lint": "bun run.ts lint"
+  }
+}

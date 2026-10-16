@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
 import type { ApnsEnvironment, Device, DevicePlatform } from "@harness/shared";
-import { now } from "./util";
+import { type Clock, systemClock } from "../clock";
 
 /** A registered device with its APNs token (never sent to clients; Device has only its suffix). */
 export interface DeviceRecord extends Device {
@@ -37,7 +37,7 @@ export function publicDevice({ apnsToken: _token, ...device }: DeviceRecord): De
 
 /** Devices registered for push notifications. */
 export class DeviceRepo {
-  constructor(private db: Database) {}
+  constructor(private db: Database, private now: Clock = systemClock) {}
 
   list(): DeviceRecord[] {
     return (this.db.query("SELECT * FROM devices ORDER BY created_at").all() as Row[]).map(toRecord);
@@ -53,7 +53,7 @@ export class DeviceRepo {
    * token (the app was reinstalled and picked a new id) is replaced.
    */
   upsert(d: { id: string; platform: DevicePlatform; name: string; apnsToken: string; topic: string; environment: ApnsEnvironment }): DeviceRecord {
-    const t = now();
+    const t = this.now();
     this.db.transaction(() => {
       this.db.query("DELETE FROM devices WHERE apns_token = $token AND id != $id").run({ token: d.apnsToken, id: d.id });
       this.db

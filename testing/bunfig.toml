@@ -1,0 +1,3 @@
+# No preload: this suite shares nothing with the old tests' bunfig (the root one preloads
+# shared/src/testing). `bun run testing` runs bun test with this directory as cwd so this file wins.
+[test]

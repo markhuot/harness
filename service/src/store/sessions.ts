@@ -1,6 +1,7 @@
 import type { Database } from "bun:sqlite";
 import type { Session, SessionKind, TriageStatus } from "@harness/shared";
-import { bool, fromJson, newId, now, toJson } from "./util";
+import { bool, fromJson, newId, toJson } from "./util";
+import { type Clock, systemClock } from "../clock";
 import type { CallUsage, StoredContext } from "../orchestrator/context-usage";
 
 interface SessionRow {
@@ -70,7 +71,7 @@ const COLUMNS: Record<string, string> = {
 };
 
 export class SessionRepo {
-  constructor(private db: Database) {}
+  constructor(private db: Database, private now: Clock = systemClock) {}
 
   list(kind?: SessionKind): Session[] {
     const rows = kind
@@ -86,7 +87,7 @@ export class SessionRepo {
 
   create(input: NewSession): Session {
     const id = input.id ?? newId();
-    const t = now();
+    const t = this.now();
     this.db
       .query(
         `INSERT INTO sessions (id, key, kind, ticket_id, driver, cwd, title, triage_status, outcome, driver_state, meta, next_seq, created_at, updated_at)
@@ -109,7 +110,7 @@ export class SessionRepo {
 
   update(id: string, patch: SessionPatch): Session | null {
     const sets: string[] = [];
-    const params: Record<string, string | number | null> = { id, t: now() };
+    const params: Record<string, string | number | null> = { id, t: this.now() };
     for (const [field, value] of Object.entries(patch)) {
       const col = COLUMNS[field];
       if (!col || value === undefined) continue;
@@ -138,7 +139,7 @@ export class SessionRepo {
     // The gauge shows the conversation the next run resumes, so clearing it clears the gauge too.
     this.db
       .query("UPDATE sessions SET driver_state = $state, driver_state_driver = $driver, context = CASE WHEN $state IS NULL THEN NULL ELSE context END, updated_at = $t WHERE id = $id")
-      .run({ id, state: toJson(state), driver: state == null ? null : driver, t: now() });
+      .run({ id, state: toJson(state), driver: state == null ? null : driver, t: this.now() });
   }
 
   /** The driver that wrote the saved conversation (null: none saved). */
@@ -160,7 +161,7 @@ export class SessionRepo {
   }
 
   /** Keeps a model call a run made. */
-  addCall(sessionId: string, runId: string, call: CallUsage, at: number = now()) {
+  addCall(sessionId: string, runId: string, call: CallUsage, at: number = this.now()) {
     this.db
       .query(
         `INSERT INTO driver_calls (session_id, run_id, at, input, cache_read, cache_write, output, estimated)

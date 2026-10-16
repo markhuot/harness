@@ -3,6 +3,7 @@
 import { Database } from "bun:sqlite";
 import { randomUUID } from "node:crypto";
 import { basename, dirname, join } from "node:path";
+import { systemClock, type Clock } from "./clock";
 import type { Attachment, AttachmentKind, AttachmentSource } from "@harness/shared";
 import { builtinCompleteChoice, builtinPhaseModels, FALLBACK_DRIVER } from "@harness/shared";
 import { attachmentPath, describeFile } from "./attachments";
@@ -761,6 +762,8 @@ export const MIGRATIONS: string[] = [
 export interface MigrationPaths {
   attachmentsDir?: string;
   uploadsDir?: string;
+  /** The clock migrations stamp rows with (default the real clock) */
+  now?: Clock;
 }
 
 /**
@@ -875,7 +878,7 @@ function backfillAttachments(db: Database, paths: Required<MigrationPaths>) {
     `INSERT INTO attachments (id, ticket_id, path, name, source, kind, mime_type, size, width, height, created_at)
      VALUES ($id, NULL, $path, $name, $source, $kind, $mimeType, $size, $width, $height, $t)`,
   );
-  const t = Date.now();
+  const t = paths.now();
   type Row = { id: string; path: string; name: string; source: string; kind: string; mime_type: string; size: number | null; width: number | null; height: number | null };
   const record = (r: Row): Attachment => ({
     id: r.id,
@@ -1002,8 +1005,22 @@ export function openDb(path: string, paths: MigrationPaths = {}): Database {
 /** The folders a migration's code looks in: the given ones, else HARNESS_HOME's, next to the database file. */
 function migrationPaths(db: Database, given: MigrationPaths): Required<MigrationPaths> {
   const file = (db.query("PRAGMA database_list").all() as { name: string; file: string }[]).find((d) => d.name === "main")?.file ?? "";
-  const home = file ? dirname(file) : process.cwd();
-  return { attachmentsDir: given.attachmentsDir ?? join(home, "attachments"), uploadsDir: given.uploadsDir ?? join(home, "uploads") };
+  const home = file ? dirname(file) : null;
+  // Read lazily: an in-memory database only fails if a migration actually needs a folder it wasn't given.
+  const dir = (given: string | undefined, name: string) => {
+    if (given) return given;
+    if (!home) throw new Error(`An in-memory database needs an explicit ${name}`);
+    return join(home, name);
+  };
+  return {
+    get attachmentsDir() {
+      return dir(given.attachmentsDir, "attachmentsDir");
+    },
+    get uploadsDir() {
+      return dir(given.uploadsDir, "uploadsDir");
+    },
+    now: given.now ?? systemClock,
+  };
 }
 
 export function migrate(db: Database, paths: MigrationPaths = {}) {

@@ -16,6 +16,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 ### Changed
 
 - The iPhone and iPad terminal now resizes when the keyboard appears or goes away: the shell gets fewer rows while the keyboard is up and the cursor stays on screen, instead of the terminal sliding up. The extra full redraw after the keyboard moves is gone.
+- Internal: a new self-contained test suite in `testing/` (`bun run testing stress` repeats the fast layers shuffled and in parallel; a lint fails any test that imports another test's data), and the service can now run on an injected clock (`createHarness({ now })`) and an in-memory database (`createHarness({ dbPath: ":memory:" })`), so tests no longer wait on real time or write a database file. Behaviour is unchanged by default.
 
 ## [app-20261016.1141](https://github.com/markhuot/harness/releases/tag/app-20261016.1141) - 2026-10-16
 

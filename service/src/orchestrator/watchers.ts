@@ -11,6 +11,7 @@
 // else = failure.
 
 import type { Watcher, WatcherLive } from "@harness/shared";
+import { type Clock, systemClock } from "../clock";
 import { homedir } from "node:os";
 
 // ---------------------------------------------------------------------------
@@ -194,6 +195,8 @@ export interface WatcherRunnerOptions {
   shell?: string;
   /** Cap on one chunk of output (default MAX_OUTPUT_CHARS) */
   maxOutputChars?: number;
+  /** The clock for live state and schedules (default the real clock) */
+  now?: Clock;
 }
 
 export class WatcherRunner {
@@ -204,6 +207,7 @@ export class WatcherRunner {
   private readonly timing: WatcherTiming;
   private readonly shell: string;
   private readonly maxOutputChars: number;
+  private readonly now: Clock;
   /** Supervised (enabled) watchers */
   private readonly entries = new Map<string, Entry>();
   /** Every watcher seen by the last sync, so runNow works for disabled ones too */
@@ -222,6 +226,7 @@ export class WatcherRunner {
     this.timing = { ...DEFAULT_TIMING, ...(opts.timing ?? {}) };
     this.shell = opts.shell ?? loginShell();
     this.maxOutputChars = opts.maxOutputChars ?? MAX_OUTPUT_CHARS;
+    this.now = opts.now ?? systemClock;
   }
 
   /** What a watcher's process is doing now; undefined for ids the last sync didn't include. */
@@ -305,7 +310,7 @@ export class WatcherRunner {
   // --- internals -----------------------------------------------------------
 
   private report(id: string, state: WatcherLive["state"], nextRunAt: number | null, failures: number): void {
-    const live: WatcherLive = { state, since: Date.now(), nextRunAt, failures };
+    const live: WatcherLive = { state, since: this.now(), nextRunAt, failures };
     this.lives.set(id, live);
     this.onLive(id, live);
   }
@@ -322,7 +327,7 @@ export class WatcherRunner {
   private nextTick(entry: Entry): number | null {
     const s = entry.schedule;
     if (!s) return null;
-    const now = Date.now();
+    const now = this.now();
     return s.startedAt + (Math.floor((now - s.startedAt) / s.everyMs) + 1) * s.everyMs;
   }
 
@@ -357,7 +362,7 @@ export class WatcherRunner {
       if (entry.stopped) return;
       if (w.mode === "interval") {
         const every = Math.max((w.intervalSec || 0) * 1000, this.timing.minIntervalMs);
-        entry.schedule = { startedAt: Date.now(), everyMs: every };
+        entry.schedule = { startedAt: this.now(), everyMs: every };
         this.execute(entry);
         entry.interval = setInterval(() => {
           if (!entry.stopped && !entry.running) this.execute(entry);
@@ -397,7 +402,7 @@ export class WatcherRunner {
         delay = Math.min(this.timing.backoffBaseMs * 2 ** (entry.failures - 1), this.timing.backoffMaxMs);
       }
       this.clearTimer(entry);
-      this.setLive(entry, "waiting", Date.now() + delay);
+      this.setLive(entry, "waiting", this.now() + delay);
       entry.timer = setTimeout(() => {
         entry.timer = null;
         if (!entry.stopped) this.loopRun(entry);
