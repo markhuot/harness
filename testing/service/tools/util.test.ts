@@ -54,7 +54,7 @@ test("nested objects are checked only when asked to, which also forbids unknown 
   const sch = s({ o: { type: "object", properties: { x: { type: "integer" }, y: { type: "integer" } }, required: ["y"], additionalProperties: false } });
   expect(() => validateInput("t", sch, { o: { x: "no" } })).not.toThrow();
   bad(() => validateInput("t", sch, { o: { x: "no", y: 1 } }, true), /"o.x" must be an integer/);
-  bad(() => validateInput("t", sch, { o: { y: 1, z: 1 } }, true), /"o.z" is not a known property \(expected x\)/);
+  bad(() => validateInput("t", sch, { o: { y: 1, z: 1 } }, true), /"o.z" is not a known property \(expected x, y\)/);
   bad(() => validateInput("t", sch, { o: {} }, true), /"o.y" is required/);
 });
 
