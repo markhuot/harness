@@ -212,7 +212,7 @@ export function Pane({
           // Keyed by what it shows: following a rename keeps it, another tab starts fresh.
           <TicketTabPane key={tornKey(c)} paneId={leaf.id} content={c} zoomed={zoomed} />
         ) : (
-          <TerminalPane key={c.sessionId} paneId={leaf.id} content={c} zoomed={zoomed} focused={active} />
+          <TerminalPane key={c.sessionId} paneId={leaf.id} content={c} zoomed={zoomed} covered={hidden} focused={active} />
         )}
       </PaneContext.Provider>
     </section>

@@ -19,7 +19,7 @@ import { usePaneScope, usePopout } from "../components/paneContext";
 import { MovePaneItems, PaneGrip, PaneWindowButton } from "../components/paneHeader";
 import { closePane, cwdName, paneLabel, replaceContent, setTerminalTitle, terminalContent, toggleZoom, updatePanes, type TerminalContent } from "../state/panes";
 import { useStore } from "../state/store";
-import { appOwnsKey, exitLabel, menuKey, terminalColors } from "../state/terminal";
+import { appOwnsKey, exitLabel, menuKey, terminalColors, terminalCounts } from "../state/terminal";
 import { currentColorTheme, currentTheme, useTheme } from "../state/theme";
 import { deviceIdNow } from "../state/usePresence";
 import "./terminal.css";
@@ -30,7 +30,7 @@ function monoFont(): string {
   return getComputedStyle(document.documentElement).getPropertyValue("--mono").trim() || "Menlo, monospace";
 }
 
-export function TerminalPane({ paneId, content, zoomed, focused }: { paneId: string; content: TerminalContent; zoomed: boolean; focused: boolean }) {
+export function TerminalPane({ paneId, content, zoomed, covered, focused }: { paneId: string; content: TerminalContent; zoomed: boolean; covered: boolean; focused: boolean }) {
   const scope = usePaneScope();
   const popout = usePopout();
   const { client, socket, onTerminalMessage, endTerminal, terminals } = useStore();
@@ -39,6 +39,10 @@ export function TerminalPane({ paneId, content, zoomed, focused }: { paneId: str
   const viewRef = useRef<TerminalView | null>(null);
   const focusedRef = useRef(focused);
   focusedRef.current = focused;
+  /** Re-attaches or detaches the live view when the pane is covered or uncovered. */
+  const syncRef = useRef<(() => void) | null>(null);
+  const coveredRef = useRef(covered);
+  coveredRef.current = covered;
   /** null while it runs; the exit code (or null for one the service lost) once it has ended. */
   const [exit, setExit] = useState<{ code: number | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -67,8 +71,9 @@ export function TerminalPane({ paneId, content, zoomed, focused }: { paneId: str
       if (disposed) return;
       let viewport: { cols: number; rows: number } | null = null;
       let attached = false;
+      const counts = () => terminalCounts({ windowVisible: document.visibilityState === "visible", covered: coveredRef.current });
       const attach = () => {
-        if (!viewport || document.visibilityState !== "visible") return;
+        if (!viewport || !counts()) return;
         socket.attachTerminal(sessionId, deviceId, viewport.cols, viewport.rows);
         attached = true;
       };
@@ -115,10 +120,15 @@ export function TerminalPane({ paneId, content, zoomed, focused }: { paneId: str
           if (isTerminalMessage(msg)) view?.handle(msg);
         }),
       );
-      // A hidden window doesn't count toward the shell's size (it would shrink it for nobody to see).
-      const onVisibility = () => (document.visibilityState === "visible" ? attach() : detach());
-      document.addEventListener("visibilitychange", onVisibility);
-      offs.push(() => document.removeEventListener("visibilitychange", onVisibility));
+      // A hidden window or a covered pane doesn't count toward the shell's size (it would
+      // shrink it for nobody to see).
+      const sync = () => (counts() ? attach() : detach());
+      syncRef.current = sync;
+      document.addEventListener("visibilitychange", sync);
+      offs.push(() => {
+        document.removeEventListener("visibilitychange", sync);
+        syncRef.current = null;
+      });
       offs.push(detach);
       attach();
       if (focusedRef.current) view.focus();
@@ -131,6 +141,8 @@ export function TerminalPane({ paneId, content, zoomed, focused }: { paneId: str
       view?.dispose();
     };
   }, [sessionId, themeKey, socket, onTerminalMessage]);
+
+  useEffect(() => syncRef.current?.(), [covered]);
 
   // Focusing the pane (a click, Tab, opening it) puts the keyboard in the terminal.
   useEffect(() => {

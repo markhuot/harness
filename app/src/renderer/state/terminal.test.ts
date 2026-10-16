@@ -2,7 +2,20 @@ import { describe, expect, test } from "bun:test";
 import { ALL_SCOPE, groupScope } from "@harness/shared/state";
 import { THEMES } from "@harness/shared/themes";
 import type { TerminalInfo } from "@harness/shared";
-import { appOwnsKey, applyTerminalEvent, exitLabel, menuKey, terminalColors, terminalCwd, terminalOpenScope, terminalRow, terminalScope, tildePath } from "./terminal";
+import { appOwnsKey, applyTerminalEvent, exitLabel, menuKey, terminalColors, terminalCounts, terminalCwd, terminalOpenScope, terminalRow, terminalScope, tildePath } from "./terminal";
+
+describe("terminalCounts", () => {
+  const seen = { windowVisible: true, covered: false };
+
+  test("a visible pane on a Mac someone is at counts", () => {
+    expect(terminalCounts(seen)).toBe(true);
+  });
+
+  test("a hidden window or a covered pane doesn't hold the shell's size", () => {
+    expect(terminalCounts({ ...seen, windowVisible: false })).toBe(false);
+    expect(terminalCounts({ ...seen, covered: true })).toBe(false);
+  });
+});
 
 describe("terminalCwd", () => {
   const projects = { p1: { path: "/Users/me/Sites/harness" }, p2: { path: "" } };

@@ -9,6 +9,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- A terminal pane on the Mac that another pane is zoomed over no longer holds the shell small for your phone. It stops counting toward the shell's size while it's covered.
+
 ## [app-20261016.0747](https://github.com/markhuot/harness/releases/tag/app-20261016.0747) - 2026-10-16
 
 ### Added

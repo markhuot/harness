@@ -100,6 +100,14 @@ export function appOwnsKey(e: Pick<KeyboardEvent, "metaKey" | "code">): boolean 
  */
 export const menuKey = (e: Pick<KeyboardEvent, "metaKey" | "ctrlKey" | "code">): boolean => appOwnsKey(e) && !e.ctrlKey;
 
+/**
+ * Whether a pane counts toward its shell's size. Chromium keeps `visibilityState` "visible" for a pane
+ * another one is zoomed over, so that is checked here: a pane nobody can see must not hold the shell
+ * small for the device that is showing it. (Away or idle doesn't count: a terminal being watched with
+ * no input, like a build, has to keep streaming.)
+ */
+export const terminalCounts = (s: { windowVisible: boolean; covered: boolean }): boolean => s.windowVisible && !s.covered;
+
 // ---------------------------------------------------------------------------
 // Colors
 // ---------------------------------------------------------------------------
