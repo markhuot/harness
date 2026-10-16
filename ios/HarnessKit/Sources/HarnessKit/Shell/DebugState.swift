@@ -67,11 +67,20 @@ public struct DebugState: Codable, Equatable, Sendable {
         /// The Ctrl accessory key is armed.
         public var ctrl: Bool
         public var keyboardInset: Double
+        /// The element holding the keyboard, nil when nothing has focus: the page hides its native
+        /// caret and turns off capitalization and autocorrect there.
+        public var input: Input?
         /// What the page could show, in points: the rows are counted from its height, which stays the
         /// web view's own whatever the keyboard does.
         public var container: Size
         /// The web view's own size, from the app.
         public var webView: Size?
+
+        public struct Input: Codable, Equatable, Sendable {
+            public var caretColor: String
+            public var autocapitalize: String
+            public var autocorrect: String
+        }
 
         public struct Size: Codable, Equatable, Sendable {
             public var width: Double

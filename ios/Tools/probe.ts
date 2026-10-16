@@ -42,6 +42,7 @@ export interface DebugState {
     screen: string[];
     ctrl: boolean;
     keyboardInset: number;
+    input: { caretColor: string; autocapitalize: string; autocorrect: string } | null;
     container: { width: number; height: number };
     webView?: { width: number; height: number };
   };

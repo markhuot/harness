@@ -62,8 +62,16 @@ export interface BridgeProbe {
   screen: string[];
   ctrl: boolean;
   keyboardInset: number;
+  /** The element that has the keyboard, and what it tells iOS about caret and capitalization; null when nothing has focus. */
+  input: { caretColor: string; autocapitalize: string; autocorrect: string } | null;
   /** What the page could show, in points (the viewport the rows are counted from). */
   container: { width: number; height: number };
+}
+
+function focusedInput(win: Window): BridgeProbe["input"] {
+  const el = win.document.activeElement;
+  if (!el || el === win.document.body) return null;
+  return { caretColor: win.getComputedStyle(el).caretColor, autocapitalize: el.getAttribute("autocapitalize") ?? "", autocorrect: el.getAttribute("autocorrect") ?? "" };
 }
 
 export interface Mounted {
@@ -185,7 +193,7 @@ export function mount(win: Window, post: (event: BridgeEvent) => void, parent?: 
       const buffer = view.term.buffer.active;
       const screen: string[] = [];
       for (let y = 0; y < view.term.rows; y++) screen.push(buffer.getLine(buffer.viewportY + y)?.translateToString(true) ?? "");
-      return { cols: view.term.cols, rows: view.term.rows, synced: view.feed.isSynced, offset: view.feed.offset, screen, ctrl, keyboardInset: inset, container: { width: root.clientWidth, height: root.clientHeight } };
+      return { cols: view.term.cols, rows: view.term.rows, synced: view.feed.isSynced, offset: view.feed.offset, screen, ctrl, keyboardInset: inset, input: focusedInput(win), container: { width: root.clientWidth, height: root.clientHeight } };
     },
     destroy() {
       view?.dispose();

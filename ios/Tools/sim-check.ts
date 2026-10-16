@@ -4558,6 +4558,9 @@ function interactionChains(s: Seeded): Chain[] {
           throw new Error(`${(e as Error).message}; screen: ${JSON.stringify((await probe(udid))?.terminal?.screen.filter((l) => l))}`);
         });
         await shot(udid, "terminal-typed-light", true);
+        // The element holding the keyboard draws no native caret (the large tinted one) and takes no autocapitalization.
+        const input = (await probe(udid))?.terminal?.input;
+        if (!input || !["transparent", "rgba(0, 0, 0, 0)"].includes(input.caretColor) || input.autocapitalize !== "none" || input.autocorrect !== "off") throw new Error(`the focused input is ${JSON.stringify(input)}`);
         // The keyboard covers the sheet instead of resizing the shell: the rows the phone reports don't change.
         await atRest(udid, 1500);
         const after = await terminalRows();

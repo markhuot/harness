@@ -6,6 +6,7 @@
 
 import type { ITheme, Terminal } from "ghostty-web";
 import { hardenInput } from "./input";
+import { createRepaintTimer, forceRedraw, type RedrawTerm } from "./repaint";
 import { viewportFor, type CellSize } from "./layout";
 import { TerminalFeed, type TerminalMessage, type TerminalSink } from "./session";
 
@@ -57,8 +58,6 @@ export interface TerminalView {
   handle(msg: TerminalMessage): void;
   /** Shift the stage up by this many pixels (the soft keyboard is covering the lower part). */
   pan(px: number): void;
-  /** Redraw every row. The render loop only paints rows that changed, so a canvas WebKit dropped (as the keyboard moves the page) stays blank until this. */
-  repaint(): void;
   /** The cursor row's bottom edge in the stage, in pixels. */
   cursorBottom(): number;
   focus(): void;
@@ -136,13 +135,8 @@ export function createTerminalView(ghostty: GhosttyModule, o: ViewOptions): Term
   };
   const feed = new TerminalFeed(o.id, sink, o.onResync);
 
-  let repaintTimer: ReturnType<typeof setTimeout> | null = null;
-  const repaint = () => {
-    repaintTimer = null;
-    // ghostty-web has no public full redraw; its render loop calls renderer.render(buffer, forceAll=false, ...).
-    const t = term as unknown as { renderer?: { render(b: unknown, forceAll: boolean, y: number, p: unknown, o: number): void }; wasmTerm?: unknown; viewportY: number; scrollbarOpacity: number };
-    t.renderer?.render(t.wasmTerm, true, t.viewportY, term, t.scrollbarOpacity);
-  };
+  const redraw = () => forceRedraw(term as unknown as RedrawTerm);
+  const repaint = createRepaintTimer(redraw, 200);
 
   return {
     term,
@@ -154,10 +148,8 @@ export function createTerminalView(ghostty: GhosttyModule, o: ViewOptions): Term
       if (stage.style.transform === next) return;
       stage.style.transform = next;
       // The pan is a transition: repaint once it has settled (transitionend doesn't fire if it's interrupted or the stage is hidden).
-      if (repaintTimer) clearTimeout(repaintTimer);
-      repaintTimer = setTimeout(repaint, 200);
+      repaint.schedule();
     },
-    repaint,
     cursorBottom() {
       const c = cell();
       const buffer = term.buffer.active;
@@ -166,7 +158,7 @@ export function createTerminalView(ghostty: GhosttyModule, o: ViewOptions): Term
     focus: () => term.focus(),
     dispose() {
       if (timer) clearTimeout(timer);
-      if (repaintTimer) clearTimeout(repaintTimer);
+      repaint.cancel();
       observer.disconnect();
       container.removeEventListener("pointerup", tap);
       term.dispose();

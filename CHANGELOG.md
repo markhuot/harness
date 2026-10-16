@@ -11,7 +11,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
-- The iPhone and iPad terminal redraws itself in full once the keyboard has moved it, so it can't be left blank when the keyboard comes up or goes away.
+- The iPhone and iPad terminal redraws itself in full after the keyboard moves it, which should stop it showing a stale or blank screen when the keyboard appears or goes away. We haven't been able to reproduce that blank screen, so tell us if you still see it.
 
 - Terminals no longer show a stray caret: no large tinted caret to the left of the terminal on iPhone and iPad, and no blinking caret at the top left of the terminal on the Mac. Only the terminal's own cursor shows.
 
