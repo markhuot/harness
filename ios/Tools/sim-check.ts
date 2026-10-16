@@ -4647,6 +4647,23 @@ function interactionChains(s: Seeded): Chain[] {
         await tapHeaderCancel(udid);
         return "no ticket rows";
       });
+      await check("tapping a ticket in the palette closes it and opens only the ticket sheet", async () => {
+        await goto(udid, BOARD);
+        await atRest(udid, 500);
+        await tapHeader(udid, "Command palette", { x: 192, y: 811 });
+        await until("the palette", async () => PALETTE(await labels(udid)), 8000);
+        await axe("type", k(s.fileLink), "--udid", udid);
+        await until("the ticket row", async () => (await labels(udid)).some((x) => x.startsWith(`${k(s.fileLink)} `)), 10000);
+        await tapWhere(udid, (x) => x.startsWith(`${k(s.fileLink)} `));
+        await until("the ticket sheet", async () => (await probe(udid))?.router.ticketSheet === "presented", 8000);
+        await atRest(udid, 1000); // long enough for a re-presented palette to show
+        const state = (await probe(udid))?.router;
+        if (state?.sheet != null) throw new Error(`the palette came back: sheet is ${state.sheet}`);
+        if (state?.ticketSheet !== "presented") throw new Error(`the ticket sheet is ${state?.ticketSheet}`);
+        if (PALETTE(await labels(udid))) throw new Error("the palette's commands are showing over the ticket");
+        await shot(udid, "palette-ticket-opened-light");
+        return "ticket sheet only";
+      });
       await check("⌘K over a ticket sheet lists its actions; Copy ticket key copies it", async () => {
         await goto(udid, `harness://ticket/${k(s.fileLink)}?tab=spec`, (l) => l.includes("greetingFor fallback"));
         await axe("key-combo", "--modifiers", "227", "--key", "14", "--udid", udid);

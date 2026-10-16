@@ -185,6 +185,8 @@ public final class Router {
     /// dock on top. Ticket scope: `push`.
     public func openTicket(key: String, tab: TicketTab?) {
         guard scope == .main else { return push(.ticket(key: key, tab: tab)) }
+        // The palette is a route on `sheet`; left set, the ticket sheet host re-presents it on top.
+        if case .palette = sheet { sheet = nil }
         presentTicketSheet(.ticket(key: key, tab: tab))
     }
 

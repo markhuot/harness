@@ -9,6 +9,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- On iPhone, tapping a ticket in the command palette now opens the ticket and leaves the palette closed, instead of the palette reappearing over the ticket.
+
 ### Changed
 
 - The iPhone and iPad terminal now resizes when the keyboard appears or goes away: the shell gets fewer rows while the keyboard is up and the cursor stays on screen, instead of the terminal sliding up. The extra full redraw after the keyboard moves is gone.

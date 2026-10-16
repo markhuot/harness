@@ -584,6 +584,21 @@ struct RouterSheetTests {
         #expect(r.sheet == nil && r.ticketSheet?.terminalID == "t-1")
     }
 
+    @Test func openingATicketFromThePaletteClosesThePalette() {
+        let r = sheeted()
+        r.present(.palette(files: false))
+        r.openTicket(key: "A-1", tab: nil)
+        #expect(r.sheet == nil)
+        #expect(r.ticketSheet?.rootKey == "A-1" && r.ticketSheetState == .presented)
+    }
+
+    @Test func openingATicketLeavesOtherSheetsAlone() {
+        let r = sheeted()
+        r.present(.projects)
+        r.openTicket(key: "A-1", tab: nil)
+        #expect(r.sheet == .projects)
+    }
+
     @Test func aFileOpensAsItsOwnSheetNextToTheTickets() {
         let r = sheeted()
         r.push(t("A-1"))
