@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261016.1141](https://github.com/markhuot/harness/releases/tag/app-20261016.1141) - 2026-10-16
+
 ### Fixed
 
 - The iPhone and iPad terminal redraws itself in full after the keyboard moves it, which should stop it showing a stale or blank screen when the keyboard appears or goes away. We haven't been able to reproduce that blank screen, so tell us if you still see it.
@@ -16,6 +18,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - Terminals no longer show a stray caret: no large tinted caret to the left of the terminal on iPhone and iPad, and no blinking caret at the top left of the terminal on the Mac. Only the terminal's own cursor shows.
 
 - The iPhone and iPad terminal no longer capitalizes the first letter of a command, and autocorrect and suggestions are off.
+
+### Changed
+
+- For people working on Harness: the terminal's repaint timer, its redraw after the keyboard moves, and the focused-input probe on iOS now have automated tests, so a regression there fails before a release instead of on a device.
 
 ## [app-20261016.1037](https://github.com/markhuot/harness/releases/tag/app-20261016.1037) - 2026-10-16
 
