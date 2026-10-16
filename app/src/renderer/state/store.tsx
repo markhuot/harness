@@ -22,6 +22,7 @@ import {
   type Snapshot,
   type State,
 } from "@harness/shared/state";
+import { boardProjectOf, boardScopeOf } from "./boardScope";
 import { boardRoute, formatRoute, mirrorRoute, paneScopeOf, parseRoute, type Route } from "./route";
 import {
   focusedTicket,
@@ -211,19 +212,7 @@ async function loadSnapshot(client: HarnessClient, scope: string): Promise<Snaps
   return { projects, ...board, sessions, watchers, settings, drivers };
 }
 
-/** The board's project filter, once it names a project that exists (else all projects). */
-export function boardProjectOf(state: State, route: Route): string | null {
-  return route.view === "board" && !route.group && route.projectId && state.projects[route.projectId] ? route.projectId : null;
-}
-
-/**
- * The board's scope: a group's (even one no project carries any more: its board is empty, not
- * every ticket), else the validated project's, else All projects.
- */
-export function boardScopeOf(state: State, route: Route): string {
-  if (route.view === "board" && route.group) return groupScope(route.group);
-  return scopeOf(boardProjectOf(state, route));
-}
+export { boardProjectOf, boardScopeOf };
 
 /** Run async jobs with bounded concurrency. */
 async function pool<T>(items: T[], n: number, fn: (x: T) => Promise<void>) {

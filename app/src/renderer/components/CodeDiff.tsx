@@ -3,24 +3,11 @@
 // up first (normalizePatch); anything that still doesn't parse, or fails to render, shows `fallback`.
 
 import { Component, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { getFiletypeFromFileName, parsePatchFiles, type FileDiffMetadata } from "@pierre/diffs";
+import { getFiletypeFromFileName, type FileDiffMetadata } from "@pierre/diffs";
 import { FileDiff, type FileDiffOptions } from "@pierre/diffs/react";
-import { normalizePatch } from "@harness/shared/state";
+import { diffFiles } from "../state/diffFiles";
 import { loadHighlighter, useSyntaxTheme } from "../state/syntax";
 import { CopyButton, useNearViewport } from "./Code";
-
-/** The files in a diff block, or [] when it doesn't parse. */
-export function diffFiles(text: string): FileDiffMetadata[] {
-  const quiet = console.error;
-  try {
-    console.error = () => {}; // the parser logs the patches it rejects; we fall back instead
-    return parsePatchFiles(normalizePatch(text)).flatMap((p) => p.files);
-  } catch {
-    return [];
-  } finally {
-    console.error = quiet;
-  }
-}
 
 // Sit on the code block surface (.md pre's) rather than the Shiki theme's editor background; the
 // add / delete tints mix from it the same way the Git tab's do from its background.

@@ -33,7 +33,8 @@ import { MenuButton, TicketKey } from "../components/bits";
 import { useBoardScope, usePaneScope, usePopout } from "../components/paneContext";
 import { MovePaneItems, PaneGrip, PaneWindowButton } from "../components/paneHeader";
 import { ApprovalCard } from "./Approval";
-import { focusTicketComposer, MessageComposer, scrollCommands, TicketTabBody, tornTabName, useTicketActions, useTicketData, type BrowserOpts } from "./TicketDetail";
+import { focusTicketComposer, MessageComposer, scrollCommands, TicketTabBody, useTicketActions, useTicketData, type BrowserOpts } from "./TicketDetail";
+import { tornTabName } from "../state/tornTabName";
 
 export function TicketTabPane({ paneId, content, zoomed }: { paneId: string; content: TicketTabContent; zoomed: boolean }) {
   const scope = usePaneScope();

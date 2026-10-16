@@ -5,8 +5,11 @@ import { useEffect, useRef, useState } from "react";
 import type { HarnessSocket } from "@harness/shared";
 import { readHideChildren, type State } from "@harness/shared/state";
 import { getPanes, getPopoutPanes, usePaneStore } from "./panes";
+import { reportedPresence } from "./presenceReport";
 import { presenceTerminals, presenceTickets } from "./presence";
 import { paneScopeOf, type Route } from "./route";
+
+export { reportedPresence };
 
 /** Board.tsx's "Hide child tickets" toggle fires this on its window when it changes. */
 export const HIDE_CHILDREN_CHANGED = "harness:hide-children-changed";
@@ -77,19 +80,6 @@ function useAway(): boolean {
     };
   }, []);
   return away;
-}
-
-/**
- * What this window reports. Chromium keeps `visibilityState` "visible" while the display sleeps, so
- * an away person reports nothing on screen however the window looks.
- */
-export function reportedPresence(
-  visible: boolean,
-  away: boolean,
-  tickets: string[],
-  terminals: string[],
-): { visible: boolean; tickets: string[]; terminals: string[] } {
-  return away ? { visible: false, tickets: [], terminals: [] } : { visible, tickets, terminals };
 }
 
 function useHideChildrenSetting(): boolean {

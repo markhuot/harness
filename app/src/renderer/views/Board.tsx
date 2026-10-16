@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { isConductor, keyLabel, resolveBaseBranch, TICKET_STATUSES, type Ticket } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
+import { cardPropsEqual, type CardProps, type CardSelection } from "../state/boardCard";
 import {
   autoStartTitle,
   APPROVED_TITLE,
@@ -49,7 +50,6 @@ import { cursorPos, firstCard, moveCursor, resolveCursor, type CursorDir, type C
 import "./board.css";
 
 /** How a card shows that its ticket is open: in the focused pane, in another pane, or not at all. */
-type CardSelection = "focused" | "open" | null;
 
 /** The board: pane content in the workspace (components/PaneWorkspace.tsx). */
 export function BoardPane() {
@@ -512,19 +512,6 @@ const TicketCard = memo(function TicketCard({
     </article>
   );
 }, cardPropsEqual);
-
-type CardProps = { ticket: Ticket; state: State; selected: CardSelection; isCursor: boolean; showProject: boolean; related: boolean };
-function cardPropsEqual(a: CardProps, b: CardProps) {
-  if (a.ticket !== b.ticket || a.selected !== b.selected || a.isCursor !== b.isCursor || a.showProject !== b.showProject || a.related !== b.related) return false;
-  const s1 = a.state;
-  const s2 = b.state;
-  if (s1.activity[a.ticket.sessionId] !== s2.activity[b.ticket.sessionId]) return false;
-  if (s1.projects !== s2.projects || s1.settings !== s2.settings) return false;
-  if (s1.keyAliases !== s2.keyAliases || s1.missingKeys !== s2.missingKeys) return false;
-  // Deps, children and the parent live in the tickets map.
-  if (s1.tickets !== s2.tickets && (a.ticket.dependsOn.length || isConductor(a.ticket) || a.ticket.parentId)) return false;
-  return true;
-}
 
 export function useTicket(key: string) {
   const { state } = useStore();

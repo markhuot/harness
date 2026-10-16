@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { diffFiles } from "./CodeDiff";
+import { diffFiles } from "../state/diffFiles";
 import { Markdown } from "./Markdown";
 
 test("hand-written diffs parse into @pierre/diffs files, named without their a/ b/ prefixes", () => {

@@ -9,108 +9,21 @@
 // so a long transcript renders its plain text at once and never re-highlights an unchanged block.
 
 import { useEffect, useState } from "react";
-import { PIERRE_DEFAULT, syntaxThemeName, viewerThemes, type ThemeAppearance } from "@harness/shared/themes";
-import { activeTheme, type ThemeState } from "../../main/theme";
 import { useTheme } from "./theme";
+import { createTokenCache, failedSyntaxThemes, markSyntaxThemeFailed, onSyntaxThemeFailed, syntaxThemeFor, MAX_HIGHLIGHT_CHARS, type Lines, type SyntaxTheme, type Tokenize } from "./syntaxTokens";
 
-export interface SyntaxTheme {
-  appearance: ThemeAppearance;
-  /** The Shiki theme on screen */
-  name: string;
-  /** @pierre/diffs `theme`: the chosen theme in the active slot, Pierre's default in the other */
-  theme: Record<ThemeAppearance, string>;
-  /** @pierre/diffs `themeType` */
-  themeType: ThemeAppearance;
-}
-
-export function syntaxThemeFor(s: Pick<ThemeState, "themeId" | "resolved">, failed: ReadonlySet<string> = new Set()): SyntaxTheme {
-  const appearance = s.resolved;
-  const name = syntaxThemeName(appearance, activeTheme(s).syntaxTheme, failed);
-  return { appearance, name, theme: viewerThemes(appearance, name), themeType: appearance };
-}
-
-const failedThemes = new Set<string>();
-const failListeners = new Set<() => void>();
-
-/** Remember a Shiki theme that didn't load, so everything falls back to Pierre's default instead. */
-export function markSyntaxThemeFailed(name: string) {
-  if (name === PIERRE_DEFAULT.light || name === PIERRE_DEFAULT.dark || failedThemes.has(name)) return;
-  failedThemes.add(name);
-  for (const fn of failListeners) fn();
-}
+export * from "./syntaxTokens";
 
 export function useSyntaxTheme(): SyntaxTheme {
   const state = useTheme();
   const [, bump] = useState(0);
   useEffect(() => {
-    const fn = () => bump((n) => n + 1);
-    failListeners.add(fn);
-    return () => void failListeners.delete(fn);
+    return onSyntaxThemeFailed(() => bump((n) => n + 1));
   }, []);
-  return syntaxThemeFor(state, failedThemes);
+  return syntaxThemeFor(state, failedSyntaxThemes());
 }
 
 // --- tokens ---------------------------------------------------------------------------------
-
-/** One colored run; `style` is Shiki's FontStyle bits (1 italic, 2 bold, 4 underline). */
-export interface Tok {
-  text: string;
-  color?: string;
-  style?: number;
-}
-export type Lines = Tok[][];
-
-/** Past this, a block stays plain text: tokenizing it would stall the renderer for little benefit. */
-export const MAX_HIGHLIGHT_CHARS = 100_000;
-
-export type Tokenize = (text: string, lang: string, theme: string) => Promise<Lines>;
-
-/**
- * Tokenized blocks by (theme, language, text), least recently used evicted past `limit`, with
- * concurrent requests for the same block sharing one tokenize call. A failed tokenize isn't cached,
- * so a later request (after a theme falls back, say) tries again.
- */
-export function createTokenCache(tokenize: Tokenize, limit = 400) {
-  const done = new Map<string, Lines>();
-  const pending = new Map<string, Promise<Lines>>();
-  const key = (text: string, lang: string, theme: string) => `${theme}\u0000${lang}\u0000${text}`;
-  return {
-    get(text: string, lang: string, theme: string): Lines | undefined {
-      const k = key(text, lang, theme);
-      const hit = done.get(k);
-      if (hit) {
-        done.delete(k);
-        done.set(k, hit);
-      }
-      return hit;
-    },
-    request(text: string, lang: string, theme: string): Promise<Lines> {
-      const k = key(text, lang, theme);
-      const hit = done.get(k);
-      if (hit) return Promise.resolve(hit);
-      let p = pending.get(k);
-      if (!p) {
-        p = tokenize(text, lang, theme).then(
-          (lines) => {
-            pending.delete(k);
-            done.set(k, lines);
-            if (done.size > limit) done.delete(done.keys().next().value!);
-            return lines;
-          },
-          (e) => {
-            pending.delete(k);
-            throw e;
-          },
-        );
-        pending.set(k, p);
-      }
-      return p;
-    },
-    get size() {
-      return done.size;
-    },
-  };
-}
 
 /** Wait for an idle moment (falls back to a timeout where requestIdleCallback is missing). */
 function idle(): Promise<void> {

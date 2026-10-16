@@ -67,6 +67,7 @@ import { PaneGrip, PaneWindowButton } from "../components/paneHeader";
 import { dragProps, tabContextMenu } from "../components/paneDrag";
 import { ComposerReturnBar, TornMark, TornPlaceholder } from "../components/TornOff";
 import { formatRoute } from "../state/route";
+import { tornTabName } from "../state/tornTabName";
 import {
   closePane,
   COMPOSER_TAB,
@@ -143,16 +144,6 @@ export function focusTicketComposer(ticketKey: string, torn: TornOff | undefined
     const id = popoutIdOf(torn.scope);
     void window.harness?.popout.open({ id, route: formatRoute({ view: "popout", id, fromScope: boardScope }) });
   }
-}
-
-/** A tab's name in a placeholder, a drag image or a torn-off pane's header. */
-export function tornTabName(tab: TornTab, pluginTabs: PluginTabRef[] | null | undefined): string {
-  if (tab === COMPOSER_TAB) return "Message box";
-  const t = tabStripTab(tab);
-  if (t === CHANGES_TAB) return CHANGES_LABEL;
-  const plugin = parsePluginTab(t);
-  if (plugin) return pluginTabs?.find((p) => p.pluginId === plugin.pluginId && p.id === plugin.tabId)?.title ?? plugin.tabId;
-  return TAB_LABEL[t as keyof typeof TAB_LABEL] ?? t;
 }
 
 /**
