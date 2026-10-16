@@ -64,7 +64,10 @@ export interface TerminalView {
 
 export function createTerminalView(ghostty: GhosttyModule, o: ViewOptions): TerminalView {
   const { container } = o;
-  Object.assign(container.style, { display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", position: "relative" });
+  Object.assign(container.style, { display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" });
+  // Only a static container gets a position: the Mac pane's host is absolutely placed by its CSS, and an inline
+  // `relative` would put it back in flow, where it shrinks to the stage and the rows it reports never grow.
+  if (getComputedStyle(container).position === "static") container.style.position = "relative";
   const stage = document.createElement("div");
   stage.className = "terminal-stage";
   stage.style.flex = "none";

@@ -11,6 +11,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
+- A terminal pane on the Mac uses the pane's full height. It had been stuck at the number of rows the shell already had, so a tall window or pop-out left the terminal short with empty space below, even with no other device connected.
+
 - A Mac that's asleep, locked or idle no longer holds a terminal small for your phone, and neither does a phone with another sheet in front of the terminal. A terminal is sized for the devices actually showing it; when none is, the smallest attached device still sets the size.
 
 - A terminal pane on the Mac that another pane is zoomed over no longer holds the shell small for your phone. It stops counting toward the shell's size while it's covered.

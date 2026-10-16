@@ -146,6 +146,10 @@ try {
   await typeKeys("q");
   await until("top quit", async () => !(await altScreen()), 8000);
 
+  // 2b'. The host fills the pane body (less its inset), not just the shell's own height, so the rows follow the pane.
+  const fill = await js<{ bodyH: number; hostH: number; rows: number; cellH: number }>(`(() => { const h = document.querySelector('[data-terminal="${t1}"] .terminal-host'); return { bodyH: h.parentElement.clientHeight, hostH: h.clientHeight, rows: h.harnessTerminal.rows, cellH: h.harnessTerminal.renderer.getMetrics().height }; })()`);
+  check("the host fills the pane body, so the shell gets every row that fits", fill.hostH >= fill.bodyH - 12 && fill.rows === Math.floor(fill.hostH / fill.cellH), JSON.stringify(fill));
+
   // 2c. Zooming the pane resizes the PTY to the bigger terminal.
   await js(`document.querySelector('[data-terminal="${t1}"] [data-testid="pane-zoom"]').click()`);
   const small = await size(t1);
