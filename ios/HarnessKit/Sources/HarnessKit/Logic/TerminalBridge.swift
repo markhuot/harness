@@ -142,6 +142,16 @@ public enum TerminalKey: CaseIterable, Sendable {
     }
 }
 
+/// Where the key bar sits against the keyboard. The bar is laid out below the web view; with the
+/// keyboard up it rides above it, covering the web view's bottom edge.
+public enum TerminalKeyBarRules {
+    /// How far to lift the bar (and how much of the web view's bottom the page must pan clear of):
+    /// the bar's bottom edge sits at `webViewBottom + barHeight`, the keyboard starts at `keyboardTop`.
+    public static func cover(webViewBottom: Double, barHeight: Double, keyboardTop: Double) -> Double {
+        max(0, webViewBottom + barHeight - keyboardTop)
+    }
+}
+
 /// Which layout changes of the terminal's web view reach the rows the shell is given.
 public enum TerminalViewportRules {
     /// A height drop of at most this many points is the keyboard's accessory or the home indicator's

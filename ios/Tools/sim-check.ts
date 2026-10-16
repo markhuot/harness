@@ -4524,6 +4524,26 @@ function interactionChains(s: Seeded): Chain[] {
         await shot(udid, "terminal-sheet-light");
         return `${row.length} rows, drawn at ${state.terminal!.cols}×${state.terminal!.rows}`;
       });
+      await check("the key bar's keyboard key hides the keyboard, the page re-pans, and the rows the shell is given stay the same", async () => {
+        // A headless simulator keeps the software keyboard minimized to a bar next to its hardware keyboard, so this
+        // reads the key's own state (the page has the keyboard) rather than how far a keyboard covers the page.
+        await tapWhere(udid, (x) => x === "Show keyboard").catch(async () => {
+          await axe("tap", "-x", "195", "-y", "300", "--udid", udid);
+        });
+        await until("the key offering Hide keyboard", async () => (await labels(udid)).includes("Hide keyboard"), 8000);
+        const before = (await probe(udid))!.terminal!;
+        await tapWhere(udid, (x) => x === "Hide keyboard");
+        await until("the key turning into Show keyboard", async () => (await labels(udid)).includes("Show keyboard"), 8000);
+        await atRest(udid, 800);
+        const t = (await probe(udid))!.terminal!;
+        if (t.rows !== before.rows) throw new Error(`rows went from ${before.rows} to ${t.rows} when the keyboard hid`);
+        // The key bar is below the web view, so every row the page counts is on screen: the page is the web view's height.
+        if (Math.abs((t.webView?.height ?? 0) - t.container.height) > 1) throw new Error(`the page is ${t.container.height}pt tall in a ${t.webView?.height}pt web view`);
+        await shot(udid, "terminal-keyboard-hidden-light", true);
+        await tapWhere(udid, (x) => x === "Show keyboard");
+        await until("the keyboard back", async () => (await labels(udid)).includes("Hide keyboard"), 8000);
+        return `Hide ⇄ Show keyboard, ${t.rows} rows throughout, page ${t.container.height}pt in the web view`;
+      });
       const terminalRows = async () => (await api<{ id: string; rows: number }[]>("GET", "/terminals")).find((t) => t.id === terminalId)!.rows;
       await check("typing in the sheet reaches the shell and its output is drawn", async () => {
         const state = await probe(udid);

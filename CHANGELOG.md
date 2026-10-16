@@ -9,6 +9,14 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- The iPhone terminal's key bar has a keyboard key at the end that hides the keyboard, and shows it again when it's down.
+
+### Fixed
+
+- The iPhone terminal no longer hides its bottom rows under the key bar: the bar sits below the terminal, so every row shows.
+
 ## [app-20261016.0011](https://github.com/markhuot/harness/releases/tag/app-20261016.0011) - 2026-10-16
 
 ### Added

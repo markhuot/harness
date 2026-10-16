@@ -90,4 +90,12 @@ struct TerminalAttachRulesTests {
         #expect(TerminalCommand.inset(300).script.contains("inset"))
         #expect(r.resync() == [.detach, .attach(cols: 60, rows: 30)])
     }
+
+    @Test func keyBarSitsBelowTheWebViewUntilTheKeyboardLiftsIt() {
+        // Keyboard down: its top is the bar's bottom edge (or lower, past the home indicator), nothing to lift.
+        #expect(TerminalKeyBarRules.cover(webViewBottom: 700, barHeight: 48, keyboardTop: 852) == 0)
+        #expect(TerminalKeyBarRules.cover(webViewBottom: 700, barHeight: 48, keyboardTop: 748) == 0)
+        // Keyboard up: the bar rides up by the overlap, and the page pans clear of the same amount.
+        #expect(TerminalKeyBarRules.cover(webViewBottom: 700, barHeight: 48, keyboardTop: 500) == 248)
+    }
 }

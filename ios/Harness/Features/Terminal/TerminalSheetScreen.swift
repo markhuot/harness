@@ -28,19 +28,24 @@ struct TerminalSheetScreen: View {
     @State private var stopListening: (@MainActor () -> Void)?
 
     private static let accessoryHeight: CGFloat = 44
+    /// The bar's whole height: its keys plus the padding under them.
+    private static let barHeight: CGFloat = accessoryHeight + 4
 
     private var info: TerminalInfo? { store.terminals.first { $0.id == id } }
     private var ended: Bool { endedCode != nil || info?.state == .exited || (store.state.ready && info == nil && !store.terminals.isEmpty) }
 
     var body: some View {
-        ZStack {
-            TerminalWebViewRepresentable(host: host)
-                .accessibilityIdentifier("terminal-web")
-            if ended || failure != nil { endedBanner }
+        // The key bar sits below the web view, not over it, so the rows the page counts all show.
+        VStack(spacing: 0) {
+            ZStack {
+                TerminalWebViewRepresentable(host: host)
+                    .accessibilityIdentifier("terminal-web")
+                if ended || failure != nil { endedBanner }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            accessoryBar.offset(y: -host.keyboardCover)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(c.bg)
-        .overlay(alignment: .bottom) { accessoryBar.padding(.bottom, host.keyboardCover) }
         // The keyboard covers the terminal instead of resizing it, so the rows the shell is given never
         // change with it (the page pans to keep the cursor visible, and the bar rides above the keyboard).
         .ignoresSafeArea(.keyboard)
@@ -81,7 +86,7 @@ struct TerminalSheetScreen: View {
             .background(c.bgElev, in: RoundedRectangle(cornerRadius: 10))
             .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(c.border))
             .padding(.horizontal, 12)
-            .padding(.bottom, Self.accessoryHeight + 12)
+            .padding(.bottom, 12)
         }
         .accessibilityIdentifier("terminal-ended")
     }
@@ -96,7 +101,6 @@ struct TerminalSheetScreen: View {
         Menu {
             if let info { Button { UIPasteboard.general.string = info.cwd } label: { Label("Copy folder path", systemImage: "folder") } }
             Button { if let text = UIPasteboard.general.string { host.send(.paste(text)) } } label: { Label("Paste", systemImage: "doc.on.clipboard") }
-            Button { host.resignFocus() } label: { Label("Hide keyboard", systemImage: "keyboard.chevron.compact.down") }
             Divider()
             Button(role: .destructive) {
                 Task { await store.closeTerminal(id) }
@@ -122,13 +126,28 @@ struct TerminalSheetScreen: View {
             key("↑", .up)
             key("→", .right)
             key("|", .pipe)
+            keyboardToggle
         }
         .padding(.horizontal, 12)
         .padding(.bottom, 4)
         .frame(height: Self.accessoryHeight + 4)
         .frame(maxWidth: .infinity)
-        .background(.bar)
-        .onAppear { host.accessoryHeight = Self.accessoryHeight }
+        .background(.bar, ignoresSafeAreaEdges: .bottom)
+        .onAppear { host.barHeight = Self.barHeight }
+    }
+
+    /// Takes the keyboard down while it is up, and brings it back while it is down.
+    private var keyboardToggle: some View {
+        let up = host.editing
+        return Button { if up { host.resignFocus() } else { host.send(.focus) } } label: {
+            Image(systemName: up ? "keyboard.chevron.compact.down" : "keyboard")
+                .font(.footnote.weight(.medium))
+                .frame(maxWidth: .infinity, minHeight: 32)
+                .background(c.bgElev, in: RoundedRectangle(cornerRadius: 7))
+                .foregroundStyle(c.text)
+        }
+        .accessibilityLabel(up ? "Hide keyboard" : "Show keyboard")
+        .accessibilityIdentifier(up ? "terminal-key-dismiss" : "terminal-key-show")
     }
 
     private func key(_ label: String, _ key: TerminalKey) -> some View {
@@ -150,7 +169,7 @@ struct TerminalSheetScreen: View {
             host.send(.open(id: id, theme: FileEditorTheme(c.theme.pluginInfo), fontSize: 13))
         }
         host.onEvent = { event in handle(event) }
-        host.accessoryHeight = Self.accessoryHeight
+        host.barHeight = Self.barHeight
         stopListening = store.onTerminalMessage { message in
             switch message {
             case let .terminalSnapshot(mid, _, _, _, _, _), let .terminalOutput(mid, _, _), let .terminalExit(mid, _):

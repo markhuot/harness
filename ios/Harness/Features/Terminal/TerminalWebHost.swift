@@ -46,6 +46,7 @@ final class TerminalWebHost: NSObject {
         // The content controller retains its handlers; the proxy keeps that from retaining us.
         content.add(WeakTerminalHandler(self), name: Self.handlerName)
         webView.navigationDelegate = self
+        webView.onFocusChange = { [weak self] focused in MainActor.assumeIsolated { self?.editing = focused } }
         webView.onLayout = { [weak self] size in MainActor.assumeIsolated { self?.sizeChanged(size) } }
         // The keyboard covers the web view instead of resizing it, so the rows the page reports never
         // change with it; the page pans to keep the cursor visible above `inset`.
@@ -61,25 +62,26 @@ final class TerminalWebHost: NSObject {
         if let keyboardObserver { NotificationCenter.default.removeObserver(keyboardObserver) }
     }
 
-    /// Points of the web view the keyboard covers, as last told to the page.
+    /// Points of the web view the keyboard and the key bar riding above it cover, as last told to the page.
     private(set) var keyboardInset: Double = 0
-    /// The accessory bar sits above the keyboard, so it covers the web view too.
-    var accessoryHeight: Double = 0 { didSet { if accessoryHeight != oldValue { sendInset() } } }
-    /// How far the keyboard covers the web view; the accessory bar rides above it.
+    /// The key bar's height; it sits below the web view and rides up over it with the keyboard.
+    var barHeight: Double = 0 { didSet { if barHeight != oldValue { keyboardChanged(lastKeyboard) } } }
+    /// How far the keyboard pushes the key bar up from below the web view (0 with the keyboard down).
     private(set) var keyboardCover: Double = 0
+    private var lastKeyboard: CGRect?
 
     private func keyboardChanged(_ end: CGRect?) {
+        lastKeyboard = end
         guard webView.window != nil, let end else { return }
         let frame = webView.convert(webView.bounds, to: nil)
-        keyboardCover = max(0, frame.maxY - end.minY)
+        keyboardCover = TerminalKeyBarRules.cover(webViewBottom: frame.maxY, barHeight: barHeight, keyboardTop: end.minY)
         sendInset()
     }
 
     private func sendInset() {
-        let inset = keyboardCover > 0 ? keyboardCover + accessoryHeight : accessoryHeight
-        guard inset != keyboardInset else { return }
-        keyboardInset = inset
-        send(.inset(inset))
+        guard keyboardCover != keyboardInset else { return }
+        keyboardInset = keyboardCover
+        send(.inset(keyboardCover))
     }
 
     private var lastSize = CGSize.zero
@@ -112,6 +114,10 @@ final class TerminalWebHost: NSObject {
         guard ready else { return }
         webView.evaluateJavaScript(command.script, completionHandler: nil)
     }
+
+    /// The web view is the first responder: the keyboard (or, next to a hardware keyboard, its bar) is
+    /// up, and `resignFocus` takes it down.
+    private(set) var editing = false
 
     /// Takes the keyboard down.
     func resignFocus() { webView.endEditing(true) }
@@ -159,6 +165,22 @@ extension TerminalWebHost: WKNavigationDelegate {
 /// A web view that reports its size as it lays out, so the page can be exactly that big.
 final class TerminalWebView: WKWebView {
     var onLayout: (CGSize) -> Void = { _ in }
+    var onFocusChange: (Bool) -> Void = { _ in }
+
+    /// No ‹ › ✓ form bar above the keyboard: a terminal has no fields to step through, and the key bar does its job.
+    override var inputAccessoryView: UIView? { nil }
+
+    override func becomeFirstResponder() -> Bool {
+        let became = super.becomeFirstResponder()
+        if became { onFocusChange(true) }
+        return became
+    }
+
+    override func resignFirstResponder() -> Bool {
+        let resigned = super.resignFirstResponder()
+        if resigned { onFocusChange(false) }
+        return resigned
+    }
 
     override func layoutSubviews() {
         super.layoutSubviews()
