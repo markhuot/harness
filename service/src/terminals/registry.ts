@@ -8,13 +8,13 @@ import { randomUUID } from "node:crypto";
 import { statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, isAbsolute, join } from "node:path";
-import { MAX_RUNNING_TERMINALS, type CreateTerminalBody, type ServerMessage, type TerminalInfo } from "@harness/shared";
+import { MAX_RUNNING_TERMINALS, type CreateTerminalBody, type Presence, type ServerMessage, type TerminalInfo } from "@harness/shared";
 import type { EventBus } from "../events";
 import { badRequest, conflict, notFound } from "../orchestrator/errors";
 import { createEmulator, type CreateEmulator, type Emulator } from "./emulator";
 import { pollTerminals, type PollRunners } from "./poller";
 import type { PtyProcess, SpawnPty } from "./pty";
-import { SizeCoordinator, clampSize, realTimers, type Size, type Timers } from "./sizing";
+import { SizeCoordinator, clampSize, realTimers, watchesTerminal, type Size, type Timers } from "./sizing";
 
 /** A socket attached to terminals. */
 export interface TerminalClient {
@@ -151,6 +151,8 @@ interface Term {
 
 export class TerminalRegistry {
   private terms = new Map<string, Term>();
+  /** The last presence each socket sent; a socket with none counts for the terminals it attaches. */
+  private presences = new Map<string, Presence>();
   private readonly o: Required<Pick<TerminalRegistryOptions, "now" | "timers" | "maxRunning" | "exitedGraceMs" | "idleMs" | "flushMs" | "highWater">>;
   private readonly env: Record<string, string | undefined>;
   private readonly home: string;
@@ -329,10 +331,11 @@ export class TerminalRegistry {
   async attach(client: TerminalClient, id: string, deviceId: string, cols: unknown, rows: unknown): Promise<void> {
     const term = this.terms.get(id);
     if (!term) throw notFound(`No terminal ${id}`);
+    const counted = watchesTerminal(this.presences.get(client.id), id);
     const existing = term.clients.get(client.id);
     if (existing) {
       // Attaching again reports a new viewport.
-      term.size.report(client.id, cols, rows);
+      term.size.report(client.id, cols, rows, counted);
       return;
     }
     // The same device on an older socket (a reconnect, or a second window) doesn't count twice for
@@ -340,7 +343,7 @@ export class TerminalRegistry {
     for (const [sid, st] of term.clients) {
       if (deviceId && st.deviceId === deviceId && sid !== client.id) term.size.remove(sid);
     }
-    term.size.report(client.id, cols, rows); // an unusable report leaves the size as it is
+    term.size.report(client.id, cols, rows, counted); // an unusable report leaves the size as it is
     const state: ClientState = { client, deviceId, ready: false, resyncing: false, floor: 0 };
     term.clients.set(client.id, state);
     term.lastActive = this.o.now();
@@ -357,7 +360,20 @@ export class TerminalRegistry {
 
   /** A socket closed: detach it everywhere. */
   dropClient(socketId: string) {
+    this.presences.delete(socketId);
     for (const term of this.terms.values()) this.detach(socketId, term.info.id);
+  }
+
+  /**
+   * What a socket shows now (its presence message). A socket that is hidden, away, or showing
+   * other terminals stops counting toward the size of the terminals it is attached to, but keeps
+   * its output; it counts again when its presence says the terminal is back on screen.
+   */
+  setPresence(socketId: string, presence: Presence) {
+    this.presences.set(socketId, presence);
+    for (const term of this.terms.values()) {
+      if (term.clients.has(socketId)) term.size.setCounted(socketId, watchesTerminal(presence, term.info.id));
+    }
   }
 
   /** Any message from a socket keeps its attachments alive. */

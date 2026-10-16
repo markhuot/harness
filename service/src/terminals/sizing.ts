@@ -1,9 +1,11 @@
 // Shared sizing, tmux-style: a terminal is as large as the smallest client that is attached,
-// visible and live. Shrinks apply at once, grows wait (a phone that rotates or a window that is
-// resized shouldn't make the shell flap), reports are debounced, and a client that stops reporting
-// (a sleeping phone, a dropped network) expires, so the size goes back to what the rest fit.
+// watching (its presence says the terminal is on screen, see watchesTerminal) and live. When no
+// attached client is watching, the smallest attached one still sets the size. Shrinks apply at
+// once, grows wait (a phone that rotates or a window that is resized shouldn't make the shell
+// flap), reports are debounced, and a client that stops reporting (a sleeping phone, a dropped
+// network) expires, so the size goes back to what the rest fit.
 
-import { MAX_TERMINAL_COLS, MAX_TERMINAL_ROWS, MIN_TERMINAL_COLS, MIN_TERMINAL_ROWS } from "@harness/shared";
+import { MAX_TERMINAL_COLS, MAX_TERMINAL_ROWS, MIN_TERMINAL_COLS, MIN_TERMINAL_ROWS, type Presence } from "@harness/shared";
 
 export interface Timers {
   set(fn: () => void, ms: number): unknown;
@@ -50,8 +52,19 @@ export function clampSize(cols: unknown, rows: unknown): Size | null {
   };
 }
 
+/**
+ * Whether a client with this presence is looking at the terminal. No presence yet (it hasn't sent
+ * one) counts, and so does a presence that doesn't list terminals (an older client): only a client
+ * that says it is hidden, away, or showing other terminals stops counting.
+ */
+export function watchesTerminal(presence: Pick<Presence, "visible" | "terminals"> | null | undefined, terminalId: string): boolean {
+  if (!presence) return true;
+  if (!presence.visible) return false;
+  return presence.terminals === undefined || presence.terminals.includes(terminalId);
+}
+
 export class SizeCoordinator {
-  private clients = new Map<string, Size & { seen: number }>();
+  private clients = new Map<string, Size & { seen: number; counted: boolean }>();
   private current: Size;
   private debounce: unknown = null;
   private dirty = false;
@@ -78,20 +91,32 @@ export class SizeCoordinator {
   }
 
   /** Each counted client's last viewport and how long ago its socket was heard from (a debug view of who holds the size). */
-  reports(): { clientId: string; cols: number; rows: number; ageMs: number }[] {
+  reports(): { clientId: string; cols: number; rows: number; ageMs: number; counted: boolean }[] {
     const now = this.opts.now();
-    return [...this.clients].map(([clientId, c]) => ({ clientId, cols: c.cols, rows: c.rows, ageMs: now - c.seen }));
+    return [...this.clients].map(([clientId, c]) => ({ clientId, cols: c.cols, rows: c.rows, ageMs: now - c.seen, counted: c.counted }));
   }
 
-  /** A client's viewport (attach or resize). False when the report was unusable. */
-  report(clientId: string, cols: unknown, rows: unknown): boolean {
+  /**
+   * A client's viewport (attach or resize). False when the report was unusable. `counted` says
+   * whether the client is watching the terminal; left out, a known client keeps what it had and a
+   * new one counts.
+   */
+  report(clientId: string, cols: unknown, rows: unknown, counted?: boolean): boolean {
     const size = clampSize(cols, rows);
     if (!size) return false;
     // The first client to attach to a terminal nobody is watching gets its own size at once.
     if (this.clients.size === 0) this.fresh = true;
-    this.clients.set(clientId, { ...size, seen: this.opts.now() });
+    this.clients.set(clientId, { ...size, seen: this.opts.now(), counted: counted ?? this.clients.get(clientId)?.counted ?? true });
     this.schedule();
     return true;
+  }
+
+  /** The client started or stopped watching the terminal (its presence changed). */
+  setCounted(clientId: string, counted: boolean) {
+    const c = this.clients.get(clientId);
+    if (!c || c.counted === counted) return;
+    c.counted = counted;
+    this.schedule();
   }
 
   /** The client is still there (any message from its socket). */
@@ -120,8 +145,11 @@ export class SizeCoordinator {
   }
 
   private target(): Size | null {
+    const all = [...this.clients.values()];
+    // Nobody watching: the smallest attached client, so a shell nobody looks at doesn't jump around.
+    const counted = all.filter((c) => c.counted);
     let t: Size | null = null;
-    for (const c of this.clients.values()) t = t ? { cols: Math.min(t.cols, c.cols), rows: Math.min(t.rows, c.rows) } : { cols: c.cols, rows: c.rows };
+    for (const c of counted.length ? counted : all) t = t ? { cols: Math.min(t.cols, c.cols), rows: Math.min(t.rows, c.rows) } : { cols: c.cols, rows: c.rows };
     return t;
   }
 

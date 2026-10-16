@@ -11,12 +11,15 @@ const KEY = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/;
 /** A presence message from the wire, cleaned up; null when it isn't one. */
 export function parsePresence(raw: unknown): Presence | null {
   if (!raw || typeof raw !== "object") return null;
-  const { deviceId, platform, visible, tickets } = raw as Record<string, unknown>;
+  const { deviceId, platform, visible, tickets, terminals } = raw as Record<string, unknown>;
   if (typeof deviceId !== "string" || !deviceId || deviceId.length > 128) return null;
   if (platform !== "mac" && platform !== "ios") return null;
   if (typeof visible !== "boolean" || !Array.isArray(tickets)) return null;
   const keys = tickets.filter((k): k is string => typeof k === "string" && KEY.test(k)).slice(0, MAX_TICKETS);
-  return { deviceId, platform: platform as DevicePlatform, visible, tickets: [...new Set(keys.map((k) => k.toUpperCase()))] };
+  const presence: Presence = { deviceId, platform: platform as DevicePlatform, visible, tickets: [...new Set(keys.map((k) => k.toUpperCase()))] };
+  // Terminal ids are case-sensitive (t-…); a missing or malformed list stays missing (an older client).
+  if (Array.isArray(terminals)) presence.terminals = [...new Set(terminals.filter((t): t is string => typeof t === "string" && KEY.test(t)))].slice(0, MAX_TICKETS);
+  return presence;
 }
 
 export class PresenceRegistry {

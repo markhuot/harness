@@ -128,12 +128,17 @@ export interface TestNotificationResult {
  * board it shows and its open ticket panes, sheets or windows. `visible` is false while it's
  * hidden (minimized, covered, app hidden, iOS in the background); a hidden presence suppresses
  * nothing. Sent again whenever any of it changes, and after each reconnect.
+ *
+ * `terminals` lists the terminal ids it shows on screen (the front sheet, the uncovered pane), so
+ * a terminal is sized for the clients looking at it. A presence without the field (an older
+ * client) counts for every terminal it has attached while it is `visible`.
  */
 export interface Presence {
   deviceId: string;
   platform: DevicePlatform;
   visible: boolean;
   tickets: string[];
+  terminals?: string[];
 }
 
 /** The custom key in the APNs payload that carries the ticket key, for the tap's deep link. */

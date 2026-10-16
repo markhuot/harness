@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { SizeCoordinator, clampSize } from "./sizing";
+import { SizeCoordinator, clampSize, watchesTerminal } from "./sizing";
 import { fakeClock } from "./testing";
 
 function setup(initial = { cols: 100, rows: 40 }) {
@@ -21,7 +21,53 @@ describe("clampSize", () => {
   });
 });
 
+describe("watchesTerminal", () => {
+  const base = { visible: true };
+  test("no presence and a presence without terminals count while visible", () => {
+    expect(watchesTerminal(null, "t-1")).toBe(true);
+    expect(watchesTerminal({ ...base }, "t-1")).toBe(true);
+  });
+  test("hidden, away or listing other terminals does not count", () => {
+    expect(watchesTerminal({ visible: false, terminals: ["t-1"] }, "t-1")).toBe(false);
+    expect(watchesTerminal({ visible: true, terminals: [] }, "t-1")).toBe(false);
+    expect(watchesTerminal({ visible: true, terminals: ["t-2"] }, "t-1")).toBe(false);
+    expect(watchesTerminal({ visible: true, terminals: ["t-2", "t-1"] }, "t-1")).toBe(true);
+  });
+});
+
 describe("SizeCoordinator", () => {
+  test("a client that stops counting leaves the size to the rest, and counts again when it returns", () => {
+    const { clock, size } = setup({ cols: 80, rows: 24 });
+    size.report("phone", 46, 51);
+    size.report("mac", 105, 22);
+    clock.advance(200);
+    expect(size.size).toEqual({ cols: 46, rows: 22 });
+    size.setCounted("mac", false); // the Mac went to sleep: only the phone counts
+    clock.advance(200);
+    clock.advance(1500);
+    expect(size.size).toEqual({ cols: 46, rows: 51 });
+    size.setCounted("mac", true);
+    clock.advance(200);
+    expect(size.size).toEqual({ cols: 46, rows: 22 });
+  });
+
+  test("when no client counts, the smallest attached one still sets the size", () => {
+    const { clock, size } = setup({ cols: 80, rows: 24 });
+    size.report("phone", 46, 51, false);
+    size.report("mac", 105, 22, false);
+    clock.advance(2000);
+    expect(size.size).toEqual({ cols: 46, rows: 22 });
+  });
+
+  test("a re-report keeps whether the client counts unless it says otherwise", () => {
+    const { size } = setup();
+    size.report("mac", 100, 30, false);
+    size.report("mac", 90, 30);
+    expect(size.reports()[0]?.counted).toBe(false);
+    size.report("mac", 90, 30, true);
+    expect(size.reports()[0]?.counted).toBe(true);
+  });
+
   test("a bigger client never enlarges a smaller one, in either order", () => {
     for (const order of [["mac", "phone"], ["phone", "mac"]]) {
       const { clock, applied, size } = setup();
@@ -75,8 +121,8 @@ describe("SizeCoordinator", () => {
     clock.advance(6000);
     size.touch("phone");
     expect(size.reports()).toEqual([
-      { clientId: "mac", cols: 120, rows: 40, ageMs: 16_000 },
-      { clientId: "phone", cols: 40, rows: 15, ageMs: 0 },
+      { clientId: "mac", cols: 120, rows: 40, ageMs: 16_000, counted: true },
+      { clientId: "phone", cols: 40, rows: 15, ageMs: 0, counted: true },
     ]);
     size.sweep();
     expect(size.reports().map((r) => r.clientId)).toEqual(["phone"]);

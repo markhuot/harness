@@ -81,6 +81,7 @@ export function createWsHandlers(opts: { bus: EventBus; browser: BrowserService;
           const p = parsePresence(msg);
           if (!p) return send(ws, { type: "error", message: "presence needs deviceId, platform (mac or ios), visible and tickets" });
           presence?.set(ws.data.id, p);
+          terminals?.setPresence(ws.data.id, p);
           return;
         }
         case "terminal.attach": {

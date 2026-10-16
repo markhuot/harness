@@ -371,6 +371,74 @@ describe("shared size", () => {
     registry.shutdown();
   });
 
+  describe("presence", () => {
+    const presence = (visible: boolean, terminals?: string[]) => ({ deviceId: "d", platform: "mac" as const, visible, tickets: [], terminals });
+
+    test("an away Mac stops holding the shell small while the phone is the one watching, and counts again when it wakes", async () => {
+      const { registry, clock, ptys } = setup();
+      const { id } = registry.create({ cols: 120, rows: 40 });
+      await registry.attach(new FakeClient("phone"), id, "phone-dev", 46, 51);
+      await registry.attach(new FakeClient("mac"), id, "mac-dev", 105, 22);
+      clock.advance(200);
+      expect(ptys[0]!.resizes.at(-1)).toEqual({ cols: 46, rows: 22 });
+      registry.setPresence("phone", presence(true, [id]));
+      registry.setPresence("mac", presence(false, []));
+      clock.advance(2000);
+      expect(ptys[0]!.resizes.at(-1)).toEqual({ cols: 46, rows: 51 });
+      registry.setPresence("mac", presence(true, [id]));
+      clock.advance(200);
+      expect(ptys[0]!.resizes.at(-1)).toEqual({ cols: 46, rows: 22 });
+      registry.shutdown();
+    });
+
+    test("a presence that arrived before the attach applies to it, and a client with none counts", async () => {
+      const { registry, clock, ptys } = setup();
+      const { id } = registry.create({ cols: 120, rows: 40 });
+      registry.setPresence("mac", presence(false, []));
+      await registry.attach(new FakeClient("phone"), id, "phone-dev", 60, 30); // no presence: counts
+      await registry.attach(new FakeClient("mac"), id, "mac-dev", 100, 10);
+      clock.advance(2000);
+      expect(ptys[0]!.resizes.at(-1)).toEqual({ cols: 60, rows: 30 });
+      expect(registry.sizeReports(id).clients.map((c) => [c.clientId, c.counted])).toEqual([["phone", true], ["mac", false]]);
+      registry.shutdown();
+    });
+
+    test("a client showing another terminal doesn't count for this one", async () => {
+      const { registry, clock, ptys } = setup();
+      const { id } = registry.create({ cols: 120, rows: 40 });
+      await registry.attach(new FakeClient("mac"), id, "mac-dev", 120, 40);
+      await registry.attach(new FakeClient("phone"), id, "phone-dev", 50, 20);
+      clock.advance(200);
+      registry.setPresence("phone", presence(true, ["t-other"])); // another sheet is in front
+      clock.advance(2000);
+      expect(ptys[0]!.resizes.at(-1)).toEqual({ cols: 120, rows: 40 });
+      registry.shutdown();
+    });
+
+    test("when nobody is watching the smallest attached client still sets the size", async () => {
+      const { registry, clock, ptys } = setup();
+      const { id } = registry.create({ cols: 120, rows: 40 });
+      await registry.attach(new FakeClient("mac"), id, "mac-dev", 120, 40);
+      await registry.attach(new FakeClient("phone"), id, "phone-dev", 50, 20);
+      registry.setPresence("mac", presence(false, []));
+      registry.setPresence("phone", presence(false, []));
+      clock.advance(3000);
+      expect(ptys[0]!.resizes.at(-1)).toEqual({ cols: 50, rows: 20 });
+      registry.shutdown();
+    });
+
+    test("a dropped socket forgets its presence, so a reconnect under the same id counts again", async () => {
+      const { registry, clock } = setup();
+      const { id } = registry.create({ cols: 120, rows: 40 });
+      registry.setPresence("mac", presence(false, []));
+      registry.dropClient("mac");
+      await registry.attach(new FakeClient("mac"), id, "mac-dev", 100, 30);
+      clock.advance(200);
+      expect(registry.sizeReports(id).clients[0]?.counted).toBe(true);
+      registry.shutdown();
+    });
+  });
+
   test("a resize from a socket that isn't attached is ignored", async () => {
     const { registry, clock, ptys } = setup();
     const { id } = registry.create({ cols: 80, rows: 24 });
