@@ -4,7 +4,7 @@
 // palette on a project board).
 
 import type { FileLink } from "@harness/shared";
-import type { FileContent, FileRoot } from "./panes";
+import type { FileContent, FileRoot } from "./paneModel";
 
 /** Where a link was clicked, for links that don't name their own ticket or project. */
 export interface FileLinkContext {

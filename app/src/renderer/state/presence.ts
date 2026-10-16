@@ -4,7 +4,7 @@
 
 import { TICKET_STATUSES } from "@harness/shared";
 import { boardColumns, hideOnBoard, searchColumns, type State } from "@harness/shared/state";
-import { layoutPanes, paneTicket, type PaneState } from "./panes";
+import { layoutPanes, paneTicket, type PaneState } from "./paneModel";
 import type { Route } from "./route";
 
 /**
