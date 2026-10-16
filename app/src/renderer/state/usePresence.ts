@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import type { HarnessSocket } from "@harness/shared";
 import { readHideChildren, type State } from "@harness/shared/state";
 import { getPanes, getPopoutPanes, usePaneStore } from "./panes";
-import { presenceTickets } from "./presence";
+import { presenceTerminals, presenceTickets } from "./presence";
 import { paneScopeOf, type Route } from "./route";
 
 /** Board.tsx's "Hide child tickets" toggle fires this on its window when it changes. */

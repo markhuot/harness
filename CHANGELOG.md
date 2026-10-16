@@ -11,6 +11,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
+- A Mac that's asleep, locked or idle no longer holds a terminal small for your phone, and neither does a phone with another sheet in front of the terminal. A terminal is sized for the devices actually showing it; when none is, the smallest attached device still sets the size.
+
 - A terminal pane on the Mac that another pane is zoomed over no longer holds the shell small for your phone. It stops counting toward the shell's size while it's covered.
 
 ## [app-20261016.0747](https://github.com/markhuot/harness/releases/tag/app-20261016.0747) - 2026-10-16

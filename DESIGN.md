@@ -3523,7 +3523,13 @@ Settings, project settings, or on the board route the pane workspace.
   and it gets a fresh snapshot once its socket drains, so a slow phone never stalls the shell or
   the others. An unknown or ended terminal answers `terminal.exit`.
   **Sizing** (`sizing.ts`) is tmux-style: the PTY and the emulator are the componentwise minimum
-  of the attached clients' viewports (floor 20×5; a 0×0 or NaN report is dropped). The first client
+  of the attached clients that are *watching* (floor 20×5; a 0×0 or NaN report is dropped). A client
+  watches while its `presence` (the same message notifications use) is visible and lists the
+  terminal in `terminals`: the Mac lists the terminal panes no zoomed pane covers, the iPhone the
+  presented terminal sheet. An away Mac (locked, suspended, idle), a backgrounded phone or one
+  with another sheet in front stops counting but stays attached and keeps its output; with no
+  presence yet, or from a client that sends no `terminals`, it counts while visible. When nobody
+  is watching, the smallest attached client sets the size. The first client
   to attach to a terminal nobody watches gets its own size at once; otherwise shrinks apply
   immediately and grows wait 1.5 s, reports are debounced (100 ms, leading and trailing, so 50
   reports make at most two resizes) and nothing resizes when the size is unchanged. A client that
