@@ -204,24 +204,28 @@ public struct TestNotificationResult: Codable, Sendable, Equatable {
 
 /// WebSocket `presence` (client → service): what this socket shows. `tickets` lists every ticket
 /// key on screen; `visible` is false while the app is in the background (a hidden presence
-/// suppresses nothing).
+/// suppresses nothing). `terminals` lists the terminal ids on screen, so a terminal is sized for the
+/// clients looking at it; absent from an older client, which counts for every terminal it attaches
+/// while visible.
 public struct Presence: Codable, Sendable, Equatable, Hashable {
     public var deviceId: String
     public var platform: DevicePlatform
     public var visible: Bool
     public var tickets: [String]
+    public var terminals: [String]?
 
-    public init(deviceId: String, platform: DevicePlatform, visible: Bool, tickets: [String]) {
+    public init(deviceId: String, platform: DevicePlatform, visible: Bool, tickets: [String], terminals: [String]? = nil) {
         self.deviceId = deviceId
         self.platform = platform
         self.visible = visible
         self.tickets = tickets
+        self.terminals = terminals
     }
 
     /// Tickets deduplicated and sorted, as `HarnessSocket.setPresence` sends them (so an unchanged
     /// set in another order isn't sent again).
     public var normalized: Presence {
-        Presence(deviceId: deviceId, platform: platform, visible: visible, tickets: Array(Set(tickets)).sorted())
+        Presence(deviceId: deviceId, platform: platform, visible: visible, tickets: Array(Set(tickets)).sorted(), terminals: terminals.map { Array(Set($0)).sorted() })
     }
 }
 

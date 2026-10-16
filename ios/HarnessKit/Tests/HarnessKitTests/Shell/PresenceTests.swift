@@ -127,37 +127,68 @@ struct PresenceTests {
 
     // MARK: Combining windows
 
+    // MARK: Terminals
+
+    @Test func theFrontTerminalSheetIsTheTerminalOnScreen() {
+        let r = Router()
+        #expect(PresenceRules.terminals(r).isEmpty)
+        r.openTerminal(id: "t-1")
+        #expect(PresenceRules.terminals(r) == ["t-1"])
+        // Another sheet in front of it: the terminal is still mounted but nobody is looking at it.
+        r.push(t("A-1"))
+        r.openTerminal(id: "t-2")
+        #expect(PresenceRules.terminals(r) == ["t-2"])
+    }
+
+    @Test func aDockedTerminalSheetAndAScannerShowNoTerminal() {
+        let r = Router()
+        r.openTerminal(id: "t-1")
+        r.dockSheet()
+        #expect(PresenceRules.terminals(r).isEmpty)
+        r.restoreDock()
+        #expect(PresenceRules.terminals(r) == ["t-1"])
+    }
+
+    @Test func terminalsFromWindowsInTheBackgroundDontCountAndTheRestAreSorted() {
+        let scenes = [
+            ScenePresence(phase: .active, tickets: [], terminals: ["t-b"]),
+            ScenePresence(phase: .inactive, tickets: [], terminals: ["t-a", "t-b"]),
+            ScenePresence(phase: .background, tickets: [], terminals: ["t-z"]),
+        ]
+        #expect(PresenceRules.presence(deviceId: "d", scenes: scenes).terminals == ["t-a", "t-b"])
+    }
+
     @Test func visibleWhileAnyWindowIsActiveWithTheForegroundWindowsTickets() {
         let p = PresenceRules.presence(deviceId: "d", scenes: [
             ScenePresence(phase: .inactive, tickets: ["B-2", "A-1"]),
             ScenePresence(phase: .active, tickets: ["A-1", "C-3"]),
             ScenePresence(phase: .background, tickets: ["Z-9"]),
         ])
-        #expect(p == Presence(deviceId: "d", platform: .ios, visible: true, tickets: ["A-1", "B-2", "C-3"]))
+        #expect(p == Presence(deviceId: "d", platform: .ios, visible: true, tickets: ["A-1", "B-2", "C-3"], terminals: []))
     }
 
     @Test func hiddenOnceNoWindowIsActive() {
-        let inactive = PresenceRules.presence(deviceId: "d", scenes: [ScenePresence(phase: .inactive, tickets: ["A-1"])])
+        let inactive = PresenceRules.presence(deviceId: "d", scenes: [ScenePresence(phase: .inactive, tickets: ["A-1"], terminals: [])])
         #expect(!inactive.visible)
-        let background = PresenceRules.presence(deviceId: "d", scenes: [ScenePresence(phase: .background, tickets: ["A-1"])])
-        #expect(background == Presence(deviceId: "d", platform: .ios, visible: false, tickets: []))
+        let background = PresenceRules.presence(deviceId: "d", scenes: [ScenePresence(phase: .background, tickets: ["A-1"], terminals: [])])
+        #expect(background == Presence(deviceId: "d", platform: .ios, visible: false, tickets: [], terminals: []))
         #expect(!PresenceRules.presence(deviceId: "d", scenes: []).visible)
     }
 
     @Test func theTrackerSendsOnlyChangesAndForgetsClosedWindows() {
         var sent: [Presence] = []
         let tracker = PresenceTracker(deviceId: "d") { sent.append($0) }
-        tracker.update("main", ScenePresence(phase: .active, tickets: ["B-1"]))
-        tracker.update("main", ScenePresence(phase: .active, tickets: ["B-1"]))
-        tracker.update("win", ScenePresence(phase: .inactive, tickets: ["W-1"]))
-        tracker.update("main", ScenePresence(phase: .background, tickets: ["B-1"]))
+        tracker.update("main", ScenePresence(phase: .active, tickets: ["B-1"], terminals: []))
+        tracker.update("main", ScenePresence(phase: .active, tickets: ["B-1"], terminals: []))
+        tracker.update("win", ScenePresence(phase: .inactive, tickets: ["W-1"], terminals: []))
+        tracker.update("main", ScenePresence(phase: .background, tickets: ["B-1"], terminals: []))
         tracker.remove("win")
         tracker.remove("never-seen")
         #expect(sent == [
-            Presence(deviceId: "d", platform: .ios, visible: true, tickets: ["B-1"]),
-            Presence(deviceId: "d", platform: .ios, visible: true, tickets: ["B-1", "W-1"]),
-            Presence(deviceId: "d", platform: .ios, visible: false, tickets: ["W-1"]),
-            Presence(deviceId: "d", platform: .ios, visible: false, tickets: []),
+            Presence(deviceId: "d", platform: .ios, visible: true, tickets: ["B-1"], terminals: []),
+            Presence(deviceId: "d", platform: .ios, visible: true, tickets: ["B-1", "W-1"], terminals: []),
+            Presence(deviceId: "d", platform: .ios, visible: false, tickets: ["W-1"], terminals: []),
+            Presence(deviceId: "d", platform: .ios, visible: false, tickets: [], terminals: []),
         ])
     }
 }

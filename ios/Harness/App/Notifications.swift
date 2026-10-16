@@ -171,6 +171,6 @@ private struct PresenceProbe: View {
         }
         guard app.active != nil, let store = app.store else { return ScenePresence(phase: p, tickets: []) }
         let prefs = app.prefs
-        return ScenePresence(phase: p, tickets: PresenceRules.tickets(router) { BoardColumns.shownKeys(store.state, prefs: prefs) })
+        return ScenePresence(phase: p, tickets: PresenceRules.tickets(router) { BoardColumns.shownKeys(store.state, prefs: prefs) }, terminals: PresenceRules.terminals(router))
     }
 }

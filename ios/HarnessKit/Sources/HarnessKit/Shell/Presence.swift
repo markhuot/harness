@@ -11,10 +11,13 @@ public struct ScenePresence: Equatable, Sendable {
     public var phase: Phase
     /// The ticket keys on screen in this window.
     public var tickets: [String]
+    /// The terminal ids on screen in this window.
+    public var terminals: [String]
 
-    public init(phase: Phase, tickets: [String]) {
+    public init(phase: Phase, tickets: [String], terminals: [String] = []) {
         self.phase = phase
         self.tickets = tickets
+        self.terminals = terminals
     }
 }
 
@@ -51,13 +54,28 @@ public enum PresenceRules {
         }
     }
 
+    /// The terminals on screen in `router`'s window, so the service sizes a shell for the clients
+    /// looking at it: the terminal in the presented ticket sheet (the iPhone's covering sheet or the
+    /// iPad's panel beside the board). A sheet docked to its bar, or under a full-screen cover,
+    /// shows no terminal, and neither does a sheet that another sheet has covered.
+    @MainActor
+    public static func terminals(_ router: Router) -> [String] {
+        switch router.scope {
+        case .ticket:
+            return [] // a terminal is only ever a sheet of the main window
+        case .main:
+            if router.cover != nil { return [] }
+            return router.ticketSheet?.terminalID.map { [$0] } ?? []
+        }
+    }
+
     /// The presence for all the windows: visible while any of them is active (in front and taking
     /// input), listing the tickets of every window still in the foreground. Tickets are
-    /// deduplicated and sorted.
+    /// deduplicated and sorted; so are the terminals.
     public static func presence(deviceId: String, platform: DevicePlatform = .ios, scenes: [ScenePresence]) -> Presence {
         let visible = scenes.contains { $0.phase == .active }
-        let tickets = scenes.filter { $0.phase != .background }.flatMap(\.tickets)
-        return Presence(deviceId: deviceId, platform: platform, visible: visible, tickets: tickets).normalized
+        let shown = scenes.filter { $0.phase != .background }
+        return Presence(deviceId: deviceId, platform: platform, visible: visible, tickets: shown.flatMap(\.tickets), terminals: shown.flatMap(\.terminals)).normalized
     }
 
     private static func lastTicket(_ path: [Route]) -> String? {
