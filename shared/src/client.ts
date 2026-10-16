@@ -615,7 +615,7 @@ export class HarnessSocket {
    * tickets. Remembered across reconnects; an unchanged presence isn't sent again.
    */
   setPresence(presence: Presence) {
-    const next = { ...presence, tickets: [...new Set(presence.tickets)].sort() };
+    const next = { ...presence, tickets: [...new Set(presence.tickets)].sort(), ...(presence.terminals ? { terminals: [...new Set(presence.terminals)].sort() } : {}) };
     if (this.presence && JSON.stringify(this.presence) === JSON.stringify(next)) return;
     this.presence = next;
     this.send({ type: "presence", ...next });

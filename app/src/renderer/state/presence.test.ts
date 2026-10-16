@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import type { Ticket } from "@harness/shared";
 import { ALL_SCOPE, initialState, reducer, type Action, type State } from "@harness/shared/state";
-import { defaultPanes, openTicket, toggleZoom, type PaneState } from "./panes";
+import { defaultPanes, openTerminal, openTicket, toggleZoom, type PaneState } from "./panes";
 import { parseRoute } from "./route";
-import { boardCardKeys, presenceTickets } from "./presence";
+import { boardCardKeys, presenceTerminals, presenceTickets } from "./presence";
 
 const tk = (key: string, over: Partial<Ticket> = {}): Ticket =>
   ({
@@ -123,5 +123,35 @@ describe("presenceTickets", () => {
   test("a file pane resolved in a ticket counts for that ticket", () => {
     const panes: PaneState = { root: { type: "leaf", id: "x1", content: { kind: "file", root: { ticketKey: "Z-3" }, path: "README.md" } }, focusedId: "x1", zoomedId: null };
     expect(presenceTickets({ route: parseRoute("#/popout/abc/all"), state, boardScope: ALL_SCOPE, panes, hideChildren: false })).toEqual(["Z-3"]);
+  });
+});
+
+describe("presenceTerminals", () => {
+  const term = (sessionId: string) => ({ kind: "terminal" as const, sessionId, cwd: "~" });
+
+  test("lists each terminal pane on the board, sorted", () => {
+    const panes = openTerminal(openTerminal(bare, term("t-b")), term("t-a"));
+    expect(presenceTerminals({ route: board, panes })).toEqual(["t-a", "t-b"]);
+  });
+
+  test("a terminal covered by a zoomed pane isn't on screen, and is again when the zoom ends", () => {
+    const withTerminal = openTerminal(bare, term("t-a"));
+    const opened = openTicket(withTerminal, "Z-9");
+    const zoomedTicket = toggleZoom(opened, opened.focusedId);
+    expect(zoomedTicket.zoomedId).not.toBeNull();
+    expect(presenceTerminals({ route: board, panes: zoomedTicket })).toEqual([]);
+    expect(presenceTerminals({ route: board, panes: toggleZoom(zoomedTicket, zoomedTicket.focusedId) })).toEqual(["t-a"]);
+  });
+
+  test("a zoomed terminal is on screen", () => {
+    const withTerminal = openTerminal(bare, term("t-a"));
+    expect(presenceTerminals({ route: board, panes: toggleZoom(withTerminal, withTerminal.focusedId) })).toEqual(["t-a"]);
+  });
+
+  test("a pop-out holding a terminal lists it; off the board nothing is on screen", () => {
+    const popout: PaneState = { root: { type: "leaf", id: "x1", content: term("t-p") }, focusedId: "x1", zoomedId: null };
+    expect(presenceTerminals({ route: parseRoute("#/popout/abc/all"), panes: popout })).toEqual(["t-p"]);
+    expect(presenceTerminals({ route: parseRoute("#/settings/notifications"), panes: openTerminal(bare, term("t-a")) })).toEqual([]);
+    expect(presenceTerminals({ route: board, panes: null })).toEqual([]);
   });
 });

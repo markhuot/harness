@@ -83,8 +83,13 @@ function useAway(): boolean {
  * What this window reports. Chromium keeps `visibilityState` "visible" while the display sleeps, so
  * an away person reports nothing on screen however the window looks.
  */
-export function reportedPresence(visible: boolean, away: boolean, tickets: string[]): { visible: boolean; tickets: string[] } {
-  return away ? { visible: false, tickets: [] } : { visible, tickets };
+export function reportedPresence(
+  visible: boolean,
+  away: boolean,
+  tickets: string[],
+  terminals: string[],
+): { visible: boolean; tickets: string[]; terminals: string[] } {
+  return away ? { visible: false, tickets: [], terminals: [] } : { visible, tickets, terminals };
 }
 
 function useHideChildrenSetting(): boolean {
@@ -126,8 +131,10 @@ export function usePresence(socket: HarnessSocket, state: State, route: Route, b
     if (!deviceId) return;
     const send = () => {
       const { state, route, boardScope } = latest.current;
-      const tickets = presenceTickets({ route, state, boardScope, panes: panesFor(route), hideChildren });
-      socket.setPresence({ deviceId, platform: "mac", ...reportedPresence(visible, away, tickets) });
+      const panes = panesFor(route);
+      const tickets = presenceTickets({ route, state, boardScope, panes, hideChildren });
+      const terminals = presenceTerminals({ route, panes });
+      socket.setPresence({ deviceId, platform: "mac", ...reportedPresence(visible, away, tickets, terminals) });
     };
     // Going away or coming back is sent at once; other changes are lightly debounced.
     const t = setTimeout(send, away === lastAway.current ? 100 : 0);

@@ -50,3 +50,17 @@ export function presenceTickets({ route, state, boardScope, panes, hideChildren 
   }
   return [...keys].sort();
 }
+
+/**
+ * Every terminal on screen in this window: the session of each terminal pane that isn't covered by
+ * a zoomed one, so the service sizes a shell only for the windows looking at it. Sorted and
+ * without repeats.
+ */
+export function presenceTerminals({ route, panes }: Pick<PresenceInput, "route" | "panes">): string[] {
+  if (!panes || (route.view !== "board" && route.view !== "popout")) return [];
+  const ids = new Set<string>();
+  for (const { leaf, hidden } of layoutPanes(panes).leaves) {
+    if (!hidden && leaf.content.kind === "terminal") ids.add(leaf.content.sessionId);
+  }
+  return [...ids].sort();
+}
