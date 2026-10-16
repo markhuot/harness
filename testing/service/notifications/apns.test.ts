@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { ApnsClient, ApnsTokens, apnsJwt, findApnsKeys, isDeadToken, JWT_TTL_MS, type ApnsHttpResponse, type ApnsKeyFile, type ApnsTransport } from "../../../service/src/notifications/apns";
+import { ApnsClient, ApnsTokens, apnsJwt, findApnsKeys, isDeadToken, type ApnsHttpResponse, type ApnsKeyFile, type ApnsTransport } from "../../../service/src/notifications/apns";
 import { fakeClock } from "../../builders/clock";
 import { tempDir } from "../../builders/tmp";
 
@@ -42,7 +42,9 @@ test("a signed token is reused for 40 minutes and signed anew after, by the inje
   const tokens = new ApnsTokens(() => (reads++, pem), clock);
   const key: ApnsKeyFile = { environment: "sandbox", keyId: "KEYID12345", path: "/k.p8" };
   const first = await tokens.get(key, "TEAM123456");
-  clock.advance(JWT_TTL_MS - 1);
+  // Apple refuses tokens older than an hour and throttles refreshes under 20 minutes: reused for 40.
+  const FORTY_MINUTES = 40 * 60_000;
+  clock.advance(FORTY_MINUTES - 1);
   expect(await tokens.get(key, "TEAM123456")).toBe(first);
   expect(reads).toBe(1);
   clock.advance(1);

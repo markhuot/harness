@@ -1,12 +1,13 @@
 import { afterEach, expect, test } from "bun:test";
 import type { Ticket } from "@harness/shared";
-import { gate, replyScript, toolCall } from "../fake-driver";
+import { gate, replyScript, toolCall, type Step } from "../fake-driver";
 import { makeOrchestrator, stopAll } from "../orchestrator-harness";
 
 afterEach(stopAll);
 
 const submit = (note = "Added the button; tests pass") => toolCall("submit_for_review", { note, spec_is_up_to_date: true });
-const decide = (decision: "approve" | "request_changes", notes: string) => toolCall("review_decision", { decision, notes });
+/** What a reviewing agent does: the driver saves its conversation as it goes, then the verdict. */
+const decide = (decision: "approve" | "request_changes", notes: string): Step[] => [{ type: "state", state: { reviewer: true } }, ...toolCall("review_decision", { decision, notes })];
 const activity = (h: ReturnType<typeof makeOrchestrator>, t: Ticket) => h.store.activity.listBySession(t.sessionId).map((a) => `${a.kind}/${a.author}: ${a.body}`);
 
 test("the agent submitting moves the ticket to review and an independent review run follows", async () => {
@@ -17,6 +18,8 @@ test("the agent submitting moves the ticket to review and an independent review 
   expect(h.driver.requests.map((r) => r.kind)).toEqual(["work", "review"]);
   // A review judges the work cold: it never inherits the work's conversation.
   expect(h.driver.requests[1]!.state).toBeNull();
+  // ...and its own conversation isn't kept for a later run to resume.
+  expect(h.store.sessions.getDriverState(t.sessionId)).toBeNull();
   expect(h.ticket(t.key)).toMatchObject({ status: "review", agentReview: "approved", humanReview: "pending" });
   expect(activity(h, t)).toEqual(expect.arrayContaining(["submitted/agent: Added the button; tests pass", "review_approved/agent: Approved, nothing to fix."]));
 });

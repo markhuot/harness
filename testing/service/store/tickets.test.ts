@@ -117,11 +117,12 @@ test("search ranks an exact key above a key prefix, a remote ID, a title hit and
     clock.advance(1);
     return addTicketWith(store, project, over);
   };
-  const spec = mk({ key: "AB-100", title: "unrelated", spec: "mentions widget deep inside" });
-  const title = mk({ key: "AB-101", title: "widget polish" });
-  const remote = mk({ key: "AB-102", title: "other", externalRef: { source: "jira", key: "widget", url: null, raw: {} } });
-  const keyPrefix = mk({ key: "WIDGET-5", title: "other2" });
+  // Created best match first, so a newest-first order would be exactly backwards.
   const exact = mk({ key: "WIDGET", title: "other3" });
+  const keyPrefix = mk({ key: "WIDGET-5", title: "other2" });
+  const remote = mk({ key: "AB-102", title: "other", externalRef: { source: "jira", key: "widget", url: null, raw: {} } });
+  const title = mk({ key: "AB-101", title: "widget polish" });
+  const spec = mk({ key: "AB-100", title: "unrelated", spec: "mentions widget deep inside" });
   const hits = store.tickets.search({ q: "widget" });
   expect(hits.tickets.map((t) => t.id)).toEqual([exact.id, keyPrefix.id, remote.id, title.id, spec.id]);
   expect(hits.total).toBe(5);

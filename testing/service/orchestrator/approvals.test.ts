@@ -133,3 +133,17 @@ test("a denial of a tool already allowed on the ticket is retried at once with t
   expect(h.driver.requests[2]!.grants?.once).toEqual([{ toolName: "Bash", input: { command: "git status" } }]);
   expect(h.ticket(t.key).pendingApproval).toBeNull();
 });
+
+test("only one approval is open at a time: a second request while one waits is denied and doesn't replace it", async () => {
+  const h = rig();
+  let second = "";
+  h.driver.script([
+    ...toolCall("permission_prompt", { tool_name: "Bash", input: { command: "first" }, tool_use_id: "t1" }),
+    ...toolCall("permission_prompt", { tool_name: "Bash", input: { command: "second" }, tool_use_id: "t2" }, (r) => (second = JSON.stringify(r))),
+  ]);
+  const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x", skipAgentReview: true });
+  await h.settle();
+  expect(second).toContain("deny");
+  expect(h.ticket(t.key).pendingApproval).toMatchObject({ input: { command: "first" } });
+  expect(h.store.activity.listBySession(t.sessionId).filter((a) => a.kind === "permission")).toHaveLength(1);
+});
