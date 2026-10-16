@@ -45,7 +45,7 @@ struct DockedTicketText: Equatable {
     /// A menu row's one line: "<ref> · <title>", the system truncating the title.
     var menuLine: String { DockLabels.menuLine(ref: ref, title: title) }
 
-    /// VoiceOver's name for it, and sim-check's: "<ref>, <title>, docked".
+    /// VoiceOver's name for it, and the walkthrough's: "<ref>, <title>, docked".
     var accessibilityLabel: String { DockLabels.accessibilityLabel(ref: ref, title: title) }
 }
 
@@ -508,7 +508,7 @@ struct DockedCardsContainer: View {
         .onChange(of: docked) { _, docked in if docked { focused = sheets.first?.id } }
         .onChange(of: report, initial: true) { _, report in onReport(report) }
         .onAppear {
-            #if SIM_CHECK
+            #if DEBUG_PROBE
             DebugProbe.shared.dockMounted()
             #endif
         }

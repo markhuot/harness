@@ -40,7 +40,7 @@ final class EditorWebHost: NSObject {
         webView.isInspectable = true
         #endif
         super.init()
-        #if SIM_CHECK
+        #if DEBUG_PROBE
         DebugProbe.shared.register(self)
         #endif
         // The content controller retains its handlers; the proxy keeps that from retaining us.

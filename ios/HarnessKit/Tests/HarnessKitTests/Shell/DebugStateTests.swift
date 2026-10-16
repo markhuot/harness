@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import HarnessKit
 
-/// The probe's JSON shape ios/Tools/sim-check.ts parses, and the settle rule it waits on.
+/// The probe's JSON shape next/walkthrough/ios.ts parses, and the settle rule it waits on.
 @MainActor
 @Suite("DebugState")
 struct DebugStateTests {

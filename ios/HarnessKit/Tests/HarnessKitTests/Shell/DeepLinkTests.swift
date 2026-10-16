@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import HarnessKit
 
-/// Every harness:// link ios/Tools/sim-check.ts opens, and the edges around them.
+/// Every harness:// link next/walkthrough/ios.ts opens, and the edges around them.
 @Suite("DeepLink")
 struct DeepLinkTests {
     @Test(arguments: [
@@ -45,7 +45,7 @@ struct DeepLinkTests {
         ("harness://ticket/GREET-1?tab=children", .ticket(key: "GREET-1", tab: .children)),
         ("harness://ticket/GREET-1?tab=agents", .ticket(key: "GREET-1", tab: .agents)),
         ("harness://ticket/GREET-1?tab=browser", .ticket(key: "GREET-1", tab: .browser)),
-        // sim-check encodes the sub-agent tab's colon.
+        // the walkthrough encodes the sub-agent tab's colon.
         ("harness://ticket/GREET-1?tab=agent%3Atoolu_01", .ticket(key: "GREET-1", tab: TicketTab("agent:toolu_01"))),
         // Changes is built in: its old plugin id maps to it.
         ("harness://ticket/GREET-1?tab=plugin:git:changes", .ticket(key: "GREET-1", tab: .changes)),

@@ -1,6 +1,6 @@
-// The debug state probe, read side. The app (Harness/App/DebugProbe.swift, only in a SIM_CHECK
+// The debug state probe, read side. The app (Harness/App/DebugProbe.swift, only in a DEBUG_PROBE
 // build) writes HarnessKit's DebugState as JSON to <app container>/tmp/harness-debug-state.json
-// every ~50 ms; sim-check reads that file instead of asking the accessibility tree, and waits on its
+// every ~50 ms; the walkthrough reads that file instead of asking the accessibility tree, and waits on its
 // `settled` instead of sleeping. The shape is documented in ios/ARCHITECTURE.md ("Debug state probe")
 // and pinned by ios/HarnessKit/Tests/.../DebugStateTests.swift.
 

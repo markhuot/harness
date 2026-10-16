@@ -1,7 +1,7 @@
 // `bun run nightly`: the full regression pass the Harness "nightly" watcher runs once a day.
 // Unlike `bun run verify` (which maps a diff to layers), it runs everything: bun tests, typecheck,
-// `swift test`, every app/scripts check against a fresh renderer build, and the full sim-check
-// walk-through (`--shards=2`). sim-check takes the shared simulator lock itself, and the simulator
+// `swift test`, every app/scripts check against a fresh renderer build, and the full iPhone
+// walkthrough. `bun run walk:ios` takes the shared simulator lock itself, and the simulator
 // layer is skipped (and reported) when `bun run sim disk` says there isn't room.
 //
 // Output is for the watcher's triage agent: all green prints nothing on stdout and exits 4 ("nothing
@@ -14,7 +14,7 @@
 import { readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { runCommand } from "./run-layer";
-import { appCheck, simCheck, type Layer } from "./verify-plan";
+import { appCheck, walkIos, type Layer } from "./verify-plan";
 
 const root = resolve(import.meta.dir, "..");
 const BUN = "bun";
@@ -39,7 +39,7 @@ export function nightlyLayers(appChecks: string[]): Layer[] {
     { id: "swift-test", title: "swift test (HarnessKit)", cmd: ["swift", "test", "--package-path", "ios/HarnessKit"], kind: "light" },
     { id: "app-build", title: "build the Mac app renderer", cmd: [BUN, "run", "--cwd", "app", "build"], kind: "app" },
     ...appChecks.map(appCheck),
-    simCheck(["--shards=2"], "(full walk-through, 2 shards)"),
+    walkIos(),
   ];
 }
 
@@ -55,7 +55,7 @@ export function listAppChecks(dir = join(root, "app", "scripts")): string[] {
 const strip = (s: string) => s.replace(/\x1b\[[0-9;]*[A-Za-z]/g, "");
 
 /**
- * The names of what failed inside one layer's log: `✗ name` lines (sim-check and the app checks),
+ * The names of what failed inside one layer's log: `✗ name` lines (the walkthrough and the app checks),
  * `(fail) name` lines (bun test) and `error TSnnnn` lines (tsc). Deduplicated, in log order; empty
  * when the log names none (the report then falls back to the log tail alone).
  */

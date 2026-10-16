@@ -12,7 +12,7 @@ struct PromptsScreen: View {
         ZStack {
             if let prompts = catalog.prompts {
                 // A plain stack, not a lazy Form: every row is in the accessibility tree from the
-                // start (sim-check waits for a row below the fold).
+                // start (the walkthrough waits for a row below the fold).
                 ScrollView {
                     VStack(alignment: .leading, spacing: 24) {
                         Text(promptsIntro).font(.scaled(size: 13)).foregroundStyle(c.text3).padding(.horizontal, 16)

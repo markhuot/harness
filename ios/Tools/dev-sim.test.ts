@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { parseArgs, UsageError } from "./dev-sim";
+import { parseArgs } from "./dev-sim";
 
 test("takes --flag value and --flag=value, and keeps repeated links in order", () => {
   const o = parseArgs(["--link=harness://board", "--link", "harness://ticket/GREET-1?tab=details", "--shot", "details"]);
@@ -14,12 +14,10 @@ test("--app installs that app without building", () => {
   expect(o.app).toBe("/tmp/Harness.app");
 });
 
-test("uses the shared simulator unless told otherwise, and never sim-check's", () => {
+test("uses the shared simulator unless told otherwise", () => {
   expect(parseArgs([]).sim).toBe("harness-shared");
   expect(parseArgs(["--sim", "other"]).sim).toBe("other");
   expect(parseArgs(["--sim=other"]).sim).toBe("other");
-  expect(() => parseArgs(["--sim", "sim-check 1"])).toThrow(UsageError);
-  expect(() => parseArgs(["--sim", "sim-check 1"])).toThrow(/belongs to sim-check/);
 });
 
 test("--seed-only needs no simulator and refuses the simulator flags", () => {

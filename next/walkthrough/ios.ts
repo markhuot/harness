@@ -186,7 +186,7 @@ try {
   const override = async (id: string) => (await prompts()).find((p) => p.id === id)!.override;
   /** The app is up showing something: its root element is "Harness". A crash leaves SpringBoard's tree. */
   const appUp = (els: AXElement[]) => els[0]?.label === "Harness";
-  // The app's debug state (a SIM_CHECK build writes it into its container): the editor is a web view the tree can't see into.
+  // The app's debug state (a DEBUG_PROBE build writes it into its container): the editor is a web view the tree can't see into.
   let container = "";
   const probe = (): DebugState | null => {
     try {
@@ -268,7 +268,7 @@ try {
   await w.screen("ticket details", async (expect) => {
     const els = await visit(`harness://ticket/${seeded.notes.key}?tab=details`);
     expect("models row", has(els, /^Models, /));
-    // sim-check agent-notes: the notes start collapsed and a tap on the header opens and closes them.
+    // the notes start collapsed and a tap on the header opens and closes them.
     const open = (e: AXElement[]) => has(e, /Where things live/) && e.some((x) => x.id === "agent-notes");
     expect("agent notes header", has(els, /^Agent notes/), seen(els));
     expect("agent notes start collapsed", !open(els));
@@ -288,7 +288,7 @@ try {
   await w.screen("settings", async (expect) => {
     const els = await visit("harness://settings");
     expect("appearance section with a theme choice", has(els, "Appearance") && has(els, "Light theme"), seen(els));
-    // sim-check save-on-blur: jump to the General section (no swipes) and press the switch.
+    // jump to the General section (no swipes) and press the switch.
     const sw = (e: AXElement[]) => e.find((x) => x.id === "settings-save-on-blur");
     const cur = await visit("harness://settings?section=general", (e) => !!sw(e)?.frame);
     expect("a Save on blur switch", !!sw(cur)?.frame, seen(cur));
@@ -301,7 +301,7 @@ try {
     }
   });
 
-  // sim-check agents-filter: the Tasks and Agents chips filter the list, and the filter survives opening a row and coming back.
+  // the Tasks and Agents chips filter the list, and the filter survives opening a row and coming back.
   await w.screen("agents & tasks filter", async (expect) => {
     let els = await visit(`harness://ticket/${world.tasks.key}?tab=agents`);
     const rows = (e: AXElement[]) => ({ agents: e.filter((x) => /^Sub-task \d+, /.test(x.label ?? "")).length, tasks: e.filter((x) => x.label?.startsWith("Count to 30")).length });
@@ -323,7 +323,7 @@ try {
     expect("neither pressed shows every row again", JSON.stringify(await shows(2, 1)()) === '{"agents":2,"tasks":1}', seen(await axe.nodes()));
   });
 
-  // sim-check file-link: a spec's file link opens the viewer on its lines, the file clean and syntax colored.
+  // a spec's file link opens the viewer on its lines, the file clean and syntax colored.
   await w.screen("file link", async (expect) => {
     let els = await visit(`harness://ticket/${world.fileLink.key}?tab=spec`);
     const link = find(els, (l) => l === "greetingFor fallback");
@@ -339,7 +339,7 @@ try {
     expect("the linked function's lines are marked", marked.length === GREETING_FOR[1] - GREETING_FOR[0] + 1 && !!marked[0]?.startsWith("export function greetingFor"), `marked ${marked.length}`);
     expect("the code is syntax colored", (s?.editor?.colors ?? 0) >= 3, `colors ${s?.editor?.colors}`);
   });
-  // sim-check terraform highlight: a .tf file written into the ticket's worktree comes up colored.
+  // a .tf file written into the ticket's worktree comes up colored.
   await w.screen("terraform highlight", async (expect) => {
     const wd = (await d.api<TicketDetail>("GET", `/tickets/${world.fileLink.key}`)).ticket.workdir!;
     mkdirSync(join(wd, "infra"), { recursive: true });
@@ -352,7 +352,7 @@ try {
       rmSync(join(wd, "infra"), { recursive: true, force: true });
     }
   });
-  // sim-check open-file: ⌘P with a typed line range opens the file on those lines.
+  // ⌘P with a typed line range opens the file on those lines.
   await w.screen("open file palette", async (expect) => {
     await visit(`harness://ticket/${world.fileLink.key}?tab=spec`);
     await axe.keyCombo(227, 19);
@@ -366,7 +366,7 @@ try {
     expect("the typed lines are marked in the editor", s?.editor?.markedLines.length === GREETING_FOR[1] - GREETING_FOR[0] + 1, `marked ${s?.editor?.markedLines.length}`);
   });
 
-  // sim-check context-gauge: where the gauge sits and how big its tap target is, its menu and the About popover.
+  // where the gauge sits and how big its tap target is, its menu and the About popover.
   /** Dismisses the menu and whatever popover sits over it: each tap on the popover scrim closes the top one. */
   const closeMenu = async (gone: (e: AXElement[]) => boolean) => {
     for (let i = 0; i < 3 && !gone(await axe.nodes()); i++) {
@@ -431,7 +431,7 @@ try {
     expect("the gauge reads compacting", has(els, "Context, compacting"), seen(els));
     expect("the composer says Compacting…", has(els, "Compacting…") && !has(els, "Message the agent"), seen(els));
   });
-  // sim-check routes: every screen a link can open comes up without taking the app down.
+  // every screen a link can open comes up without taking the app down.
   await w.screen("routes", async (expect) => {
     const enc = encodeURIComponent;
     const pluginLoaded = (e: AXElement[]) => has(e, "Changes") && !has(e, "In progress");
@@ -456,7 +456,7 @@ try {
     await untilTree(() => axe.nodes(), (e) => !has(e, "Connect to a Mac"));
   });
 
-  // sim-check blocked-composer: a message to a blocked ticket is sent from the composer, and the Transcript opens.
+  // a message to a blocked ticket is sent from the composer, and the Transcript opens.
   await w.screen("blocked composer", async (expect) => {
     await clearDock();
     await visit(`harness://ticket/${seeded.blocked.key}`, composerUp);
@@ -467,7 +467,7 @@ try {
     const els = await untilTree(() => axe.nodes(), (e) => e.some((x) => x.id?.startsWith("run-header")));
     expect("the Transcript is shown", els.some((x) => x.id?.startsWith("run-header")), seen(els));
   });
-  // sim-check approve-and: the Approve menu's Approve and… takes typed instructions and approves.
+  // the Approve menu's Approve and… takes typed instructions and approves.
   await w.screen("approve and…", async (expect) => {
     await clearDock();
     await visit(`harness://ticket/${world.approvable.key}?tab=spec`, (e) => e.some((x) => x.id === "ticket-approve-more"));
@@ -480,7 +480,7 @@ try {
     const t = await until(`${world.approvable.key} approved`, async () => (((x) => (x.humanReview === "approved" ? x : null))(await ticketOf(world.approvable.key))), 15000, 100).catch(() => null);
     expect("Approve sends the instructions and approves the ticket", !!t, `humanReview ${(await ticketOf(world.approvable.key)).humanReview}`);
   });
-  // sim-check prompt-editor: a bad variable shows inline and can't save; Save stores the fixed override; Reset (confirmed) clears it.
+  // a bad variable shows inline and can't save; Save stores the fixed override; Reset (confirmed) clears it.
   await w.screen("prompt editor", async (expect) => {
     await clearDock();
     const field = (l: string) => l === "Work run instructions prompt";
@@ -510,7 +510,7 @@ try {
     els = await untilTree(() => axe.nodes(), (e) => e.some((x) => x.id === "prompt-customize"));
     expect("the prompt is read-only again", els.some((x) => x.id === "prompt-customize"), seen(els));
   });
-  // sim-check prompt-editor: a tapped variable goes in at the cursor, and the next key follows it.
+  // a tapped variable goes in at the cursor, and the next key follows it.
   await w.screen("prompt variable chip", async (expect) => {
     await clearDock();
     const field = (l: string) => l === "Agent review prompt";
@@ -528,7 +528,7 @@ try {
     expect("Save stores the text with the variable", !!saved?.endsWith("then the diff.{{key}}Z"), `override ${JSON.stringify(saved?.slice(-30))}`);
     await d.api("PATCH", "/settings", { prompts: { [REVIEW_PROMPT_ID]: REVIEW_PROMPT } });
   });
-  // sim-check card-preview: touch and hold on a review card previews its ticket and offers its actions.
+  // touch and hold on a review card previews its ticket and offers its actions.
   await w.screen("card preview", async (expect) => {
     await clearDock();
     await visit("harness://board", (e) => has(e, /^Review, /));
@@ -556,7 +556,7 @@ try {
     expect("Request changes opens the notes sheet", up);
     if (up) await tapLabel("Cancel");
   });
-  // sim-check attachments: an inline image opens the viewer on it; swiping pages, Close closes; a small image opens centred at its own size; swiping down closes it, a video page too.
+  // an inline image opens the viewer on it; swiping pages, Close closes; a small image opens centred at its own size; swiping down closes it, a video page too.
   await w.screen("attachments", async (expect) => {
     await clearDock();
     await visit(`harness://ticket/${world.media.key}?tab=spec`, (e) => has(e, "Image phone.png") && has(e, "Image wide.png") && has(e, "Image small.png"));
@@ -610,7 +610,7 @@ try {
     await swipeDown();
     expect("swiping down closes the video page too", closed(await shut()));
   });
-  // sim-check models-picker: a tap on a model in the Models picker saves it to the phase.
+  // a tap on a model in the Models picker saves it to the phase.
   await w.screen("models picker", async (expect) => {
     await clearDock();
     await visit(`harness://ticket/${world.branchPlan.key}?tab=details`, (e) => has(e, /^Models, /));
@@ -623,7 +623,7 @@ try {
     expect("the pick is saved to the Work phase", !!picked, `phaseModels ${JSON.stringify((await ticketOf(world.branchPlan.key)).phaseModels)}`);
     await tapLabel("Done"); // the sheet stays open after a pick
   });
-  // sim-check file-edit: the file editor edits, shows the unsaved dot and writes the file with Save.
+  // the file editor edits, shows the unsaved dot and writes the file with Save.
   await w.screen("file editor save", async (expect) => {
     await clearDock();
     const wd = (await ticketOf(world.fileLink.key)).workdir!;
@@ -651,7 +651,7 @@ try {
     }
     await visit("harness://board"); // the file screen stays pushed otherwise
   });
-  // sim-check mentions: New session and the composer complete @-mentions and /commands from a tap, and launch.
+  // New session and the composer complete @-mentions and /commands from a tap, and launch.
   await w.screen("mentions and commands", async (expect) => {
     await clearDock();
     const keys = async (projectId: string) => new Set((await d.api<{ key: string; draft?: boolean }[]>("GET", `/tickets?projectId=${projectId}`)).filter((t) => !t.draft).map((t) => t.key));
@@ -705,7 +705,7 @@ try {
     await start();
     expect("the slash command's ticket launches", !!(await launched(world.slash.id, before)));
   });
-  // sim-check drafts: moving the caret keeps what's typed, on the field and in the draft the service stored.
+  // moving the caret keeps what's typed, on the field and in the draft the service stored.
   await w.screen("composer draft", async (expect) => {
     await clearDock();
     const composer = (l: string) => l.startsWith("Message the agent");
@@ -742,7 +742,7 @@ try {
   const cardOf = (key: string) => (l: string) => l.startsWith(`${key}, `) && isDock(l);
   const dockable = (i: number) => d.api<Ticket>("POST", "/tickets", { projectId: seeded.project.id, spec: `Docked ticket ${i}: a title long enough that it has to truncate before the dock's buttons`, driver: "dummy", start: false });
 
-  // sim-check sheets: a ticket link opens its ticket in a sheet over the board, its composer as far from the bottom as from the side.
+  // a ticket link opens its ticket in a sheet over the board, its composer as far from the bottom as from the side.
   await w.screen("ticket sheet", async (expect) => {
     await closeAllSheets();
     const [kid, sibling] = (await d.api<TicketDetail>("GET", `/tickets/${world.conductor.key}`)).children;
@@ -759,7 +759,7 @@ try {
     expect("the composer is as far from the bottom as from the side", Math.abs(gap - attach.frame.x) <= 3, `${Math.round(gap)} pt above the bottom, ${Math.round(attach.frame.x)} pt from the side`);
   });
 
-  // sim-check sheets: a slow drag of the sheet to the bottom holds a ghost card, and the release docks it under the board, inset like the bar.
+  // a slow drag of the sheet to the bottom holds a ghost card, and the release docks it under the board, inset like the bar.
   await w.screen("sheet dock drag", async (expect) => {
     // The ghost card is the sheet's own drag animation, which the no-animations launch switches off: this screen runs on a launch with them.
     relaunch(true);
@@ -796,7 +796,7 @@ try {
     await animationsOff();
   });
 
-  // sim-check dock-stack: tickets join the dock as cards (the newest at the bottom), a card over the sheet leaves the composer clear above it,
+  // tickets join the dock as cards (the newest at the bottom), a card over the sheet leaves the composer clear above it,
   // switching cards keeps the dock mounted, and a picker the ticket screen opens hides the dock until Done.
   await w.screen("dock stack", async (expect) => {
     await closeAllSheets();
@@ -847,7 +847,7 @@ try {
       }
     }
 
-    // sim-check dock-stack OVER: a tap on a card opens it as the sheet, and the other card waits over it with the composer above.
+    // a tap on a card opens it as the sheet, and the other card waits over it with the composer above.
     await tapCenter(cardOf(kid.key)); // the cards share one identifier, so a tap by label's position
     els = await untilTree(() => axe.nodes(), (e) => has(e, "Sheet Grabber") && !e.some((x) => cardOf(kid.key)(x.label ?? "")) && e.some((x) => cardOf(b.key)(x.label ?? "")) && has(e, "Attach"));
     const waiting = find(els, cardOf(b.key));
@@ -858,7 +858,7 @@ try {
       expect("the composer's attach button sits 8–24 pt above the card (the 11 pt gap plus its inset in the row)", gap >= 8 && gap <= 24, `${Math.round(gap)} pt`);
     }
 
-    // sim-check dock-stack STABLE: with two cards over the sheet, swapping one in changes only that card and mounts the dock once.
+    // with two cards over the sheet, swapping one in changes only that card and mounts the dock once.
     await open("harness://board");
     await open(`harness://ticket/${enc(c.key)}`);
     els = await untilTree(() => axe.nodes(), (e) => dockCards(e).length === 2 && has(e, "Sheet Grabber"));
@@ -872,7 +872,7 @@ try {
     expect("the card that didn't change stayed where it was", !!after && Math.abs(after.y - upper.frame!.y) <= 1, `${Math.round(upper.frame!.y)} → ${after ? Math.round(after.y) : "(gone)"}`);
     expect("the dock mounted once since launch", probe()?.dockMounts === 1, `dockMounts ${probe()?.dockMounts}`);
 
-    // sim-check dock-stack PICKER: a picker the ticket screen opens itself hides the dock, and Done gives it back.
+    // a picker the ticket screen opens itself hides the dock, and Done gives it back.
     const isModels = (l: string) => l.startsWith("Models, ");
     els = await visit(`harness://ticket/${enc(b.key)}?tab=details`, (e) => has(e, /^Models, /) && dockCards(e).length === 2);
     const n = dockTotal(els);
@@ -886,7 +886,7 @@ try {
     expect("the dock is back after Done", !has(els, "Search models") && dockTotal(els) === n, `${dockTotal(els)} cards, not ${n}`);
   });
 
-  // sim-check dock-stack, drafts: a ticket docked with its draft typed reopens from its card with its draft. The old check also scrolled the
+  // a ticket docked with its draft typed reopens from its card with its draft. The old check also scrolled the
   // spec first and asserted it reopened at that offset; a scroll needs a swipe (the hardware keyboard's Page Down, Space and arrows don't
   // reach a SwiftUI scroll view), so that half stays with HarnessKit's ScrollRestore tests.
   await w.screen("docked ticket restores", async (expect) => {
@@ -906,7 +906,7 @@ try {
     expect("the reopened composer holds the draft", (field?.value ?? "").toLowerCase().includes("kept"), `reads ${JSON.stringify(field?.value)}`);
   });
 
-  // sim-check file-dock RELINK: linking other lines of the file in the dock scrolls its open editor there, on the same card.
+  // linking other lines of the file in the dock scrolls its open editor there, on the same card.
   await w.screen("file relink", async (expect) => {
     await closeAllSheets();
     const link = `harness://file/${GREETINGS_PATH}?ticket=${world.fileLink.key}`;
@@ -927,7 +927,7 @@ try {
     expect("relinking left one card for the file and one for its ticket", dockTotal(els) === 2, `${dockTotal(els)} docked; ${seen(els)}`);
   });
 
-  // sim-check keyboard: New session's prompt row is tall before anything is typed, and a tap at its bottom focuses it.
+  // New session's prompt row is tall before anything is typed, and a tap at its bottom focuses it.
   await w.screen("new session prompt focus", async (expect) => {
     await closeAllSheets();
     const draft = await d.api<Ticket>("POST", "/tickets", { projectId: seeded.project.id, spec: "One line", draft: true, skipAgentReview: true });
@@ -944,7 +944,7 @@ try {
     await closeAllSheets();
   });
 
-  // sim-check stick: a ticket's Transcript and Activity open scrolled to the bottom and follow new content while they are there.
+  // a ticket's Transcript and Activity open scrolled to the bottom and follow new content while they are there.
   await w.screen("transcript and activity stick", async (expect) => {
     await closeAllSheets();
     const LOREM = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore. ";
@@ -1001,7 +1001,7 @@ try {
       expect(`${tab} follows new content while at the bottom`, landed(els) && !!atBottom(els, last), seen(els));
     }
 
-    // sim-check stick: the tab bodies sit side by side in a pager, and a sideways swipe moves to the neighbour and back.
+    // the tab bodies sit side by side in a pager, and a sideways swipe moves to the neighbour and back.
     const specRow = (l: string) => l.startsWith("Stick 0:");
     const activityRow = (l: string) => l.includes(REVIEWED);
     let els = await visit(`harness://ticket/${enc(key)}?tab=spec`, (e) => e.some((x) => !!x.label && specRow(x.label)));
@@ -1029,7 +1029,7 @@ try {
     expect("a swipe right moves back to Spec", shows(els, specRow) && !shows(els, activityRow), seen(els));
   });
 
-  // sim-check keyboard: the composer and New session's prompt sit on top of the software keyboard, which is read from its keys (the
+  // the composer and New session's prompt sit on top of the software keyboard, which is read from its keys (the
   // keyboard is in the tree only while it's up as a software keyboard, so the pref that minimizes it with a hardware keyboard is off).
   await w.screen("keyboard geometry", async (expect) => {
     await closeAllSheets();
@@ -1123,7 +1123,7 @@ try {
     };
     let els = await openPalette();
     expect("the palette lists commands", has(els, "Go to Inbox, Go to") && has(els, "Open Settings, Go to"), seen(els));
-    // sim-check palette: running Show child tickets closes the palette and flips its label.
+    // running Show child tickets closes the palette and flips its label.
     await tapLabel("Show child tickets, General");
     await closed();
     await openPalette();
@@ -1133,7 +1133,7 @@ try {
     await closed();
     // The > prefix (commands only) is PaletteTests' to cover; no typing here.
   });
-  // sim-check palette: ⌘K over a ticket lists its actions; Copy ticket key copies it.
+  // ⌘K over a ticket lists its actions; Copy ticket key copies it.
   await w.screen("ticket commands", async (expect) => {
     await open(`harness://ticket/${seeded.review.key}?tab=spec`);
     await axe.keyCombo(227, 14);
@@ -1145,7 +1145,7 @@ try {
     const copied = pasteboard();
     expect("Copy ticket key copies the key", copied === seeded.review.key, `copied "${copied}"`);
   });
-  // sim-check usage: the sidebar's plan-usage gauges, read from the proxy's fixture. Last, since it relaunches the app.
+  // the sidebar's plan-usage gauges, read from the proxy's fixture. Last, since it relaunches the app.
   await w.screen("plan usage", async (expect) => {
     const showSidebar = async () => {
       await open("harness://projects");
@@ -1200,7 +1200,7 @@ try {
     expect("the sidebar toggle is in the top bar", has(els, "Hide Sidebar") || has(els, "Show Sidebar"), seen(els));
   });
 
-  // sim-check panel: a board card opens its ticket in a side panel against the trailing edge, left of which the board stays live.
+  // a board card opens its ticket in a side panel against the trailing edge, left of which the board stays live.
   await w.screen("ipad side panel", async (expect) => {
     await closeAllSheets().catch(() => {});
     const key = seeded.review.key;

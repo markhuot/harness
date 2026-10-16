@@ -6,7 +6,7 @@
 //
 //   bun ios/Tools/build.ts sim [--optimized]           Release settings, iphonesimulator, ad-hoc signed, arm64. Compiled without optimization
 //                                                      (-Onone, per-file) unless --optimized: about a third of the clean build time,
-//                                                      and sim-check drives it the same; --optimized for what measures speed or memory
+//                                                      and the walkthrough drives it the same; --optimized for what measures speed or memory
 //   bun ios/Tools/build.ts snapshots                   Debug build-for-testing of the snapshot tests (HarnessSnapshotTests),
 //                                                      into ios/build/dd-snapshots; prints the .xctestrun path
 //                                                      (Tools/snapshots.ts, `bun run sim snapshots`, runs it)
@@ -240,7 +240,7 @@ export function simArgs(optimized = false): string[] {
     "CODE_SIGN_IDENTITY=-", "CODE_SIGNING_REQUIRED=NO",
     // The debug state probe (Harness/App/DebugProbe.swift) is compiled in for this simulator build
     // only; the device and archive builds never get it.
-    "SWIFT_ACTIVE_COMPILATION_CONDITIONS=$(inherited) SIM_CHECK",
+    "SWIFT_ACTIVE_COMPILATION_CONDITIONS=$(inherited) DEBUG_PROBE",
     // Whole-module optimization of four targets, one after another, is most of a clean build (about 120 s against 40 s).
     ...(optimized ? [] : ["SWIFT_OPTIMIZATION_LEVEL=-Onone", "SWIFT_COMPILATION_MODE=singlefile"]),
     "build",
@@ -304,7 +304,7 @@ function exportArchive(o: Extract<Options, { command: "export" }>): string {
   return ipa;
 }
 
-/** The xcodebuild arguments of the device build: Debug, but without SIM_CHECK, so no debug probe. */
+/** The xcodebuild arguments of the device build: Debug, but without DEBUG_PROBE, so no debug probe. */
 export function deviceArgs(): string[] {
   return [
     "xcodebuild", ...project(), "-configuration", "Debug", "-destination", "generic/platform=iOS",

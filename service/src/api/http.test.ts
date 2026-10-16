@@ -88,7 +88,7 @@ describe("http api", () => {
   });
 
   // The contract seam with the iPhone app: HarnessClientTests encodes these same bodies from the app's types.
-  // sim-check used to prove the service took them by tapping Plan first, the Save on blur switch and Send.
+  // An iPhone check used to prove the service took them by tapping Plan first, the Save on blur switch and Send.
   test("every launch, Save on blur and message body HarnessKit builds is accepted and does what it says", async () => {
     const fixtures = JSON.parse(readFileSync(join(import.meta.dir, "../../../ios/HarnessKit/Tests/HarnessKitTests/Fixtures/launchBodies.json"), "utf8")) as Record<
       string,

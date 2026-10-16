@@ -1,6 +1,6 @@
 import Foundation
 
-/// The size and spacing rules for headings in a rendered spec (MarkdownView draws them; sim-check
+/// The size and spacing rules for headings in a rendered spec (MarkdownView draws them; the walkthrough
 /// only confirms they reach the screen).
 public enum SpecHeadings {
     /// A heading's text size: a scale down from the body size + 7 pt (level 1) through +4, +2 and +0.5.

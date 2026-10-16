@@ -1,6 +1,6 @@
 // Runs one layer command for `bun run verify` and `bun run nightly`: captures its output, gives it a
 // time limit, and forwards SIGINT/SIGTERM to it. The command runs in its own process group so a kill
-// reaches the children it started (sim-check, the snapshot runner) and they release the simulator
+// reaches the children it started (the walkthrough, the snapshot runner) and they release the simulator
 // lock instead of outliving whoever killed us.
 
 export const DEFAULT_LAYER_TIMEOUT_MS = 45 * 60 * 1000;

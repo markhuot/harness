@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import HarnessKit
 
-/// The navigation semantics ios/Tools/sim-check.ts relies on.
+/// The navigation semantics next/walkthrough/ios.ts relies on.
 @MainActor
 @Suite("Router")
 struct RouterTests {

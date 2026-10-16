@@ -6,7 +6,7 @@ import XCTest
 /// Screens whose job is to show what the service returned: plan usage, the context gauge, a
 /// conductor's header, a transcript's replies, a spec's wide tables and its attachments. The
 /// service's side of each is a bun test and the mapping a HarnessKit test; these prove the views
-/// read the right fields and lay them out (they replace sim-check checks that read labels off a
+/// read the right fields and lay them out (they replace the walkthrough checks that read labels off a
 /// booted simulator).
 extension ScreenSnapshotTests {
     // MARK: Fixtures
@@ -112,7 +112,7 @@ extension ScreenSnapshotTests {
     // MARK: Context gauge
 
     /// The gauge's label in each state: cached/fresh split (Normal), grey New, "over the limit",
-    /// the miss badge and Copilot's estimate (the compacting spinner animates, so it stays in sim-check) (asterisk, one tone).
+    /// the miss badge and Copilot's estimate (the compacting spinner animates, so it stays in the walkthrough) (asterisk, one tone).
     func testContextGaugeStates() async throws {
         world.add(Self.gaugeTickets.map(\.1))
         world.store.dispatch(.drivers([Self.claude, Self.copilot]))
@@ -196,7 +196,7 @@ extension ScreenSnapshotTests {
         "",
         "Measure with:",
         "```",
-        "time bun scripts/sim-check.ts --no-build --shards=2",
+        "time bun scripts/long-task.ts --no-build --shards=2",
         "```",
     ].joined(separator: "\n")
 

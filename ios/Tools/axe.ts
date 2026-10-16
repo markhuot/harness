@@ -1,5 +1,6 @@
 // Reading and tapping the simulator's screen through AXe (brew install cameroncooke/axe/axe), for
-// dev-sim.ts: the same accessibility-tree approach as sim-check.ts, so a dev loop
+// dev-sim.ts: the same accessibility-tree approach the walkthrough
+// (next/walkthrough/ios.ts) uses, so a dev loop
 // knows what's on screen instead of sleeping and hoping.
 import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
@@ -39,11 +40,11 @@ export function screenKey(labels: string[]): string {
 /**
  * AXe looks for SimulatorKit under Developer/Library/PrivateFrameworks, which Xcode 27 moved to
  * Contents/SharedFrameworks, so it gets a symlinked Xcode with the framework where it expects it.
- * The same shim sim-check.ts makes (and in the same place, so either one can create it).
+ * Cached under ~/Library/Caches/harness-sim, so each run after the first reuses it.
  */
 export function xcodeShim(developerDir: string): string {
   const real = resolve(developerDir, "..");
-  const root = join(homedir(), "Library", "Caches", "harness-sim-check", "xcode-shim");
+  const root = join(homedir(), "Library", "Caches", "harness-sim", "xcode-shim");
   const contents = join(root, "Xcode.app", "Contents");
   const dev = join(contents, "Developer");
   if (existsSync(join(dev, "Library", "PrivateFrameworks", "SimulatorKit.framework"))) return dev;

@@ -86,7 +86,7 @@ describe("submitting a draft", () => {
     expect(h.statusLines(t).slice(0, 2)).toEqual(["Draft saved", "Ticket created"]);
   });
 
-  // sim-check's New session mention and slash checks used to prove these through the sheet: the draft the
+  // The old iPhone New session mention and slash checks used to prove these through the sheet: the draft the
   // app saves is submitted with {"start":true|false}, and the run gets the spec as typed plus its mentions.
   test("a draft's @-mentioned file reaches the run and is announced; the spec stays as typed", async () => {
     const h = setup();

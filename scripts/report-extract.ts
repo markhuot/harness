@@ -3,7 +3,7 @@
 // Names generated at runtime (loops, helpers) show up as their template, e.g. `${tab} opens at the bottom`.
 
 export type Row = {
-  kind: "bun" | "swift" | "snapshot" | "sim-check" | "app-check";
+  kind: "bun" | "swift" | "snapshot" | "app-check";
   /** Repo-relative file. */
   file: string;
   /** Enclosing suite or check function, "" when none. */
@@ -101,24 +101,6 @@ function checkName(arg: string, consts: Map<string, string>): string {
   const id = /^(\w+)/.exec(arg.trim())?.[1];
   if (id && consts.has(id)) return consts.get(id)!;
   return `<${arg.trim().replace(/[,)].*$/, "") || "dynamic"}>`;
-}
-
-/** sim-check's `check("name", ...)` calls, grouped by the top-level function that holds them. */
-export function extractSimChecks(file: string, src: string): Row[] {
-  const rows: Row[] = [];
-  const consts = constants(src);
-  const lines = src.split("\n");
-  let fn = "";
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]!;
-    const f = /^(?:export )?(?:async )?function\s+(\w+)/.exec(line);
-    if (f) fn = f[1]!;
-    const m = /^\s*(?:await\s+)?check\(\s*(.*)$/.exec(line);
-    if (!m || line.trimStart().startsWith("async function check(")) continue;
-    const arg = m[1]!.trim() === "" ? (lines[i + 1] ?? "").trim() : m[1]!;
-    rows.push({ kind: "sim-check", file, group: fn, name: checkName(arg, consts) });
-  }
-  return rows;
 }
 
 /** The Mac scripts' `check("name", ok, detail)` calls (the `checker()` helper in app/scripts/lib/drive.ts). */

@@ -276,7 +276,7 @@ private struct PromptDetailView: View {
 }
 
 /// Edit / Compare with built-in. Two buttons drawn as a segmented control rather
-/// than a segmented Picker, whose segments AXe doesn't list by label (sim-check waits for
+/// than a segmented Picker, whose segments AXe doesn't list by label (the walkthrough waits for
 /// "Compare with built-in").
 private struct PromptSegmented: View {
     let compare: Bool

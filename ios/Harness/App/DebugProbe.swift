@@ -1,13 +1,13 @@
-#if SIM_CHECK
+#if DEBUG_PROBE
 import Foundation
 import HarnessKit
 import UIKit
 
 /// The debug state probe: writes `DebugState` as JSON to `<container>/tmp/harness-debug-state.json`
-/// about every 50 ms, for ios/Tools/sim-check.ts to read (`simctl get_app_container … data`). A file
+/// about every 50 ms, for next/walkthrough/ios.ts to read (`simctl get_app_container … data`). A file
 /// rather than a URL route and a daemon post: it needs no round trip to land (a read is a file
 /// read), nothing from the daemon, and it works before the app is paired. Compiled only into a
-/// SIM_CHECK build (build.ts's simulator build sets it; a Debug device build does not), so a device or release build has
+/// DEBUG_PROBE build (build.ts's simulator build sets it; a Debug device build does not), so a device or release build has
 /// none of it. The shape and the settle rule are in HarnessKit's DebugState.swift.
 @MainActor
 final class DebugProbe {
@@ -53,7 +53,7 @@ final class DebugProbe {
     /// What is moving on screen, in any of the app's windows (the keyboard's and a sheet's included):
     /// a Core Animation animation in flight ("animating:<layer>:<key>", the first few) and a scroll
     /// view being dragged or coasting ("scrolling"). A spinner or a pulse that repeats forever is
-    /// part of a screen at rest, so it doesn't count. This is what lets sim-check wait for a sheet
+    /// part of a screen at rest, so it doesn't count. This is what lets the walkthrough wait for a sheet
     /// to slide in or a fling to stop instead of sleeping.
     private func motion() -> [String] {
         let now = ProcessInfo.processInfo.systemUptime

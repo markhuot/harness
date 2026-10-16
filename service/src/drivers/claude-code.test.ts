@@ -915,7 +915,7 @@ describe("ClaudeCodeDriver.run (fake binary)", () => {
 
   // HARNESS-139: the work run submitted with a background task still running. Resuming that
   // session, claude 2.1.286 reports the task stopped and ends an empty turn before it reads the
-  // prompt; closing stdin at that result killed the completion run's own background sim-check.
+  // prompt; closing stdin at that result killed the completion run's own background command.
   const orphanTurn = [
     { type: "system", subtype: "task_notification", task_id: "old", tool_use_id: "c0", status: "stopped", summary: "Background shell command didn't finish before the previous session ended" },
     { __echo_session: true },
@@ -930,8 +930,8 @@ describe("ClaudeCodeDriver.run (fake binary)", () => {
         ...orphanTurn,
         { __echo_session: true },
         { __replay_prompt: true },
-        bashCall("c1", "bun scripts/sim-check.ts", { run_in_background: true }),
-        taskStarted("b1", "c1", "Run sim-check"),
+        bashCall("c1", "bun scripts/long-task.ts", { run_in_background: true }),
+        taskStarted("b1", "c1", "Run long task"),
         toolResult("c1", BG("b1")),
         success({ session_id: "old-sess", result: "Started in the background.", num_turns: 2, total_cost_usd: 1.5 }),
         { __sleep: 100 },
@@ -947,7 +947,7 @@ describe("ClaudeCodeDriver.run (fake binary)", () => {
       { label: "after empty turn", stdinClosed: false },
       { label: "after prompt turn", stdinClosed: false },
     ]);
-    expect(events.filter((e) => e.type === "status")).toEqual([{ type: "status", text: "Waiting for a background task to finish (Run sim-check)." }]);
+    expect(events.filter((e) => e.type === "status")).toEqual([{ type: "status", text: "Waiting for a background task to finish (Run long task)." }]);
   });
 
   test("an empty turn after the prompt was taken in still ends the run", async () => {

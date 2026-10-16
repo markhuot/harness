@@ -59,7 +59,7 @@ public struct MentionRowDisplay: Equatable, Sendable {
     public var icon: String
     public var name: String
     public var detail: String
-    /// The row's accessibility label: the full path, or "/name" (sim-check taps these)
+    /// The row's accessibility label: the full path, or "/name" (the walkthrough taps these)
     public var label: String
     /// A file's directory is cut at its start when it doesn't fit ("…src/lib/"), a description at its end
     public var truncateHead: Bool

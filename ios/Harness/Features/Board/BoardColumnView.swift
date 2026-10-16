@@ -55,7 +55,7 @@ struct BoardStatusStrip: View {
 }
 
 /// One of the iPad's side-by-side columns, as on the Mac: a rounded panel with a header (dot,
-/// label, count) over its cards. The header reads "Planning, 3" like a phone chip (sim-check and
+/// label, count) over its cards. The header reads "Planning, 3" like a phone chip (the walkthrough and
 /// dev-sim look for it), and a tap scrolls the column into view.
 struct BoardColumnFrame<Content: View>: View {
     let status: TicketStatus

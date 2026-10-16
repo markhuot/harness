@@ -37,7 +37,7 @@ ios/
       Fixtures/          JSON from shared/fixtures, generated or frozen (committed)
       Support/           Fixture loader, jsonEqual
     Sources/HarnessHighlight/  Shiki-in-JavaScriptCore highlighter (§ Syntax highlighting)
-  Tools/                 build.ts, sim.ts, sim-check.ts, dev-sim.ts + axe.ts (README § Dev loop),
+  Tools/                 build.ts, sim.ts, ios.ts, dev-sim.ts + axe.ts (README § Dev loop),
                          build-highlighter.ts + highlighter/ (§ Syntax highlighting), bun tests
 ```
 
@@ -533,7 +533,7 @@ window's root, and takes touches only where the cards are: `DockWindow.hitTest` 
 container publishes (`DockedCardsReport`), or the whole screen while the list is open, rather than
 asking whether the hit view is the root, which SwiftUI's gesture views make unreliable on iOS 18+.
 The container never mounts again while the app runs (`DebugState.dockMounts` counts it, and
-sim-check asserts one): cards insert and remove by id, so opening a sheet from the board, switching
+the walkthrough asserts one): cards insert and remove by id, so opening a sheet from the board, switching
 tickets from a card, or docking changes only the cards that change. Each card is `DockedCard`, 52pt
 tall, 8pt from the home indicator and in from the sides as far as the board's bottom bar (its
 concentric inset, `DockMetrics.phoneSides(screen:)`), the most recent at the bottom, up to two, then
@@ -617,7 +617,7 @@ Split View or a small Stage Manager window gets the phone's:
 - **Columns** (regular, iPad): every column at once, as on the Mac. Each is a `BoardColumnFrame`
   (rounded `bgColumn` panel, header with dot, label and count) around the same `BoardColumnView`,
   so cards, paging footers, empty states and pull to refresh are shared. There is no strip: the
-  headers read "Planning, 3" like the chips (sim-check's `onBoard`, dev-sim's `screenState` and
+  headers read "Planning, 3" like the chips (the walkthrough's `onBoard`, dev-sim's `screenState` and
   AXe taps rely on it), and a tap on one scrolls its column into view. Widths come from
   `BoardScreenRules.columnSizing` (equal shares of the detail column's width, so they follow the
   sidebar toggle; 216…400pt, the Mac's 216 minimum):
@@ -631,15 +631,8 @@ target, no Move to … in its menu and no VoiceOver move actions. Touch and hold
 screen, on the Spec tab in a navigation stack of its own, as the context menu's preview (a
 draft's lifts the card itself); a tap opens the ticket.
 
-simctl and AXe can't rotate a simulator and this Mac has no Simulator.app, so `sim-check --ipad`
-runs portrait. For a landscape check, build once with `UIRequiresFullScreen` on and
-`UISupportedInterfaceOrientations~ipad` set to `UIInterfaceOrientationLandscapeLeft` only (never
-commit that), then run sim-check with `--no-build` and `SIM_CHECK_LANDSCAPE=1`. The simulator stays
-portrait while the app draws sideways: AXe's tree reads in the app's landscape points, but its
-touches land in the device's portrait ones, so sim-check maps each tap, swipe and touch from
-(x, y) to (portrait width − y, x) and rotates its shots (`sips -r 270`, named `*-landscape.png`).
-The keyboard still draws in portrait across the app, so a check that leaves it up can't tap what
-it covers.
+simctl and AXe can't rotate a simulator and this Mac has no Simulator.app, so `bun run walk:ipad`
+runs portrait; landscape isn't driven.
 
 ## Windows
 
@@ -722,23 +715,23 @@ is) to the store, never a single window's.
   RootView; a ticket window only allows them), so harness:// from outside the app never lands in a
   ticket window or opens a new one.
 
-`sim-check --ipad`'s `ticket-tear-off` check opens the Transcript chip's menu (touch and hold) on
+`bun run walk:ipad`'s `ticket-tear-off` check opens the Transcript chip's menu (touch and hold) on
 a ticket in the side panel, picks Open in New Window, expects the pinned window (its title
 "KEY · Transcript"), brings the ticket back with its link and expects "Transcript is in another
 window", then presses Return to this window and expects the pinned window gone and the transcript
 back. AXe can't drive a drag (its touch events don't move), so drag-to-window is checked by hand.
 
-`sim-check --ipad --sheets` runs the side panel's checks (`panelChecks`) on the `--sheets` seed. sim-check reads the panel's
+`bun run walk:ipad` runs the side panel's checks (`panelChecks`) on the `--sheets` seed. The walkthrough reads the panel's
 geometry from its resize handle ("Resize panel", centred on the leading edge). A board card opens
 the panel trailing-aligned at TicketPanelWidth's default with the board still showing and its title
 bar no higher than the sidebar button (both keep the top safe area). The panel's labels name its
-ticket once: in the hero's title, with no navigation bar above any ticket and no `ticket-back` button on the root. Dragging the handle to either edge stops at 25% and 80%, then sim-check
+ticket once: in the hero's title, with no navigation bar above any ticket and no `ticket-back` button on the root. Dragging the handle to either edge stops at 25% and 80%, then the walkthrough
 drags it back to the default, since the width is a pref that outlives the run. A child link inside
-pushes, and a different board card opens its ticket over it, at the root. sim-check taps where the hero's
+pushes, and a different board card opens its ticket over it, at the root. The walkthrough taps where the hero's
 Back button sits: after a push that goes back to the parent, and at the
 root it leaves the panel where it was. The dock button leaves the "KEY, title, docked" card in the
 bottom-right corner, and a tap on it restores the pushed child, Back and all. A card's ✕ closes
-just its ticket (sim-check closes the board card's and the conductor's one at a time), New session opens in the panel with one title and one ✕ and no
+just its ticket (the walkthrough closes the board card's and the conductor's one at a time), New session opens in the panel with one title and one ✕ and no
 pop-out button (AXe's labels, then the screenshot's ink where its bar would draw a title, then a tap
 where its ✕ would sit, which must leave the panel up), with a draft typed Escape and the panel's ✕
 each bring up Save or Discard (Keep editing, then Discard, which closes the panel and takes the
@@ -762,7 +755,7 @@ drive both platforms. `--keyboard` adds the composer sitting on the keys with a 
 the dock out of the way.
 
 The simulator's backboardd sometimes aborts in Metal texture validation (`MTLSimDriver`,
-`CA::OGL::FlattenNode`) during long `sim-check --ipad` runs with ticket windows open, and the app and
+`CA::OGL::FlattenNode`) during long `bun run walk:ipad` runs with ticket windows open, and the app and
 AXe's tree go with it. That's the simulator's renderer, not the app. Reboot the device
 (`xcrun simctl shutdown`/`boot` under its lock) and rerun.
 
@@ -790,7 +783,7 @@ The service decides which card activity notifies and sends it through APNs (DESI
   - A presented ticket sheet counts as just its ticket, and a docked one adds the board.
   - On leaving, the app sends `visible: false` in the inactive phase, inside a short background
     task, so it reaches the Mac before suspension.
-- **sim-check.** The launch prompt would cover the pair link's screens, so `install()` writes the
+- **The walkthrough.** The launch prompt would cover the pair link's screens, so `install()` writes the
   `HarnessSkipNotificationPrompt` default. The `-HarnessSkipNotificationPrompt YES` launch argument
   does the same.
 
@@ -902,7 +895,7 @@ from it (Ticket/TicketDetailSupport.swift):
 - **`.ticketHeroScroll()`** on a tab body's ScrollView or List: a forward drag or fling collapses
   the hero to its title line (HarnessKit `HeroCollapse`, checked against frozen fixtures, then
   `HeroDisclosure`); nothing a scroll does expands it again, only its chevron.
-  TranscriptView and AgentsTabView should attach it, since sim-check `--stick` checks the hero on
+  TranscriptView and AgentsTabView should attach it, since the walkthrough `--stick` checks the hero on
   the Transcript. Outside a ticket screen it does nothing.
 - **`.ticketStickToBottom()`** on a ScrollView whose newest content is last (Activity, and the
   Transcript): it opens at the bottom, follows new content while pinned, stays put once the user
@@ -913,7 +906,7 @@ from it (Ticket/TicketDetailSupport.swift):
 - The composer sits in the screen's bottom `safeAreaInset`, so tab bodies shouldn't add their own.
   Its field's AX label is always "Message the agent" (MentionTextEditor `fieldLabel`).
 - Testable branches (menus, the Complete sheet's rules, run rows, labels) are in HarnessKit's
-  `TicketDetailLogic`. Approve/Complete menus are native `Menu`s; sim-check closes one with
+  `TicketDetailLogic`. Approve/Complete menus are native `Menu`s; the walkthrough closes one with
   "Dismiss context menu".
 
 ## Transcript, Agents and Inbox (Ticket/Transcript*, Ticket/Agents*, Inbox/)
@@ -988,7 +981,7 @@ What screens that show agent text use (HARNESS-136):
   page-style TabView lost sideways swipes that started over AVPlayerViewController's view, so the
   viewer often couldn't page off a video; inside the scroll view, its pan sees them first. Paging is
   off while an image is zoomed. A page keeps one view for its whole life, so video pages keep one
-  AVPlayerViewController and only hand it a player while showing. Labels match sim-check `--attachments`: "Image x.png" /
+  AVPlayerViewController and only hand it a player while showing. Labels match the walkthrough `--attachments`: "Image x.png" /
   "Video x.mp4" inline images (the alt text), "Close", "2 of 4 · 1.2 MB".
 - **Debug gallery:** a paired Debug build launched with `-debugScreen content [-debugTicket KEY]`
   shows sample markdown and that ticket's spec with its inline attachments.
@@ -1003,7 +996,7 @@ What the hosting screens (Ticket detail, New session, Settings, Project settings
   PermissionPicker are built on it. DriverModelPicker, PhaseModelPicker and BranchPicker use the same trigger, but
   open a `PickerSheet`. PhaseModelPicker's sheet has a radio column per run phase and stays open
   after a pick. That sheet draws its own header (Cancel, the title and an accessory) instead
-  of toolbar items, because AXe doesn't see a sheet's toolbar and sim-check taps "Cancel" by label.
+  of toolbar items, because AXe doesn't see a sheet's toolbar and the walkthrough taps "Cancel" by label.
 - **Model lists** come from `store.sharedModelCache`, one `ModelListCache` per store
   (PickerClient.swift). `store.pickerClient` is the store's client as a `PickerClient`
   (model lists, branches, files and commands; HarnessClient conforms).
@@ -1036,9 +1029,9 @@ What Settings, Project settings, the watcher form and Prompts share (HARNESS-144
   Settings' sections set `SettingsModel`'s `menu` / `confirm` / `textPrompt` and the screen
   presents them, and it runs the network, drivers and prompt-catalog loads once.
 - **AXe and segmented Pickers.** AXe lists a segmented Picker as one unlabeled element, so a
-  segment sim-check taps or waits for ("Compare with built-in") is a labeled Button
+  segment the walkthrough taps or waits for ("Compare with built-in") is a labeled Button
   (PromptSegmented). Lazy Forms leave off-screen rows out of the AX tree too; the Prompts list is a
-  plain stack because sim-check waits for a row below the fold.
+  plain stack because the walkthrough waits for a row below the fold.
 - **The prompt editor** is a UIKit bridge (`PromptTextEditor`): a growing UITextView with
   autocorrection and smart punctuation off, whose selection `PromptEditorHandle` keeps (UTF-16, as
   `Prompts.insertText` takes it) and which scrolls its enclosing scroll view to keep the caret
@@ -1054,7 +1047,7 @@ What Settings, Project settings, the watcher form and Prompts share (HARNESS-144
   `.onChange` and acts on what it returns.
 - **Its own Cancel.** SheetHost leaves the shell's ✕ off this sheet; the screen's asks Save draft /
   Discard draft / Keep editing for a non-empty draft. A swipe down (any `onDisappear`) saves.
-- The prompt is a MentionTextEditor with `fieldLabel: "Prompt"` (sim-check looks for it) and `autofocus`.
+- The prompt is a MentionTextEditor with `fieldLabel: "Prompt"` (the walkthrough looks for it) and `autofocus`.
 
 ## File viewer (Features/Files)
 
@@ -1095,18 +1088,18 @@ What Settings, Project settings, the watcher form and Prompts share (HARNESS-144
   swipe-down are disabled; a pop that gets past it saves anyway, since edits are never dropped
   silently. A clean editor silently reloads when the app comes back to the foreground (`setContents`,
   no undo history); a dirty one keeps its edits.
-- **sim-check:** a web view's page isn't in the accessibility tree, so the debug state probe
+- **The walkthrough:** a web view's page isn't in the accessibility tree, so the debug state probe
   (§ Debug state probe) reads the editor's marked lines, selection and dirty flag from the page. The
   `file-link` chain asserts the marked lines through it; the `file-edit` chain types, checks the
   unsaved dot and Save.
-- File/Diff is two labeled buttons, not a segmented Picker, because sim-check taps the label that
+- File/Diff is two labeled buttons, not a segmented Picker, because the walkthrough taps the label that
   starts with "Diff". The counts use `Text(verbatim:)`, so 25000 doesn't render as "25,000".
 
 ## Snapshot tests (HarnessSnapshotTests)
 
 `ios/HarnessSnapshotTests` renders the app's main screens in-process from fixture models and compares
 the pixels with reference PNGs: no daemon, install, pairing or accessibility polling. A run is one
-Debug build, then about a second per screen. sim-check stays for flows that need real taps, a
+Debug build, then about a second per screen. The walkthrough stays for flows that need real taps, a
 daemon or the keyboard.
 
 ```sh
@@ -1156,17 +1149,17 @@ for this app they come down to:
 
 - Test only on iOS 27.0. Never download a runtime or create a simulator.
 - Use the shared `harness-shared` simulator through `bun run sim with-lock -- …`. dev-sim and
-  sim-check take the lock themselves.
+  the walkthrough take the lock themselves.
 - Build with `-derivedDataPath ios/build/dd` inside your own worktree and nowhere else.
 - Run `bun run sim disk` before any `xcodebuild`, and block and ask when it exits 1.
 - When you finish, delete `ios/build` and `ios/HarnessKit/.build`. Leave the simulator alone.
 
 ## Debug state probe
 
-A SIM_CHECK build (build.ts's simulator build sets `SIM_CHECK`; the device and archive builds
+A DEBUG_PROBE build (build.ts's simulator build sets `DEBUG_PROBE`; the device and archive builds
 never do, so a release has none of it) writes the app's state as JSON to
 `<app container>/tmp/harness-debug-state.json` about every 50 ms (`Harness/App/DebugProbe.swift`,
-written atomically). `ios/Tools/sim-check.ts` finds the container with `simctl get_app_container … data`
+written atomically). `next/walkthrough/ios.ts` finds the container with `simctl get_app_container … data`
 and reads the file (`Tools/probe.ts`). **Why a file:** a URL route plus a daemon post needs a round trip
 before a read lands, a daemon route to carry it, and a paired app; the file is a read, always current and
 there before pairing. The accessibility tree stays for taps and for what a person reads on screen.
@@ -1203,37 +1196,37 @@ The shape is HarnessKit's `DebugState` (`Shell/DebugState.swift`, pinned by `Deb
   (a Core Animation animation in flight in any window, the keyboard's and a sheet's included; one that
   repeats forever, like a spinner, doesn't count) and `scrolling` (a scroll view dragged or coasting).
   `seq` counts writes, so a reader waits for it to move to know a state postdates its last action.
-- sim-check waits with `atRest(udid, fallbackMs)` where it used to sleep (fresh writes, settled, quiet for
+- the walkthrough waits with `atRest(udid, fallbackMs)` where it used to sleep (fresh writes, settled, quiet for
   the old sleep's length up to 300 ms), and with `probeUntil` for a state to reach. What no probe state
   covers (an image or a video drawing, a list loading from the daemon, a gesture's own timing) still sleeps.
   An app built without the probe (`--app=` of a release build) falls back to those sleeps.
 - Adding to the shape means changing `DebugState`, its test, `Tools/probe.ts` and this section together.
 
-## Accessibility labels and sim-check (read this before porting a screen)
+## Accessibility labels and the walkthrough (read this before porting a screen)
 
-**sim-check finds everything by AXLabel**: the visible text of an element, or its
-`accessibilityLabel`. `ios/Tools/sim-check.ts` drives the app through the accessibility tree
+**The walkthrough finds everything by AXLabel**: the visible text of an element, or its
+`accessibilityLabel`. `next/walkthrough/ios.ts` drives the app through the accessibility tree
 (AXe) and deep links. The rule for every screen:
 
-- Wherever sim-check looks for a label, the UI exposes **exactly** that label. Grep
-  sim-check.ts for the screen's strings before you port it and keep every one: column chips
+- Wherever the walkthrough looks for a label, the UI exposes **exactly** that label. Grep
+  next/walkthrough/ios.ts for the screen's strings before you port it and keep every one: column chips
   "Planning, 3" (`"<Status>, <count>"`), card labels starting "GREET-1 <title>", "Options" /
   "Options, …", "Cancel", "Allow once", "Start work", "Message the agent…", "Reset to built-in",
   "Customize", "Image phone.png", "Prompt", "Model, …", "Agent review: skipped", "Remote ID JIRA-62"…
-- A composite control whose label sim-check reads (a card, a chip) uses
+- A composite control whose label the walkthrough reads (a card, a chip) uses
   `.accessibilityElement(children: .ignore)` + `.accessibilityLabel(…)`, so AXe sees one element
   with the whole string instead of its pieces.
 - The root AX element must stay the app ("Harness"), so no full-screen overlay may take
   accessibility focus above the window.
-- Don't label a container whose children sim-check taps (`.accessibilityElement(children:
+- Don't label a container whose children the walkthrough taps (`.accessibilityElement(children:
   .contain)` plus `.accessibilityLabel`): AXe then lists the container as one element and drops
   its rows. That's why the mention list and the project color swatches have no group label.
 - Every route in § App shell is reachable by a `harness://` link (the same links the 1.x app
   took, so old links keep working), with the same semantics (a tab link pops to the tab root and dismisses modals; a ticket link pushes).
 
-`bun ios/Tools/sim-check.ts --only=<name>` shoots one catalog screen (or runs one check) on the shared
-simulator; `--shot=<link>` shoots any route once. Validation (no `--only`) opens every route and
-checks the app survives it. A change to a screen should keep its `--only=` entries passing.
+`bun run walk:ios --only=<screen>` runs one walkthrough screen on the shared simulator; with no `--only`
+it runs every screen, including one that opens every route and checks the app survives it. A change to a
+screen should keep its walkthrough screen passing.
 
 ## Parity table
 
@@ -1241,7 +1234,7 @@ This is the historical parity audit against the 1.x React Native app, which has 
 the "RN file" column names files from that app. HARNESS-145 audited every file in its routes,
 screens, UI kit, lib and state against `main` as of the HARNESS-155/157/160 merges: each
 user-visible feature, action, state, empty state, error, haptic, deep link and persistence key,
-read on both sides and checked in the simulator where sim-check reaches it. Logic rows are also
+read on both sides and checked in the simulator where the walkthrough reaches it. Logic rows are also
 pinned by fixtures (§ Fixture pipeline). Every row is done. "Differs" notes a deliberate,
 native-pattern difference, not a missing feature.
 
@@ -1308,7 +1301,7 @@ defines no DEBUG condition.
 Checked on the shared simulator (iOS 27.0) unless marked **device**:
 
 - **Board card push → Back:** passes in every full interaction run. Back is tapped by label when
-  AXe sees it, else at the header point sim-check's `tapHeader` uses.
+  AXe sees it, else at the header point the walkthrough's `tapHeader` uses.
 - **Robustness (a scripted pass with real daemons):**
   - Daemon restart: the "Reconnecting to …" banner shows, then clears, and a ticket made after
     the restart arrives live (4 of 5 runs; once the live event didn't arrive within 20 s,
@@ -1336,7 +1329,7 @@ Checked on the shared simulator (iOS 27.0) unless marked **device**:
     built in.
 - **`--keyboard`** passes (4/4 native). A headless simulator (no Simulator.app) always has a
   hardware keyboard attached, which minimizes the software keyboard to a bar. That holds whatever
-  the host's `ConnectHardwareKeyboard` says, and after a reboot too. So sim-check turns the
+  the host's `ConnectHardwareKeyboard` says, and after a reboot too. So the walkthrough turns the
   simulated device's own `AutomaticMinimizationEnabled` (com.apple.keyboard.preferences) off for
   the run and puts it back afterwards, so no other simulator changes. It types by tapping the
   on-screen keys, because AXe's `type` and `key` are hardware key events, which put iOS back in

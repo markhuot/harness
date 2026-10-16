@@ -140,12 +140,12 @@ test("the simulator build skips optimization unless asked: -Onone, per file, for
   expect(simArgs().at(-1)).toBe("build");
 });
 
-test("the simulator build compiles in the debug probe (SIM_CHECK)", () => {
-  expect(compilationConditions(simArgs())).toMatch(/\bSIM_CHECK\b/);
+test("the simulator build compiles in the debug probe (DEBUG_PROBE)", () => {
+  expect(compilationConditions(simArgs())).toMatch(/\bDEBUG_PROBE\b/);
 });
 
-test("the device build, though Debug, never gets SIM_CHECK, so a phone runs no probe", () => {
+test("the device build, though Debug, never gets DEBUG_PROBE, so a phone runs no probe", () => {
   const args = deviceArgs();
   expect(args).toContain("Debug");
-  expect(args.join(" ")).not.toContain("SIM_CHECK");
+  expect(args.join(" ")).not.toContain("DEBUG_PROBE");
 });

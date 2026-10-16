@@ -5,7 +5,7 @@ import XCTest
 
 /// The app's main screens rendered from fixture models (SnapshotWorld), in light and dark, on the
 /// simulator the run uses (iPhone or iPad: References/<device>/). Flows that need real taps, a
-/// daemon or the keyboard stay in sim-check.
+/// daemon or the keyboard stay in the walkthrough.
 @MainActor
 final class ScreenSnapshotTests: XCTestCase {
     var world: SnapshotWorld!

@@ -167,7 +167,7 @@ describe("choosing at approval", () => {
   });
 
   // The contract seam with the iPhone app: HarnessKit's ApproveTests builds each of these bodies, and the service
-  // must store what they say. sim-check used to prove this by typing into the Approve and… sheet.
+  // must store what they say. An iPhone check used to prove this by typing into the Approve and… sheet.
   test("every review body HarnessKit's Approve builds is accepted and stored as it says", async () => {
     const fixture = JSON.parse(
       readFileSync(resolve(import.meta.dir, "../../ios/HarnessKit/Tests/HarnessKitTests/Fixtures/approve.json"), "utf8"),

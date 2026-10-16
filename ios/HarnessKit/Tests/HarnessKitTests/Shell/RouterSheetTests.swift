@@ -759,7 +759,7 @@ struct RouterSheetTests {
         #expect(w.sheet == draft)
     }
 
-    /// The memory rule `sim-check --memory` used to measure: only the most recent sheets stay mounted, however many are docked.
+    /// The memory rule the old memory check measured: only the most recent sheets stay mounted, however many are docked.
     @Test func twentyDockedTicketsKeepAtMostFiveLive() {
         let r = sheeted()
         for n in 1...20 {

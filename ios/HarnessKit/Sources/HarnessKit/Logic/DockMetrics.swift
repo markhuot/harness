@@ -1,6 +1,6 @@
 import Foundation
 
-/// The dock's measurements and labels (TicketDock, DockedCardStack): what sim-check's dock checks
+/// The dock's measurements and labels (TicketDock, DockedCardStack): what the walkthrough's dock checks
 /// used to recompute from the screen.
 public enum DockMetrics {
     /// One docked card's height: the ✕'s 44pt tap target with 4pt above and below.

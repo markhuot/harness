@@ -3509,7 +3509,7 @@ the conventions, and ios/README.md the build and test commands.
   moves a card between columns: only agents move tickets. Touch and hold on a card previews the
   ticket on its Spec tab above the card's menu. Two browser views of one session stream side by
   side because each is its own viewer (`viewerId`, "Browser tabs"). iPhone and compact width have
-  none of this. `sim-check --ipad` opens the walk-through's routes on an iPad simulator. See
+  none of this. `bun run walk:ipad` checks the board, sidebar and side panel on an iPad simulator. See
   ios/ARCHITECTURE.md § Windows.
 - **Connection.** `harness://pair?url=…&token=…` (the desktop QR code) opens the app through its
   URL scheme, or the in-app scanner reads it; the app probes `GET /health`, then an authenticated
@@ -3586,12 +3586,10 @@ the conventions, and ios/README.md the build and test commands.
   navigation and toolbars follow it. Appearance plus the Light / Dark theme picks are stored in the
   Keychain prefs blob and normalized on load.
   `harness://settings?lightTheme=<id>&darkTheme=<id>&theme=<system|light|dark>` applies a setup.
-- **Checks.** `ios/Tools/sim-check.ts` runs a simulator walk-through against a real daemon on a
-  throwaway home, through the accessibility tree (AXe) and deep links, and validates what needs a
-  simulator by real taps (no screenshots). Shots are opt-in: `--screens`, `--only=<name>`, `--shot=<link>`.
-  `--grep=<pattern>` picks single checks (a check names the earlier ones it starts from, which run as
-  setup), and `--keep` then `--reuse` reattaches to the kept daemon, seeds and paired app (state in
-  the kept home's `reuse.json`, with a hash of the built app; `sim reap --kept` clears it).
+- **Checks.** The iPhone walkthrough (`next/walkthrough/ios.ts`, `bun run walk:ios`) runs one pass
+  against a real daemon on a throwaway home, through the accessibility tree (AXe) and deep links, and
+  validates what needs a simulator by real taps (no screenshots). `--only=<screen>,…` picks screens;
+  `bun run walk:ipad` runs the iPad's own layouts.
 - **Builds.** `release/publish-install.sh` archives the Release app with `ios/Tools/build.ts`,
   exports a development IPA (and uploads a TestFlight build), packages and Developer ID signs the
   Mac app, uploads both to the GitHub release of the annotated `app-YYYYMMDD.HHMM` tag on HEAD (it

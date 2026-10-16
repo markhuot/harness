@@ -10,10 +10,10 @@
 //   --files=a,b  plan for these paths instead of the git diff (a synthetic diff, for trying the mapping)
 //
 // Light layers (bun tests, typecheck, swift test) run at once; the Mac app checks follow one at a time,
-// then the simulator layers, after `bun run sim disk` says there is room. sim-check and the snapshot
+// then the simulator layers, after `bun run sim disk` says there is room. the walkthrough and the snapshot
 // tests take the simulator lock themselves, so a layer holds it only while it runs. Each layer ends
 // in one summary line; a failing layer's output is printed, and the exit code is 1 if any failed.
-// To iterate on one simulator check, run sim-check directly: --only=<chain> --grep=… --reuse --no-build.
+// To iterate on one simulator screen, run `bun run walk:ios --only=<screen> --no-build`.
 
 import { readdirSync } from "node:fs";
 import { join } from "node:path";

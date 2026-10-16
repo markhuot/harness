@@ -6,7 +6,7 @@ const layer = (id: string, kind: "light" | "app" | "sim" = "light") => ({ id, ti
 const result = (id: string, code: number | null, output = "", skipped?: string): LayerResult => ({ layer: layer(id), code, output, ms: 1, skipped });
 
 describe("failedChecks", () => {
-  test("reads ✗ lines from sim-check and app checks, ignoring passes and duplicates", () => {
+  test("reads ✗ lines from walk:ios and app checks, ignoring passes and duplicates", () => {
     const out = "✓ opens inbox\n✗ ticket sheet — never appeared\n✗ ticket sheet — never appeared\n✗ composer: draft survives relaunch";
     expect(failedChecks(out)).toEqual(["ticket sheet — never appeared", "composer: draft survives relaunch"]);
   });
@@ -34,10 +34,10 @@ describe("formatReport", () => {
 
   test("names the failing layer, its checks and only the log tail", () => {
     const log = Array.from({ length: 100 }, (_, i) => `line ${i}`).join("\n") + "\n✗ walk: tickets — timeout";
-    const report = formatReport([result("bun:all", 0), result("sim-check --shards=2", 1, log)], date);
-    expect(report).toContain("2026-10-14: 1 of 2 layers failed: sim-check --shards=2");
+    const report = formatReport([result("bun:all", 0), result("walk:ios", 1, log)], date);
+    expect(report).toContain("2026-10-14: 1 of 2 layers failed: walk:ios");
     expect(report).toContain("Failing checks: walk: tickets — timeout");
-    expect(report).toContain("Rerun: bun sim-check --shards=2");
+    expect(report).toContain("Rerun: bun walk:ios");
     expect(report).toContain("✗ walk: tickets — timeout");
     expect(report).toContain("line 99");
     expect(report).not.toContain("line 10\n");
@@ -50,19 +50,19 @@ describe("formatReport", () => {
   });
 
   test("reports a skipped layer as a failure with its reason", () => {
-    const report = formatReport([result("sim-check", null, "", "not enough free disk")], date);
-    expect(report).toContain("1 of 1 layers failed: sim-check");
+    const report = formatReport([result("walk:ios", null, "", "not enough free disk")], date);
+    expect(report).toContain("1 of 1 layers failed: walk:ios");
     expect(report).toContain("Skipped: not enough free disk");
   });
 });
 
 describe("layers", () => {
-  test("the sim-check layer is the full walk-through with two shards, after the app checks", () => {
+  test("the walkthrough layer runs every iPhone screen, after the app checks", () => {
     const layers = nightlyLayers(["smoke", "x-check"]);
     expect(layers.map((l) => l.id)).toEqual([
-      "bun:all", "typecheck", "swift-test", "app-build", "app-check:smoke", "app-check:x-check", "sim-check --shards=2",
+      "bun:all", "typecheck", "swift-test", "app-build", "app-check:smoke", "app-check:x-check", "walk:ios",
     ]);
-    expect(layers.at(-1)!.cmd).toEqual(["bun", "ios/Tools/sim-check.ts", "--shards=2"]);
+    expect(layers.at(-1)!.cmd).toEqual(["bun", "run", "walk:ios"]);
   });
 
   test("listAppChecks finds smoke and every real *-check script", () => {
@@ -70,11 +70,6 @@ describe("layers", () => {
     expect(checks[0]).toBe("smoke");
     expect(checks).toContain("terminal-check");
     expect(checks.every((c) => c === "smoke" || c.endsWith("-check"))).toBe(true);
-  });
-
-  test("sim-check documents the flags the nightly passes", async () => {
-    const src = await Bun.file(join(import.meta.dir, "..", "ios", "Tools", "sim-check.ts")).text();
-    expect(src).toContain("--shards=N");
   });
 });
 
@@ -88,7 +83,7 @@ describe("parseArgs and the CLI", () => {
     const p = Bun.spawn(["bun", join(import.meta.dir, "nightly.ts"), "--list"], { stdout: "pipe", stderr: "pipe" });
     const out = await new Response(p.stdout).text();
     expect(await p.exited).toBe(0);
-    expect(out).toContain("sim-check --shards=2\tbun ios/Tools/sim-check.ts --shards=2");
+    expect(out).toContain("walk:ios\tbun run walk:ios");
   });
 
   test("a bad flag exits 2", async () => {

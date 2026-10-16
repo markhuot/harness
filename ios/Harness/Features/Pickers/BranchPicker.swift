@@ -81,7 +81,7 @@ private struct BranchSheet: View {
             if loading { ProgressView() }
         } content: {
             // A plain stack, not a lazy List: AXe sees only the rows a List has realized, and
-            // sim-check waits for one below the fold (release/v2 under a dozen harness/ branches).
+            // the walkthrough waits for one below the fold (release/v2 under a dozen harness/ branches).
             ScrollView {
                 VStack(spacing: 0) {
                     ForEach(Array(rows.enumerated()), id: \.element.listId) { i, row in

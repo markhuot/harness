@@ -44,7 +44,7 @@ struct RootView: View {
             .onAppear {
                 WindowDirectory.shared.mainActive(router, scene: scene)
                 syncDockWindow()
-                #if SIM_CHECK
+                #if DEBUG_PROBE
                 DebugProbe.shared.attach(router)
                 #endif
             }

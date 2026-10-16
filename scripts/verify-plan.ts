@@ -31,19 +31,19 @@ const typecheck: Layer = { id: "typecheck", title: "typecheck (tsc, all projects
 const nextSuite: Layer = { id: "next", title: "new suite (next/: guarded tier and contract tier)", cmd: [BUN, "run", "test:next"], kind: "light" };
 const swiftTest: Layer = { id: "swift-test", title: "swift test (HarnessKit)", cmd: ["swift", "test", "--package-path", "ios/HarnessKit"], kind: "light" };
 const snapshots: Layer = { id: "snapshots", title: "iOS snapshot tests (iPhone, iPad)", cmd: [BUN, "run", "sim", "snapshots"], kind: "sim" };
-/** sim-check with these args; it takes the simulator lock itself. */
-export const simCheck = (args: string[], title: string): Layer => ({
-  id: `sim-check${args.length ? ` ${args.join(" ")}` : ""}`,
-  title: `sim-check ${title}`,
-  cmd: [BUN, "ios/Tools/sim-check.ts", ...args],
+/** The iPhone walkthrough (next/walkthrough/ios.ts), all screens or just the named ones; `bun run walk:ios` takes the simulator lock itself. */
+export const walkIos = (screens: string[] = []): Layer => ({
+  id: screens.length ? `walk:ios ${screens.join(",")}` : "walk:ios",
+  title: screens.length ? `iPhone walkthrough: ${screens.join(", ")}` : "iPhone walkthrough (all screens)",
+  cmd: [BUN, "run", "walk:ios", ...(screens.length ? [`--only=${screens.join(",")}`] : [])],
   kind: "sim",
 });
 const appBuild: Layer = { id: "app-build", title: "build the Mac app renderer", cmd: [BUN, "run", "--cwd", "app", "build"], kind: "app" };
 /** An app/scripts/<name>.ts check against the built renderer. */
 export const appCheck = (name: string): Layer => ({ id: `app-check:${name}`, title: `app check: ${name}`, cmd: [BUN, `app/scripts/${name}.ts`], kind: "app" });
 
-/** The sim-check walk-through: every route opened once, then the real-tap chains. */
-export const walkThrough = simCheck([], "(walk-through)");
+/** The whole iPhone walkthrough. */
+export const walkThrough = walkIos();
 
 /** Every renderer file (by regex) to the closest app/scripts check. */
 export const RENDERER_CHECKS: [RegExp, string][] = [
@@ -74,18 +74,18 @@ export const RENDERER_CHECKS: [RegExp, string][] = [
 /** The check for a renderer file nothing above names: the whole-app smoke test. */
 export const RENDERER_FALLBACK = "smoke";
 
-/** Feature folders of the iPhone app to the sim-check run that drives them. Anything else under ios/Harness gets snapshots only. */
-export const IOS_FEATURE_CHECKS: [RegExp, string[], string][] = [
-  [/^ios\/Harness\/(App\/(TicketSheetHost|DockedTickets|DockHold|TicketSidePanel)|Features\/Ticket\/TearOff)/, ["--sheets"], "--sheets (the ticket sheet and dock)"],
-  [/^ios\/Harness\/Features\/Files\//, ["--only=file-link,save-on-blur,file-edit"], "--only=file-link,save-on-blur,file-edit"],
-  [/^ios\/Harness\/Features\/Prompts\//, ["--only=prompt-editor"], "--only=prompt-editor"],
-  [/^ios\/Harness\/Features\/NewSession\//, ["--mentions"], "--mentions"],
-  [/^ios\/Harness\/Features\/Pickers\/ModelPicker/, ["--only=models-picker"], "--only=models-picker"],
-  [/^ios\/Harness\/Features\/Ticket\/TicketContextGauge/, ["--only=context-gauge"], "--only=context-gauge"],
-  [/^ios\/Harness\/Features\/Ticket\/TicketDetailApprovalCard/, ["--only=approve-and"], "--only=approve-and"],
-  [/^ios\/Harness\/Features\/Ticket\/TicketDetailComposer/, ["--only=blocked-composer"], "--only=blocked-composer"],
-  [/^ios\/Harness\/Features\/Ticket\/AgentsTabView/, ["--only=agents-filter"], "--only=agents-filter"],
-  [/^ios\/Harness\/Features\/Content\/(Attachment|PromptAttachment)/, ["--attachments"], "--attachments"],
+/** Feature folders of the iPhone app to the walkthrough screens that drive them. Anything else under ios/Harness gets snapshots only. */
+export const IOS_FEATURE_SCREENS: [RegExp, string[]][] = [
+  [/^ios\/Harness\/(App\/(TicketSheetHost|DockedTickets|DockHold|TicketSidePanel)|Features\/Ticket\/TearOff)/, ["ticket sheet", "sheet dock drag", "dock stack", "docked ticket restores"]],
+  [/^ios\/Harness\/Features\/Files\//, ["file link", "file editor save", "file relink"]],
+  [/^ios\/Harness\/Features\/Prompts\//, ["prompt editor", "prompt variable chip"]],
+  [/^ios\/Harness\/Features\/NewSession\//, ["mentions and commands", "new session prompt focus"]],
+  [/^ios\/Harness\/Features\/Pickers\/ModelPicker/, ["models picker"]],
+  [/^ios\/Harness\/Features\/Ticket\/TicketContextGauge/, ["context gauge", "context gauge limit", "context gauge states"]],
+  [/^ios\/Harness\/Features\/Ticket\/TicketDetailApprovalCard/, ["approve and…"]],
+  [/^ios\/Harness\/Features\/Ticket\/TicketDetailComposer/, ["blocked composer", "composer draft"]],
+  [/^ios\/Harness\/Features\/Ticket\/AgentsTabView/, ["agents & tasks filter"]],
+  [/^ios\/Harness\/Features\/Content\/(Attachment|PromptAttachment)/, ["attachments"]],
 ];
 
 interface Rule {
@@ -119,7 +119,7 @@ export const RULES: Rule[] = [
   {
     name: "editor (the Mac file pane and the iPhone's web page)",
     match: /^editor\//,
-    layers: (f) => (isTest(f) ? [bunIn("editor"), typecheck] : [bunIn("editor"), bunIn("app"), typecheck, appBuild, appCheck("file-pane-check"), simCheck(["--only=file-link,save-on-blur,file-edit"], "--only=file-link,save-on-blur,file-edit")]),
+    layers: (f) => (isTest(f) ? [bunIn("editor"), typecheck] : [bunIn("editor"), bunIn("app"), typecheck, appBuild, appCheck("file-pane-check"), walkIos(["file link", "file editor save", "file relink"])]),
   },
   { name: "plugin sdk (every plugin builds on it)", match: /^plugins\/sdk\//, layers: () => [bunAll, typecheck] },
   { name: "plugin", match: /^plugins\/[^/]+\//, layers: (f) => [bunIn(f.split("/").slice(0, 2).join("/")), typecheck] },
@@ -136,14 +136,13 @@ export const RULES: Rule[] = [
   // HarnessKit is linked into the app, so a source change can break the app build the snapshot layer makes.
   { name: "HarnessKit (linked into the app)", match: /^ios\/HarnessKit\/(?!Tests\/)/, layers: () => [swiftTest, snapshots] },
   { name: "ios build tooling (a real build)", match: /^ios\/Tools\/(build|build-cache|snapshots)\.ts$/, layers: () => [bunIn("ios"), typecheck, snapshots] },
-  { name: "sim-check", match: /^ios\/Tools\/sim-check\.ts$/, layers: () => [bunIn("ios"), typecheck, walkThrough] },
   { name: "ios tooling", match: /^ios\/Tools\//, layers: () => [bunIn("ios"), typecheck] },
   { name: "snapshot tests and references", match: /^ios\/HarnessSnapshotTests\//, layers: () => [snapshots] },
   { name: "iPhone app project", match: /^ios\/(project\.yml|Harness\/Resources\/)/, layers: () => [snapshots, walkThrough] },
   {
     name: "iPhone app screens",
     match: /^ios\/(Harness|Widgets)\//,
-    layers: (f) => [snapshots, ...IOS_FEATURE_CHECKS.filter(([re]) => re.test(f)).map(([, args, title]) => simCheck(args, title))],
+    layers: (f) => [snapshots, ...IOS_FEATURE_SCREENS.filter(([re]) => re.test(f)).map(([, screens]) => walkIos(screens))],
   },
   { name: "ios package config", match: /^ios\/(package\.json|tsconfig[^/]*\.json)$/, layers: () => [bunIn("ios"), typecheck] },
 ];

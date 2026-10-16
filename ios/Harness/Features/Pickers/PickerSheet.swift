@@ -4,7 +4,7 @@ import SwiftUI
 /// The page sheet behind the searchable pickers (model, branch): Cancel (or another `leading`
 /// control), the title, a trailing accessory (refresh / spinner), a search field pinned under the bar with an optional problem
 /// line, and the list. The search field is our own rather than `.searchable` so it can be mono
-/// (branches), focus on open, and carry the AX label sim-check looks for.
+/// (branches), focus on open, and carry the AX label the walkthrough looks for.
 struct PickerSheet<Content: View, Leading: View, Trailing: View>: View {
     let title: String
     @Binding var query: String
@@ -65,7 +65,7 @@ struct PickerSheet<Content: View, Leading: View, Trailing: View>: View {
     }
 
     /// The leading control, the title and the trailing accessory in the sheet itself: AXe doesn't
-    /// see a sheet's toolbar items, and sim-check taps them by label.
+    /// see a sheet's toolbar items, and the walkthrough taps them by label.
     private var header: some View {
         HStack(spacing: 10) {
             leading

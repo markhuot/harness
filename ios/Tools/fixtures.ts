@@ -1,4 +1,4 @@
-// Fixtures the iPhone worlds share (the walkthrough's and sim-check's): a long file for the file
+// Fixtures the walkthrough's iPhone worlds share: a long file for the file
 // viewer to scroll to a linked range, and the plan-usage report the app reads through a proxy.
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";

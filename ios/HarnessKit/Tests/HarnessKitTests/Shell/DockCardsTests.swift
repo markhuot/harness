@@ -33,7 +33,7 @@ struct DockCardsTests {
     }
 }
 
-/// What a docked card says, which sim-check's JOINS check used to find by label.
+/// What a docked card says, which the walkthrough's JOINS check used to find by label.
 @Suite("Dock labels")
 struct DockLabelsTests {
     @Test func aCardIsNamedByItsRefAndTitleThenDocked() {

@@ -1,7 +1,7 @@
 import Testing
 @testable import HarnessKit
 
-/// A ticket docked and reopened lands back at its scroll position (sim-check's "docked with the
+/// A ticket docked and reopened lands back at its scroll position (the walkthrough's "docked with the
 /// keyboard up reopens from its card at its scroll position" used to scroll, dock and reopen to see it).
 @Suite("ScrollRestore")
 struct ScrollRestoreTests {

@@ -28,7 +28,7 @@ struct RouteScreen: View {
 }
 
 /// A sheet's content in its own NavigationStack. Every sheet but Projects gets a Cancel (✕)
-/// button, which sim-check's tapHeaderCancel looks for; Projects closes by its grabber, and New
+/// button, which the walkthrough's tapHeaderCancel looks for; Projects closes by its grabber, and New
 /// session draws its own (it asks before dropping a draft).
 struct SheetHost: View {
     let sheet: SheetRoute

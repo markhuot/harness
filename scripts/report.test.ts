@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { DROPPED, HARNESSKIT, PORTED, dispositionOf, label } from "./report-dispositions";
-import { extractAppChecks, extractBunTests, extractSimChecks, extractSnapshotTests, extractSwiftTests } from "./report-extract";
+import { DROPPED, PORTED, dispositionOf } from "./report-dispositions";
+import { extractAppChecks, extractBunTests, extractSnapshotTests, extractSwiftTests } from "./report-extract";
 import { REPORT_PATH, areaOf, buildReport, collectRows, listFiles, rowsForFile } from "./report";
 
 const root = join(import.meta.dir, "..");
@@ -61,23 +61,6 @@ describe("extractors", () => {
     expect(rows.map((r) => [r.group, r.name])).toEqual([["ScreenSnapshotTests", "testBoard"]]);
   });
 
-  test("sim-check names resolve through constants and keep the enclosing function; the declaration itself isn't a check", () => {
-    const rows = extractSimChecks("sim-check.ts", [
-      'const OPEN = "a ticket link opens";',
-      "async function check(name: string) {}",
-      "async function sheetChecks() {",
-      '  await check("sheet one", async () => true);',
-      "  await check(OPEN, async () => true);",
-      "  await check(`${tab} opens`, async () => true);",
-      "}",
-    ].join("\n"));
-    expect(rows.map((r) => [r.group, r.name])).toEqual([
-      ["sheetChecks", "sheet one"],
-      ["sheetChecks", "a ticket link opens"],
-      ["sheetChecks", "${tab} opens"],
-    ]);
-  });
-
   test("Mac checks find a name on the line after `check(`", () => {
     const rows = extractAppChecks("x-check.ts", ['check("one", ok);', "check(", '  "two",', "  ok);"].join("\n"));
     expect(rows.map((r) => r.name)).toEqual(["one", "two"]);
@@ -85,52 +68,8 @@ describe("extractors", () => {
 });
 
 describe("dispositions", () => {
-  const sim = (group: string, name = "n") => ({ kind: "sim-check" as const, file: "ios/Tools/sim-check.ts", group, name });
-
-  test("the named losses are losses, everything undecided is open", () => {
-    expect(dispositionOf(sim("sheetChecks")).status).toBe("loss");
-    expect(dispositionOf(sim("keyboardChecksWithSoftwareKeyboard")).status).toBe("loss");
-    expect(dispositionOf(sim("stickChecks")).status).toBe("loss");
-    expect(dispositionOf(sim("interactionChains", "state survives a relaunch")).status).toBe("loss");
-    expect(dispositionOf(sim("interactionChains", "the palette opens")).status).toBe("open");
+  test("an undecided row is open", () => {
     expect(dispositionOf({ kind: "bun", file: "service/src/x.test.ts", group: "", name: "x" }).status).toBe("open");
-  });
-
-  test("a check a HarnessKit test pins is harnesskit by its name, ahead of its function's loss reason", () => {
-    const d = dispositionOf(sim("panelChecks", "a card's ✕ closes just its ticket without opening it"));
-    expect(d).toEqual({ status: "harnesskit", ref: "RouterSheetTests.closingADockedCardLeavesTheOtherCardsAndOpensNoPanel" });
-    expect(label(d)).toBe("HarnessKit: RouterSheetTests.closingADockedCardLeavesTheOtherCardsAndOpensNoPanel");
-    // The next check in the same function has no HarnessKit test: it keeps the function's reason.
-    expect(dispositionOf(sim("panelChecks", "dragging the panel's edge resizes it, stopping at 25% and 80% of the window")).status).toBe("loss");
-    // Even with a keyboard in its name.
-    expect(dispositionOf(sim("keyboardChecksWithSoftwareKeyboard", "the composer sits on the keyboard with another ticket docked, and the dock steps aside")).status).toBe("harnesskit");
-  });
-
-  test("a restore is not a relaunch, and the usage filter is a walkthrough screen", () => {
-    const reason = (name: string, group: string) => (dispositionOf(sim(group, name)) as { reason: string }).reason;
-    expect(reason("docking stashes the panel as a card in the bottom-right corner, and the card restores its path", "panelChecks")).toMatch(/^dropped \(human decision\): the iPad's corner cards/);
-    expect(reason("holding the dragged panel in the trailing 40% shows the ghost card and docks it on release; the card restores it at its root", "panelChecks")).toMatch(/^dropped \(human decision\): the iPad's corner cards/);
-    // The five the human kept are carried by a walkthrough screen, whatever their function's loss reason says.
-    expect(dispositionOf(sim("panelChecks", "a board card opens its ticket in the side panel against the trailing edge"))).toEqual({ status: "walkthrough", ref: "next/walkthrough/ios.ts › ipad side panel" });
-    expect(reason("state survives a relaunch", "interactionChains")).toMatch(/quit-and-relaunch/);
-    expect(dispositionOf(sim("usageChecks", "usage: the filter shows one driver, and the choice survives a relaunch"))).toEqual({
-      status: "walkthrough",
-      ref: "next/walkthrough/ios.ts › plan usage",
-    });
-  });
-
-  test("every HarnessKit test a disposition names exists", () => {
-    const tests = listFiles().filter((f) => f.startsWith("ios/HarnessKit/Tests/") && f.endsWith(".swift")).map((f) => ({ f, src: readFileSync(join(root, f), "utf8") }));
-    expect(HARNESSKIT.length).toBeGreaterThan(15);
-    for (const h of HARNESSKIT) {
-      expect(h.tests.length).toBeGreaterThan(0);
-      for (const t of h.tests) {
-        const [suite, fn] = t.split(".") as [string, string];
-        const file = tests.find((x) => new RegExp(`\\b(?:struct|class|enum)\\s+${suite}\\b`).test(x.src));
-        expect(file, `${t}: no suite ${suite}`).toBeDefined();
-        expect(new RegExp(`\\bfunc\\s+${fn}\\b`).test(file!.src), `${t}: ${suite} has no ${fn}`).toBe(true);
-      }
-    }
   });
 
   test("HarnessKit's swift tests are kept", () => {
@@ -152,7 +91,6 @@ describe("report", () => {
 
   test("areas split service and shared by package directory", () => {
     expect(areaOf({ kind: "bun", file: "service/src/orchestrator/a.test.ts", group: "", name: "" })).toBe("service/src/orchestrator");
-    expect(areaOf({ kind: "sim-check", file: "ios/Tools/sim-check.ts", group: "", name: "" })).toBe("ios sim-check");
   });
 
   test("an area is deletable only when it has no open rows", () => {

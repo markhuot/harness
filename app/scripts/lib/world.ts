@@ -4,7 +4,7 @@
 // HELLOHARNESS rename case, SITE with a deep Done column, MH with linked remote IDs), a ticket in
 // every state, spec history with media, approvals, context gauges, watchers and triage sessions.
 //
-// Rows are written with SQL, the way sim-check seeds its database, because a state like "blocked
+// Rows are written with SQL because a state like "blocked
 // on a classifier's approval" or "completed 40 minutes ago" is what a run would have left behind,
 // not something an API call can ask for. Run state the daemon would sweep at startup (a run going)
 // goes in after it is up. `bun run --cwd app world` boots one for development.

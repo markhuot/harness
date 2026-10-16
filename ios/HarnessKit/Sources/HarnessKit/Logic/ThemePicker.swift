@@ -88,7 +88,7 @@ public enum ThemePicker {
     }
 
     /// Theme picks from a settings deep link (harness://settings?darkTheme=catppuccin-mocha&theme=dark),
-    /// used to share a setup and by ios/Tools/sim-check.ts. Only valid values come back; anything
+    /// used to share a setup and by next/walkthrough/ios.ts. Only valid values come back; anything
     /// else is dropped rather than falling back, so a bad link changes nothing.
     ///
     /// `params` is the link's params: a string, or an array for a repeated param (which is dropped).

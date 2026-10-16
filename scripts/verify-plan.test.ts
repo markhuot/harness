@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { FALLBACK_REASON, IOS_FEATURE_CHECKS, RENDERER_CHECKS, RENDERER_FALLBACK, allLayers, newTestsInOldDirs, planLayers } from "./verify-plan";
+import { FALLBACK_REASON, IOS_FEATURE_SCREENS, RENDERER_CHECKS, RENDERER_FALLBACK, allLayers, newTestsInOldDirs, planLayers } from "./verify-plan";
 
 const root = join(import.meta.dir, "..");
 const ids = (files: string[]) => planLayers(files).layers.map((l) => l.id);
@@ -30,7 +30,7 @@ describe("planLayers", () => {
   });
 
   test("editor source reruns the app's tests and both apps' file checks, since the editor is what they show", () => {
-    expect(ids(["editor/src/x.ts"])).toEqual(["bun:editor", "bun:app", "typecheck", "app-build", "app-check:file-pane-check", expect.stringMatching(/^sim-check/)]);
+    expect(ids(["editor/src/x.ts"])).toEqual(["bun:editor", "bun:app", "typecheck", "app-build", "app-check:file-pane-check", expect.stringMatching(/^walk:ios/)]);
   });
 
   test("an editor test alone needs only the editor's tests", () => {
@@ -67,18 +67,17 @@ describe("planLayers", () => {
     expect(ids(["app/scripts/groups-check.ts"])).toEqual(["bun:app", "typecheck", "app-build", "app-check:groups-check"]);
   });
 
-  test("an iPhone screen runs snapshots plus the sim-check run for its feature", () => {
-    expect(ids(["ios/Harness/Features/Prompts/PromptsScreen.swift"])).toEqual(["snapshots", "sim-check --only=prompt-editor"]);
-    expect(ids(["ios/Harness/App/TicketSheetHost.swift"])).toEqual(["snapshots", "sim-check --sheets"]);
+  test("an iPhone screen runs snapshots plus the walkthrough screens for its feature", () => {
+    expect(ids(["ios/Harness/Features/Prompts/PromptsScreen.swift"])).toEqual(["snapshots", "walk:ios prompt editor,prompt variable chip"]);
+    expect(ids(["ios/Harness/App/TicketSheetHost.swift"])).toEqual(["snapshots", "walk:ios ticket sheet,sheet dock drag,dock stack,docked ticket restores"]);
   });
 
-  test("an iPhone screen with no sim-check chain gets snapshots only", () => {
+  test("an iPhone screen with no walkthrough screen gets snapshots only", () => {
     expect(ids(["ios/Harness/Features/Inbox/InboxScreen.swift"])).toEqual(["snapshots"]);
   });
 
-  test("project.yml and sim-check itself run the walk-through", () => {
-    expect(ids(["ios/project.yml"])).toEqual(["snapshots", "sim-check"]);
-    expect(ids(["ios/Tools/sim-check.ts"])).toEqual(["bun:ios", "typecheck", "sim-check"]);
+  test("project.yml runs the whole walkthrough", () => {
+    expect(ids(["ios/project.yml"])).toEqual(["snapshots", "walk:ios"]);
   });
 
   test("other ios tooling runs the ios tests, no simulator", () => {
@@ -101,7 +100,7 @@ describe("planLayers", () => {
 
   test("light layers come before app checks, which come before simulator layers", () => {
     const got = ids(["ios/Harness/Features/Files/FileViewerScreen.swift", "app/src/renderer/views/PlanUsage.tsx", "service/src/x.ts"]);
-    expect(got).toEqual(["bun:app", "bun:service", "typecheck", "app-build", "app-check:plan-usage-check", "snapshots", "sim-check --only=file-link,save-on-blur,file-edit"]);
+    expect(got).toEqual(["bun:app", "bun:service", "typecheck", "app-build", "app-check:plan-usage-check", "snapshots", "walk:ios file link,file editor save,file relink"]);
   });
 
   test("docs-only diffs plan nothing, on purpose", () => {
@@ -126,12 +125,9 @@ describe("the mapping points at things that exist", () => {
   const checks = new Set([...RENDERER_CHECKS.map(([, n]) => n), RENDERER_FALLBACK]);
   for (const name of checks) test(`app/scripts/${name}.ts exists`, () => expect(existsSync(join(root, "app/scripts", `${name}.ts`))).toBe(true));
 
-  const simCheck = readFileSync(join(root, "ios/Tools/sim-check.ts"), "utf8");
-  const mapped = IOS_FEATURE_CHECKS.flatMap(([, args]) => args);
-  for (const arg of mapped) {
-    if (arg.startsWith("--only=")) {
-      for (const name of arg.slice(7).split(",")) test(`sim-check has a chain named ${name}`, () => expect(simCheck).toContain(`chain("${name}"`));
-    } else test(`sim-check documents ${arg}`, () => expect(simCheck).toContain(`//   ${arg}`));
+  const walkthrough = readFileSync(join(root, "next/walkthrough/ios.ts"), "utf8");
+  for (const name of new Set(IOS_FEATURE_SCREENS.flatMap(([, screens]) => screens))) {
+    test(`the walkthrough has a screen named ${name}`, () => expect(walkthrough).toContain(`w.screen("${name}"`));
   }
 
   test("every RENDERER_CHECKS pattern matches a real renderer file", () => {
@@ -143,7 +139,7 @@ describe("the mapping points at things that exist", () => {
 
 describe("allLayers", () => {
   test("runs every package, swift test, the given app checks and both simulator layers", () => {
-    expect(allLayers(["smoke", "groups-check"]).map((l) => l.id)).toEqual(["bun:all", "typecheck", "next", "swift-test", "app-build", "app-check:smoke", "app-check:groups-check", "snapshots", "sim-check"]);
+    expect(allLayers(["smoke", "groups-check"]).map((l) => l.id)).toEqual(["bun:all", "typecheck", "next", "swift-test", "app-build", "app-check:smoke", "app-check:groups-check", "snapshots", "walk:ios"]);
   });
 });
 

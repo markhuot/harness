@@ -1,6 +1,6 @@
 // One way to run the real service for tests, check scripts and dev tools: spawn service/src/daemon.ts
 // with the dummy driver in a throwaway HARNESS_HOME, wait until it answers, hand back its API, and
-// stop it (and the Chrome it launched) without leaving files behind. sim-check, dev-sim and the app's
+// stop it (and the Chrome it launched) without leaving files behind. dev-sim, the walkthrough and the app's
 // drive scripts all start their daemons here. Not imported by production code.
 
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
@@ -13,7 +13,7 @@ export const daemonEntry = join(repoRoot, "service", "src", "daemon.ts");
 /**
  * Poll `fn` until it returns something truthy. Errors it throws are retried; the last one is
  * reported on timeout. `beforeEach` runs before every attempt and may throw to give up early
- * (sim-check's per-check time cap).
+ * (a walkthrough screen's time cap).
  */
 export async function until<T>(what: string, fn: () => Promise<T | undefined | false | null>, ms = 8000, every = 100, beforeEach?: () => void): Promise<T> {
   const end = Date.now() + ms;
@@ -32,7 +32,7 @@ export async function until<T>(what: string, fn: () => Promise<T | undefined | f
 }
 
 /**
- * A port nothing is listening on. With `pool` it picks inside that range (a kept sim-check daemon
+ * A port nothing is listening on. With `pool` it picks inside that range (a kept dev-sim daemon
  * holds its port indefinitely, and a fixed range keeps them findable); otherwise the OS picks.
  */
 export function freePort(pool?: { from: number; span: number }): number {
@@ -120,7 +120,7 @@ export type StartDaemonOptions = {
   /**
    * Stop the daemon (and sweep its Chrome) when this process exits or gets SIGINT/SIGTERM/SIGHUP,
    * so a killed check leaves no orphan. Default true; pass false for a daemon meant to outlive
-   * the run (sim-check --keep).
+   * the run (dev-sim --keep).
    */
   stopOnExit?: boolean;
   /** The script to run instead of the service's daemon (for tests of this module). */

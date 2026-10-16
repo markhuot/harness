@@ -39,8 +39,8 @@ bun run sim with-lock -- sh -c 'xcrun simctl install "$SIM_UDID" ios/build/dd/Bu
 Or open `Harness.xcodeproj` in Xcode and press Run.
 
 `bun ios/Tools/build.ts sim` (from the repo root) runs XcodeGen and builds the Release
-configuration for the simulator without optimization (`-Onone`, one file at a time: a clean build takes about 40 s instead of 120 s; `--optimized` turns it back on, and `sim-check --memory` does), ad-hoc signed (the simulator only grants the Keychain to a signed app) and arm64 only, into
-`ios/build/dd/Build/Products/Release-iphonesimulator/Harness.app`. That's the build sim-check
+configuration for the simulator without optimization (`-Onone`, one file at a time: a clean build takes about 40 s instead of 120 s; and `--optimized` turns it back on), ad-hoc signed (the simulator only grants the Keychain to a signed app) and arm64 only, into
+`ios/build/dd/Build/Products/Release-iphonesimulator/Harness.app`. That's the build the walkthrough
 will drive. Install it with `simctl` and launch `com.markhuot.harness`.
 
 ## ios/Tools/build.ts
@@ -147,47 +147,34 @@ token path and pid) until Ctrl-C. `--keep` lets go of the simulator lock first, 
 may reinstall the app in the meantime.
 
 dev-sim checks the screen with [AXe](https://github.com/cameroncooke/AXe)
-(`brew install cameroncooke/axe/axe`; it refuses to run without it), as sim-check does. After
+(`brew install cameroncooke/axe/axe`; it refuses to run without it), as the walkthrough does. After
 each `openurl` it taps Open on iOS's "Open in “Harness”?" prompt, which the first link on a fresh
 simulator stops at. Pairing counts only once the board's column chips ("Planning, 1") show, and a
 link only once the screen changes. Otherwise the run exits 1 with the labels it saw, before any
 screenshot, and it cancels a leftover prompt first, so a stale pair link can't be accepted later.
 To read the screen yourself, `axe describe-ui` lists the AXLabels. It needs the Xcode shim that
-dev-sim and sim-check create:
-`DEVELOPER_DIR=~/Library/Caches/harness-sim-check/xcode-shim/Xcode.app/Contents/Developer axe describe-ui --udid <udid>`.
+dev-sim and the walkthrough create:
+`DEVELOPER_DIR=~/Library/Caches/harness-sim/xcode-shim/Xcode.app/Contents/Developer axe describe-ui --udid <udid>`.
 
 `--seed-only [--keep]` only starts and seeds the daemon and prints what it seeded, without a
 simulator, build or app.
 
-`ios/Tools/sim-check.ts` validates the app by real taps on the same simulator and under the same lock
-(validation takes no screenshots; shots are opt-in with `--screens`, `--only=<name>` or
-`--shot=<link>`):
+`next/walkthrough/ios.ts` validates the app by real taps on a shared simulator and under its lock. It
+takes no screenshots (`WALK_SHOTS=<dir>` saves one of each failing screen):
 
 ```sh
-bun ios/Tools/sim-check.ts --no-build --only=approve-and     # one check (or: bun run --cwd ios sim-check …)
-bun ios/Tools/sim-check.ts --no-build --only=connect          # one catalog screen, shot light and dark
-bun ios/Tools/sim-check.ts --no-build --shot='harness://ticket/{headings}?tab=spec'
-bun ios/Tools/sim-check.ts --sheets --keep                    # leave the daemon, seeds and paired app running
-bun ios/Tools/sim-check.ts --sheets --reuse --grep="dirty file"   # then one check, in seconds
+bun run walk:ios                                   # every screen, one linear pass
+bun run walk:ios --no-build --only="approve and…"  # one screen, on the last build (names are the w.screen("…") calls)
+bun run walk:ipad                                  # the iPad's own layouts, on harness-shared-ipad
 ```
 
-`--grep=<pattern>` (a case-insensitive substring, or `/regex/flags`) runs only the checks whose names
-match. A check that depends on what an earlier one left on screen declares it with `needs` in
-`check()`, and the earlier checks run first as setup. `--reuse` attaches to the last `--keep` run's
-daemon, seeded tickets and paired app instead of building, installing, seeding and pairing (it uses
-the app already built; `--rebuild` builds first). A changed app is reinstalled and paired again
-against the same daemon; with nothing that fits it says why and does a full run. It keeps its state
-too. `bun run sim reap --kept` stops kept daemons and removes their folders.
-
-The simulator build is compiled with `SIM_CHECK`, which adds a debug state probe: the app writes its
+The simulator build is compiled with `DEBUG_PROBE`, which adds a debug state probe: the app writes its
 router, dock, editor and "settled" state as JSON into its container (ARCHITECTURE.md § Debug state
-probe). sim-check asserts on it (`probe`, `probeUntil`) and waits on it (`atRest`) instead of sleeping.
+probe). The walkthrough asserts on it (`probe`, `probeUntil`) and waits on it (`atRest`) instead of sleeping.
 A release build has none of it.
 
-It builds with `build.ts sim` (skip with `--no-build`), installs
-`ios/build/dd/Build/Products/Release-iphonesimulator/Harness.app` and, for a shot run, saves screenshots to
-`ios/build/screens/` (`--ipad`: `ios/build/screens-ipad/`). `--udid` still names a specific
-existing simulator. `--ipad` runs on `harness-shared-ipad` (an iPad Pro 11-inch), which stays booted between
-runs like `harness-shared`, so an iPad run skips creating and installing on a fresh simulator. The header of `sim-check.ts` lists every mode.
+The walkthrough builds with `build.ts sim` (skip with `--no-build`) and installs
+`ios/build/dd/Build/Products/Release-iphonesimulator/Harness.app`. `--ipad` runs on `harness-shared-ipad` (an iPad Pro 11-inch),
+which stays booted between runs like `harness-shared`, so an iPad run skips creating and installing on a fresh simulator.
 
 When the ticket is done, delete `ios/build` and `ios/HarnessKit/.build`. Leave the simulator alone.

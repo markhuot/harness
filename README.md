@@ -78,23 +78,15 @@ desktop agree on keys, reducers, themes and markdown. See [ios/README.md](ios/RE
   replaces a TestFlight or release install on the same device. Use
   `DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer` when `xcode-select` points
   at the Command Line Tools.
-- **Check on the simulator:** `bun ios/Tools/sim-check.ts` (or `bun run --cwd ios sim-check`)
-  builds the app for the simulator, runs it against a throwaway daemon and validates what
-  needs a simulator by real taps (via [AXe](https://github.com/cameroncooke/AXe)): gestures,
-  sheets and docking, the keyboard, scrolling, a relaunch, crashes. It takes no screenshots; logic
-  such as routing and request bodies lives in `swift test` and the service's `bun test`.
-  Screenshots are opt-in: `--screens` shoots the whole catalog (light and dark, to
-  `ios/build/screens/`), `--only=<name>` shoots a catalog entry or runs one check, and
-  `--shot='harness://ticket/{headings}?tab=spec'` takes one pair of any route
-  (`--prepare='scroll:Label;tap:Label'` reaches a state a link can't). `--themes=catppuccin-mocha,…`
-  adds board + settings shots per color theme. It runs on the shared `harness-shared` simulator
-  (iOS 27.0) and holds its lock for the run, so other agents wait their turn. `--shards=N` splits
-  the screens across extra "sim-check 2" … "sim-check N" simulators. `--sheets`, `--ipad`,
-  `--ipad --sheets`, `--memory` and the other modes in the header of `ios/Tools/sim-check.ts` each
-  validate one area. `--grep=<pattern>` runs only the checks whose names match, and `--keep` then
-  `--reuse` reattaches to the kept daemon, seeds and app so one check reruns in seconds
-  (`sim-check --help` lists every flag; `bun run sim reap --kept` clears kept runs).
-  `ios/build/screens/timings.json` shows where the time went.
+- **Check on the simulator:** `bun run walk:ios` (the iPhone walkthrough, `next/walkthrough/ios.ts`)
+  builds the app for the simulator, runs it against a throwaway daemon and validates what needs a
+  simulator by real taps (via [AXe](https://github.com/cameroncooke/AXe)): sheets and docking, the
+  keyboard, scrolling, mentions, attachments. One install and one linear pass, a report per screen.
+  It takes no screenshots; logic such as routing and request bodies lives in `swift test` and the
+  service's `bun test`. `--only=<screen>,…` runs some screens, `--no-build` reuses the last build,
+  `WALK_SHOTS=<dir>` saves a screenshot of each failing screen, and `bun run walk:ipad` runs the
+  iPad's own layouts on the shared iPad simulator. It runs on a shared simulator (iOS 27.0) and
+  holds its lock for the run, so other agents wait their turn.
   `bun ios/Tools/dev-sim.ts` is the dev loop: it seeds a daemon, installs a fresh build and pairs it.
 - **Simulator:** `bun run sim` (`ios/Tools/sim.ts`) manages the small pool of simulators everyone shares
   (`harness-shared`, `harness-shared-2`; `HARNESS_SIM_POOL_SIZE` sets how many). `ensure` creates `harness-shared` (iPhone 18 Pro, pinned to the iOS 27.0 runtime; it never falls
@@ -256,13 +248,12 @@ built-in plugin UIs, and the service also builds them on start when they're miss
 ## Tests
 
 `bun run verify` (repo root) runs the layers your diff needs: it maps the changed files to bun tests,
-typecheck, `swift test`, the matching Mac app check and the iPhone snapshot and sim-check runs, and
+typecheck, `swift test`, the matching Mac app check and the iPhone snapshot and walkthrough runs, and
 exits non-zero if any fail. `--dry-run` prints the plan and why, `--all` runs everything, and
 `--base=<ref>` diffs against another branch. The mapping is `scripts/verify-plan.ts`. The layers
 by hand:
 
-`bun run nightly` runs everything `verify --all` covers, with the full sim-check walk-through on two
-shards (`--shards=2`). The watcher in `service/examples/watchers/nightly.json` runs it from the main
+`bun run nightly` runs everything `verify --all` covers, with the full iPhone walkthrough. The watcher in `service/examples/watchers/nightly.json` runs it from the main
 checkout once a day (add it in Settings → Watchers; adjust `cwd` to your checkout). All
 green prints nothing (exit 4, "nothing to report"). A failure prints the failing layer, the failing
 check names and the tail of its log to the Inbox, where triage dispatches it to a ticket in the HARNESS
