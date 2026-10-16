@@ -1,5 +1,5 @@
 import type { DriverInfo, ModelInfo } from "@harness/shared";
-import type { Driver, DriverEvent, RunRequest } from "../../service/src/drivers/types";
+import { executeTool, type Driver, type DriverEvent, type RunRequest } from "../../service/src/drivers/types";
 
 /** A latch the test opens when it wants a scripted run to go on. */
 export interface Gate {
@@ -45,7 +45,7 @@ function abortError(): Error {
  * throws AbortError, the way the real drivers do), a function to run (to read the request or
  * poke the service mid-run), or an error to throw.
  */
-export type Step = DriverEvent | { wait: Gate } | { run: (req: RunRequest) => void | Promise<void> } | { throw: Error };
+export type Step = DriverEvent | { wait: Gate } | { event: (req: RunRequest) => DriverEvent | Promise<DriverEvent> } | { run: (req: RunRequest) => void | Promise<void> } | { throw: Error };
 
 export type Script = Step[] | ((req: RunRequest) => Step[]);
 
@@ -75,6 +75,8 @@ export interface FakeDriverOptions {
   id?: string;
   /** Takes human messages mid-run through RunRequest.input */
   supportsSteering?: boolean;
+  /** Asks permission through the harness's permission_prompt tool, as claude-code does */
+  usesPermissionPromptTool?: boolean;
   /** Scripts for the runs, in order; later runs get the default reply */
   scripts?: Script[];
 }
@@ -90,6 +92,7 @@ export class FakeDriver implements Driver {
   readonly description = "A scripted test driver";
   readonly hasBuiltinTools = true;
   readonly supportsSteering: boolean;
+  readonly usesPermissionPromptTool: boolean;
   readonly requests: RunRequest[] = [];
   private scripts: Script[];
   private waiters: { n: number; resolve: (req: RunRequest) => void }[] = [];
@@ -99,6 +102,7 @@ export class FakeDriver implements Driver {
   constructor(opts: FakeDriverOptions = {}) {
     this.id = opts.id ?? "fake";
     this.supportsSteering = opts.supportsSteering ?? false;
+    this.usesPermissionPromptTool = opts.usesPermissionPromptTool ?? false;
     this.scripts = [...(opts.scripts ?? [])];
   }
 
@@ -131,9 +135,30 @@ export class FakeDriver implements Driver {
     for (const step of typeof script === "function" ? script(req) : script) {
       if (req.signal.aborted) throw abortError();
       if ("wait" in step) await step.wait.wait(req.signal);
+      else if ("event" in step) yield await step.event(req);
       else if ("run" in step) await step.run(req);
       else if ("throw" in step) throw step.throw;
       else yield step;
     }
   }
+}
+
+/**
+ * What a native-loop agent does to call one of the run's tools: the `tool_call` event, the tool run
+ * for real through the run's own tool list and context (so it reaches the orchestrator exactly as
+ * an agent's call would), then the `tool_result` event. `then` sees the result.
+ */
+export function toolCall(name: string, input: unknown, then?: (result: Awaited<ReturnType<typeof executeTool>>) => void): Step[] {
+  const callId = `call-${name}`;
+  let result: Awaited<ReturnType<typeof executeTool>>;
+  return [
+    { type: "tool_call", callId, name, input },
+    {
+      run: async (req) => {
+        result = await executeTool(req.tools, name, input, req.toolContext);
+        then?.(result);
+      },
+    },
+    { event: () => ({ type: "tool_result", callId, name, result }) },
+  ];
 }

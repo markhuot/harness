@@ -75,11 +75,14 @@ export function makeOrchestrator(opts: Partial<OrchestratorOptions> & { driver?:
     events,
     logs,
     async settle() {
-      for (let i = 0; i < 100_000; i++) {
-        if (orch.isIdle()) return;
+      // Yielding to the event loop, not sleeping: a run can be waiting on a real subprocess (the
+      // review decision reads the checkout's git HEAD), which has no bus event to wait on. The
+      // limit only turns a hung run into a failure.
+      const giveUp = performance.now() + 30_000;
+      while (!orch.isIdle()) {
+        if (performance.now() > giveUp) throw new Error("orchestrator never became idle");
         await new Promise<void>((resolve) => setImmediate(resolve));
       }
-      throw new Error("orchestrator never became idle");
     },
     ticket: (key) => store.tickets.getByKey(key)!,
   };
