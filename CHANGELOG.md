@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261016.0747](https://github.com/markhuot/harness/releases/tag/app-20261016.0747) - 2026-10-16
+
 ### Added
 
 - The iPhone terminal's key bar has a keyboard key at the end that hides the keyboard, and shows it again when it's down.
