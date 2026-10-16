@@ -99,7 +99,7 @@ describe("itemRun", () => {
   const e = (role: TranscriptEntry["role"], runId: string | null, content: TranscriptEntry["content"]): TranscriptEntry => ({ id: "e", sessionId: "s", runId, seq: 1, role, content, createdAt: 42 });
   const entryItem = (entry: TranscriptEntry): TranscriptItem => ({ kind: "entry", entry });
   test("a run-less agent row says nothing about its run", () => {
-    expect(itemRun(entryItem(e("agent", null, { type: "text", text: "x" })))).toBeNull();
+    expect(itemRun(entryItem(e("assistant", null, { type: "text", text: "x" })))).toBeNull();
     expect(itemRun(entryItem(e("system", null, { type: "status", text: "Moved to review" })))).toBeNull();
   });
   test("a run-less human text message is its own run-less section", () => {
@@ -113,10 +113,10 @@ describe("itemRun", () => {
     expect(itemRun(entryItem(e("system", "r1", { type: "status", text })))).toEqual({ runId: "r1", startText: text, createdAt: 42 });
     expect(itemRun(entryItem(e("system", "r1", { type: "status", text, permission: {} as never })))?.startText).toBeNull();
     expect(itemRun(entryItem(e("system", "r1", { type: "status", text: "other" })))?.startText).toBeNull();
-    expect(itemRun(entryItem(e("agent", "r1", { type: "text", text })))?.startText).toBeNull();
+    expect(itemRun(entryItem(e("assistant", "r1", { type: "text", text })))?.startText).toBeNull();
   });
   test("a tool item uses its call's run and never has start text", () => {
-    const call = e("agent", "r9", { type: "tool_call", callId: "c", name: "Bash", input: {} }) as never;
+    const call = e("assistant", "r9", { type: "tool_call", callId: "c", name: "Bash", input: {} }) as never;
     expect(itemRun({ kind: "tool", call })).toEqual({ runId: "r9", startText: null, createdAt: 42 });
   });
 });

@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import type { Block } from "../../../shared/src/state/markdown";
 import { inlineTokens, mediaIn, parseBlocks, plainText } from "../../../shared/src/state/markdown";
 
-const item = (text: string, children: unknown[] = []) => ({ text, children });
+const item = (text: string, children: Block[] = []) => ({ text, children });
 
 describe("parseBlocks: paragraphs, headings, rules", () => {
   test("empty input has no blocks; blank lines split paragraphs; consecutive lines join with newlines", () => {

@@ -18,7 +18,7 @@ import {
   ticketLegacyChoice,
   withLegacyChoice,
 } from "../../../shared/src/phases";
-import type { RunKind } from "../../../shared/src/protocol";
+import type { Phase, RunKind } from "../../../shared/src/protocol";
 
 const cc = (model: string | null) => ({ driver: "claude-code", model });
 const api = (model: string | null) => ({ driver: "anthropic-api", model });
@@ -58,7 +58,7 @@ describe("adviserFor", () => {
 });
 
 test("runPhase maps kinds to phases; triage has none; unlisted kinds are work", () => {
-  const kinds: [RunKind, string | null][] = [["plan", "plan"], ["review", "review"], ["complete", "complete"], ["triage", null], ["work", "work"], ["conductor", "work"], ["chat", "work"], ["compact", "work"]];
+  const kinds: [RunKind, Phase | null][] = [["plan", "plan"], ["review", "review"], ["complete", "complete"], ["triage", null], ["work", "work"], ["conductor", "work"], ["chat", "work"], ["compact", "work"]];
   for (const [k, p] of kinds) expect(runPhase(k)).toBe(p);
 });
 

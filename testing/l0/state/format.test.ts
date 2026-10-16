@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { TranscriptEntry } from "../../../shared/src/protocol";
+import type { TranscriptItem } from "../../../shared/src/state/format";
 import {
   approvalToast,
   decisionSource,
@@ -30,7 +31,7 @@ const entry = (seq: number, content: TranscriptEntry["content"]): TranscriptEntr
   sessionId: "s",
   runId: null,
   seq,
-  role: "agent",
+  role: "assistant",
   content,
   createdAt: seq,
 });
@@ -201,7 +202,7 @@ describe("groupTranscript", () => {
       entry(3, { type: "tool_result", callId: "c", name: "Bash", output: [], isError: false }),
     ]);
     expect(items.map((i) => i.kind)).toEqual(["tool", "entry"]);
-    expect(items[0]!.kind === "tool" && items[0].result?.seq).toBe(3);
+    expect(items[0]!.kind === "tool" && (items[0] as Extract<TranscriptItem, { kind: "tool" }>).result?.seq).toBe(3);
   });
   test("an orphan result (no call seen) stays a plain entry", () => {
     const items = groupTranscript([entry(1, { type: "tool_result", callId: "x", name: "Bash", output: [], isError: false })]);
@@ -210,7 +211,7 @@ describe("groupTranscript", () => {
   });
   test("a call with no result has none", () => {
     const [item] = groupTranscript([entry(1, { type: "tool_call", callId: "c", name: "Bash", input: {} })]);
-    expect(item!.kind === "tool" && item.result).toBeUndefined();
+    expect(item!.kind === "tool" && (item as Extract<TranscriptItem, { kind: "tool" }>).result).toBeUndefined();
   });
 });
 
@@ -296,7 +297,7 @@ describe("fitRect / toPagePoint", () => {
     expect(fitRect(100, 200, 100, 100)).toEqual({ x: 0, y: 50, w: 100, h: 100 });
   });
   test("any zero dimension draws nothing", () => {
-    for (const args of [[0, 1, 1, 1], [1, 0, 1, 1], [1, 1, 0, 1], [1, 1, 1, 0]] as const) expect(fitRect(...args)).toEqual({ x: 0, y: 0, w: 0, h: 0 });
+    for (const args of [[0, 1, 1, 1], [1, 0, 1, 1], [1, 1, 0, 1], [1, 1, 1, 0]] as [number, number, number, number][]) expect(fitRect(args[0], args[1], args[2], args[3])).toEqual({ x: 0, y: 0, w: 0, h: 0 });
   });
   test("maps a local point to page pixels, inclusive of the edges", () => {
     const drawn = { x: 50, y: 0, w: 100, h: 100 };

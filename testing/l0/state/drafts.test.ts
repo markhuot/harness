@@ -169,7 +169,7 @@ describe("draftIsEmpty", () => {
     const changes: Partial<Ticket>[] = [
       { spec: "do it" },
       { promptAttachments: [{ id: "a", path: "/x", name: "x", source: "file", kind: "file", mimeType: "" }] },
-      { kind: "bug" as Ticket["kind"] },
+      { kind: "conductor" },
       { driver: "codex" },
       { model: "opus" },
       { phaseModels: { work: { driver: "claude-code", model: null } } },
@@ -246,7 +246,7 @@ describe("draftPatch", () => {
 
   test("only the changed fields appear; title is never sent", () => {
     expect(draftPatch(draft(), draft({ spec: "new", title: "Different" }))).toEqual({ spec: "new" });
-    expect(draftPatch(draft(), draft({ projectId: "p2", kind: "bug" as Ticket["kind"], permissionMode: "ask" }))).toEqual({ projectId: "p2", kind: "bug", permissionMode: "ask" });
+    expect(draftPatch(draft(), draft({ projectId: "p2", kind: "conductor", permissionMode: "ask" }))).toEqual({ projectId: "p2", kind: "conductor", permissionMode: "ask" });
   });
 
   test("null and undefined count as the same for optional fields", () => {
@@ -369,7 +369,7 @@ describe("draft branch picks", () => {
 });
 
 describe("ticketBranchChoice / ticketBranchHint / optionsNeedAttention", () => {
-  const proj = { path: "/Users/me/code", isGit: true, useWorktrees: true, baseBranch: null };
+  const proj = { path: "/Users/me/code", isGit: true, useWorktrees: true, baseBranch: null as string | null };
 
   test("a draft without a worktree works in the project directory, falling back when the branch is unknown", () => {
     const t = draft({ useWorktree: false });
