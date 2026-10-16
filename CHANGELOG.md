@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261016.1037](https://github.com/markhuot/harness/releases/tag/app-20261016.1037) - 2026-10-16
+
 ### Fixed
 
 - A terminal pane on the Mac uses the pane's full height. It had been stuck at the number of rows the shell already had, so a tall window or pop-out left the terminal short with empty space below, even with no other device connected.
