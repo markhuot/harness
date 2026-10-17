@@ -14,7 +14,7 @@ struct PromptAttachmentTile: Identifiable {
 
     var id: String { attachment.id.isEmpty ? attachment.path : attachment.id }
     /// Previewed as an image: by its kind, or because it's annotated (only images are).
-    var isImage: Bool { PromptAttachments.isImage(attachment) || attachment.annotation != nil }
+    var isImage: Bool { ViewRules.showsAsImage(attachment) }
     /// The human's notes on it (drawn over its thumbnail, listed under its row)
     var annotation: AttachmentAnnotation? { attachment.annotation.flatMap { $0.marks.isEmpty ? nil : $0 } }
 

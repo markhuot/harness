@@ -42,7 +42,7 @@ struct ProjectsSidebar: View {
         let totalOpen = counts.values.reduce(0, +)
         let groups = state.projectGroups()
         let groupCounts = BoardScreenRules.groupOpenCounts(counts, projects: projects)
-        let triaging = state.triageSessions().filter { $0.triageStatus == .triaging || $0.busy }.count
+        let triaging = ViewRules.triagingCount(state.triageSessions())
         let row = SidebarRow.current(tab: router.selectedTab, board: state.boardFilter(app.prefs.boardProject))
         let bg = column ? c.bgSidebar : c.bg
 

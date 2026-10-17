@@ -22,8 +22,7 @@ struct ExtensionSettingsScreen: View {
     @State private var folderPath = ""
 
     var body: some View {
-        let mine = list?.extensions.filter { $0.source != .chrome } ?? []
-        let others = list?.extensions.filter { $0.source == .chrome } ?? []
+        let (mine, others) = ViewRules.splitExtensions(list?.extensions ?? [])
         let waiting = list.map(Extensions.waiting) ?? 0
         Form {
             Section {

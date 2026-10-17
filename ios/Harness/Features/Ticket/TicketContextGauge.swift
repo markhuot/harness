@@ -44,7 +44,7 @@ struct TicketContextGauge: View {
         .menuOrder(.fixed)
         .buttonStyle(.plain)
         .disabled(!menu.opens)
-        .accessibilityLabel(compacting ? "Context, compacting" : gauge.summary + (gauge.missBadge.map { ", \($0)" } ?? ""))
+        .accessibilityLabel(gauge.accessibilityLabel(compacting: compacting))
         .accessibilityHint("Opens the session menu")
         .accessibilityIdentifier("ticket-context-gauge")
         .popover(item: $info) { which in

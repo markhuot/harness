@@ -209,8 +209,7 @@ private struct AttachmentViewerHeader: View {
                         .font(.scaled(size: 15, weight: .semibold))
                         .foregroundStyle(.white)
                     // Without a known size (an older service's spec media): only the position, then.
-                    let size = current.size.flatMap { $0 > 0 ? Attachments.formatSize(Double($0)) : nil } ?? ""
-                    Text([attachments.count > 1 ? "\(index + 1) of \(attachments.count)" : "", size].filter { !$0.isEmpty }.joined(separator: " · "))
+                    Text(ViewRules.viewerCaption(size: current.size, index: index, count: attachments.count))
                         .font(.scaled(size: 12.5))
                         .foregroundStyle(.white.opacity(0.6))
                 }

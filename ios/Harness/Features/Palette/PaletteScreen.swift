@@ -409,7 +409,7 @@ struct PaletteScreen: View {
             return
         }
         guard !Task.isCancelled else { return }
-        files = FileResults(key: filesKey(root, q), files: found.filter { $0.kind == .file })
+        files = FileResults(key: filesKey(root, q), files: ViewRules.fileResults(found))
     }
 }
 
@@ -420,15 +420,12 @@ enum PaletteCommandRecents {
     static let max = 8
 
     static func read() -> [String: Int] {
-        var out: [String: Int] = [:]
-        for (i, id) in (UserDefaults.standard.stringArray(forKey: key) ?? []).prefix(max).enumerated() { out[id] = i }
-        return out
+        ViewRules.recentRanks(UserDefaults.standard.stringArray(forKey: key) ?? [], limit: max)
     }
 
     @discardableResult
     static func push(_ id: String) -> [String: Int] {
-        let current = (UserDefaults.standard.stringArray(forKey: key) ?? []).filter { $0 != id }
-        UserDefaults.standard.set(Array(([id] + current).prefix(max)), forKey: key)
+        UserDefaults.standard.set(ViewRules.pushedRecent(id, onto: UserDefaults.standard.stringArray(forKey: key) ?? [], limit: max), forKey: key)
         return read()
     }
 }

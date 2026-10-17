@@ -57,11 +57,7 @@ struct BrowserPluginDebugScreen: View {
 
         /// The next ticket (by key) in this ticket's project that has a worktree.
         private func nextTicket(after ticket: Ticket) -> String? {
-            let keys = store.state.tickets.values
-                .filter { $0.projectId == ticket.projectId && $0.workdir != nil }
-                .map(\.key).sorted()
-            guard let i = keys.firstIndex(of: ticket.key), keys.count > 1 else { return nil }
-            return keys[(i + 1) % keys.count]
+            ViewRules.nextWorkdirTicket(after: ticket, in: Array(store.state.tickets.values))
         }
 
         var body: some View {

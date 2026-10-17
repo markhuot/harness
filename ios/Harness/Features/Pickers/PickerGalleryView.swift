@@ -23,8 +23,8 @@ struct PickerGalleryView: View {
     @State private var draft: Ticket?
 
     var body: some View {
-        let project = store.state.projects.values.sorted { $0.key < $1.key }.first { $0.isGit != false }
-        let ticket = project.flatMap { p in store.state.tickets.values.filter { $0.projectId == p.id && $0.status == .planning && $0.draft != true }.sorted { $0.key < $1.key }.first }
+        let project = ViewRules.galleryProject(Array(store.state.projects.values))
+        let ticket = ViewRules.galleryTicket(in: project, tickets: Array(store.state.tickets.values))
         ScrollViewReader { proxy in
             Form {
                 Section("Selects") {
