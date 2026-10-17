@@ -156,6 +156,23 @@ extension ScreenSnapshotTests {
         try await snapshot("conductor-hero", router: openTicket("HAR-26", .spec)) { RootView() }
     }
 
+    /// A child's ref sits on its own line above its title on the conductor's Tickets tab.
+    func testConductorTicketsTab() async throws {
+        var a = Self.extra(27, "L2 service API tests: in-process HTTP and /ws on port 0")
+        a.parentId = "t-26"
+        var b = Self.extra(28, "L3 contract tests: wire fixtures and Swift decoding")
+        b.parentId = "t-26"
+        b.dependsOn = ["HAR-27"]
+        let conductor = Self.extra(26, "Test strategy", kind: .conductor, driver: "claude-code", childCount: 2)
+        world.add([conductor, a, b])
+        world.store.dispatch(.drivers([Self.claude]))
+        // The tab spins until the conductor's detail has landed.
+        let session = Session(id: conductor.sessionId, key: conductor.key, kind: .ticket, ticketId: conductor.id, driver: conductor.driver,
+                              cwd: SnapshotWorld.project.path, createdAt: conductor.createdAt, updatedAt: conductor.updatedAt)
+        world.store.dispatch(.detail(TicketDetail(ticket: conductor, session: session, children: [a, b]), requestedKey: "HAR-26"))
+        try await snapshot("conductor-tickets", router: openTicket("HAR-26", .children)) { RootView() }
+    }
+
     // MARK: Transcript and spec layout
 
     /// A reply's list items show their text, not a bullet with a zero-width item.
