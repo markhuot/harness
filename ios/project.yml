@@ -165,6 +165,25 @@ targets:
         TEST_HOST: $(BUILT_PRODUCTS_DIR)/Harness.app/Harness
         BUNDLE_LOADER: $(TEST_HOST)
         ENABLE_TESTABILITY: YES
+  # The L4 screen tests (testing/README.md): the app's screens rendered from the shared world
+  # (testing/world) through the real client and stores, compared with reference images. The sources
+  # and references live in testing/ios, outside ios/. Hosted by the app because the screens are in
+  # the app target (an app can't be linked into a hostless bundle); run in Debug by
+  # `bun run testing ios`, never in a release build.
+  HarnessScreenTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: ../testing/ios/ScreenTests
+    dependencies:
+      - target: Harness
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.markhuot.harness.screentests
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/Harness.app/Harness
+        BUNDLE_LOADER: $(TEST_HOST)
+        ENABLE_TESTABILITY: YES
   # The widgets (ARCHITECTURE.md § Widgets). One set of sources builds both extensions: this one
   # for iPhone and iPad, embedded in the app, and HarnessMacWidgets for the Electron Mac app.
   HarnessWidgets:
@@ -246,6 +265,15 @@ schemes:
     build:
       targets:
         HarnessMacWidgets: all
+  HarnessScreens:
+    build:
+      targets:
+        Harness: all
+        HarnessScreenTests: [test]
+    test:
+      config: Debug
+      targets:
+        - HarnessScreenTests
   HarnessSnapshots:
     build:
       targets:

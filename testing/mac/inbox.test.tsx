@@ -22,7 +22,11 @@ describe("Inbox", () => {
     const m = await mount(<InboxView />, { hash: "#/inbox" });
     const badges = items(m).map((r) => text(r.querySelector(".badge")));
     expect(badges).toEqual(["Triaging", "Dispatched", "Declined", "Failed"]);
-    // A session still being triaged shows a spinner; the finished ones don't.
+    expect(items(m).some((r) => r.querySelector(".spinner") !== null)).toBe(false);
+  });
+
+  test("a session whose agent is working shows a spinner on its badge", async () => {
+    const m = await mount(<InboxView />, { hash: "#/inbox", world: edited((w) => void (w.sessions.find((s) => s.key === "TRIAGE-1")!.busy = true)) });
     expect(items(m).map((r) => r.querySelector(".spinner") !== null)).toEqual([true, false, false, false]);
   });
 

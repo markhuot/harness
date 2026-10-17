@@ -11,11 +11,17 @@ async function runner(...args: string[]) {
 }
 
 describe("runner", () => {
-  test.each(["ios", "walk"])("%s fails until its layer is built, and says so", async (cmd) => {
-    const r = await runner(cmd);
+  test("walk fails until its layer is built, and says so", async () => {
+    const r = await runner("walk");
     expect(r.code).toBe(1);
-    expect(r.err).toContain(`testing ${cmd}`);
+    expect(r.err).toContain("testing walk");
     expect(r.err).toContain("isn't built yet");
+  });
+
+  test("ios refuses an option it doesn't know before it touches a simulator", async () => {
+    const r = await runner("ios", "--bogus");
+    expect(r.code).toBe(2);
+    expect(r.err).toContain("unknown option --bogus");
   });
 
   test("an unknown command fails and lists the real ones", async () => {

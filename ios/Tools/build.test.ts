@@ -123,6 +123,12 @@ test("parseArgs: device needs --device; verify needs a bundle id and one app", (
   expect(() => parseArgs([...verify, "--kind", "native", "a.app"])).toThrow("verify doesn't take --kind");
 });
 
+test("screens needs a derived-data directory and resolves it", () => {
+  expect(parseArgs(["screens", "--derived-data", "/tmp/dd"])).toEqual({ command: "screens", derivedData: "/tmp/dd" });
+  expect(() => parseArgs(["screens"])).toThrow(UsageError);
+  expect(() => parseArgs(["screens", "--derived-data", "/tmp/dd", "--record"])).toThrow(UsageError);
+});
+
 test("snapshots takes no flags", () => {
   expect(parseArgs(["snapshots"])).toEqual({ command: "snapshots" });
   expect(() => parseArgs(["snapshots", "--record"])).toThrow(UsageError);

@@ -10,6 +10,8 @@
 //   bun ios/Tools/build.ts snapshots                   Debug build-for-testing of the snapshot tests (HarnessSnapshotTests),
 //                                                      into ios/build/dd-snapshots; prints the .xctestrun path
 //                                                      (Tools/snapshots.ts, `bun run sim snapshots`, runs it)
+//   bun ios/Tools/build.ts screens --derived-data DIR  Debug build-for-testing of the L4 screen tests (HarnessScreenTests, testing/ios) into DIR;
+//                                                      prints the .xctestrun path (`bun run testing ios` runs it)
 //   bun ios/Tools/build.ts archive --build-number N    Release archive for devices (CFBundleVersion N),
 //                                                      signed automatically with team 47P4ZSALX4
 //   bun ios/Tools/build.ts export --method dev|testflight
@@ -42,6 +44,7 @@ export type Method = "dev" | "testflight";
 export type Options =
   | { command: "sim"; optimized: boolean }
   | { command: "snapshots" }
+  | { command: "screens"; derivedData: string }
   | { command: "archive"; buildNumber: string; archivePath: string }
   | { command: "export"; method: Method; archivePath: string; exportPath: string }
   | { command: "device"; device: string; launch: boolean }
@@ -74,6 +77,7 @@ export function parseArgs(argv: string[]): Options {
   const allowed: Record<string, string[]> = {
     sim: ["optimized"],
     snapshots: [],
+    screens: ["derived-data"],
     archive: ["build-number", "archive-path"],
     export: ["method", "archive-path", "export-path"],
     device: ["device", "launch"],
@@ -98,6 +102,8 @@ export function parseArgs(argv: string[]): Options {
       return { command, optimized: flags.has("optimized") };
     case "snapshots":
       return { command };
+    case "screens":
+      return { command, derivedData: resolve(need("derived-data")) };
     case "archive":
       return { command, buildNumber: buildNumber(), archivePath: resolve(str("archive-path") ?? DEFAULT_ARCHIVE) };
     case "export": {
@@ -271,6 +277,21 @@ function snapshots(): string {
   return join(products, file);
 }
 
+/** Builds the L4 screen tests and the app that hosts them for any simulator (iPhone and iPad share the products); returns the .xctestrun file. */
+function screens(derivedData: string): string {
+  prepare();
+  log("==> Building the screen tests (Debug, arm64, ad-hoc signed)");
+  run("screens", [
+    "xcodebuild", "-project", join(IOS, "Harness.xcodeproj"), "-scheme", "HarnessScreens", "-derivedDataPath", derivedData,
+    "-configuration", "Debug", "-sdk", "iphonesimulator", "-destination", "generic/platform=iOS Simulator",
+    "ARCHS=arm64", "ONLY_ACTIVE_ARCH=YES", "CODE_SIGN_IDENTITY=-", "CODE_SIGNING_REQUIRED=NO", "build-for-testing",
+  ]);
+  const products = join(derivedData, "Build/Products");
+  const file = [...new Bun.Glob("*.xctestrun").scanSync({ cwd: products })][0];
+  if (!file) fail(`no .xctestrun in ${products}`);
+  return join(products, file);
+}
+
 function archive(o: Extract<Options, { command: "archive" }>): string {
   prepare();
   log(`==> Archiving (Release, build ${o.buildNumber})`);
@@ -358,6 +379,7 @@ if (import.meta.main) {
       const out =
         o.command === "sim" ? sim(o.optimized)
         : o.command === "snapshots" ? snapshots()
+        : o.command === "screens" ? screens(o.derivedData)
         : o.command === "archive" ? archive(o)
         : o.command === "export" ? exportArchive(o)
         : device(o);

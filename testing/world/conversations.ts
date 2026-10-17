@@ -5,7 +5,7 @@ import { hoursAgo, minutesAgo } from "./time";
 /** One session per ticket, plus triage sessions for the inbox: one working, one dispatched, one declined, one failed. */
 export const sessions = [
   ...tickets.map((t) => session({ key: t.key, kind: "ticket", busy: t.busy, cwd: t.workdir ?? "/Users/dev/harness", updatedAt: t.updatedAt })),
-  session({ key: "TRIAGE-1", kind: "triage", title: "FOO-201 Checkout button misaligned on Safari", triageStatus: "triaging", busy: true, updatedAt: minutesAgo(1) }),
+  session({ key: "TRIAGE-1", kind: "triage", title: "FOO-201 Checkout button misaligned on Safari", triageStatus: "triaging", updatedAt: minutesAgo(1) }),
   session({ key: "TRIAGE-2", kind: "triage", title: "FOO-198 Add export to CSV", triageStatus: "dispatched", outcome: "Dispatched to WEB as WEB-1", updatedAt: minutesAgo(20) }),
   session({ key: "TRIAGE-3", kind: "triage", title: "FOO-150 Upgrade to Node 24", triageStatus: "declined", outcome: "Declined: already done in HARNESS-7", updatedAt: hoursAgo(3) }),
   session({ key: "TRIAGE-4", kind: "triage", title: "FOO-77 Intermittent 502", triageStatus: "failed", outcome: "The watcher's agent exited with an error", updatedAt: hoursAgo(6) }),
@@ -31,6 +31,16 @@ export const transcript = [
   entry({ id: "tr-7", sessionId: S2, runId: "run-HARNESS-2-work", seq: 7, role: "system", content: { type: "status", text: "Run started (work)" } }),
   entry({ id: "tr-8", sessionId: S2, runId: "run-HARNESS-2-work", seq: 8, role: "tool", content: { type: "tool_result", callId: "call-2", name: "Bash", output: [{ type: "text", text: "bun test: 3 failed" }], isError: true } }),
   entry({ id: "tr-9", sessionId: S2, runId: "run-HARNESS-2-work", seq: 9, role: "system", content: { type: "error", text: "The test run reported failures" } }),
+];
+
+const S5 = "session-HARNESS-5";
+/** A finished run's transcript on a ticket nothing is working on, so screens that show it hold still (no "Working…" spinner). */
+export const finishedTranscript = [
+  entry({ id: "tr5-1", sessionId: S5, runId: "run-HARNESS-5-work", seq: 1, role: "user", content: { type: "text", text: "The board takes two seconds to paint on a cold start. Can you cache the first page?" } }),
+  entry({ id: "tr5-2", sessionId: S5, runId: "run-HARNESS-5-work", seq: 2, role: "assistant", content: { type: "text", text: "I'll keep the last page of tickets on disk and paint it before the socket connects." } }),
+  entry({ id: "tr5-3", sessionId: S5, runId: "run-HARNESS-5-work", seq: 3, role: "tool", content: { type: "tool_call", callId: "c5-1", name: "Edit", input: { file_path: "src/board.ts" } } }),
+  entry({ id: "tr5-4", sessionId: S5, runId: "run-HARNESS-5-work", seq: 4, role: "tool", content: { type: "tool_result", callId: "c5-1", name: "Edit", output: [{ type: "text", text: "Edited src/board.ts" }], isError: false } }),
+  entry({ id: "tr5-5", sessionId: S5, runId: "run-HARNESS-5-work", seq: 5, role: "assistant", content: { type: "text", text: "Done: the board now paints from the cache, then refreshes when the socket connects." } }),
 ];
 
 export const activityLog = [

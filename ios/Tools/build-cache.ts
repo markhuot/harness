@@ -16,7 +16,7 @@ export function planXcodegen(o: { projectExists: boolean; lastHash: string | nul
 }
 
 /** The app's source folders; XcodeGen globs them, so adding or removing a file changes the project. */
-const GLOBBED = ["Harness", "Widgets/Sources", "Widgets/iOS", "Widgets/macOS", "HarnessSnapshotTests"];
+const GLOBBED = ["Harness", "Widgets/Sources", "Widgets/iOS", "Widgets/macOS", "HarnessSnapshotTests", "../testing/ios/ScreenTests"];
 /** Folders XcodeGen doesn't glob into a target (the snapshot tests' reference images). */
 const NOT_GLOBBED = /(^|\/)References(\/|$)/;
 

@@ -2,7 +2,7 @@
 //   l0      logic tests: bun (testing/l0) and Swift (testing/swift) side by side, each timed
 //   mac     L4 Mac: React views under happy-dom against the shared world (testing/mac)
 //   stress  L0–L2 repeatedly, shuffled, in parallel   (--rounds=N --parallel=M --seed=S)
-//   ios     the iPhone/iPad layer                       (not built yet: fails)
+//   ios     L4 iPhone and iPad screens from the world   (--iphone --ipad --only=Class/test --record --out=dir; see ios.ts)
 //   walk    the walkthrough                             (not built yet: fails)
 //   lint    the test-import lint
 //   (none)  the full gate: lint, L0, L1–L2, ios, walk. Nothing lands on main until it passes.
@@ -11,12 +11,12 @@ import { cpus } from "node:os";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { formatViolations, lintTestImports } from "./lint/imports";
+import { ios } from "./ios";
 import { stress } from "./stress";
 
 const dir = import.meta.dir;
 
 const STUBS: Record<string, string> = {
-  ios: "`testing ios` isn't built yet: the iPhone/iPad layer lands in a later ticket of HARNESS-529.",
   walk: "`testing walk` isn't built yet: the walkthrough lands in a later ticket of HARNESS-529.",
 };
 
@@ -125,6 +125,14 @@ async function run(cmd: string, args: string[] = []): Promise<number> {
   if (cmd === "lint") return lint();
   if (cmd === "l0") return l0();
   if (cmd === "mac") return mac();
+  if (cmd === "ios") {
+    try {
+      return await ios(args);
+    } catch (e) {
+      console.error((e as Error).message);
+      return 2;
+    }
+  }
   console.error(`Unknown command "${cmd}". Commands: l0, mac, stress, ios, walk, lint (none runs the full gate).`);
   return 2;
 }

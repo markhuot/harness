@@ -4,13 +4,15 @@
 // Change a value here and every layer's render changes with it.
 
 import type { ActivityEntry, Run, Ticket, TicketDetail, TranscriptEntry } from "@harness/shared";
-import { activityLog, runs, sessions, transcript } from "./conversations";
+import { activityLog, finishedTranscript, runs, sessions, transcript as liveTranscript } from "./conversations";
 import { changes, files } from "./files";
 import { projects } from "./projects";
 import { drivers, settings } from "./settings";
 import { LOCALE, NOW, TIME_ZONE } from "./time";
 import { tickets } from "./tickets";
 import { watchers } from "./watchers";
+
+const transcript = [...liveTranscript, ...finishedTranscript];
 
 export { NOW, TIME_ZONE, LOCALE } from "./time";
 

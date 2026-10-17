@@ -46,6 +46,12 @@ import HarnessKit
             let detail = try decode(TicketDetail.self, value)
             #expect(detail.ticket.key == key)
         }
+        let changes = try #require(Self.world()["changes"] as? [String: [String: Any]])
+        #expect(!changes.isEmpty)
+        for (_, pair) in changes {
+            _ = try decode(Changes.self, try #require(pair["changes"]))
+            _ = try decode(ChangesLog.self, try #require(pair["log"]))
+        }
         let files = try #require(Self.world()["files"] as? [String: Any])
         for view in try #require(files["views"] as? [Any]) { _ = try decode(FileView.self, view) }
         for diff in try #require(files["diffs"] as? [Any]) { _ = try decode(FileDiff.self, diff) }
