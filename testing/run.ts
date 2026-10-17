@@ -61,7 +61,8 @@ async function l0(): Promise<number> {
   const started = performance.now();
   const [bun, swift] = await Promise.all([
     timed(["bun", "test", "l0"], dir),
-    timed(["swift", "test", "--package-path", join(dir, "swift")], dir, developerDir()),
+    // ContractTests (L3) need the fixtures contract/swift.test.ts writes, so that wrapper runs them.
+    timed(["swift", "test", "--package-path", join(dir, "swift"), "--skip", "ContractTests"], dir, developerDir()),
   ]);
   const failed: string[] = [];
   for (const [name, r] of [["bun l0", bun], ["swift", swift]] as const) {
