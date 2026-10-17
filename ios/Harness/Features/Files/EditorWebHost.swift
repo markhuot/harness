@@ -40,9 +40,6 @@ final class EditorWebHost: NSObject {
         webView.isInspectable = true
         #endif
         super.init()
-        #if SIM_CHECK
-        DebugProbe.shared.register(self)
-        #endif
         // The content controller retains its handlers; the proxy keeps that from retaining us.
         content.add(WeakEditorHandler(self), name: Self.handlerName)
         webView.navigationDelegate = self
@@ -79,13 +76,6 @@ final class EditorWebHost: NSObject {
 
     /// Takes the keyboard down, which makes the page lose focus and say `blur`.
     func resignFocus() { webView.endEditing(true) }
-
-    /// The editor's state as the page reports it (the debug state probe); nil while none is open.
-    func probe() async -> DebugState.EditorState? {
-        guard ready, let json = await evaluate("JSON.stringify(window.harnessEditor ? window.harnessEditor.probe() : null)"),
-              let data = json.data(using: .utf8) else { return nil }
-        return try? JSONDecoder().decode(DebugState.EditorState.self, from: data)
-    }
 
     /// Run a script in the page and return its result as a string (DEBUG probes).
     func evaluate(_ script: String) async -> String? {

@@ -6,7 +6,7 @@
   "scripts": {
     "test": "bun test ./Tools",
     "typecheck": "tsc --noEmit -p .",
-    "fixtures": "bun ../shared/scripts/export-fixtures.ts",
+    "themes": "bun ../shared/scripts/export-themes.ts",
     "sim-check": "bun Tools/sim-check.ts"
   },
   "devDependencies": {

@@ -2,7 +2,7 @@ import Foundation
 
 // Port of shared/src/themes/index.ts (all but the CSS-only helpers: themeCssVars, themeCssText,
 // applyThemeVars). The data comes from Resources/themes.json, generated from shared/src by
-// shared/fixtures/resources/themes.ts, so the palettes are never hand-copied.
+// shared/scripts/export-themes.ts, so the palettes are never hand-copied.
 //
 // Appearance stays System / Light / Dark. The user also picks one light theme and one dark theme;
 // the active theme is the light pick when the resolved appearance is light, the dark pick when dark.

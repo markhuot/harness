@@ -40,9 +40,6 @@ final class TerminalWebHost: NSObject {
         webView.isInspectable = true
         #endif
         super.init()
-        #if SIM_CHECK
-        DebugProbe.shared.register(self)
-        #endif
         // The content controller retains its handlers; the proxy keeps that from retaining us.
         content.add(WeakTerminalHandler(self), name: Self.handlerName)
         webView.navigationDelegate = self
@@ -124,15 +121,6 @@ final class TerminalWebHost: NSObject {
 
     /// Takes the keyboard down.
     func resignFocus() { webView.endEditing(true) }
-
-    /// The terminal's state as the page reports it (the debug state probe); nil while none is open.
-    func probe() async -> DebugState.TerminalState? {
-        guard ready, let json = await evaluate("JSON.stringify(window.harnessTerminal ? window.harnessTerminal.probe() : null)"),
-              let data = json.data(using: .utf8) else { return nil }
-        guard var state = try? JSONDecoder().decode(DebugState.TerminalState.self, from: data) else { return nil }
-        state.webView = .init(width: Double(webView.bounds.width), height: Double(webView.bounds.height))
-        return state
-    }
 
     /// Run a script in the page and return its result as a string (DEBUG probes).
     func evaluate(_ script: String) async -> String? {

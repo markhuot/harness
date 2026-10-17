@@ -10,8 +10,8 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { startDaemon as startDaemonShared, until, type TestDaemon } from "@harness/shared/testing/daemon";
-import { GREETER_FILES, seedDummySettings, seedRepo } from "@harness/shared/testing/seed";
+import { startDaemon as startDaemonShared, until, type TestDaemon } from "./lib/daemon";
+import { GREETER_FILES, seedDummySettings, seedRepo } from "./lib/seed";
 import { buildPairUrl, type Project, type Ticket, type TicketDetail } from "@harness/shared";
 import { acquire, acquireReady, checkDisk, ensureDevice, freeGiB, isSharedDevice, SHARED_DEVICE, exportDeveloperDir, type Device } from "./sim";
 import { axeFor, hasAxe, screenKey, screenState } from "./axe";

@@ -44,9 +44,6 @@ struct RootView: View {
             .onAppear {
                 WindowDirectory.shared.mainActive(router, scene: scene)
                 syncDockWindow()
-                #if SIM_CHECK
-                DebugProbe.shared.attach(router)
-                #endif
             }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active { WindowDirectory.shared.mainActive(router, scene: scene) }
