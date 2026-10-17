@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { Settings } from "@harness/shared";
 import { tempDir } from "@harness/shared/testing";
 import { fakeContext } from "../tools/fakes";
-import { ClaudeCodeDriver, retryAfterMs, parseClaudeUsage, StreamJsonParser } from "./claude-code";
+import { CLAUDE_USAGE_EXPIRED, ClaudeCodeDriver, retryAfterMs, parseClaudeUsage, StreamJsonParser } from "./claude-code";
 import { PlanUsageError, type DriverEvent, type RunRequest } from "./types";
 
 const settings = (over: Partial<Settings> = {}): Settings => ({ defaultDriver: "claude-code", maxConcurrentRuns: 4, permissionMode: "ask", classifier: "off", defaultModels: {}, reviewModels: {}, anthropicApiKey: null, ...over });
@@ -146,6 +146,14 @@ describe("ClaudeCodeDriver.planUsage", () => {
   test("with no token anywhere it asks to sign in; when every token is refused it says the same", async () => {
     await expect(driver(() => json(200)).d.planUsage()).rejects.toThrow("Sign in to Claude Code to see plan usage");
     await expect(driver(() => json(401, {}), { login: ["a", "b"] }).d.planUsage()).rejects.toThrow("Sign in to Claude Code to see plan usage");
+  });
+
+  test("a login whose access token has lapsed says it expired, not that nobody signed in", async () => {
+    const expired = () => json(401, { type: "error", error: { type: "authentication_error", message: "OAuth access token has expired. Re-authenticate to continue." } });
+    await expect(driver(expired, { login: ["kc"] }).d.planUsage()).rejects.toThrow(CLAUDE_USAGE_EXPIRED);
+    // A refused setup token after an expired login doesn't hide the expiry
+    await expect(driver((t) => (t === "kc" ? expired() : json(401, {})), { login: ["kc", "file"] }).d.planUsage()).rejects.toThrow(CLAUDE_USAGE_EXPIRED);
+    await expect(driver((t) => (t === "stored" ? json(401, {}) : expired()), { stored: "stored", login: ["kc"] }).d.planUsage()).rejects.toThrow(CLAUDE_USAGE_EXPIRED);
   });
 
   test("a 429 carries the Retry-After the server sent", async () => {
