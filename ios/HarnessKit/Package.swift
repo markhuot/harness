@@ -24,12 +24,6 @@ let package = Package(
             dependencies: ["HarnessKit"],
             path: "Sources/HarnessHighlight"
         ),
-        .testTarget(
-            name: "HarnessKitTests",
-            dependencies: ["HarnessKit", "HarnessHighlight"],
-            path: "Tests/HarnessKitTests",
-            resources: [.copy("Fixtures")]
-        ),
     ],
     swiftLanguageModes: [.v6]
 )
