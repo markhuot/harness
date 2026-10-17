@@ -11,7 +11,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
-- On iPhone, the Tickets tab of a conductor now shows each ticket's ref on its own line above its title, so long titles get the full row width.
+- On iPhone, iPad and the Mac app, the Tickets tab of a conductor now shows each ticket's ref on its own line above its title, so long titles get the full row width.
 - On iPhone, tapping a ticket in the command palette now opens the ticket and leaves the palette closed, instead of the palette reappearing over the ticket.
 
 ### Changed
