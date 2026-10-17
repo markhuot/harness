@@ -12,4 +12,5 @@ ios/Widgets/*/Info.plist
 ios/build/
 DerivedData/
 .build/
+.walk/
 .swiftpm/

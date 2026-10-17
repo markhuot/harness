@@ -1,6 +1,6 @@
 // The shared world: one small, fixed set of data that every L4 test and the walkthrough render.
 // Mac L4 answers a fake client from it, iPhone/iPad L4 load world.json (generated from it) through
-// a fake transport, and the walkthrough loads the same data into the real daemon.
+// a fake transport. The walkthrough's own data (a checkout, a ticket, the dummy driver's markers) is in walk.ts.
 // Change a value here and every layer's render changes with it.
 
 import type { ActivityEntry, Run, Ticket, TicketDetail, TranscriptEntry } from "@harness/shared";

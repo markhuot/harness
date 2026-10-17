@@ -104,6 +104,31 @@ export function failureLines(output: string): string[] {
   return output.split("\n").filter((l) => /error:|\.(actual|diff)\.png|reference: |If the change is intended|XCTAssert|failed \(/.test(l));
 }
 
+/**
+ * The one build-for-testing both L4 iOS and the walkthrough run from: regenerates world.json, then
+ * builds the app and the test bundle for both devices unless the sources still match the stamp.
+ * Returns the .xctestrun and whether it was built or reused, or the message of what stopped it.
+ */
+export async function ensureBuild(): Promise<{ xctestrun: string; how: "built" | "reused" } | string> {
+  // The world the screens render is the one in TypeScript, as of now.
+  writeFileSync(WORLD_JSON, renderWorld());
+
+  mkdirSync(BUILD_DIR, { recursive: true });
+  const hash = sourceHash();
+  let xctestrun = currentBuild(hash);
+  let how: "built" | "reused" = "reused";
+  if (!xctestrun) {
+    const build = await run(["bun", "ios/Tools/build.ts", "screens", "--derived-data", DERIVED_DATA]);
+    if (build.code !== 0) {
+      return `✗ ios: the build failed\n${build.err.split("\n").slice(-40).join("\n")}`;
+    }
+    xctestrun = build.out.trim().split("\n").pop()!;
+    writeFileSync(STAMP, JSON.stringify({ hash, xctestrun } satisfies Stamp));
+    how = "built";
+  }
+  return { xctestrun, how };
+}
+
 export async function ios(argv: string[]): Promise<number> {
   const o = parseArgs(argv);
   const started = performance.now();
@@ -119,24 +144,13 @@ export async function ios(argv: string[]): Promise<number> {
     return 1;
   }
 
-  // The world the screens render is the one in TypeScript, as of now.
-  writeFileSync(WORLD_JSON, renderWorld());
-
-  mkdirSync(BUILD_DIR, { recursive: true });
-  const hash = sourceHash();
-  let xctestrun = currentBuild(hash);
-  let built = "reused";
-  if (!xctestrun) {
-    const build = await run(["bun", "ios/Tools/build.ts", "screens", "--derived-data", DERIVED_DATA]);
-    if (build.code !== 0) {
-      console.error(`✗ ios: the build failed\n${build.err.split("\n").slice(-40).join("\n")}`);
-      return 1;
-    }
-    xctestrun = build.out.trim().split("\n").pop()!;
-    writeFileSync(STAMP, JSON.stringify({ hash, xctestrun } satisfies Stamp));
-    built = "built";
+  const built = await ensureBuild();
+  if (typeof built === "string") {
+    console.error(built);
+    return 1;
   }
-  console.log(`✓ ios build ${built} [${lap()}]`);
+  const { xctestrun } = built;
+  console.log(`✓ ios build ${built.how} [${lap()}]`);
 
   const failures = mkdtempSync(join(tmpdir(), "harness-screens-"));
   let failed = false;

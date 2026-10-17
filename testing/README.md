@@ -47,3 +47,29 @@ socket (`WorldSocket`) replaced. A request the world has no route for fails the 
 - Animations are off, and spinners that repeat forever are frozen where they stand so a busy ticket
   can still settle. A render waits for the display's frames to stop changing and the transport to
   have nothing in flight, never for a fixed delay.
+
+## The walkthrough (`testing/walk`, `bun run testing walk`)
+
+One journey through the real apps, last in the gate: the service (dummy driver, port 0, a temp
+home), the built Mac app, and the iPhone and iPad apps from the same build-for-testing as L4 iOS.
+Seven steps, each building on the last: launch the Mac app; pair both phones by link; create a
+ticket on the Mac and see it on both phones; approve its plan and watch the dummy session arrive on
+all three; edit and save a file; open a terminal and pop it out into its own window (the
+renderer↔main IPC the L4 layers can't reach); relaunch each app and check the state survived.
+
+- Data for the journey is `testing/world/walk.ts` (a checkout, the ticket, the dummy driver's
+  markers), seeded through the real API.
+- Every wait is on an observable (a `/ws` event, a DOM mutation over DevTools, an accessibility
+  label through AXe, a process's output) and has a deadline that names the step and the last state
+  seen. There are no sleeps and no retries.
+- `walk/run.ts` builds the Mac app and the iOS app once, then takes the iPhone and iPad locks in a
+  fixed order (`bun run sim with-lock`) and runs `walk/main.ts` inside them. The simulators are left
+  booted; only the app installs are removed.
+- Every process the run starts is written to `testing/.walk/runs/<pid>.pids`. The run kills them on
+  the way out, on SIGINT and on SIGTERM, and the next run reaps what a killed one left.
+- `--out=dir` sets where the screenshots go (default `testing/.walk/shots`): named, fixed points
+  (`01-mac-board`, `04-transcript-iphone`, …). They are not compared with anything.
+- The drivers (`lib/daemon.ts`, `lib/cdp.ts` and `lib/mac.ts`, `lib/ios.ts`) are shared: other
+  tests that need the real service, the real Mac app or a simulator use them instead of a copy.
+- The terminal is a canvas, so what the shell printed is read on the service (`terminal.snapshot`
+  and `terminal.output` on `/ws`), not from the DOM.

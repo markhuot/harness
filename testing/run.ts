@@ -3,7 +3,7 @@
 //   mac     L4 Mac: React views under happy-dom against the shared world (testing/mac)
 //   stress  L0–L2 repeatedly, shuffled, in parallel   (--rounds=N --parallel=M --seed=S)
 //   ios     L4 iPhone and iPad screens from the world   (--iphone --ipad --only=Class/test --record --out=dir; see ios.ts)
-//   walk    the walkthrough                             (not built yet: fails)
+//   walk    L5 the walkthrough: Mac, iPhone and iPad  (--out=dir for the screenshots; see walk/run.ts)
 //   lint    the test-import lint
 //   (none)  the full gate: lint, L0, L1–L2, ios, walk. Nothing lands on main until it passes.
 
@@ -12,13 +12,10 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { formatViolations, lintTestImports } from "./lint/imports";
 import { ios } from "./ios";
+import { walk } from "./walk/run";
 import { stress } from "./stress";
 
 const dir = import.meta.dir;
-
-const STUBS: Record<string, string> = {
-  walk: "`testing walk` isn't built yet: the walkthrough lands in a later ticket of HARNESS-529.",
-};
 
 function flag(args: string[], name: string, fallback: number): number {
   const hit = args.find((a) => a.startsWith(`--${name}=`));
@@ -117,10 +114,7 @@ export async function main(args: string[]): Promise<number> {
 }
 
 async function run(cmd: string, args: string[] = []): Promise<number> {
-  if (cmd in STUBS) {
-    console.error(STUBS[cmd]);
-    return 1;
-  }
+  if (cmd === "walk") return walk(args);
   if (cmd === "stress") return runStress(args);
   if (cmd === "lint") return lint();
   if (cmd === "l0") return l0();
