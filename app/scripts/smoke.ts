@@ -1139,7 +1139,8 @@ try {
       `(() => { const r = document.querySelector(".child-row"); const k = r?.querySelector(".child-key")?.getBoundingClientRect(); const t = r?.querySelector(".child-title")?.getBoundingClientRect(); return !!k && !!t && k.bottom <= t.top + 1; })()`,
     );
     check("Tickets tab puts a child's ref on its own line above the title", refAboveTitle);
-    check("Tickets tab shows the progress header",(await progressText()) === "1/7 done · 1 in progress · 2 blocked · 2 review · 1 up next", await progressText());
+    await screenshot("/tmp/harness-538-mac-conductor-tickets.png");
+    check("Tickets tab shows the progress header", (await progressText()) === "1/7 done · 1 in progress · 2 blocked · 2 review · 1 up next", await progressText());
     check("Tickets tab badge counts the children", (await tabCount()) === "7", await tabCount());
     const waiting = await js<string>(`document.querySelector(".children-attn")?.textContent ?? ""`);
     check("header counts blocked/approval children only (reviews are the conductor's)", waiting === "2 tickets waiting on you", waiting);
