@@ -5,7 +5,7 @@
 
 import type { ActivityEntry, Run, Ticket, TicketDetail, TranscriptEntry } from "@harness/shared";
 import { activityLog, runs, sessions, transcript } from "./conversations";
-import { files } from "./files";
+import { changes, files } from "./files";
 import { projects } from "./projects";
 import { drivers, settings } from "./settings";
 import { LOCALE, NOW, TIME_ZONE } from "./time";
@@ -48,6 +48,7 @@ export const world = {
   settings,
   drivers,
   files,
+  changes,
   details: Object.fromEntries(tickets.map((t) => [t.key, ticketDetail(t.key)])) as Record<string, TicketDetail>,
 };
 

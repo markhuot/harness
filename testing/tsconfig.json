@@ -10,5 +10,6 @@
     "noEmit": true,
     "allowImportingTsExtensions": true
   },
-  "include": [".", "../service/src", "../shared/src"]
+  "include": [".", "../service/src", "../shared/src"],
+  "exclude": ["mac"]
 }

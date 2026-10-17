@@ -5,6 +5,11 @@
   "scripts": {
     "test": "bun test",
     "stress": "bun run.ts stress",
-    "lint": "bun run.ts lint"
+    "lint": "bun run.ts lint",
+    "mac": "bun run.ts mac"
+  },
+  "devDependencies": {
+    "@happy-dom/global-registrator": "^21.0.1",
+    "happy-dom": "^21.0.1"
   }
 }

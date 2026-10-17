@@ -230,6 +230,7 @@ export function StoreProvider({
   onTokenRotated,
   serviceDeferred = false,
   retryService,
+  client: injected,
 }: {
   baseUrl: string;
   token: string;
@@ -239,13 +240,15 @@ export function StoreProvider({
   retryService?: () => Promise<void>;
   /** Resolves once the connection carries the new token (Root re-reads the token file in Electron). */
   onTokenRotated?: (rotatedToken: string) => Promise<void>;
+  /** Talk to this client (and its `connect()` socket) instead of building one from baseUrl and token: the component tests' seam. */
+  client?: HarnessClient;
 }) {
   const [state, dispatch] = useReducer(reducer, initialState);
   const [epoch, setEpoch] = useState(0);
   const [serviceCode, setServiceCode] = useState<ServiceCode>(null);
   const [route, navigate] = useRoute();
   const listeners = useRef(new Set<EventListener>());
-  const client = useMemo(() => new HarnessClient({ baseUrl, token }), [baseUrl, token]);
+  const client = useMemo(() => injected ?? new HarnessClient({ baseUrl, token }), [injected, baseUrl, token]);
   const stateRef = useRef(state);
   stateRef.current = state;
   const boardProjectId = boardProjectOf(state, route);

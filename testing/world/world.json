@@ -1378,6 +1378,51 @@
       }
     ]
   },
+  "changes": {
+    "HARNESS-5": {
+      "changes": {
+        "mode": "branch",
+        "base": "main",
+        "baseSha": "9f8e7d6c5b4a",
+        "head": "a1b2c3d4e5f6",
+        "branch": "harness/harness-5",
+        "files": [
+          {
+            "path": "src/board.ts",
+            "status": "modified",
+            "additions": 2,
+            "deletions": 1,
+            "binary": false
+          },
+          {
+            "path": "src/util.ts",
+            "status": "added",
+            "additions": 1,
+            "deletions": 0,
+            "binary": false
+          }
+        ],
+        "patch": "diff --git a/src/board.ts b/src/board.ts\nindex 1f2e3d4..5a6b7c8 100644\n--- a/src/board.ts\n+++ b/src/board.ts\n@@ -1,3 +1,4 @@\n export function columns(tickets: Ticket[]) {\n-  return STATUSES.map((s) => tickets.filter((t) => t.status === s));\n+  const byStatus = Map.groupBy(tickets, (t) => t.status);\n+  return STATUSES.map((s) => byStatus.get(s) ?? []);\n }\ndiff --git a/src/util.ts b/src/util.ts\nnew file mode 100644\nindex 0000000..3b18e51\n--- /dev/null\n+++ b/src/util.ts\n@@ -0,0 +1 @@\n+export const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));\n",
+        "truncated": false,
+        "additions": 3,
+        "deletions": 1
+      },
+      "log": {
+        "mode": "branch",
+        "base": "main",
+        "commits": [
+          {
+            "sha": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0",
+            "shortSha": "a1b2c3d",
+            "subject": "Cache the first page of tickets",
+            "author": "Harness Agent",
+            "email": "agent@example.com",
+            "date": 1773497700000
+          }
+        ]
+      }
+    }
+  },
   "details": {
     "HARNESS-1": {
       "ticket": {

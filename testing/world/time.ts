@@ -12,6 +12,7 @@ export const LOCALE = "en_US";
 
 const MINUTE = 60_000;
 
+export const minutesFromNow = (n: number): number => NOW + n * MINUTE;
 export const minutesAgo = (n: number): number => NOW - n * MINUTE;
 export const hoursAgo = (n: number): number => NOW - n * 60 * MINUTE;
 export const daysAgo = (n: number): number => NOW - n * 24 * 60 * MINUTE;

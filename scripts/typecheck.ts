@@ -1,10 +1,10 @@
-// `bun run typecheck`: the nine tsc projects, all at once instead of one after another. Prints
+// `bun run typecheck`: the ten tsc projects, all at once instead of one after another. Prints
 // each project's errors under its name and exits 1 if any failed (or tsc couldn't run).
 
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
-export const PROJECTS = ["service", "editor", "terminal", "app", "plugins", "plugins/tsconfig.server.json", "ios", "release", "testing"];
+export const PROJECTS = ["service", "editor", "terminal", "app", "plugins", "plugins/tsconfig.server.json", "ios", "release", "testing", "testing/mac"];
 
 const root = join(import.meta.dir, "..");
 const tsc = [join(root, "node_modules/.bin/tsc")];

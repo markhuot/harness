@@ -1,0 +1,5 @@
+# Mac L4: React views under happy-dom. A directory of its own because the DOM globals the preload
+# installs would leak into the service tests (fetch, timers) if both ran in one bun process.
+# `bun run testing` runs this with this directory as cwd, so this file wins.
+[test]
+preload = ["./setup.ts"]
