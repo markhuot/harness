@@ -74,7 +74,8 @@ export async function startDaemon(runs: RunFile, home: string): Promise<Daemon> 
 export class Socket {
   readonly messages: ServerMessage[] = [];
   readonly ready: Promise<void>;
-  private cursor = 0;
+  /** Indices of messages a wait has taken; every wait scans from the start, so one wait never discards what it passed over. */
+  private taken = new Set<number>();
   private ws: WebSocket;
   private waiters: (() => void)[] = [];
   private closed = false;
@@ -108,9 +109,12 @@ export class Socket {
   message(what: string, match: (m: ServerMessage) => boolean, ms = 30_000): Promise<ServerMessage> {
     const found = (async () => {
       for (;;) {
-        while (this.cursor < this.messages.length) {
-          const m = this.messages[this.cursor++]!;
-          if (match(m)) return m;
+        for (let i = 0; i < this.messages.length; i++) {
+          const m = this.messages[i]!;
+          if (!this.taken.has(i) && match(m)) {
+            this.taken.add(i);
+            return m;
+          }
         }
         if (this.closed) throw new Error(`socket closed before ${what}`);
         await new Promise<void>((r) => this.waiters.push(r));
@@ -123,9 +127,12 @@ export class Socket {
   event(what: string, match: (e: HarnessEvent) => boolean, ms = 60_000): Promise<HarnessEvent> {
     const found = (async () => {
       for (;;) {
-        while (this.cursor < this.messages.length) {
-          const m = this.messages[this.cursor++]!;
-          if (m.type === "event" && match(m.event)) return m.event;
+        for (let i = 0; i < this.messages.length; i++) {
+          const m = this.messages[i]!;
+          if (!this.taken.has(i) && m.type === "event" && match(m.event)) {
+            this.taken.add(i);
+            return m.event;
+          }
         }
         if (this.closed) throw new Error(`socket closed before ${what}`);
         await new Promise<void>((r) => this.waiters.push(r));

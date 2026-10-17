@@ -55,7 +55,7 @@ test("killRecords leaves alone a process that merely reused the recorded pid", a
 
 test("reapRuns kills what a dead run's file lists, removes the file, and skips the run asking", async () => {
   const dir = temp();
-  const dead = new RunFile(join(dir, "1.pids"));
+  const dead = new RunFile(join(dir, "1.pids"), { pid: 2 ** 22 + 1, start: "gone" });
   const mine = new RunFile(join(dir, "2.pids"));
   const orphan = spawnTracked(dead, "orphan", ["sleep", "60"]);
   const live = spawnTracked(mine, "mine", ["sleep", "60"]);
@@ -68,6 +68,35 @@ test("reapRuns kills what a dead run's file lists, removes the file, and skips t
   expect(existsSync(dead.path)).toBe(false);
   expect(alive(live.proc.pid)).toBe(true);
   expect(existsSync(mine.path)).toBe(true);
+});
+
+test("reapRuns leaves a file alone while its owner is still running, and reaps it once the owner is gone", async () => {
+  const dir = temp();
+  const ownerAlive = new RunFile(join(dir, "1.pids"));
+  const bystander = spawnTracked(ownerAlive, "daemon of a live run", ["sleep", "60"]);
+  spawned.push(bystander.proc.pid);
+
+  expect(await reapRuns(dir)).toEqual([]);
+  expect(alive(bystander.proc.pid)).toBe(true);
+  expect(existsSync(ownerAlive.path)).toBe(true);
+
+  const gone = (pid: number) => (pid === process.pid ? null : processStart(pid));
+  const reaped = await reapRuns(dir, undefined, gone);
+  expect(reaped.map((r) => r.name)).toEqual(["daemon of a live run"]);
+  await bystander.proc.exited;
+  expect(alive(bystander.proc.pid)).toBe(false);
+});
+
+test("killRecords reaps group members left behind by a leader that already exited", async () => {
+  const run = new RunFile(join(temp(), "a.pids"));
+  const s = spawnTracked(run, "leader", ["sh", "-c", "sleep 60 & echo $!; exit 0"]);
+  spawned.push(s.proc.pid);
+  const child = Number((await s.line(/^\d+$/, "the child pid", 5000))[0]);
+  await s.proc.exited;
+  expect(alive(child)).toBe(true);
+  await killRecords(run.records());
+  await Bun.sleep(100);
+  expect(alive(child)).toBe(false);
 });
 
 test("line() resolves on output that arrived before the wait began, and names the output when the process exits first", async () => {

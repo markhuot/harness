@@ -61,20 +61,44 @@ export async function killRecords(records: Tracked[], graceMs = 3000, startOf: (
       try {
         await withDeadline(`${r.name} (pid ${r.pid}) to exit`, graceMs, gone.promise);
       } catch {
-        signal(r.pid, "SIGKILL");
+        if (startOf(r.pid) === r.start) signal(r.pid, "SIGKILL");
       } finally {
         clearInterval(check);
       }
     }),
   );
+  // Members of a group outlive a leader that exited first (the group id is the leader's pid). A pid
+  // that now belongs to another process (different start time) is left alone.
+  for (const r of records) {
+    if (startOf(r.pid) !== null) continue;
+    try {
+      process.kill(-r.pid, "SIGKILL");
+    } catch {}
+  }
+}
+
+export interface Owner {
+  pid: number;
+  start: string;
+}
+
+/** The first line of a run file names the process that owns it: its pid and start time. */
+export function parseOwner(text: string): Owner | null {
+  try {
+    const o = (JSON.parse(text.split("\n")[0] ?? "") as { owner?: Owner }).owner;
+    return o && Number.isInteger(o.pid) && typeof o.start === "string" ? o : null;
+  } catch {
+    return null;
+  }
 }
 
 export class RunFile {
-  constructor(readonly path: string) {
+  constructor(readonly path: string, private owner: Owner = { pid: process.pid, start: processStart(process.pid) ?? "" }) {
     mkdirSync(join(path, ".."), { recursive: true });
   }
 
   add(record: Tracked): void {
+    if (!existsSync(this.path)) appendFileSync(this.path, JSON.stringify({ owner: this.owner }) + "\n");
     appendFileSync(this.path, JSON.stringify(record) + "\n");
   }
 
@@ -87,16 +111,22 @@ export class RunFile {
   }
 }
 
-/** Kill what every earlier run file under `dir` still has running (a run that was killed outright), and delete the files. */
-export async function reapRuns(dir: string, except?: string): Promise<Tracked[]> {
+/**
+ * Kill what every earlier run file under `dir` still has running (a run that was killed outright), and
+ * delete the files. A file whose owner is still running belongs to a live run and is left alone.
+ */
+export async function reapRuns(dir: string, except?: string, startOf: (pid: number) => string | null = processStart): Promise<Tracked[]> {
   if (!existsSync(dir)) return [];
   const reaped: Tracked[] = [];
   for (const name of readdirSync(dir)) {
     const path = join(dir, name);
     if (path === except || !name.endsWith(".pids")) continue;
+    const owner = parseOwner(readFileSync(path, "utf8"));
+    if (owner && startOf(owner.pid) === owner.start) continue;
     const file = new RunFile(path);
-    const live = stillRunning(file.records());
-    await killRecords(live);
+    const records = file.records();
+    const live = stillRunning(records, startOf);
+    await killRecords(records, 3000, startOf);
     reaped.push(...live);
     file.remove();
   }

@@ -6,7 +6,7 @@ import { mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { builtApp } from "../lib/ios";
 import { ensureBuild, BUILD_DIR } from "../ios";
-import { reapRuns, RunFile } from "../lib/procs";
+import { reapRuns } from "../lib/procs";
 
 const testing = join(import.meta.dir, "..");
 const root = resolve(testing, "..");
@@ -56,7 +56,6 @@ export async function walk(argv: string[]): Promise<number> {
   }
   console.log(`✓ iOS app ${built.how} [${lap()}]`);
 
-  const mark = new RunFile(join(RUNS_DIR, `runner-${process.pid}.pids`));
   const chain = lockChain(["bun", join(testing, "walk/main.ts"), `--run-dir=${RUNS_DIR}`, `--out=${out}`, `--app=${builtApp(BUILD_DIR)}`]);
   const child = Bun.spawn(chain, { cwd: root, env: process.env as Record<string, string>, stdout: "inherit", stderr: "inherit", stdin: "ignore" });
   const forward = (sig: NodeJS.Signals) => () => child.kill(sig);
@@ -67,7 +66,6 @@ export async function walk(argv: string[]): Promise<number> {
   const code = await child.exited;
   process.off("SIGINT", onInt);
   process.off("SIGTERM", onTerm);
-  mark.remove();
   // A journey that died without its own cleanup leaves its run file: kill what's in it.
   const left2 = await reapRuns(RUNS_DIR);
   if (left2.length) console.log(`killed ${left2.length} process(es) the journey left running`);

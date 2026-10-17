@@ -18,9 +18,9 @@ const env = (name: string) => {
 
 const runDir = arg("run-dir");
 const runs = new RunFile(join(runDir, `${process.pid}.pids`));
-for (const sig of ["SIGINT", "SIGTERM"] as const) {
+for (const [sig, code] of [["SIGINT", 130], ["SIGTERM", 143]] as const) {
   process.on(sig, () => {
-    void killRecords(runs.records()).finally(() => process.exit(130));
+    void killRecords(runs.records()).finally(() => process.exit(code));
   });
 }
 
@@ -39,7 +39,8 @@ try {
   );
   runs.remove();
   process.exit(0);
-} catch {
+} catch (e) {
+  console.error(`✗ walk: ${e instanceof Error ? (e.stack ?? e.message) : String(e)}`);
   await killRecords(runs.records());
   runs.remove();
   process.exit(1);

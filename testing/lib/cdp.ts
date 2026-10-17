@@ -45,13 +45,15 @@ export class Cdp {
   private nextId = 1;
   private pending = new Map<number, { method: string; resolve: (v: unknown) => void; reject: (e: Error) => void }>();
   private listeners = new Set<Waiter>();
-  private opened = deferred<void>();
+  private opened_ = deferred<void>();
   closed = false;
+  /** How long a command may go unanswered before it fails. */
+  sendDeadlineMs = 30_000;
 
   constructor(url: string) {
     this.ws = new WebSocket(url);
-    this.ws.onopen = () => this.opened.resolve();
-    this.ws.onerror = () => this.opened.reject(new Error(`could not open ${url}`));
+    this.ws.onopen = () => this.opened_.resolve();
+    this.ws.onerror = () => this.opened_.reject(new Error(`could not open ${url}`));
     this.ws.onclose = () => {
       this.closed = true;
       for (const p of this.pending.values()) p.reject(new Error("CDP connection closed"));
@@ -74,8 +76,13 @@ export class Cdp {
     };
   }
 
+  /** Resolves once the socket is open. */
+  opened(): Promise<void> {
+    return this.opened_.promise;
+  }
+
   async connect(): Promise<void> {
-    await withDeadline("the DevTools socket to open", 15_000, this.opened.promise);
+    await withDeadline("the DevTools socket to open", 15_000, this.opened_.promise);
     await this.send("Target.setDiscoverTargets", { discover: true });
   }
 
@@ -84,7 +91,11 @@ export class Cdp {
     const p = deferred<unknown>();
     this.pending.set(id, { method, resolve: p.resolve, reject: p.reject });
     this.ws.send(JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) }));
-    return p.promise as Promise<T>;
+    // A renderer or browser that stops answering with its socket still open would hang every caller, teardown included.
+    return withDeadline(`the DevTools answer to ${method}`, this.sendDeadlineMs, p.promise as Promise<T>, () => "no answer").catch((e) => {
+      this.pending.delete(id);
+      throw e;
+    });
   }
 
   /** The first Target event that makes `ready()` return something, checked against what is already known first. */
@@ -115,6 +126,8 @@ export class Cdp {
 }
 
 export class Page {
+  private waits = 0;
+
   constructor(readonly cdp: Cdp, readonly sessionId: string, readonly target: TargetInfo) {}
 
   send<T = Record<string, unknown>>(method: string, params: Record<string, unknown> = {}) {
@@ -133,18 +146,26 @@ export class Page {
    * on a timer. Resolves with its value. At the deadline fails with `what` and the last value seen.
    */
   async waitFor<T = unknown>(what: string, expression: string, ms = 30_000): Promise<T> {
+    // Per-call keys, so two waits on one page don't overwrite each other's stop and last-seen values.
+    const key = `__walk${this.waits++}`;
+    // Re-checks on DOM mutations and on every frame: a mutation observer on `document` sees neither
+    // changes inside a shadow root nor expando properties on an element.
     const script = `new Promise((resolve) => {
-      const check = () => { try { const v = (${expression}); if (v) { obs.disconnect(); resolve({ ok: true, v: v instanceof Node ? true : v }); return true; } window.__walkLast = v; } catch (e) { window.__walkLast = 'threw: ' + e.message; } return false; };
+      let frame = 0;
+      const done = (r) => { obs.disconnect(); cancelAnimationFrame(frame); resolve(r); };
+      const check = () => { try { const v = (${expression}); if (v) { done({ ok: true, v: v instanceof Node ? true : v }); return true; } window.${key}Last = v; } catch (e) { window.${key}Last = 'threw: ' + e.message; } return false; };
       const obs = new MutationObserver(check);
       obs.observe(document, { subtree: true, childList: true, attributes: true, characterData: true });
-      if (!check()) { window.__walkStop = () => { obs.disconnect(); resolve({ ok: false }); }; }
+      const tick = () => { if (!check()) frame = requestAnimationFrame(tick); };
+      window.${key}Stop = () => done({ ok: false });
+      tick();
     })`;
     const run = this.evaluate<{ ok: boolean; v: T }>(script);
     try {
       const r = await withDeadline(what, ms, run, () => undefined);
       return r.v;
     } catch (e) {
-      const last = await this.evaluate<string>(`(window.__walkStop && window.__walkStop(), String(JSON.stringify(window.__walkLast) ?? 'false') + ' on ' + location.hash + ' / ' + (document.body?.innerText ?? '').slice(0, 200))`).catch(() => "(page not answering)");
+      const last = await this.evaluate<string>(`(window.${key}Stop && window.${key}Stop(), String(JSON.stringify(window.${key}Last) ?? 'false') + ' on ' + location.hash + ' / ' + (document.body?.innerText ?? '').slice(0, 200))`).catch(() => "(page not answering)");
       if (e instanceof Error && e.name === "DeadlineError") throw new Error(`${e.message.replace(/last seen: .*$/, "")}last seen: ${last.replace(/\s+/g, " ")}`);
       throw e;
     }

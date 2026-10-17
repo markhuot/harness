@@ -12,6 +12,7 @@ import { startDaemon, type Daemon, type Socket } from "../lib/daemon";
 import { columnCount, phone, type Phone } from "../lib/ios";
 import { launchMac, type MacApp } from "../lib/mac";
 import { killRecords, RunFile } from "../lib/procs";
+import { until } from "../lib/wait";
 import { EDIT_TEXT, EDITED_FILE, DUMMY_DONE_NOTE, DUMMY_HELLO, TERMINAL_ANSWER, TERMINAL_COMMAND, WALK_FILES, WALK_PROJECT, WALK_TICKET } from "../world/walk";
 
 export interface Ctx {
@@ -186,8 +187,10 @@ export function steps(start: Start, built: { app: string }): Step[] {
         const main = ctx.mac.main;
         await main.press("t", "KeyT", MOD.meta);
         await main.waitFor("the terminal pane", `document.querySelector('aside.terminal-pane [data-testid="terminal-host"]')`);
-        const list = await ctx.daemon.call<{ id: string }[]>("GET", "/terminals");
-        if (list.length !== 1) throw new Error(`expected one terminal on the service, found ${list.length}`);
+        const list = await until("one terminal on the service", 15_000, async () => {
+          const l = await ctx.daemon.call<{ id: string }[]>("GET", "/terminals");
+          return l.length === 1 ? l : undefined;
+        });
         ctx.terminalId = list[0]!.id;
         await main.focus("aside.terminal-pane textarea");
         await main.type(TERMINAL_COMMAND);

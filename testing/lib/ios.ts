@@ -3,7 +3,7 @@
 // Nothing here takes a lock: the caller already holds it (`bun run sim with-lock`), and the
 // simulator is left booted for the next run.
 
-import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, renameSync, rmSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { homedir } from "node:os";
 
@@ -39,7 +39,16 @@ function xcodeShim(developerDir: string): string {
   const contents = join(root, "Xcode.app", "Contents");
   const dev = join(contents, "Developer");
   if (existsSync(join(dev, "Library", "PrivateFrameworks", "SimulatorKit.framework"))) return dev;
-  rmSync(root, { recursive: true, force: true });
+  // Built beside the shared cache and renamed into place, so sim-check on the other simulator never
+  // sees (or is handed) a half-built shim.
+  const final = root;
+  const tmp = `${root}.tmp-${process.pid}`;
+  rmSync(tmp, { recursive: true, force: true });
+  const contentsFinal = join(final, "Xcode.app", "Contents");
+  const devFinal = join(contentsFinal, "Developer");
+  const build = (r: string) => {
+  const contents = join(r, "Xcode.app", "Contents");
+  const dev = join(contents, "Developer");
   mkdirSync(join(dev, "Library", "PrivateFrameworks"), { recursive: true });
   const link = (from: string, to: string) => Bun.spawnSync(["ln", "-s", from, to]);
   for (const e of readdirSync(real)) if (e !== "Developer") link(join(real, e), join(contents, e));
@@ -48,7 +57,16 @@ function xcodeShim(developerDir: string): string {
   const priv = join(developerDir, "Library", "PrivateFrameworks");
   if (existsSync(priv)) for (const e of readdirSync(priv)) link(join(priv, e), join(dev, "Library", "PrivateFrameworks", e));
   link(join(real, "SharedFrameworks", "SimulatorKit.framework"), join(dev, "Library", "PrivateFrameworks", "SimulatorKit.framework"));
-  return dev;
+  };
+  build(tmp);
+  try {
+    renameSync(tmp, final);
+  } catch {
+    // Another process put a shim there first (a non-empty directory can't be replaced): use theirs.
+    rmSync(tmp, { recursive: true, force: true });
+    if (!existsSync(join(devFinal, "Library", "PrivateFrameworks", "SimulatorKit.framework"))) throw new Error(`could not build the Xcode shim at ${final}`);
+  }
+  return devFinal;
 }
 
 async function run(cmd: string[], env: Record<string, string> = {}): Promise<{ code: number; out: string; err: string }> {
@@ -82,16 +100,23 @@ export function phone(name: string, udid: string): Phone {
     if (r.code !== 0) throw new Error(`simctl ${a.join(" ")} failed: ${r.err.trim() || r.out.trim()}`);
     return r.out;
   };
+  /** AXe's output, or null when it failed (distinct from a screen with nothing on it). */
   const axe = async (...a: string[]) => {
     const r = await run(["axe", ...a, "--udid", udid], { DEVELOPER_DIR: xcodeShim(developerDir) });
-    return r.code === 0 ? r.out : "";
+    return r.code === 0 ? r.out : null;
   };
-  const labels = async () => parseLabels(await axe("describe-ui"));
+  const labels = async () => parseLabels((await axe("describe-ui")) ?? "");
   const see = async (what: string, match: (l: string[]) => boolean, ms = 30_000) => {
     let last: string[] = [];
     try {
       return await until(`${name}: ${what}`, ms, async () => {
-        last = await labels();
+        const out = await axe("describe-ui");
+        if (out === null) {
+          // AXe failed (the simulator is busy): back off rather than respawn it back to back.
+          await new Promise<void>((r) => setTimeout(r, 250));
+          return undefined;
+        }
+        last = parseLabels(out);
         return match(last) ? last : undefined;
       });
     } catch (e) {
@@ -114,10 +139,15 @@ export function phone(name: string, udid: string): Phone {
     async pair(link) {
       await simctl("openurl", udid, link);
       let tapped = false;
+      let tapping = false;
       return see("the board after pairing", (l) => {
-        if (!tapped && screenState(l) === "prompt") {
-          tapped = true;
-          void axe("tap", "--label", "Open");
+        if (!tapped && !tapping && screenState(l) === "prompt") {
+          tapping = true;
+          // Only a tap that succeeded counts; a failed one is tried again on the next look.
+          void axe("tap", "--label", "Open").then((out) => {
+            tapped = out !== null;
+            tapping = false;
+          });
         }
         return screenState(l) === "board";
       });

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { TargetTracker, type TargetInfo } from "./cdp";
+import { Cdp, TargetTracker, type TargetInfo } from "./cdp";
 
 const info = (targetId: string, url: string, type = "page"): TargetInfo => ({ targetId, type, url });
 const created = (t: TargetInfo) => ({ targetInfo: t }) as Record<string, unknown>;
@@ -37,4 +37,17 @@ test("events that aren't about targets change nothing", () => {
   const t = new TargetTracker();
   t.apply("Page.loadEventFired", {});
   expect(t.pages()).toEqual([]);
+});
+
+test("a command the browser never answers fails at its deadline naming the method, instead of hanging teardown", async () => {
+  const server = Bun.serve({ port: 0, fetch: (req, s) => (s.upgrade(req) ? undefined : new Response("no")), websocket: { message() {} } });
+  try {
+    const cdp = new Cdp(`ws://localhost:${server.port}`);
+    cdp.sendDeadlineMs = 50;
+    await cdp.opened();
+    await expect(cdp.send("Browser.close")).rejects.toThrow(/timed out after 50ms waiting for the DevTools answer to Browser\.close/);
+    cdp.close();
+  } finally {
+    server.stop(true);
+  }
 });
