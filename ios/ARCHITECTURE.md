@@ -3,9 +3,8 @@
 The iPhone and iPad app is SwiftUI. Version 2.0 replaced the 1.x React Native app, at feature
 parity with it (§ Parity table). It talks to the service over the same HTTP API and WebSocket as
 the desktop (DESIGN.md § HTTP API, § Network). `shared/` is the spec for everything the app shares
-with the desktop, through generated fixtures. For logic only the phone has, which used to live in
-the React Native app's TypeScript, the frozen fixtures (§ Fixture pipeline) are the spec, and
-`swift test` owns them. The app follows the desktop's behavior, not its look. Use native SwiftUI
+with the desktop: the wire contract tests (§ Tests) hold the Swift protocol types to
+`shared/src/protocol.ts`. The app follows the desktop's behavior, not its look. Use native SwiftUI
 patterns (NavigationStack, `.sheet`, `Menu`, `.searchable`,
 swipe actions, drag and drop). iPhone is the primary target. The build is universal: at regular width (iPad) the shell is a
 desktop-style split view (§ iPad layout); at compact width (iPhone, and an iPad in a
@@ -33,12 +32,9 @@ ios/
                          BoardLoader, DetailFetcher, DraftSync, ModelListCache)
       Shell/             DeepLink (harness:// → Route), Router, AppModel (servers, pairing, prefs)
       Resources/         generated JSON bundled with the package (themes.json)
-    Tests/HarnessKitTests/
-      Fixtures/          JSON from shared/fixtures, generated or frozen (committed)
-      Support/           Fixture loader, jsonEqual
     Sources/HarnessHighlight/  Shiki-in-JavaScriptCore highlighter (§ Syntax highlighting)
-  Tools/                 build.ts, sim.ts, sim-check.ts, dev-sim.ts + axe.ts (README § Dev loop),
-                         build-highlighter.ts + highlighter/ (§ Syntax highlighting), bun tests
+  Tools/                 build.ts, sim.ts, dev-sim.ts + axe.ts (README § Dev loop),
+                         build-highlighter.ts + highlighter/ (§ Syntax highlighting)
 ```
 
 Generated and ignored: `ios/Harness.xcodeproj`, `ios/Harness/Info.plist` (XcodeGen writes both
@@ -125,61 +121,33 @@ so adding a file never means editing project.yml or Package.swift.
   extension of it), and put shared test helpers (like `sameScalars` in FileLinksTests.swift) in
   Support/ instead of redeclaring them.
 
-## Fixture pipeline (TS ↔ Swift parity)
+## Tests
 
-Logic ported from `shared/` must not drift from TypeScript. It's checked with fixtures whose
-expected outputs come from the real TS functions. Logic that only the phone has (it lived in the
-1.x React Native app's TypeScript, which is gone) is pinned by frozen fixtures instead (step 6):
+All of the app's tests live in the top-level `testing/` directory (its README describes each layer);
+`bun run testing` runs them and a change doesn't land until it passes. Nothing under `ios/` holds a
+test.
 
-1. **Case files:** `shared/fixtures/cases/<module>.ts`. Each named export is a JSON-able value,
-   usually a case list built with `cases(fn, inputs)` or `asyncCases` from
-   `shared/fixtures/case.ts`: `[{ name, input, output }]`, where `output = fn(input)`. `undefined`
-   outputs are written as `null`. Files are discovered by directory, so adding one needs no
-   registry edit, and parallel tickets don't conflict.
-2. **Resources:** `shared/fixtures/resources/<name>.ts` → `HarnessKit/Sources/HarnessKit/Resources/<name>.json`,
-   bundled data the app uses at runtime (the themes registry, project colors, icon paths). Load it
-   with `Bundle.module`. The exporter treats every `.json` file in
-   `HarnessKit/Sources/HarnessKit/Resources/` as generated and deletes any that no resource file
-   produces. Hand-written JSON resources have to live somewhere else, in a different folder with
-   its own `resources:` entry.
-3. **Export:** `bun shared/scripts/export-fixtures.ts` writes
-   `ios/HarnessKit/Tests/HarnessKitTests/Fixtures/<module>.json` (and the resources) as
-   `{ "<export>": value }`, and deletes orphaned JSON. The JSON is committed.
-4. **Freshness:** `shared/src/fixtures.test.ts` (part of `bun run test`) rebuilds everything in
-   memory and fails if the committed JSON is stale or orphaned. Change TS behavior without
-   regenerating, and `bun run test` fails. Regenerate with a behavior Swift disagrees with, and
-   `swift test` fails.
-5. **Swift side:** `Fixture.cases("<module>", "<export>", input: I.self, output: O.self)` feeds
-   `@Test(arguments:)`. `Fixture.value` and `Fixture.exports` read arbitrary exports.
-   `jsonEqual` compares JSON key-order-insensitively. Worked example:
-   `shared/fixtures/cases/pairing.ts` → `Logic/Pairing.swift` → `Tests/.../Logic/PairingTests.swift`.
-6. **Frozen fixtures:** JSON whose values came from the React Native app's TypeScript and is never
-   regenerated. The committed JSON is the spec. A whole frozen module is listed in `FROZEN` in
-   `shared/scripts/export-fixtures.ts` and has no case file; a case file that mixes computed and
-   frozen exports reads the frozen ones back with `frozen(module, key)` (`shared/fixtures/case.ts`).
-   `fixtures.test.ts` checks each frozen file exists and parses. To change the behavior, edit the
-   JSON and the Swift together.
-
-The protocol drift guard works the same way: `cases/protocol.ts` has a typed sample for every
-entity and event, and `ProtocolRoundTripTests` decodes and re-encodes every sample, failing on any
-export it has no Swift type for. When you add a field to protocol.ts, add it to a sample, and the
-Swift side has to follow.
-
-When porting a `shared/` module: write the case file from the TS source and its `*.test.ts` (plus
-extra edge cases), export, port, and test against the fixtures. Hand-written Swift tests are only for things
-fixtures can't express (request sequences, timing). Stateful machines (TouchGesture, ResizeGate,
-PluginHostBridge, MentionCaret, stickStep) get both: direct ports of their TS tests, and fixture
-sequences (`{ events[], outputs[] }`), computed by driving the TS implementation (now frozen for
-the ones whose TS was in the React Native app).
-Timers become explicit timestamps or a `deadline` + `tick(now:)` API, so tests never wait.
-
-`Fixture.value` decodes through `JSONValue`/JSONDecoder. Don't switch it back to
-JSONSerialization: that silently drops a leading U+FEFF from strings (the "leading BOM" markdown
-case pins this).
+- **Logic** (`testing/swift`, `bun run testing l0`): a Swift package of its own that tests
+  HarnessKit through its public API on the Mac host, in seconds. When you port a `shared/` module,
+  write the Swift test from the TS behavior and its edge cases. Stateful machines take explicit
+  timestamps or a `deadline` + `tick(now:)` API, so tests never wait.
+- **Wire contract** (`testing/contract`): samples of every type and constant in
+  `shared/src/protocol.ts`, generated with the TypeScript checker, which the Swift types must
+  decode and re-encode unchanged. When you add a field to protocol.ts, the Swift side has to
+  follow.
+- **The shared world** (`testing/world`): one typed set of data the screens are drawn from.
+  `WorldDecodeTests` decodes all of it through the real HarnessKit models.
+- **Screens** (`testing/ios`, `bun run testing ios`): § Screen tests.
+- **The walkthrough** (`bun run testing walk`): one journey through the real service, Mac app,
+  iPhone and iPad.
+- **Themes resource.** `Resources/themes.json` (the theme registry, project colors and icon paths)
+  is generated from `shared/src` by `bun shared/scripts/export-themes.ts` and loaded with
+  `Bundle.module`; a test fails when the committed file is stale. Don't switch its decoding to
+  JSONSerialization: that silently drops a leading U+FEFF from strings.
 
 ### Deliberate differences from TS
 
-Ports match TS on every fixture. Where Swift can't or shouldn't follow TS, the difference is listed
+Ports match TS. Where Swift can't or shouldn't follow TS, the difference is listed
 here and in a doc comment:
 
 - `Prefs.normalize` drops unknown keys and turns non-string ids into nil (TS passes both through).
@@ -205,12 +173,12 @@ places until someone dedupes them:
 
 - `Approve.Option` stays: it isn't a straight swap for `SelectOption` (State/SelectOptions.swift).
   It's `SelectOption<CompletionAction>`, so `value` is a typed `CompletionAction`, and `label` is
-  optional because TS leaves it undefined for an action this build doesn't know (the
-  "unknown action has no label" fixture pins that). `SelectOption` is the plain-string form with a
+  optional because TS leaves it undefined for an action this build doesn't know (an
+  unknown action has no label). `SelectOption` is the plain-string form with a
   required label. Folding them together means making `SelectOption` generic with an optional
   label, which changes its other callers.
 - `Completion.ProjectInfo/TicketInfo/ParentInfo` and `ProjectKey.ProjectInfo/TicketInfo` are
-  narrow input shapes (the fixture cases decode partial entities into them). Overloads take
+  narrow input shapes (they decode partial entities). Overloads take
   `Ticket`/`Project` directly. `Ticket` and `RelatedTicket` conform to `TicketKeyed` (Keys.swift).
 - `formatSize` exists twice on purpose: FileViewer's ("3.0 MB") and Attachments' ("3 MB",
   promotes at 1024) behave differently in TS too.
@@ -258,23 +226,8 @@ and the Git tab exactly. The pieces:
   generates: a trailing `// comment` in Swift or TypeScript comes out as an operator plus
   identifiers. The regex interpreter matches Oniguruma. Apps on a device get no JIT. Before its first
   JSContext, `Highlighter` sets `JSC_useRegExpJIT=false` so the simulator and the Mac behave the same
-  way, and the parity fixtures are generated in a child bun with `BUN_JSC_useRegExpJIT=false`
-  (ios/Tools/highlighter/runCorpus.ts). Bun itself has the bug, so `bun test` results for
+  way, and Bun itself has the bug, so bun results for
   highlight.ts aren't what a phone shows for those patterns.
-- **Parity:** `shared/fixtures/cases/highlight.ts` runs the corpus in `ios/Tools/highlighter/corpus.ts`
-  (11 languages, light and dark themes, diffs, CRLF, emoji, unknown language and theme, the size
-  boundary) through the real highlight.ts. `HighlighterTests` checks that the bundle returns the
-  same tokens and colors. `wellFormed()` moves a lone high surrogate left by diffLines'
-  `slice(0, 1)` sign split into the next span, since Swift strings can't hold it.
-
-**Reducer scenarios.** Stateful pure code (the reducer, paging, sub-agent state) is pinned with
-scenarios instead of single cases: `shared/fixtures/board.ts` runs real TS actions through
-`reducer` and records, after each step, the outputs of selector *probes* (tickets projected to
-ids) and, on the last step or when asked, the whole serialized State. `BoardScenarioTests`
-decodes the actions as `BoardAction`, replays them on `BoardState`, runs the same probes and
-compares JSON. A new selector needs a probe on both sides (`everyProbeIsImplemented` checks the
-lists match). Keep scenario data small: the 120-ticket paging tests are scaled down to 12.
-
 ## Board state conventions
 
 - `BoardState`, `BoardAction` and `BoardSnapshot` are the TS `State`, `Action` and `Snapshot`.
@@ -283,7 +236,7 @@ lists match). Keep scenario data small: the 120-ticket paging tests are scaled d
 - Entity maps are Swift dictionaries, which have no insertion order. Selectors that sort in TS
   sort the same way here. Where TS leaves equal sort keys in insertion order, Swift breaks the tie
   by id. Selectors whose TS order is insertion order (`unresolvedKeys`,
-  `conductorsNeedingChildren`, `ticketsForProject`) come back sorted. Fixtures avoid exact ties.
+  `conductorsNeedingChildren`, `ticketsForProject`) come back sorted. Tests avoid exact ties.
 - Stateful types (BoardStore, BoardLoader, DetailFetcher, DraftSync, ModelListCache) are
   `@MainActor` classes. They take the service through protocols (`LoaderClient`, `DetailClient`,
   `BoardClient`, `DraftAPI`, and `EventSource` for the socket; HarnessClient and HarnessSocket
@@ -532,8 +485,7 @@ the composer keeps first responder), forwards the status bar style and orientati
 window's root, and takes touches only where the cards are: `DockWindow.hitTest` reads the rects the
 container publishes (`DockedCardsReport`), or the whole screen while the list is open, rather than
 asking whether the hit view is the root, which SwiftUI's gesture views make unreliable on iOS 18+.
-The container never mounts again while the app runs (`DebugState.dockMounts` counts it, and
-sim-check asserts one): cards insert and remove by id, so opening a sheet from the board, switching
+The container never mounts again while the app runs: cards insert and remove by id, so opening a sheet from the board, switching
 tickets from a card, or docking changes only the cards that change. Each card is `DockedCard`, 52pt
 tall, 8pt from the home indicator and in from the sides as far as the board's bottom bar (its
 concentric inset, `DockMetrics.phoneSides(screen:)`), the most recent at the bottom, up to two, then
@@ -554,7 +506,7 @@ when docked), a card's ✕ closes it. There is no gesture on the cards and no Vo
 Previous: the cards are how a person switches. VoiceOver has Close on each card, and focus moves to
 the bottom card after a ticket docks. Reduce Motion fades the cards and the ghost. The ghost dock card
 is the dock's incoming bottom slot: the cards lift one row (an offset, with no clearance asked for),
-and a release docks the ticket into it. Snapshots draw only their own window, so SnapshotRenderer
+and a release docks the ticket into it. Screen tests draw only their own window, so Renderer
 composites the dock window over the screen, drawing it over a picture of what is below it so the glass
 has something behind it.
 
@@ -617,7 +569,7 @@ Split View or a small Stage Manager window gets the phone's:
 - **Columns** (regular, iPad): every column at once, as on the Mac. Each is a `BoardColumnFrame`
   (rounded `bgColumn` panel, header with dot, label and count) around the same `BoardColumnView`,
   so cards, paging footers, empty states and pull to refresh are shared. There is no strip: the
-  headers read "Planning, 3" like the chips (sim-check's `onBoard`, dev-sim's `screenState` and
+  headers read "Planning, 3" like the chips (dev-sim's `screenState` and
   AXe taps rely on it), and a tap on one scrolls its column into view. Widths come from
   `BoardScreenRules.columnSizing` (equal shares of the detail column's width, so they follow the
   sidebar toggle; 216…400pt, the Mac's 216 minimum):
@@ -630,16 +582,6 @@ Neither layout moves cards between columns: only agents move tickets, so a card 
 target, no Move to … in its menu and no VoiceOver move actions. Touch and hold lifts the ticket's
 screen, on the Spec tab in a navigation stack of its own, as the context menu's preview (a
 draft's lifts the card itself); a tap opens the ticket.
-
-simctl and AXe can't rotate a simulator and this Mac has no Simulator.app, so `sim-check --ipad`
-runs portrait. For a landscape check, build once with `UIRequiresFullScreen` on and
-`UISupportedInterfaceOrientations~ipad` set to `UIInterfaceOrientationLandscapeLeft` only (never
-commit that), then run sim-check with `--no-build` and `SIM_CHECK_LANDSCAPE=1`. The simulator stays
-portrait while the app draws sideways: AXe's tree reads in the app's landscape points, but its
-touches land in the device's portrait ones, so sim-check maps each tap, swipe and touch from
-(x, y) to (portrait width − y, x) and rotates its shots (`sips -r 270`, named `*-landscape.png`).
-The keyboard still draws in portrait across the app, so a check that leaves it up can't tap what
-it covers.
 
 ## Windows
 
@@ -722,47 +664,8 @@ is) to the store, never a single window's.
   RootView; a ticket window only allows them), so harness:// from outside the app never lands in a
   ticket window or opens a new one.
 
-`sim-check --ipad`'s `ticket-tear-off` check opens the Transcript chip's menu (touch and hold) on
-a ticket in the side panel, picks Open in New Window, expects the pinned window (its title
-"KEY · Transcript"), brings the ticket back with its link and expects "Transcript is in another
-window", then presses Return to this window and expects the pinned window gone and the transcript
-back. AXe can't drive a drag (its touch events don't move), so drag-to-window is checked by hand.
-
-`sim-check --ipad --sheets` runs the side panel's checks (`panelChecks`) on the `--sheets` seed. sim-check reads the panel's
-geometry from its resize handle ("Resize panel", centred on the leading edge). A board card opens
-the panel trailing-aligned at TicketPanelWidth's default with the board still showing and its title
-bar no higher than the sidebar button (both keep the top safe area). The panel's labels name its
-ticket once: in the hero's title, with no navigation bar above any ticket and no `ticket-back` button on the root. Dragging the handle to either edge stops at 25% and 80%, then sim-check
-drags it back to the default, since the width is a pref that outlives the run. A child link inside
-pushes, and a different board card opens its ticket over it, at the root. sim-check taps where the hero's
-Back button sits: after a push that goes back to the parent, and at the
-root it leaves the panel where it was. The dock button leaves the "KEY, title, docked" card in the
-bottom-right corner, and a tap on it restores the pushed child, Back and all. A card's ✕ closes
-just its ticket (sim-check closes the board card's and the conductor's one at a time), New session opens in the panel with one title and one ✕ and no
-pop-out button (AXe's labels, then the screenshot's ink where its bar would draw a title, then a tap
-where its ✕ would sit, which must leave the panel up), with a draft typed Escape and the panel's ✕
-each bring up Save or Discard (Keep editing, then Discard, which closes the panel and takes the
-draft's card off the board), Escape (AXe's HID key 41) closes the panel, and pop-out opens a ticket
-window and closes the panel. Then `cardStackChecks` docks a dozen tickets of their own: the ones
-behind an open panel wait as cards just left of it, ref and title in their labels, newest at the
-bottom, and never over the sidebar (none beside the default 80% panel, full cards at 25%, the lone
-"2 docked…" card beside a column about 190pt wide, none at 50%, with Settings still taking a tap); docked, every one is a card in the
-corner and a tap opens that one; a card's ✕ closes just its ticket; twelve show five cards and "7
-more…", which expands into the list of all twelve, one of the oldest opening from it; and
-harness://projects closes them all. Shots are `panel-*.png`. A compact window's bottom sheet isn't
-covered, since AXe and simctl can't resize a window or enter Split View; the iPhone's `--sheets`
-checks drive the same sheet, and `dockStackChecks` there covers several docked tickets the same
-way (two cards, the newest at the bottom, with the board's bar above the taller dock; a tap on a
-card, after which the other cards stay over the open sheet with the composer 11pt above them; two
-cards and "1 more…" expanding into the list of three; switching cards under an open sheet leaving
-the other card where it was and the dock's mount count at one; a card's ✕ closing only that ticket; a
-terminate and relaunch keeping the dock; and the app's footprint with none, 5 and 20 docked;
-`dock-*.png`). The dock window shows up in AXe's tree like any other window, so the same card labels
-drive both platforms. `--keyboard` adds the composer sitting on the keys with a ticket docked and
-the dock out of the way.
-
 The simulator's backboardd sometimes aborts in Metal texture validation (`MTLSimDriver`,
-`CA::OGL::FlattenNode`) during long `sim-check --ipad` runs with ticket windows open, and the app and
+`CA::OGL::FlattenNode`) during long iPad runs with ticket windows open, and the app and
 AXe's tree go with it. That's the simulator's renderer, not the app. Reboot the device
 (`xcrun simctl shutdown`/`boot` under its lock) and rerun.
 
@@ -790,7 +693,7 @@ The service decides which card activity notifies and sends it through APNs (DESI
   - A presented ticket sheet counts as just its ticket, and a docked one adds the board.
   - On leaving, the app sends `visible: false` in the inactive phase, inside a short background
     task, so it reaches the Mac before suspension.
-- **sim-check.** The launch prompt would cover the pair link's screens, so `install()` writes the
+- **Tests and dev-sim.** The launch prompt would cover the pair link's screens, so `install()` writes the
   `HarnessSkipNotificationPrompt` default. The `-HarnessSkipNotificationPrompt YES` launch argument
   does the same.
 
@@ -900,10 +803,9 @@ TicketDetailScreen (HARNESS-139) hosts the other Ticket slots as tab bodies. Wha
 from it (Ticket/TicketDetailSupport.swift):
 
 - **`.ticketHeroScroll()`** on a tab body's ScrollView or List: a forward drag or fling collapses
-  the hero to its title line (HarnessKit `HeroCollapse`, checked against frozen fixtures, then
+  the hero to its title line (HarnessKit `HeroCollapse`, then
   `HeroDisclosure`); nothing a scroll does expands it again, only its chevron.
-  TranscriptView and AgentsTabView should attach it, since sim-check `--stick` checks the hero on
-  the Transcript. Outside a ticket screen it does nothing.
+  TranscriptView and AgentsTabView should attach it. Outside a ticket screen it does nothing.
 - **`.ticketStickToBottom()`** on a ScrollView whose newest content is last (Activity, and the
   Transcript): it opens at the bottom, follows new content while pinned, stays put once the user
   scrolls up and re-pins at the bottom (StickToBottom.stickStep, fed by scroll phases).
@@ -913,7 +815,7 @@ from it (Ticket/TicketDetailSupport.swift):
 - The composer sits in the screen's bottom `safeAreaInset`, so tab bodies shouldn't add their own.
   Its field's AX label is always "Message the agent" (MentionTextEditor `fieldLabel`).
 - Testable branches (menus, the Complete sheet's rules, run rows, labels) are in HarnessKit's
-  `TicketDetailLogic`. Approve/Complete menus are native `Menu`s; sim-check closes one with
+  `TicketDetailLogic`. Approve/Complete menus are native `Menu`s; AXe closes one with
   "Dismiss context menu".
 
 ## Transcript, Agents and Inbox (Ticket/Transcript*, Ticket/Agents*, Inbox/)
@@ -988,7 +890,7 @@ What screens that show agent text use (HARNESS-136):
   page-style TabView lost sideways swipes that started over AVPlayerViewController's view, so the
   viewer often couldn't page off a video; inside the scroll view, its pan sees them first. Paging is
   off while an image is zoomed. A page keeps one view for its whole life, so video pages keep one
-  AVPlayerViewController and only hand it a player while showing. Labels match sim-check `--attachments`: "Image x.png" /
+  AVPlayerViewController and only hand it a player while showing. Labels the tests read: "Image x.png" /
   "Video x.mp4" inline images (the alt text), "Close", "2 of 4 · 1.2 MB".
 - **Debug gallery:** a paired Debug build launched with `-debugScreen content [-debugTicket KEY]`
   shows sample markdown and that ticket's spec with its inline attachments.
@@ -1003,7 +905,7 @@ What the hosting screens (Ticket detail, New session, Settings, Project settings
   PermissionPicker are built on it. DriverModelPicker, PhaseModelPicker and BranchPicker use the same trigger, but
   open a `PickerSheet`. PhaseModelPicker's sheet has a radio column per run phase and stays open
   after a pick. That sheet draws its own header (Cancel, the title and an accessory) instead
-  of toolbar items, because AXe doesn't see a sheet's toolbar and sim-check taps "Cancel" by label.
+  of toolbar items, because AXe doesn't see a sheet's toolbar and AXe taps "Cancel" by label.
 - **Model lists** come from `store.sharedModelCache`, one `ModelListCache` per store
   (PickerClient.swift). `store.pickerClient` is the store's client as a `PickerClient`
   (model lists, branches, files and commands; HarnessClient conforms).
@@ -1036,9 +938,9 @@ What Settings, Project settings, the watcher form and Prompts share (HARNESS-144
   Settings' sections set `SettingsModel`'s `menu` / `confirm` / `textPrompt` and the screen
   presents them, and it runs the network, drivers and prompt-catalog loads once.
 - **AXe and segmented Pickers.** AXe lists a segmented Picker as one unlabeled element, so a
-  segment sim-check taps or waits for ("Compare with built-in") is a labeled Button
+  segment AXe taps or waits for ("Compare with built-in") is a labeled Button
   (PromptSegmented). Lazy Forms leave off-screen rows out of the AX tree too; the Prompts list is a
-  plain stack because sim-check waits for a row below the fold.
+  plain stack so a row below the fold is in the AX tree.
 - **The prompt editor** is a UIKit bridge (`PromptTextEditor`): a growing UITextView with
   autocorrection and smart punctuation off, whose selection `PromptEditorHandle` keeps (UTF-16, as
   `Prompts.insertText` takes it) and which scrolls its enclosing scroll view to keep the caret
@@ -1054,7 +956,7 @@ What Settings, Project settings, the watcher form and Prompts share (HARNESS-144
   `.onChange` and acts on what it returns.
 - **Its own Cancel.** SheetHost leaves the shell's ✕ off this sheet; the screen's asks Save draft /
   Discard draft / Keep editing for a non-empty draft. A swipe down (any `onDisappear`) saves.
-- The prompt is a MentionTextEditor with `fieldLabel: "Prompt"` (sim-check looks for it) and `autofocus`.
+- The prompt is a MentionTextEditor with `fieldLabel: "Prompt"` (AXe looks for it) and `autofocus`.
 
 ## File viewer (Features/Files)
 
@@ -1095,11 +997,7 @@ What Settings, Project settings, the watcher form and Prompts share (HARNESS-144
   swipe-down are disabled; a pop that gets past it saves anyway, since edits are never dropped
   silently. A clean editor silently reloads when the app comes back to the foreground (`setContents`,
   no undo history); a dirty one keeps its edits.
-- **sim-check:** a web view's page isn't in the accessibility tree, so the debug state probe
-  (§ Debug state probe) reads the editor's marked lines, selection and dirty flag from the page. The
-  `file-link` chain asserts the marked lines through it; the `file-edit` chain types, checks the
-  unsaved dot and Save.
-- File/Diff is two labeled buttons, not a segmented Picker, because sim-check taps the label that
+- File/Diff is two labeled buttons, not a segmented Picker, because AXe taps the label that
   starts with "Diff". The counts use `Text(verbatim:)`, so 25000 doesn't render as "25,000".
 
 ## Terminals (Features/Terminal)
@@ -1139,57 +1037,42 @@ phone shows it in a sheet, drawn by the same ghostty-web the Mac pane uses, in a
   "ended". The palette lists terminals (`PaletteRows` content `.terminal`) with a New Terminal command
   that creates one in the board's project (All projects when none) with `openOnMac`, so a connected
   Mac opens a pane for it at once.
-- **Checks:** `TerminalBridgeTests`, the socket and router tests in HarnessKit; the snapshot tests
-  `testPaletteTerminals`, `testTerminalSheet` and `testDockWithTerminal`; and sim-check's `terminal`
-  chain (palette → sheet, typing through the keyboard, a Mac sharing the shell, backgrounding, New
-  Terminal), which reads the page through `DebugState.terminal`.
+- **Checks:** the terminal bridge, socket and router logic in `testing/swift`, and the Terminal
+  screens in `testing/ios`.
 
-## Snapshot tests (HarnessSnapshotTests)
+## Screen tests
 
-`ios/HarnessSnapshotTests` renders the app's main screens in-process from fixture models and compares
-the pixels with reference PNGs: no daemon, install, pairing or accessibility polling. A run is one
-Debug build, then about a second per screen. sim-check stays for flows that need real taps, a
-daemon or the keyboard.
+`testing/ios` renders the app's screens in a test bundle hosted by the app (`HarnessScreenTests` in
+`project.yml`: the screens live in the app target, so a hostless bundle can't render them), from
+the shared world in `testing/world`, through the real `HarnessClient` and `BoardStore` with only
+the transport (`WorldTransport`) and the socket (`WorldSocket`) replaced. A request the world has
+no route for fails the test. No daemon, install, pairing or accessibility polling.
 
 ```sh
-bun run sim snapshots                 # check, iPhone then iPad (harness-shared, harness-shared-ipad)
-bun run sim snapshots --iphone --only=ScreenSnapshotTests/testBoard
-bun run sim snapshots --record        # write/update the references after an intended change
-bun run sim snapshots --out=/tmp/shots   # also write every render as <device>/<name>-{light,dark}.png
+bun run testing ios                          # check, iPhone then iPad (harness-shared, harness-shared-ipad)
+bun run testing ios --iphone --only=ScreenTests/testBoard
+bun run testing ios --record                 # write/update the references after an intended change
+bun run testing ios --out=/tmp/shots         # also write every render
 ```
 
-- **Screens:** the board (phone pager, iPad columns and sidebar), a ticket's Spec tab and Activity
-  tab (the tab strip, hero, history bar and composer come with them), a ticket sheet's frame (the
-  Request changes sheet) and the docked ticket cards. Each renders in light and dark, on the iPhone
-  and the iPad. These cover the layout, theming and size-class code every other screen shares; a new
-  screen is one `func test…` in `ScreenSnapshotTests.swift` using the same `SnapshotWorld`.
 - **Approach:** an in-house renderer, not swift-snapshot-testing. The repo has no third-party Swift
   dependency (the only package is local, and the JS side is bundled by bun); swift-snapshot-testing
   would be the first, plus the swift-syntax it pulls in, for what is a UIHostingController, a PNG
-  and a pixel compare. `SnapshotRenderer` puts the view in a real window in the host app's scene
-  (real size classes, safe areas and traits), `SnapshotAssert` compares.
-- **Hosted:** the test bundle runs inside the app (`@testable import Harness`) under
-  the `HarnessSnapshots` scheme, built `Debug` into `ios/build/dd-snapshots`. Under XCTest
-  `HarnessApp` stays an empty window: `MemoryStorage`, no widgets, no push registration.
-- **Fixtures:** `SnapshotWorld` builds a store from fixed models (`Ticket`, `Project`, `ActivityEntry`,
-  spec revisions) with a stub client and socket, and a real `AppModel` over `MemoryStorage`. Every date
-  derives from `SnapshotWorld.now`, which the screens read as the clock (`\.snapshotNow` in
-  `RelativeTimeText` and `NowReader`). Persisted UI state in `UserDefaults` (the docked tickets) is
-  cleared before and after each test.
-- **Deterministic:** scale 2, animations off, fixed clock and fixtures, light/dark by window style.
-  The renderer captures until three identical frames in a row (after a minimum), so a sheet or
-  push that lands late is waited for, and a screen that never settles (a spinner, a pulsing busy
-  dot, a timer) fails as "kept changing" instead of recording a half-drawn frame: fixtures leave
-  `busy` off for that reason.
-- **References:** `HarnessSnapshotTests/References/<iphone|ipad>/<name>-{light,dark}.png`, committed.
-  They depend on the simulator's iOS runtime (27.0, the only one we use) and the device size.
-- **A diff:** the test fails with the count and share of differing pixels and three paths: the
-  reference, `<name>.actual.png` and `<name>.diff.png` (red where pixels differ over a faded
-  reference), written to `ios/build/snapshots/failures/<device>/`. A pixel differs when a channel
-  is more than 2 off; up to 0.02% of pixels may. A missing reference fails and says how to record it.
-- **Screenshots for a spec:** `bun run sim snapshots --out=<dir> [--only=…]` writes the renders
-  without a daemon, in about the time of the build plus a few seconds, and they are what the
-  references are made of, so they match what the checks guard.
+  and a pixel compare. `Renderer` puts the view in a real window in the host app's scene (real size
+  classes, safe areas and traits), `ReferenceImages` compares.
+- **Hosted:** the test bundle runs inside the app (`@testable import Harness`) under the
+  `HarnessScreens` scheme, built `Debug` into `testing/.build`. Under XCTest `HarnessApp` stays an
+  empty window: `MemoryStorage`, no widgets, no push registration.
+- **Deterministic:** scale 2, animations off, the world's fixed clock (`\.snapshotNow` in
+  `RelativeTimeText` and `NowReader`), light/dark by window style. A render waits for the display's
+  frames to stop changing and the transport to have nothing in flight, never for a fixed delay.
+  Spinners that repeat forever are frozen where they stand so a busy ticket can still settle.
+- **References:** `testing/ios/references/<iphone|ipad>/`, committed. They depend on the
+  simulator's iOS runtime (27.0, the only one we use) and the device size.
+- **A diff:** a failure writes `<name>.actual.png` and `<name>.diff.png` to a temp directory and
+  prints the paths. A pixel differs when a channel is more than the tolerance off, and a budget of
+  differing pixels is allowed. A missing reference fails and says how to record it.
+- **Screenshots for a spec:** `bun run testing ios --out=<dir> [--only=…]` writes the renders.
 
 ## Disk budget (parallel agents)
 
@@ -1197,82 +1080,31 @@ Several tickets build at once on a Mac with little free disk. CLAUDE.md → Simu
 for this app they come down to:
 
 - Test only on iOS 27.0. Never download a runtime or create a simulator.
-- Use the shared `harness-shared` simulator through `bun run sim with-lock -- …`. dev-sim and
-  sim-check take the lock themselves.
+- Use the shared `harness-shared` simulator through `bun run sim with-lock -- …`. dev-sim,
+  `testing ios` and `testing walk` take the lock themselves.
 - Build with `-derivedDataPath ios/build/dd` inside your own worktree and nowhere else.
 - Run `bun run sim disk` before any `xcodebuild`, and block and ask when it exits 1.
-- When you finish, delete `ios/build` and `ios/HarnessKit/.build`. Leave the simulator alone.
+- When you finish, delete `ios/build`, `ios/HarnessKit/.build` and `testing/.build`. Leave the simulator alone.
 
-## Debug state probe
+## Accessibility labels (read this before porting a screen)
 
-A SIM_CHECK build (build.ts's simulator build sets `SIM_CHECK`; the device and archive builds
-never do, so a release has none of it) writes the app's state as JSON to
-`<app container>/tmp/harness-debug-state.json` about every 50 ms (`Harness/App/DebugProbe.swift`,
-written atomically). `ios/Tools/sim-check.ts` finds the container with `simctl get_app_container … data`
-and reads the file (`Tools/probe.ts`). **Why a file:** a URL route plus a daemon post needs a round trip
-before a read lands, a daemon route to carry it, and a paired app; the file is a read, always current and
-there before pairing. The accessibility tree stays for taps and for what a person reads on screen.
+The walkthrough and dev-sim find elements by AXLabel (through AXe): the visible text of an element,
+or its `accessibilityLabel`. The rule for every screen:
 
-The shape is HarnessKit's `DebugState` (`Shell/DebugState.swift`, pinned by `DebugStateTests`):
-
-```json
-{
-  "version": 1, "seq": 42, "settled": true, "quietMs": 812, "busy": [], "dockMounts": 1,
-  "router": {
-    "selectedTab": "board", "path": ["ticket:HARNESS-1:spec"], "sheet": null, "cover": null,
-    "ticketSheet": "presented",
-    "dock": [{"id": 0, "kind": "ticket", "title": "HARNESS-1", "path": ["ticket:HARNESS-2"]}]
-  },
-  "editor": {
-    "markedLines": ["let x = 1"], "selection": {"anchor": 0, "head": 0}, "dirty": false,
-    "scrollY": 0, "lineCount": 12
-  }
-}
-```
-
-- `dockMounts` is how many times the phone's dock container has mounted since launch: one, however
-  tickets open, switch or dock.
-- `router` is the main window's `Router`: the selected tab's stack (one `kind:detail` string per screen),
-  `sheet`/`cover`, the ticket sheet's state (`presented`, `docked`, `gone`) and every ticket sheet,
-  most recently used first. `editor` is the file editor on screen (absent with none): the text of each
-  line the page marked (`data-selected-line` rows), the selection, the dirty flag, the page's scroll offset,
-  the line count and how many colors the drawn code carries (`colors`, 0 for plain text), read from the page through `window.harnessEditor.probe()` (editor/src/bridge.ts).
-- `settled` is the app's idea of "at rest": `busy` is empty and nothing in the state has changed for 250 ms
-  (`quietMs`, from `DebugSettle`). `busy` holds `editor` (a page that hasn't said ready), `animating:<layer>:<key>`
-  (a Core Animation animation in flight in any window, the keyboard's and a sheet's included; one that
-  repeats forever, like a spinner, doesn't count) and `scrolling` (a scroll view dragged or coasting).
-  `seq` counts writes, so a reader waits for it to move to know a state postdates its last action.
-- sim-check waits with `atRest(udid, fallbackMs)` where it used to sleep (fresh writes, settled, quiet for
-  the old sleep's length up to 300 ms), and with `probeUntil` for a state to reach. What no probe state
-  covers (an image or a video drawing, a list loading from the daemon, a gesture's own timing) still sleeps.
-  An app built without the probe (`--app=` of a release build) falls back to those sleeps.
-- Adding to the shape means changing `DebugState`, its test, `Tools/probe.ts` and this section together.
-
-## Accessibility labels and sim-check (read this before porting a screen)
-
-**sim-check finds everything by AXLabel**: the visible text of an element, or its
-`accessibilityLabel`. `ios/Tools/sim-check.ts` drives the app through the accessibility tree
-(AXe) and deep links. The rule for every screen:
-
-- Wherever sim-check looks for a label, the UI exposes **exactly** that label. Grep
-  sim-check.ts for the screen's strings before you port it and keep every one: column chips
+- Keep the labels the apps' tests and tools look for exactly as they are: column chips
   "Planning, 3" (`"<Status>, <count>"`), card labels starting "GREET-1 <title>", "Options" /
   "Options, …", "Cancel", "Allow once", "Start work", "Message the agent…", "Reset to built-in",
   "Customize", "Image phone.png", "Prompt", "Model, …", "Agent review: skipped", "Remote ID JIRA-62"…
-- A composite control whose label sim-check reads (a card, a chip) uses
+- A composite control whose label is read (a card, a chip) uses
   `.accessibilityElement(children: .ignore)` + `.accessibilityLabel(…)`, so AXe sees one element
   with the whole string instead of its pieces.
 - The root AX element must stay the app ("Harness"), so no full-screen overlay may take
   accessibility focus above the window.
-- Don't label a container whose children sim-check taps (`.accessibilityElement(children:
+- Don't label a container whose children are tapped (`.accessibilityElement(children:
   .contain)` plus `.accessibilityLabel`): AXe then lists the container as one element and drops
   its rows. That's why the mention list and the project color swatches have no group label.
 - Every route in § App shell is reachable by a `harness://` link (the same links the 1.x app
   took, so old links keep working), with the same semantics (a tab link pops to the tab root and dismisses modals; a ticket link pushes).
-
-`bun ios/Tools/sim-check.ts --only=<name>` shoots one catalog screen (or runs one check) on the shared
-simulator; `--shot=<link>` shoots any route once. Validation (no `--only`) opens every route and
-checks the app survives it. A change to a screen should keep its `--only=` entries passing.
 
 ## Parity table
 
@@ -1280,8 +1112,7 @@ This is the historical parity audit against the 1.x React Native app, which has 
 the "RN file" column names files from that app. HARNESS-145 audited every file in its routes,
 screens, UI kit, lib and state against `main` as of the HARNESS-155/157/160 merges: each
 user-visible feature, action, state, empty state, error, haptic, deep link and persistence key,
-read on both sides and checked in the simulator where sim-check reaches it. Logic rows are also
-pinned by fixtures (§ Fixture pipeline). Every row is done. "Differs" notes a deliberate,
+read on both sides and checked in the simulator. Every row is done. "Differs" notes a deliberate,
 native-pattern difference, not a missing feature.
 
 | Feature | RN file | Swift file | Status |
@@ -1342,41 +1173,15 @@ Release builds carry no placeholders or debug routes: every `-debugScreen` galle
 viewer bench, the plugin probe and HighlightPreviewView are inside `#if DEBUG`, and Release
 defines no DEBUG condition.
 
-## Manual checks (HARNESS-145 results)
+## Checks only a device can do
 
-Checked on the shared simulator (iOS 27.0) unless marked **device**:
+Simulators (and AXe) can't do these, so they stay manual, on a device:
 
-- **Board card push → Back:** passes in every full interaction run. Back is tapped by label when
-  AXe sees it, else at the header point sim-check's `tapHeader` uses.
-- **Robustness (a scripted pass with real daemons):**
-  - Daemon restart: the "Reconnecting to …" banner shows, then clears, and a ticket made after
-    the restart arrives live (4 of 5 runs; once the live event didn't arrive within 20 s,
-    though the banner cleared).
-  - Token rotation shows the red re-pair banner, and re-pairing clears it.
-  - Two Macs paired, switching between them from Connect.
-  - Cold launch from `harness://ticket/<key>?tab=details`.
-  - Backgrounding to Settings.app: a ticket made meanwhile shows on return.
-  - Dynamic Type at AX5 on the board, ticket, Settings and New session.
-- **Keychain migration:** the Release build installed over a paired 1.x React Native app comes up
-  with that app's saved Mac.
-- **Transcript rows the dummy driver can't produce** (seeded straight into the service's
-  database):
-  - A thinking row expands and collapses.
-  - A tool result with an inline base64 PNG shows the image in the expanded row.
-  - 604 entries: "Show earlier messages (460)" → (310) keeps the row being read in place.
-- **Large boards:** `--paging` (125+ done tickets) passes. The Done column loads 50 a page, so a
-  bigger history only adds pages.
-- **Device only (simctl and AXe can't do these):**
-  - The chip-jump haptics.
-  - Rotating on the Browser tab (ResizeGate).
-  - Long-press-then-drag on the Browser tab.
-  - Smoothness (frame times) of a long transcript fling.
-  - Switching between two plugin tabs: this repo's only plugin tab is git:changes, which is now
-    built in.
-- **`--keyboard`** passes (4/4 native). A headless simulator (no Simulator.app) always has a
-  hardware keyboard attached, which minimizes the software keyboard to a bar. That holds whatever
-  the host's `ConnectHardwareKeyboard` says, and after a reboot too. So sim-check turns the
-  simulated device's own `AutomaticMinimizationEnabled` (com.apple.keyboard.preferences) off for
-  the run and puts it back afterwards, so no other simulator changes. It types by tapping the
-  on-screen keys, because AXe's `type` and `key` are hardware key events, which put iOS back in
-  hardware-keyboard mode.
+- The chip-jump haptics.
+- Rotating on the Browser tab (ResizeGate).
+- Long-press-then-drag on the Browser tab.
+- Smoothness (frame times) of a long transcript fling.
+- Switching between two plugin tabs: this repo's only plugin tab is git:changes, which is now
+  built in.
+- Landscape on iPad: AXe's tree reads in the app's landscape points but its touches land in the
+  device's portrait ones, and the keyboard still draws in portrait across the app.

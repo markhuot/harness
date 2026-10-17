@@ -2,8 +2,8 @@ import Foundation
 
 // The Changes tab's payloads: Codable ports of the types in plugins/git/git.ts (ChangedFile,
 // Changes, Commit) and the plugin's /log and /file responses. They aren't in protocol.ts yet; the
-// git plugin serves them under /plugins/git/api/… (ChangesSource.swift). Samples live in
-// shared/fixtures/cases/changes.ts and ChangesTests round-trips them.
+// git plugin serves them under /plugins/git/api/… (ChangesSource.swift). The logic tests
+// (testing/swift) round-trip samples of them.
 
 /// How a changed file changed. Untracked files are new files git doesn't know about yet.
 public enum ChangedFileStatus: OpenEnum {

@@ -3,7 +3,7 @@
 // the result with their markdown primitives, so turning changes on keeps headings, lists, tables and
 // code where they were, with added words marked green and removed ones red.
 //
-// The output is plain JSON (shared/fixtures/cases/specDiff.ts pins it for the iOS port, which must
+// The output is plain JSON (the logic tests in testing/l0 and testing/swift pin it for the iOS port, which must
 // reproduce it exactly). The algorithm, step by step:
 //
 // 1. Sequences (blocks, list items, table rows, code lines, words) are aligned with `lcs`: the

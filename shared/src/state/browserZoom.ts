@@ -2,7 +2,7 @@
 // letterboxed (fitRect); zooming scales that drawn rect 1–BROWSER_ZOOM_MAX× around the pinch and
 // panning moves it. Only the app's view changes: the page never sees the pinch. Input maps through
 // the zoomed rect with toPagePoint, like the unzoomed one. HarnessKit's BrowserZoom.swift is the
-// iOS port, held to these functions by shared/fixtures/cases/browserZoom.ts.
+// iOS port, held to these functions by the logic tests (testing/l0, testing/swift).
 
 import type { Rect } from "./format";
 

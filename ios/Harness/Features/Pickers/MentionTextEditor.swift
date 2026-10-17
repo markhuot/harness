@@ -137,7 +137,7 @@ struct MentionTextEditor: View {
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(c.border, lineWidth: 1 / 3))
             // No container label ("Commands"/"Files"): a labeled container is one element
-            // to AXe, which then hides the rows sim-check taps (ARCHITECTURE § Accessibility labels).
+            // to AXe, which then hides the rows the UI tests tap (ARCHITECTURE § Accessibility labels).
         }
     }
 

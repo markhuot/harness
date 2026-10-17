@@ -84,7 +84,7 @@ public enum BoardScreenRules {
         return String("\(Keys.keyLabel(t)) · \(t.title)".prefix(90))
     }
 
-    /// What VoiceOver reads for a card (and what sim-check matches): "KEY title", plus why it
+    /// What VoiceOver reads for a card (and what the UI tests match): "KEY title", plus why it
     /// matters when it's a draft, waiting on an approval, or blocked.
     public static func cardAccessibilityLabel(_ t: Ticket) -> String {
         let suffix = t.draft == true ? ", draft" : t.pendingApproval != nil ? ", needs approval" : t.status == .blocked ? ", blocked" : ""

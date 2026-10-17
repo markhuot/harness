@@ -111,7 +111,7 @@ export function TerminalPane({ paneId, content, zoomed, covered, focused }: { pa
         keyHandler: (e) => appOwnsKey(e),
       });
       viewRef.current = view;
-      // For scripts/terminal-pane-check.ts, which reads the screen (a canvas) through the buffer API.
+      // For the Mac tests, which read the screen (a canvas) through the buffer API.
       (host as HTMLElement & { harnessTerminal?: unknown; harnessTerminalView?: TerminalView }).harnessTerminal = view.term;
       (host as HTMLElement & { harnessTerminalView?: TerminalView }).harnessTerminalView = view;
       view.term.onResize(noteSize);

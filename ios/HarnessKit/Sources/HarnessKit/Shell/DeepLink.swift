@@ -1,6 +1,6 @@
 import Foundation
 
-// The app's navigation vocabulary and the harness:// links that reach it. ios/Tools/sim-check.ts
+// The app's navigation vocabulary and the harness:// links that reach it. The UI tests
 // drives every screen through them. Parsing lives here
 // so it's tested on the host; the app's Router (Router.swift) applies a DeepLink.
 

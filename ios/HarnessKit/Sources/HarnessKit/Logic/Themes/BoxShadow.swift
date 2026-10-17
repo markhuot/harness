@@ -2,7 +2,7 @@ import Foundation
 
 /// One layer of a CSS `box-shadow` list, as the theme shadow tokens write them:
 /// `[inset] <x> <y> [blur] [spread] [color]` with lengths in px (or a bare 0).
-/// The reference parser (and its fixtures) is in shared/fixtures/cases/themes.ts.
+/// The reference parser (and its fixtures) is in the logic tests (testing/l0, testing/swift).
 public struct BoxShadow: Hashable, Sendable {
     public var x: Double
     public var y: Double

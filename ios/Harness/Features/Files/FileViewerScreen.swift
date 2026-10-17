@@ -330,7 +330,7 @@ private struct FileInfoBar: View {
 }
 
 /// File / Diff, drawn as a segmented control from two buttons (AXe lists a segmented Picker as one
-/// unlabeled element, and sim-check taps the segment whose label starts "Diff").
+/// unlabeled element, and the UI tests tap the segment whose label starts "Diff").
 private struct FileTabsBar: View {
     @Binding var tab: FileViewerTab
     let rows: [PatchRow]

@@ -2,7 +2,7 @@ import Foundation
 
 // Port of shared/src/state/runSections.ts: the transcript as run sections, each opening with a
 // sticky header ("Work • Claude Code, Opus 5.5" and its start time). Pure, and kept in step with
-// TypeScript by shared/fixtures/cases/runSections.ts.
+// TypeScript by the logic tests (testing/l0, testing/swift).
 
 public enum RunSections {
     /// What a row says about its run, for splitting. nil for rows that belong to no run (streaming

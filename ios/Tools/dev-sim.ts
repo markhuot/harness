@@ -128,7 +128,6 @@ export function parseArgs(argv: string[]): Options {
     if (simGiven || o.links.length || o.shot || o.app || !o.build) throw new UsageError("--seed-only takes only --keep");
     return o;
   }
-  if (/^sim-check /.test(o.sim)) throw new UsageError(`${o.sim} belongs to sim-check; use the shared simulator (${SHARED_DEVICE})`);
   return o;
 }
 

@@ -4,8 +4,8 @@ import Foundation
 // plugin's Changes UI relies on) plus the rows the native tab draws. The plugin keys "viewed" marks
 // by a fingerprint of Pierre's parse (shared/src/state/changes.ts), so every field the fingerprint
 // reads (paths, change type, modes, hunk positions, and each side's lines as Pierre keeps them,
-// trailing newline included) must come out exactly as Pierre's do; shared/fixtures/cases/changes.ts
-// runs the real parser over a corpus of patches and ChangesPatchTests checks this one against it.
+// trailing newline included) must come out exactly as Pierre's do; the logic tests
+// (testing/l0, testing/swift) check this one against the real parser.
 //
 // Deliberate differences from Pierre: only git-format patches are parsed (the plugin's patch always
 // is one; a plain unified diff without `diff --git` lines gives no files), and `git format-patch`

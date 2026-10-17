@@ -32,14 +32,14 @@ export function columnCount(labels: string[], status: string): number | undefine
   return hit ? Number(hit.slice(status.length + 2)) : undefined;
 }
 
-/** AXe looks for SimulatorKit under Developer/Library/PrivateFrameworks, which Xcode 27 moved; it gets a symlinked Xcode that has it (the same shim and place sim-check uses). */
+/** AXe looks for SimulatorKit under Developer/Library/PrivateFrameworks, which Xcode 27 moved; it gets a symlinked Xcode that has it (the same shim and place dev-sim uses). */
 function xcodeShim(developerDir: string): string {
   const real = resolve(developerDir, "..");
-  const root = join(homedir(), "Library", "Caches", "harness-sim-check", "xcode-shim");
+  const root = join(homedir(), "Library", "Caches", "harness-xcode-shim", "xcode-shim");
   const contents = join(root, "Xcode.app", "Contents");
   const dev = join(contents, "Developer");
   if (existsSync(join(dev, "Library", "PrivateFrameworks", "SimulatorKit.framework"))) return dev;
-  // Built beside the shared cache and renamed into place, so sim-check on the other simulator never
+  // Built beside the shared cache and renamed into place, so a run on the other simulator never
   // sees (or is handed) a half-built shim.
   const final = root;
   const tmp = `${root}.tmp-${process.pid}`;

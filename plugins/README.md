@@ -129,11 +129,9 @@ while `ticket.busy` is true, as the git plugin does.
 
 - Server routes: boot the service with `createHarness({ home, port: 0, … })` from
   `service/src/app.ts` and call your routes with `HarnessClient.request`. The built-in plugins load
-  by default. See `plugins/git/server.test.ts`.
+  by default. See `testing/service/plugins`.
 - The bridge: `connect({ window, fetch })` accepts a fake window, so it can be tested without a DOM.
-  Give the fake window a `ReactNativeWebView` to test the iOS transport. See
-  `plugins/sdk/harness-plugin.test.ts`, and for the iOS host side, `PluginHostTests.swift` and
-  `PluginBridgeTests.swift` in `ios/HarnessKit/Tests/HarnessKitTests/Logic/`.
-- In the app: `app/scripts/lib/drive.ts`'s `frame(urlPart)` evaluates JavaScript inside a plugin
-  iframe. (The git plugin's Changes tab is drawn by the apps themselves; `cd app && bun run changes`
-  checks that against a real daemon.)
+  Give the fake window a `ReactNativeWebView` to test the iOS transport.
+- In the app: `bun run testing walk` drives the real Mac app over DevTools (`testing/lib/cdp.ts`),
+  which can evaluate JavaScript inside a plugin iframe. (The git plugin's Changes tab is drawn by the
+  apps themselves.)

@@ -3,7 +3,7 @@ import SwiftUI
 
 // The ticket screen's sheets (Request changes, Approve and…). Each draws its own header (Cancel,
 // the title over the key, the primary action) rather
-// than toolbar items, because AXe doesn't see a sheet's toolbar and sim-check taps "Cancel" and
+// than toolbar items, because AXe doesn't see a sheet's toolbar and the UI tests tap "Cancel" and
 // "Approve" by label.
 
 /// A sheet's frame: the header, then the body in a scroll view over the theme background.

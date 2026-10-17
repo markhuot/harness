@@ -80,24 +80,10 @@ desktop agree on keys, reducers, themes and markdown. See [ios/README.md](ios/RE
   replaces a TestFlight or release install on the same device. Use
   `DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer` when `xcode-select` points
   at the Command Line Tools.
-- **Check on the simulator:** `bun ios/Tools/sim-check.ts` (or `bun run --cwd ios sim-check`)
-  builds the app for the simulator, runs it against a throwaway daemon and validates what
-  needs a simulator by real taps (via [AXe](https://github.com/cameroncooke/AXe)): gestures,
-  sheets and docking, the keyboard, scrolling, a relaunch, crashes. It takes no screenshots; logic
-  such as routing and request bodies lives in `swift test` and the service's `bun test`.
-  Screenshots are opt-in: `--screens` shoots the whole catalog (light and dark, to
-  `ios/build/screens/`), `--only=<name>` shoots a catalog entry or runs one check, and
-  `--shot='harness://ticket/{headings}?tab=spec'` takes one pair of any route
-  (`--prepare='scroll:Label;tap:Label'` reaches a state a link can't). `--themes=catppuccin-mocha,…`
-  adds board + settings shots per color theme. It runs on the shared `harness-shared` simulator
-  (iOS 27.0) and holds its lock for the run, so other agents wait their turn. `--shards=N` splits
-  the screens across extra "sim-check 2" … "sim-check N" simulators. `--sheets`, `--ipad`,
-  `--ipad --sheets`, `--memory` and the other modes in the header of `ios/Tools/sim-check.ts` each
-  validate one area. `--grep=<pattern>` runs only the checks whose names match, and `--keep` then
-  `--reuse` reattaches to the kept daemon, seeds and app so one check reruns in seconds
-  (`sim-check --help` lists every flag; `bun run sim reap --kept` clears kept runs).
-  `ios/build/screens/timings.json` shows where the time went.
-  `bun ios/Tools/dev-sim.ts` is the dev loop: it seeds a daemon, installs a fresh build and pairs it.
+- **Try it on the simulator:** `bun ios/Tools/dev-sim.ts` is the dev loop: it seeds a throwaway
+  daemon, installs a fresh build on the shared simulator, pairs it and reads the screen through
+  [AXe](https://github.com/cameroncooke/AXe). The automated checks of the iPhone and iPad apps are
+  `bun run testing ios` and `bun run testing walk` (see Tests).
 - **Simulator:** `bun run sim` (`ios/Tools/sim.ts`) manages the small pool of simulators everyone shares
   (`harness-shared`, `harness-shared-2`; `HARNESS_SIM_POOL_SIZE` sets how many). `ensure` creates `harness-shared` (iPhone 18 Pro, pinned to the iOS 27.0 runtime; it never falls
   back to another runtime or downloads one), boots it and prints its UDID.
@@ -257,40 +243,20 @@ built-in plugin UIs, and the service also builds them on start when they're miss
 
 ## Tests
 
-`bun run verify` (repo root) runs the layers your diff needs: it maps the changed files to bun tests,
-typecheck, `swift test`, the matching Mac app check and the iPhone snapshot and sim-check runs, and
-exits non-zero if any fail. `--dry-run` prints the plan and why, `--all` runs everything, and
-`--base=<ref>` diffs against another branch. The mapping is `scripts/verify-plan.ts`. The layers
-by hand:
-
-`bun run nightly` runs everything `verify --all` covers, with the full sim-check walk-through on two
-shards (`--shards=2`). The watcher in `service/examples/watchers/nightly.json` runs it from the main
-checkout once a day (add it in Settings → Watchers; adjust `cwd` to your checkout). All
-green prints nothing (exit 4, "nothing to report"). A failure prints the failing layer, the failing
-check names and the tail of its log to the Inbox, where triage dispatches it to a ticket in the HARNESS
-project. The simulator layer is skipped, and reported, when `bun run sim disk` finds under 5 GiB free.
-`--list` prints the layers and `--only=<layer id>,…` runs some of them.
+The whole suite lives in `testing/` (its README describes each layer), and `bun run testing` runs it
+all: it is the check every change passes before it lands on `main`. It runs on this Mac; there is no
+hosted CI.
 
 ```sh
-cd shared && bun test     # key helpers, client state (reducer, conductor, models, bridge, markdown), themes (registry, WCAG contrast)
-cd service && bun run test # store, orchestrator, drivers, tools, MCP, browser (real Chrome), HTTP/WS e2e, CLI; files in parallel
-cd app && bun test        # routes, theme resolution, CSS var coverage, keyboard registry, board and pane navigation, palette ranking
-cd ios/HarnessKit && swift test   # the iPhone app's protocol, client, logic and state, against the JSON fixtures
-cd ios && bun run test    # iOS build, simulator and highlighter tooling
-bun run sim snapshots     # the iPhone/iPad screens rendered from fixture models vs. reference PNGs (--record updates them, --out=<dir> writes the renders)
-cd release && bun run test # release prepare, publish checks, TestFlight, install page
-cd plugins/sdk && bun test   # plugin iframe bridge (connect)
-cd plugins/git && bun test   # git plugin routes against real temp repos
-cd app && bun run smoke   # drives the Electron UI against a seeded world: the real daemon with the dummy driver (app/scripts/lib/world.ts)
-cd app && bun run shoot   # screenshots of every screen and state, against the same seeded world
-cd app && bun run world   # boots that world and leaves it running, for `HARNESS_URL=… HARNESS_TOKEN=… bun run dev`
-cd app && bun run build && bun scripts/approve-plan.ts   # Approve plan against a real daemon, with screenshots
-cd app && bun run real    # drives the Electron UI against a real daemon in a temp home
-cd app && bun run changes # the Changes tab against a real daemon, light + dark screenshots
-cd app && bun scripts/acceptance.ts [dummy|claude-code]   # installed app + launchd service, hello world → Done
+bun run testing          # the full gate: lint, L0 logic, L1–L3 service, L4 Mac and iOS, the L5 walkthrough
+bun run test             # its fast layers: no simulator and no Electron
+bun run typecheck        # tsc over every project, in parallel
+bun run testing l0       # logic tests, bun and Swift (testing/l0, testing/swift)
+bun run testing mac      # Mac views under happy-dom against the shared world
+bun run testing ios      # iPhone and iPad screens from the world, against reference images (--record updates them, --out=<dir> writes the renders)
+bun run testing walk     # one journey through the real service, Mac app, iPhone and iPad (--out=<dir> for the screenshots)
+bun run testing stress   # L0–L2 repeatedly, shuffled, in parallel
 ```
 
-`bun run test` in `service` runs each test file in its own `bun test` process, several at once
-(`shared/src/testing/parallel.ts`), slowest first by the last run's times. Set
-`HARNESS_TEST_JOBS` to change how many run at once. A path or name filter
-(`bun run test src/api`) runs plain `bun test` instead, and so does `bun test` itself.
+The simulator layers use the shared pool (`bun run sim`, below) and need the iOS 27.0 runtime;
+`testing ios` and `testing walk` stop when `bun run sim disk` finds under 5 GiB free.

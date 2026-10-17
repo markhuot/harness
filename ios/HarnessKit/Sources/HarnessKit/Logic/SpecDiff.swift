@@ -4,7 +4,7 @@ import Foundation
 // revisions of a spec are parsed with Markdown.parseBlocks/inlineTokens and compared block by block
 // and word by word, so turning changes on keeps headings, lists, tables and code where they were,
 // with added words marked green and removed ones red. The TS file's header spells out the
-// algorithm; shared/fixtures/cases/specDiff.ts pins the output this port must reproduce exactly.
+// algorithm; the logic tests (testing/l0, testing/swift) pin the output this port must reproduce exactly.
 //
 // Equality is the TS one: JSON.stringify keys and `===` strings compare code units, so keys here
 // are UTF-8 bytes (never Swift's canonically-equivalent String ==), and text splits on scalars.

@@ -84,7 +84,7 @@ function plist(site: string, app: { url: string; version: string; bundleId: stri
 
 /**
  * The bento grid. Each image is img/<img>-light.webp and img/<img>-dark.webp (1x captures of the
- * Mac app against the seeded world (app/scripts/lib/world.ts) or the git plugin's temp daemon, and sim-check shots
+ * Mac app against a seeded dev daemon or the git plugin's temp daemon, and simulator shots
  * of the iPhone app, so they only show mock data). `size` picks the tile's span on wide screens.
  */
 export const features: { img: string; w: number; h: number; size: "hero" | "full" | "tall" | "wide" | "small"; title: string; body: string }[] = [

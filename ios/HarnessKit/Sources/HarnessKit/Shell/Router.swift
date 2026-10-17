@@ -12,7 +12,7 @@ import Observation
 /// - `.ticket`, a ticket window's: `root` is the ticket it shows, pushes land on its stack
 ///   (`path(.board)`), and section links go to `onSectionLink` (a main window).
 ///
-/// Link semantics (ios/Tools/sim-check.ts relies on them): a tab link pops
+/// Link semantics (the UI tests rely on them): a tab link pops
 /// everything above the tabs, modals included (a presented ticket sheet docks); a pushed link
 /// pushes a fresh screen, a ticket's on the ticket sheet (where the ticket already on top doesn't
 /// stack a copy). A ticket opened from outside the sheet (`openTicket`, `openFromOutside`: a board

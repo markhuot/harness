@@ -47,7 +47,7 @@ export function FileEditor(props: FileEditorProps) {
     const p = latest.current;
     const h = createEditor(host.current!, { contents: p.contents, language: p.name, theme, range: p.range ?? undefined, readOnly: p.readOnly });
     handle.current = h;
-    // For the app checks (scripts/file-pane-check.ts), which read and drive the editor through it.
+    // For the app checks (the Mac tests), which read and drive the editor through it.
     (host.current as HTMLElement & { harnessEditor?: EditorHandle }).harnessEditor = h;
     h.onDirty((d) => latest.current.onDirty(d));
     h.onSave(() => latest.current.onSave());

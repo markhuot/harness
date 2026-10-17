@@ -1,4 +1,4 @@
-/// The words on a docked card: its menu line and its VoiceOver name (which sim-check reads too).
+/// The words on a docked card: its menu line and its VoiceOver name (which the UI tests read too).
 public enum DockLabels {
     /// A menu row's one line: "<ref> · <title>", or the ref alone with no title.
     public static func menuLine(ref: String, title: String?) -> String {

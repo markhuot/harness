@@ -11,7 +11,7 @@ struct HarnessApp: App {
     /// The app's phase across all its windows: active while any window is, background once none is.
     @Environment(\.scenePhase) private var scenePhase
 
-    /// The snapshot tests (HarnessSnapshotTests) host their views in this app: it stays an empty
+    /// The screen tests (HarnessScreenTests) host their views in this app: it stays an empty
     /// window, with no Keychain, widgets or push registration.
     private static let underTest = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
 

@@ -1,10 +1,9 @@
 # Harness for iPhone and iPad
 
 The iPhone and iPad app, in SwiftUI (version 2.0, which replaced the 1.x React Native app).
-`shared/` is the spec for everything the app shares with the desktop, through generated fixtures.
-For logic that only the phone has (and that used to live in the React Native app's TypeScript),
-the frozen fixtures in `HarnessKit/Tests/HarnessKitTests/Fixtures/` are the spec, and `swift test`
-owns them. See [ARCHITECTURE.md](ARCHITECTURE.md).
+`shared/` is the spec for everything the app shares with the desktop: the wire contract tests in
+`testing/contract` hold the Swift protocol types to `shared/src/protocol.ts`. See
+[ARCHITECTURE.md](ARCHITECTURE.md).
 
 Disk is tight and several tickets build at once. Follow [ARCHITECTURE.md § Disk budget](ARCHITECTURE.md#disk-budget-parallel-agents) (one simulator, `-derivedDataPath ios/build/dd`, clean up when done).
 
@@ -39,9 +38,8 @@ bun run sim with-lock -- sh -c 'xcrun simctl install "$SIM_UDID" ios/build/dd/Bu
 Or open `Harness.xcodeproj` in Xcode and press Run.
 
 `bun ios/Tools/build.ts sim` (from the repo root) runs XcodeGen and builds the Release
-configuration for the simulator without optimization (`-Onone`, one file at a time: a clean build takes about 40 s instead of 120 s; `--optimized` turns it back on, and `sim-check --memory` does), ad-hoc signed (the simulator only grants the Keychain to a signed app) and arm64 only, into
-`ios/build/dd/Build/Products/Release-iphonesimulator/Harness.app`. That's the build sim-check
-will drive. Install it with `simctl` and launch `com.markhuot.harness`.
+configuration for the simulator without optimization (`-Onone`, one file at a time: a clean build takes about 40 s instead of 120 s; `--optimized` turns it back on), ad-hoc signed (the simulator only grants the Keychain to a signed app) and arm64 only, into
+`ios/build/dd/Build/Products/Release-iphonesimulator/Harness.app`. Install it with `simctl` and launch `com.markhuot.harness`.
 
 ## ios/Tools/build.ts
 
@@ -64,30 +62,22 @@ The path of what it built is the only line on stdout.
 
 ## Tests
 
-- **HarnessKit** (protocol, client, logic) and **HarnessHighlight** run on the Mac host, with no simulator:
-  `cd ios/HarnessKit && swift test`. The highlighter tests bundle Shiki with bun first, so run
-  `bun install` at the repo root once. App builds need bun too, for the "Bundle highlighter" phase.
-- **Service integration** starts a real daemon on a temp `HARNESS_HOME` and drives it with
-  `HarnessClient`: `HARNESS_INTEGRATION=1 swift test --filter Integration` (from `ios/HarnessKit`;
-  needs `bun` on `PATH`).
-- **Snapshot tests** render the main screens in-process from fixture models and compare them with
-  reference PNGs, on the shared iPhone and iPad simulators: `bun run sim snapshots` (`--record` to
-  update the references, `--out=<dir>` to write the renders, e.g. for a spec's screenshots, with no
-  daemon). ARCHITECTURE.md § Snapshot tests has what is covered and how a diff is reported.
-- **Config and fixtures** (bun): `bun run test` from the repo root covers `ios/Tools/config.test.ts`
-  (Info.plist keys in `project.yml`) and `shared/src/fixtures.test.ts` (fixture freshness).
+All of the app's tests live in the top-level `testing/` directory (its README describes each layer),
+and `bun run testing` runs them. A change doesn't land until that passes.
 
-After changing a case file in `shared/fixtures/` or TS logic it exercises, regenerate the JSON:
-
-```sh
-bun shared/scripts/export-fixtures.ts
-```
-
-Frozen fixtures are never regenerated: their values came from the 1.x React Native app's
-TypeScript, and the committed JSON is now the spec. A whole frozen file is listed in `FROZEN` in
-`shared/scripts/export-fixtures.ts` and has no case file; a case file that mixes computed and
-frozen values reads the frozen ones back with `frozen(module, key)`. Change one by editing the
-JSON along with the Swift that has to match it.
+- **Logic** (protocol decoding, request bodies, view rules) runs on the Mac host with no simulator:
+  `bun run testing l0`, which builds the Swift package in `testing/swift` against HarnessKit and
+  HarnessHighlight. App builds need bun too, for the "Bundle highlighter" phase, so run
+  `bun install` at the repo root once.
+- **Screens** render in a test bundle hosted by the app, from the shared world in `testing/world`,
+  and are compared with reference images on the shared iPhone and iPad simulators:
+  `bun run testing ios` (`--record` to update the references, `--out=<dir>` to write the renders,
+  e.g. for a spec's screenshots).
+- **The walkthrough** (`bun run testing walk`) runs one journey through the real service, the Mac
+  app, and the iPhone and iPad apps.
+- **Themes resource.** `HarnessKit/Sources/HarnessKit/Resources/themes.json` is generated from
+  `shared/src`; after changing the themes, project colors or icons, run
+  `bun shared/scripts/export-themes.ts` (a test fails while the committed file is stale).
 
 ## Run on a device
 
@@ -120,7 +110,7 @@ process.
 
 ## Dev loop (the shared simulator)
 
-`ios/Tools/dev-sim.ts` checks one screen on the shared simulator, `harness-shared` (see
+`ios/Tools/dev-sim.ts` looks at one screen on the shared simulator, `harness-shared` (see
 CLAUDE.md → Simulators and ARCHITECTURE.md → Disk budget):
 
 ```sh
@@ -147,47 +137,16 @@ token path and pid) until Ctrl-C. `--keep` lets go of the simulator lock first, 
 may reinstall the app in the meantime.
 
 dev-sim checks the screen with [AXe](https://github.com/cameroncooke/AXe)
-(`brew install cameroncooke/axe/axe`; it refuses to run without it), as sim-check does. After
+(`brew install cameroncooke/axe/axe`; it refuses to run without it). After
 each `openurl` it taps Open on iOS's "Open in “Harness”?" prompt, which the first link on a fresh
 simulator stops at. Pairing counts only once the board's column chips ("Planning, 1") show, and a
 link only once the screen changes. Otherwise the run exits 1 with the labels it saw, before any
 screenshot, and it cancels a leftover prompt first, so a stale pair link can't be accepted later.
 To read the screen yourself, `axe describe-ui` lists the AXLabels. It needs the Xcode shim that
-dev-sim and sim-check create:
-`DEVELOPER_DIR=~/Library/Caches/harness-sim-check/xcode-shim/Xcode.app/Contents/Developer axe describe-ui --udid <udid>`.
+dev-sim and the walkthrough create:
+`DEVELOPER_DIR=~/Library/Caches/harness-xcode-shim/xcode-shim/Xcode.app/Contents/Developer axe describe-ui --udid <udid>`.
 
 `--seed-only [--keep]` only starts and seeds the daemon and prints what it seeded, without a
 simulator, build or app.
 
-`ios/Tools/sim-check.ts` validates the app by real taps on the same simulator and under the same lock
-(validation takes no screenshots; shots are opt-in with `--screens`, `--only=<name>` or
-`--shot=<link>`):
-
-```sh
-bun ios/Tools/sim-check.ts --no-build --only=approve-and     # one check (or: bun run --cwd ios sim-check …)
-bun ios/Tools/sim-check.ts --no-build --only=connect          # one catalog screen, shot light and dark
-bun ios/Tools/sim-check.ts --no-build --shot='harness://ticket/{headings}?tab=spec'
-bun ios/Tools/sim-check.ts --sheets --keep                    # leave the daemon, seeds and paired app running
-bun ios/Tools/sim-check.ts --sheets --reuse --grep="dirty file"   # then one check, in seconds
-```
-
-`--grep=<pattern>` (a case-insensitive substring, or `/regex/flags`) runs only the checks whose names
-match. A check that depends on what an earlier one left on screen declares it with `needs` in
-`check()`, and the earlier checks run first as setup. `--reuse` attaches to the last `--keep` run's
-daemon, seeded tickets and paired app instead of building, installing, seeding and pairing (it uses
-the app already built; `--rebuild` builds first). A changed app is reinstalled and paired again
-against the same daemon; with nothing that fits it says why and does a full run. It keeps its state
-too. `bun run sim reap --kept` stops kept daemons and removes their folders.
-
-The simulator build is compiled with `SIM_CHECK`, which adds a debug state probe: the app writes its
-router, dock, editor and "settled" state as JSON into its container (ARCHITECTURE.md § Debug state
-probe). sim-check asserts on it (`probe`, `probeUntil`) and waits on it (`atRest`) instead of sleeping.
-A release build has none of it.
-
-It builds with `build.ts sim` (skip with `--no-build`), installs
-`ios/build/dd/Build/Products/Release-iphonesimulator/Harness.app` and, for a shot run, saves screenshots to
-`ios/build/screens/` (`--ipad`: `ios/build/screens-ipad/`). `--udid` still names a specific
-existing simulator. `--ipad` runs on `harness-shared-ipad` (an iPad Pro 11-inch), which stays booted between
-runs like `harness-shared`, so an iPad run skips creating and installing on a fresh simulator. The header of `sim-check.ts` lists every mode.
-
-When the ticket is done, delete `ios/build` and `ios/HarnessKit/.build`. Leave the simulator alone.
+When the ticket is done, delete `ios/build`, `ios/HarnessKit/.build` and `testing/.build`. Leave the simulator alone.

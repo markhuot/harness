@@ -56,7 +56,7 @@ struct DockedTicketText: Equatable {
     /// A menu row's one line: "<ref> · <title>", the system truncating the title.
     var menuLine: String { DockLabels.menuLine(ref: ref, title: title) }
 
-    /// VoiceOver's name for it, and sim-check's: "<ref>, <title>, docked".
+    /// VoiceOver's name for it, and the UI tests': "<ref>, <title>, docked".
     var accessibilityLabel: String { DockLabels.accessibilityLabel(ref: ref, title: title) }
 }
 

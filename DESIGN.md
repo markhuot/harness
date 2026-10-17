@@ -24,7 +24,7 @@ outlives the app (see "Service supervision").
 | --- | --- |
 | `shared/src/protocol.ts` | Entities, events, WS messages, request bodies — **the wire contract** |
 | `shared/src/client.ts` | Typed REST/WS client (routes below are defined by it) |
-| `shared/src/state/*` | Client state for the desktop (`@harness/shared/state`), which the iOS app ports to Swift and checks against generated fixtures: reducer + selectors, conductor, model, project-key, tab, markdown and label helpers, icon paths, the plugin host bridge. No React, DOM or native APIs |
+| `shared/src/state/*` | Client state for the desktop (`@harness/shared/state`), which the iOS app ports to Swift, with the shared world and wire contract tests keeping the two in step: reducer + selectors, conductor, model, project-key, tab, markdown and label helpers, icon paths, the plugin host bridge. No React, DOM or native APIs |
 | `service/src/config.ts` | Paths (`HARNESS_HOME`, default `~/.harness`), port (`HARNESS_PORT`, default 7717), token |
 | `service/src/db.ts`, `service/src/store/*` | SQLite schema + repositories |
 | `service/src/events.ts` | In-process event bus (`HarnessEvent`) |
@@ -37,7 +37,7 @@ outlives the app (see "Service supervision").
 | `service/src/cli.ts` | `harness service install|start|stop|status|ensure|uninstall`, `harness new ...`, `harness network|listen|pair|token rotate` |
 | `app/` | Electron main + React renderer |
 | `service/src/plugins/host.ts` | Plugin discovery, loading, `/plugins/<id>/api` + `/ui` serving, tab `when` evaluation |
-| `ios/` | iPhone and iPad app (SwiftUI, XcodeGen `project.yml`): the `Harness` app target (views, navigation, platform glue) and the `HarnessKit` Swift package (protocol types, client, logic and state, `swift test`); build and simulator tooling in `ios/Tools/`; the home screen and desktop widgets for both apps in `ios/Widgets/` (ios/ARCHITECTURE.md § Widgets) |
+| `ios/` | iPhone and iPad app (SwiftUI, XcodeGen `project.yml`): the `Harness` app target (views, navigation, platform glue) and the `HarnessKit` Swift package (protocol types, client, logic and state, with its tests in `testing/swift`); build and simulator tooling in `ios/Tools/`; the home screen and desktop widgets for both apps in `ios/Widgets/` (ios/ARCHITECTURE.md § Widgets) |
 | `release/` | Release tooling: `release.ts` (prepare), `publish-install.sh` (build, GitHub release, TestFlight via `testflight.ts`), `install-page.ts` and the Vercel install site in `release/Install/` |
 | `plugins/sdk/` | Plugin API: `server.ts` (types, `definePlugin`) and `harness-plugin.ts` (iframe bridge, `connect()`) |
 | `plugins/git/` | Built-in git plugin: the routes behind the ticket **Changes** tab (which the apps draw), and a web page of it for other hosts |
@@ -103,7 +103,7 @@ changes what a group's board counts, a `project.upserted` that changes a project
 the paging of both groups, and the board pages them afresh.
 
 The iPhone and iPad app ports all of it to Swift (`Paging.groupScope`, `ProjectGroups` in
-HarnessKit, checked against the `projectGroups` and `statePaging` fixtures). Its Projects sheet and
+HarnessKit). Its Projects sheet and
 iPad sidebar list the groups under All projects. The board filter pref (`boardProject`) stores a
 group's board as its scope, so values saved before groups still read as project ids. Project
 settings has a Group picker on the same `groupRows`, where Return sets the typed name.
@@ -665,8 +665,7 @@ A finishing tool or an error still closes it; the unseen message then goes back 
 failed `--resume` writes the unseen messages again to the fresh attempt. anthropic-api: messages
 join the user message carrying the tool results; at `end_turn` a waiting message becomes a new
 user turn instead of ending the run. They count as delivered once they're in the conversation
-state. `service/scripts/claude-code-steer-check.ts` checks both claude-code cases against the
-real CLI.
+state.
 
 Runs are serialized per session and limited globally by `settings.maxConcurrentRuns` (default 4).
 `ticket.busy` / `session.busy` is true while a run is queued or running. A queued job may also
@@ -696,6 +695,12 @@ to a host and `owner/repo`; and gh's `hosts.yml` (`$GH_CONFIG_DIR`, `$XDG_CONFIG
 `~/.config/gh`) lists that host, or `GH_TOKEN`/`GITHUB_TOKEN` is set for github.com. So github.com
 and GitHub Enterprise hosts work alike, and Bitbucket, GitLab and hosts gh isn't logged into get no
 PR option.
+
+**The merge gate.** The daemon runs no check before a ticket lands: a completion run is an agent
+following these prompts, which say only to run the project's tests and typecheck. What counts as
+passing is the project's own rule. For Harness itself, CLAUDE.md says a change doesn't land until
+`bun run testing` passes on the result, so a completion run in this repo runs it on the merged
+tree. The built-in prompts name no command, since other projects and prompt overrides share them.
 
 **The project default** (`Project.completionAction`, migration 18, default `merge`) is what the
 Approve button preselects and what completes a ticket nobody picks for (a skipped human review, a
@@ -1097,13 +1102,10 @@ client state, not service state.
 | Board | a ticket's sub-agents and their transcripts, and its background tasks and their output (Agents & tasks tab, filtered to agents or tasks) | `get_ticket` (`include_agents`), `get_ticket_agent` (a sub-agent's transcript tail, a task's output tail) | the filter is a client view |
 | Local | appearance and themes, layout (sidebar, panes), board project filter, show or hide children, last-used project | none | client preferences, not service state |
 
-`service/src/orchestrator/generic-watcher-e2e.test.ts` walks the headline scenario with the
-dummy driver: a work run creates a looping `zsh -lc` watcher around
-`__fixtures__/events-api.ts` (a stand-in for `curl` against an events API) after an approval,
-each event becomes an Inbox item carrying the watcher's prompt, and triage dispatches or
-declines it by that prompt. `service/scripts/claude-code-watcher-check.ts` runs the same
-scenario by hand with the real claude-code driver for both the setup and triage, against a
-throwaway `HARNESS_HOME`.
+The generic-watcher tests in `testing/service/orchestrator` walk the headline scenario with the
+dummy driver: a work run creates a looping `zsh -lc` watcher around a stand-in for `curl`
+against an events API after an approval, each event becomes an Inbox item carrying the
+watcher's prompt, and triage dispatches or declines it by that prompt.
 
 Harness tools are advertised over MCP with `readOnlyHint: true`: Claude Code refuses
 non-read-only MCP tools in `--permission-mode plan`. That includes `tool_search` and the stubs.
@@ -1278,7 +1280,7 @@ Code's own prompt asks for bare `file_path:line_number` references; the section 
   driver ignores a non-error `num_turns: 0` result that arrives before the prompt's replay (the
   prompt is written with its own uuid). Before this, that result closed stdin, so the prompt's
   turn still ran but the CLI exited after it and killed whatever it had put in the background:
-  HARNESS-139's completion run started sim-check in the background and was marked done.
+  HARNESS-139's completion run started a long test run in the background and was marked done.
 - **anthropic-api** — direct Messages API with an API key (settings or `ANTHROPIC_API_KEY`),
   streaming, native tool loop over the harness + native tools. Message history is driver state.
 - **github-copilot** — wraps the GitHub Copilot CLI (`copilot -p <prompt> --output-format json`,
@@ -1516,14 +1518,6 @@ run kind, ticket title + spec and the last 16 transcript lines. Measured: 4–9 
 Migration 4 maps the old `claudePermissionMode` setting: `acceptEdits`/`bypassPermissions` →
 `ask`, `auto` → `auto`, `dontAsk` → `read_only` (dontAsk denied every write that wasn't
 pre-approved). PATCH /settings still accepts `claudePermissionMode` from older clients.
-
-Real checks (not `bun test`): `service/scripts/permissions-classifier-check.ts`,
-`service/scripts/claude-code-permissions-check.ts`,
-`service/scripts/claude-code-classifier-approval-check.ts` (a whole harness on a temp home and
-random port, sonnet in auto: `npx -y <missing package> init` from a README is denied
-[Code from External] → card → allow_once → the retry runs under the exact rule; `curl … | sh`
-→ card → allow_once → the retry runs in acceptEdits through the prompt tool). Run them from a
-clean `env -i HOME="$HOME" PATH="$PATH" USER="$USER"` shell.
 
 ### Models
 
@@ -1802,9 +1796,9 @@ renders to nothing is left out. Values are inserted as text and never re-parsed.
 `GET /prompts` (`HarnessClient.listPrompts`) returns `PromptEntry[]` in `PROMPT_IDS` order:
 `{ id, group, label, description, variables: [{ name, description }], builtin, override,
 overrideError }`. The settings screens edit `override` starting from `builtin`.
-`prompts-builtin.test.ts` snapshots the built-in output for a matrix of inputs, so a template
-edit that changes a built-in prompt shows up as a snapshot diff (`bun test --update-snapshots`
-after an intended change).
+`testing/service/orchestrator/prompts.test.ts` snapshots the built-in output for a matrix of
+inputs, so a template edit that changes a built-in prompt shows up as a snapshot diff
+(`bun test --update-snapshots` inside `testing/` after an intended change).
 
 ### Dummy driver script
 
@@ -2068,8 +2062,6 @@ lists what was added and whether each is on.
   `Page.frameResized`.
 - **Restarting** suspends every tab before closing Chrome (its `targetDestroyed` events would
   otherwise close them for good); a watched tab reopens at once in the new Chrome.
-- Tests: `HARNESS_NETWORK_TESTS=1 bun test src/browser/manager.test.ts -t extensions` runs the Web
-  Store flow; `app/scripts/extensions-real.ts` drives it through the Mac app.
 
 ### Browser waits and scripts
 
@@ -2265,7 +2257,7 @@ On the Mac (`app/src/renderer/views/SpecTab.tsx`, `ActivityTab.tsx`):
   headings and quotes only when at least 40% of their words are shared) and diffs their words,
   keeping each word's inline style, so added text is green and removed text red and struck
   through, inside the same headings, lists, table cells and code blocks. Unpaired blocks show
-  whole, added or removed. Its output is plain JSON, pinned by `shared/fixtures/cases/specDiff.ts`
+  whole, added or removed. Its output is plain JSON, pinned by the logic tests
   for HarnessKit's port (`MarkdownDiff` in `Logic/SpecDiff.swift`), which the iPhone/iPad Spec tab
   draws the same way through `MarkdownView(text:previous:)`; the file's header spells out the
   algorithm. The baseline
@@ -2277,8 +2269,6 @@ On the Mac (`app/src/renderer/views/SpecTab.tsx`, `ActivityTab.tsx`):
 - The composer switches to the Transcript once a message is sent (`tabAfterSend`), from any tab.
 - The Details spec editor sends `baseRevision`; a 409 offers Reload (take the current spec) or
   Overwrite (resend against the new revision).
-- `bun run spec-activity` (in `app/`) drives all of this against the real service and the dummy
-  driver and saves screenshots to `app/out/screenshots/spec-activity`.
 
 ### Spec revisions and attachments
 
@@ -2511,8 +2501,7 @@ so a ticket keeps working after one is moved or deleted.
   the service isn't on this Mac (`isLocalService(client.baseUrl)` is false: anything but
   `localhost`, `::1` or `127.x`), every file is uploaded under its own name instead, since its path
   means nothing there (`planFiles` in `state/promptAttachmentFiles.ts`). A window-level guard stops
-  a file dropped outside the draft pane from navigating the window to it. `app/scripts/attachments-check.ts` drives the whole flow
-  against the real service.
+  a file dropped outside the draft pane from navigating the window to it.
 - **iPhone and iPad.** The New session has the same list as the Spec tab (× on each row, a
   spinner row per upload), and an Attach menu with Photos, Files
   and Paste. iPad also takes drops. Everything is uploaded, and HEIC photos are converted to JPEG
@@ -2543,8 +2532,7 @@ so a ticket keeps working after one is moved or deleted.
   pastes too (`usePromptAttachmentInput`, shared with the draft editor). On iOS it offers Photos,
   Files and Paste, and iPad takes drops, like the New session. The attachments are listed above the
   field with × to remove each before sending. Send works with attachments alone, waits for uploads
-  to finish, and the (+) is hidden while a tool approval waits. `app/scripts/composer-attachments-check.ts`
-  drives the Mac flow against the real service.
+  to finish, and the (+) is hidden while a tool approval waits.
 - **Annotations.** A human can draw numbered notes on an image to go with a message: any image
   in the spec, any prompt attachment on the Spec tab, any image sent with an earlier message in the
   Transcript, a screenshot of a session browser tab (`GET /browser/:sessionId/screenshot`, a PNG of
@@ -2594,8 +2582,7 @@ so a ticket keeps working after one is moved or deleted.
     image's notes under its path, with each mark's position in pixels and as a share of the image,
     plus CSS pixels and the element for a browser page, since the agent drives the page and edits
     the source with those. The image goes to the agent inline, unchanged. `get_ticket` lists each
-    prompt attachment's notes. `app/scripts/annotate-check.ts` drives the Mac flow against the real
-    service.
+    prompt attachment's notes.
 
 **File mentions.** The new-session prompt and the follow-up composer autocomplete `@path`
 mentions of project files, like Claude Code (`@src/app.ts`, or `@"docs/My Notes.md"` for a path
@@ -2926,8 +2913,7 @@ theme is the light pick when the resolved appearance is light, the dark pick whe
 preload reads it synchronously and stamps `<html data-theme>` (resolved appearance — the plugin
 contract), `data-theme-id` and the tokens as custom properties on `<html style>` before first
 paint; the renderer restamps on every change. No stylesheet defines a theme token
-(`theme-tokens.test.ts`). `HARNESS_THEME_ID=<id>` forces a theme (screenshots:
-`scripts/shoot.ts --themes=<ids>`). Phone: see "iPhone and iPad app".
+(`theme-tokens.test.ts`). `HARNESS_THEME_ID=<id>` forces a theme. Phone: see "iPhone and iPad app".
 
 ## Plugins
 
@@ -3112,17 +3098,19 @@ edits don't emit ticket events), and have a refresh button. Below 720 px the tre
 
 ## Testing
 
-`bun test` in each package. No test touches the network or a real model; the claude-code
-driver is tested against a fake `claude` executable that replays stream-json. Browser tests
-use the local Chrome and skip when it is missing. End-to-end tests boot the service on an
-ephemeral port with a temp `HARNESS_HOME` and drive it through `HarnessClient`.
+The whole suite lives in `testing/` and `bun run testing` runs all of it: **nothing lands on `main`
+until it passes on the result.** There is no hosted CI. Its layers: lint (tests don't import each
+other's data), L0 logic tests in bun and Swift, L1–L3 the service, its HTTP/WebSocket API and the
+wire contract, L4 the Mac views (React under happy-dom) and the iPhone and iPad screens against a
+shared world, and L5 one walkthrough through the real service, Mac app, iPhone and iPad. `bun run
+test` runs the layers that need no simulator or Electron, and `bun run typecheck` runs tsc over
+every project. testing/README.md describes each layer and its commands.
 
-The service's `bun run test` runs one `bun test` process per file, several at once
-(`shared/src/testing/parallel.ts`), since its files mostly wait on git, Chrome and child
-daemons. So test files must not share fixed ports or paths. Test servers bind `127.0.0.1`, the
-address they're dialed on: a wildcard listener on an ephemeral port can be shadowed by another
-process holding `127.0.0.1` on the same port. Tests wait on the state they need (a held driver,
-a delivered output) rather than sleeping or waiting out `idle()`'s timeout.
+No test touches the network or a real model: the service tests drive a scripted fake driver, and
+the walkthrough uses the dummy driver. Test files must not share fixed ports or paths. Test servers
+bind `127.0.0.1`, the address they're dialed on: a wildcard listener on an ephemeral port can be
+shadowed by another process holding `127.0.0.1` on the same port. Tests wait on the state they
+need (a held driver, a delivered output) rather than sleeping or waiting out `idle()`'s timeout.
 
 ## Desktop app (`app/`)
 
@@ -3195,8 +3183,7 @@ Settings, project settings, or on the board route the pane workspace.
   plain text when a side is binary or too big). Contents and diff
   refetch on window focus, reconnect, the ticket's workdir or branch changing, and the refresh
   button. File panes persist with the rest of the tree, follow a ticket rename, and close when
-  their ticket is deleted. `scripts/file-pane-check.ts` drives the whole flow against the real
-  service.
+  their ticket is deleted.
 - **Torn-off tabs.** Any tab of a ticket pane (Spec, Activity, Transcript, Agents, Tickets,
   Changes, Details, Browser, sub-agent and plugin tabs), one chip of its browser strip, or its
   composer can be torn off into a pane of its own: a `ticketTab` leaf, `tab` being a `TicketTab`
@@ -3222,8 +3209,7 @@ Settings, project settings, or on the board route the pane workspace.
   and a torn-off composer leaves a one-line bar. Closing a torn-off pane any other way brings the
   tab back by itself, since the placeholder is derived from the store. Each tab, chip and the
   composer's grip has a context menu: Open to the Right/Below/Left/Above, Open in New Window, and
-  Return to this window once torn off. `scripts/tear-off-check.ts` drives all of it against the
-  real service and real Chrome.
+  Return to this window once torn off.
 - **Drag to split.** Board cards, a conductor's child rows, a pane's header grip, a ticket's tab
   buttons, browser chips and the composer's top-edge grip are drag sources (`dragProps` in
   `components/paneDrag.tsx`). They put the ticket key (`application/x-harness-ticket`), the pane's
@@ -3385,7 +3371,7 @@ Settings, project settings, or on the board route the pane workspace.
     opens on the far right, like New session). An empty query lists that root's recently opened files
     (`harness.palette.recentFiles`, kept apart from the commands' recents). Without a prefix, a
     query that reads as a path (`looksLikePath`) adds up to five files after the commands and
-    tickets. `scripts/palette-files-check.ts` drives it against the real service.
+    tickets.
   - *Rings.* `html[data-input]` is `keyboard` after a keyboard command or Tab, and `pointer` after
     any pointer press (`state/inputModality.ts`). In keyboard mode, the pane the keyboard acts on
     (or the sidebar) gets an inset accent ring and the board's parked cursor a dashed outline.
@@ -3409,7 +3395,7 @@ Settings, project settings, or on the board route the pane workspace.
   in any case, a `New group "<name>"` row, so Enter completes to an existing group or starts the
   typed one. On a group's board a New session defaults to the last used project when it's in the
   group, else the group's first project by name (`composerCandidates`), and a terminal opens at
-  home. `app/scripts/groups-check.ts` drives all of it in the built app.
+  home.
 - **Window chrome.** Only the top-left pane's header (the zoomed one while zoomed) makes room for
   the traffic lights and the sidebar toggle when the sidebar is collapsed. Headers along the top
   edge drag the window, apart from their controls. The board header sheds extras through a
@@ -3483,8 +3469,7 @@ Settings, project settings, or on the board route the pane workspace.
   window, so a person in the middle of something isn't pulled away. The palette lists every terminal
   (`terminalRow`: title or program, then folder and program as a subtitle; matched on all three), and
   choosing one focuses its pane on whichever board has it, else opens a pane on its project's board
-  and goes there (`showTerminal`). `scripts/terminal-pane-check.ts [--packaged]` drives all of this
-  in the real app over CDP, with real key events.
+  and goes there (`showTerminal`).
 - **Terminals (service).** The service hosts the shells (`service/src/terminals/`), so the Mac and
   the iPhone share them; they live in memory and end when the service restarts. A terminal is
   `{ id, cwd, title, process, projectId, state, exitCode, createdAt, createdBy, cols, rows }`
@@ -3555,22 +3540,15 @@ the conventions, and ios/README.md the build and test commands.
   doesn't draw: the Codable protocol types, `HarnessClient` (REST) and `HarnessSocket` (WebSocket),
   the board reducer and selectors, and every helper a screen branches on (completion and approve
   menus, tabs, paging, drafts, mentions, markdown, file links, settings rules). It imports
-  Foundation only, so `swift test` runs on the Mac host in seconds.
-- **Fixture parity with `shared/`.** Logic ported from `shared/` can't drift from TypeScript, so
-  board rules (child dimming, Hide child tickets, rollups, key-rename preview, model and permission
-  options) match the desktop. Each case file in `shared/fixtures/cases/` runs the real TS functions
-  over a list of inputs, and `bun shared/scripts/export-fixtures.ts` writes the outputs as JSON
-  into HarnessKit's tests. `swift test` checks the Swift ports against them, and `bun run test`
-  fails when the committed JSON is stale. `cases/protocol.ts` holds a sample of every entity and
-  event, which the Swift types must decode and re-encode unchanged, so a field added to
-  `shared/src/protocol.ts` has to reach Swift too. Reducer scenarios replay real TS actions and
-  compare selector probes.
-- **Frozen fixtures.** Logic only the phone has (pairing links, the connection probe, saved
-  servers, prefs, browser touch input, the plugin web view transport, board columns, the model
-  sheet and others) lived in the React Native app's TypeScript. Its outputs are frozen in the
-  committed JSON, which is now the spec: the exporter never regenerates them (`FROZEN` in
-  `export-fixtures.ts`, or `frozen(module, key)` inside a mixed case file), and `swift test` owns
-  them.
+  Foundation only, so the Swift logic tests (`bun run testing l0`) run on the Mac host in seconds.
+- **Wire contract and the shared world.** `testing/contract` generates a sample of every type and
+  constant in `shared/src/protocol.ts` with the TypeScript checker, and the Swift types must decode
+  and re-encode them unchanged, so a field added to the protocol has to reach Swift too (a type
+  with no sample, or a stale exemption, fails). `testing/world` is one typed set of data both
+  clients draw from; `WorldDecodeTests` decodes all of it through the real HarnessKit models. The
+  theme registry, project colors and icons ship in `Resources/themes.json`, generated from
+  `shared/src` by `bun shared/scripts/export-themes.ts`; a test fails when the committed file is
+  stale.
 - **iPad.** One universal build (device family `1,2`) that allows all four orientations, which
   iPad multitasking (Split View, Stage Manager) needs, so the window can be any size. The screens
   are the phone's, laid out at the window's width. The iPad runs several windows (one AppModel
@@ -3604,8 +3582,7 @@ the conventions, and ios/README.md the build and test commands.
   moves a card between columns: only agents move tickets. Touch and hold on a card previews the
   ticket on its Spec tab above the card's menu. Two browser views of one session stream side by
   side because each is its own viewer (`viewerId`, "Browser tabs"). iPhone and compact width have
-  none of this. `sim-check --ipad` opens the walk-through's routes on an iPad simulator. See
-  ios/ARCHITECTURE.md § Windows.
+  none of this. See ios/ARCHITECTURE.md § Windows.
 - **Connection.** `harness://pair?url=…&token=…` (the desktop QR code) opens the app through its
   URL scheme, or the in-app scanner reads it; the app probes `GET /health`, then an authenticated
   request, before saving. Tokens live in the Keychain, one per saved Mac, readable after first
@@ -3681,12 +3658,9 @@ the conventions, and ios/README.md the build and test commands.
   navigation and toolbars follow it. Appearance plus the Light / Dark theme picks are stored in the
   Keychain prefs blob and normalized on load.
   `harness://settings?lightTheme=<id>&darkTheme=<id>&theme=<system|light|dark>` applies a setup.
-- **Checks.** `ios/Tools/sim-check.ts` runs a simulator walk-through against a real daemon on a
-  throwaway home, through the accessibility tree (AXe) and deep links, and validates what needs a
-  simulator by real taps (no screenshots). Shots are opt-in: `--screens`, `--only=<name>`, `--shot=<link>`.
-  `--grep=<pattern>` picks single checks (a check names the earlier ones it starts from, which run as
-  setup), and `--keep` then `--reuse` reattaches to the kept daemon, seeds and paired app (state in
-  the kept home's `reuse.json`, with a hash of the built app; `sim reap --kept` clears it).
+- **Checks.** `bun run testing ios` renders the screens from the shared world in a test bundle
+  hosted by the app and compares them with reference images; `bun run testing walk` runs one
+  journey through the real service, Mac app, iPhone and iPad. See testing/README.md.
 - **Builds.** `release/publish-install.sh` archives the Release app with `ios/Tools/build.ts`,
   exports a development IPA (and uploads a TestFlight build), packages and Developer ID signs the
   Mac app, uploads both to the GitHub release of the annotated `app-YYYYMMDD.HHMM` tag on HEAD (it

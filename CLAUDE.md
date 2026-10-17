@@ -1,51 +1,48 @@
 # Harness
 
-README.md covers setup and use, and DESIGN.md covers the architecture. `bun run verify` runs the
-test layers your change needs (below); `bun run test` and `bun run typecheck` still run
-everything from the repo root.
+README.md covers setup and use, and DESIGN.md covers the architecture. `bun run testing` is the
+check every change passes before it lands on `main` (below); `bun run test` runs its fast layers and
+`bun run typecheck` runs tsc over every project.
 
 ## Changelog
 
 Every change gets an entry under `## [Unreleased]` in CHANGELOG.md, in the same commit or merge
 that makes the change. That includes changes only agents see (their tools, prompts and
-instructions) and internal ones (tests, sim-check, build and release scripts, refactors). Group the
+instructions) and internal ones (tests, build and release scripts, refactors). Group the
 entries as Added, Changed, Fixed, or Removed, and write each one for the person using the app: say
 what they or their agents will see or can now do, not what the commit did. For an internal change,
 say in a plain sentence what it changes for the people working on Harness.
 
 ## Verifying changes
 
-A change isn't done until it has a test, `bun run verify` passes, and a visible change has
-screenshots in the spec's Status. A ticket worktree starts without `node_modules`: clone the main
-checkout's with `cp -Rc /Users/markhuot/Sites/harness/node_modules .` (copy-on-write) or run
-`bun install`. That failure is yours to fix, not a reason to submit unverified.
+**A change doesn't land until `bun run testing` passes on the result.** That is the one gate: it runs
+the whole suite in `testing/` (its README describes each layer), runs every layer, and prints which
+failed. There is no hosted CI; it runs on this Mac. A completion run (the one that merges a ticket)
+runs it on the merged result and fixes or reports what fails before anything lands on `main`.
 
-**`bun run verify`** maps your diff against `main` (`--base=<ref>` for a stacked ticket) to layers
-and runs them: bun tests and `bun run typecheck`, `swift test` for `ios/HarnessKit`, the closest
-`app/scripts/*-check.ts` for `app/src/renderer`, and the snapshot tests and sim-check chain for the
-iPhone screens you touched. Files no rule knows run bun tests + typecheck. `--dry-run` prints the plan
-and why; `--all` runs everything. The mapping is `scripts/verify-plan.ts`. Run it once when you're
-done, not after every edit.
+A change isn't done until it has a test, `bun run testing` and `bun run typecheck` pass, and a
+visible change has screenshots in the spec's Status. A ticket worktree starts without
+`node_modules`: clone the main checkout's with `cp -Rc /Users/markhuot/Sites/harness/node_modules .`
+(copy-on-write) or run `bun install`. That failure is yours to fix, not a reason to submit
+unverified.
 
-While you work, use the lowest layer that can see the bug, and write the logic first:
+While you work, use the lowest layer that can see the bug, and write the logic first. Run the full
+gate once when you're done, not after every edit.
 
-1. **Logic** (routing, counting, layout math, request bodies, state rules): a HarnessKit test
-   (`cd ios/HarnessKit && swift test`) or the service's `bun test`. Seconds.
-2. **A screen's look** in the iPhone app: `bun run sim snapshots --only=ScreenSnapshotTests/<test>`
-   (`--out=<dir>` writes the renders for a spec's screenshots). No daemon, about a second a screen.
-   `--record` updates the references after an intended change. The state probe and event waits cover
-   what a snapshot can't see without a full run.
-3. **Real taps, scrolling, keyboard, relaunch**: sim-check, as narrowly as you can. Run
-   `bun ios/Tools/sim-check.ts --only=<chain> --grep=<check> --keep`, then
-   `--only=<chain> --grep=<check> --reuse --no-build` as often as you like (seconds); `--sheets`,
-   `--ipad --sheets`, `--stick` and the other modes work the same way. `bun run sim reap --kept` clears
-   what `--keep` left. Validation takes no screenshots; for the spec use `--only=<screen>` or
-   `--shot='harness://ticket/{headings}?tab=spec'`, never `--screens`. Run a sim-check in the
-   foreground and read its output; don't poll a background one.
-4. **The Mac app**: put new UI behaviour under an assertion in the closest `app/scripts/*-check.ts`
-   (as the margin check in `spec-activity.ts` does) and run it with `bun run --cwd app build` first.
-   `spec-activity`, `shoot`, `smoke` and `changes` write screenshots (`spec-activity` to
-   `app/out/screenshots/`).
+1. **Logic** (routing, counting, layout math, request bodies, state rules): `bun run testing l0`
+   (bun logic tests in `testing/l0` and the Swift package in `testing/swift`, side by side). Seconds.
+2. **Service behaviour**: `bun test` inside `testing/` (L1–L3: the service, its API and the wire
+   contract), or one file with `cd testing && bun test <path>`.
+3. **Mac views**: `bun run testing mac` (React under happy-dom against the shared world).
+4. **A screen's look** in the iPhone and iPad apps: `bun run testing ios` (`--iphone`, `--ipad`,
+   `--only=ScreenTests/<test>`; `--out=<dir>` writes the renders for a spec's screenshots;
+   `--record` updates the references after an intended change, and you read the diff). It builds
+   once and reuses the build while the sources are unchanged.
+5. **Real taps, IPC, relaunch**: `bun run testing walk` (`--out=<dir>` for screenshots), the one
+   journey through the real service, Mac app, iPhone and iPad. It is the last layer of the gate.
+
+`bun run test` runs the layers that need no simulator and no Electron (`bun run testing fast`), and
+`bun run testing lint` checks that tests don't import each other's data.
 
 ## Simulators
 
@@ -59,20 +56,20 @@ one runtime and a small pool of simulators.
 - Never create a simulator of your own. Use the shared pool through `bun run sim`
   (`ios/Tools/sim.ts`): `harness-shared` and `harness-shared-2` (iPhones; the lock takes whichever is
   free) and `harness-shared-ipad` for `--ipad`. Don't use, shut down, or delete simulators someone
-  else owns (`harness-HARNESS-*`, `sim-check *`).
+  else owns (`harness-HARNESS-*`).
 - Run everything that touches a simulator (install, launch, screenshots, AXe taps, dev-sim) under its
   lock, so two agents never install different builds over each other:
   `bun run sim with-lock -- <command>`. Hold it for one install-to-screenshot pass, not for a whole
-  ticket. `sim-check`, `sim snapshots` and `verify` take the lock themselves.
-- Before a heavy build (xcodebuild, sim-check, `release:publish`), run `bun run sim disk`. It exits
-  1 when less than 5 GiB is free: then block and ask rather than build. It also names any iOS runtime
-  other than 27.0; pass that on to the human, don't delete it. `verify` runs it before its simulator
-  layers.
-- sim-check removes the `sim-check *` simulators it drove when it ends, unless `--keep`. If a run was
-  killed outright or the Mac is slow, run `bun run sim reap`; it only touches what no live run owns.
-  Never kill sim-check daemons or shut down `sim-check *` simulators by hand.
-- When you're done, delete your build output (`ios/build`, `ios/HarnessKit/.build`) and leave the
-  shared simulators alone. `bun run sim shutdown` stops the pool simulators nobody holds.
+  ticket. `bun run testing ios` and `bun run testing walk` take the lock themselves.
+- Before a heavy build (xcodebuild, `bun run testing ios` or `walk`, `release:publish`), run
+  `bun run sim disk`. It exits 1 when less than 5 GiB is free: then block and ask rather than
+  build. It also names any iOS runtime other than 27.0; pass that on to the human, don't delete it.
+  `testing ios` and `testing walk` run it before they build.
+- The walkthrough records every process it starts and kills them when it ends; the next run reaps
+  what a killed one left. Don't kill its processes by hand.
+- When you're done, delete your build output (`ios/build`, `ios/HarnessKit/.build`,
+  `testing/.build`, `testing/.walk`) and leave the shared simulators alone. `bun run sim shutdown`
+  stops the pool simulators nobody holds.
 
 ## Releases
 
