@@ -11,5 +11,5 @@
     "noEmit": true,
     "allowImportingTsExtensions": true
   },
-  "include": ["Tools", "../shared/fixtures", "../shared/scripts", "../shared/src/fixtures.test.ts"]
+  "include": ["Tools", "../shared/scripts"]
 }

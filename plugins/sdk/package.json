@@ -7,9 +7,7 @@
     ".": "./harness-plugin.ts",
     "./server": "./server.ts"
   },
-  "scripts": {
-    "test": "bun test"
-  },
+  "scripts": {},
   "dependencies": {
     "@harness/shared": "workspace:*"
   },

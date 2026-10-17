@@ -49,14 +49,10 @@ export const EXCLUSIONS: Exclusion[] = [
   { file: "service/src/browser/websocket.ts", reason: "A raw WebSocket over node:net to Chrome's DevTools port; the CDP client is tested over a fake transport", layer: "L4 (a real browser)" },
   { file: "service/src/browser/index.ts", reason: "Builds the real BrowserManager from the app's options", layer: "L4 (a real browser)" },
   { file: "service/src/browser/types.ts", reason: "Types and one constant", layer: "L1 (type-checked)" },
-  { file: "service/src/browser/test-support.ts", reason: "Helper of the old browser tests (a local page server and Chrome finder)", layer: "Removed with the old suite (teardown ticket)" },
-  { file: "service/src/browser/wait-support.ts", reason: "Helper of the old browser tests", layer: "Removed with the old suite (teardown ticket)" },
   { file: "service/src/tools/browser.ts", reason: "Each tool is a thin call into a live page; the wait, key and snapshot logic they use is tested", layer: "L4 (a real browser)" },
   { file: "service/src/tools/browser-run.ts", reason: "Runs a script in a child process against a live page", layer: "L4 (a real browser)" },
 
-  // -- Test doubles and types of the old suite --
-  { file: "service/src/tools/fakes.ts", reason: "The old suite's fake tool context; L1 builds its own", layer: "Removed with the old suite (teardown ticket)" },
-  { file: "service/src/terminals/testing.ts", reason: "The old suite's fake PTY, clock and client; L1 has its own in testing/service/terminals/fakes.ts", layer: "Removed with the old suite (teardown ticket)" },
+  // -- Types --
   { file: "service/src/tools/types.ts", reason: "Interfaces (ToolDefinition, ToolContext, HarnessOps) with no runtime logic", layer: "L1 (type-checked)" },
 
   // -- Harness tools: run for real, as an agent's call, through the orchestrator --

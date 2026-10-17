@@ -146,25 +146,6 @@ targets:
         # phase may only do for declared inputs.
         ENABLE_USER_SCRIPT_SANDBOXING: NO
         PRODUCT_BUNDLE_IDENTIFIER: com.markhuot.harness
-  # The snapshot tests (ARCHITECTURE.md § Snapshot tests): the app's screens rendered in-process from
-  # fixture models. Hosted by the app (`@testable import Harness`) and run in Debug through
-  # `bun run sim snapshots`, never in a release build. The reference PNGs sit beside the sources
-  # and are not part of the bundle.
-  HarnessSnapshotTests:
-    type: bundle.unit-test
-    platform: iOS
-    sources:
-      - path: HarnessSnapshotTests
-        excludes: ["References/**"]
-    dependencies:
-      - target: Harness
-    settings:
-      base:
-        GENERATE_INFOPLIST_FILE: YES
-        PRODUCT_BUNDLE_IDENTIFIER: com.markhuot.harness.snapshottests
-        TEST_HOST: $(BUILT_PRODUCTS_DIR)/Harness.app/Harness
-        BUNDLE_LOADER: $(TEST_HOST)
-        ENABLE_TESTABILITY: YES
   # The L4 screen tests (testing/README.md): the app's screens rendered from the shared world
   # (testing/world) through the real client and stores, compared with reference images. The sources
   # and references live in testing/ios, outside ios/. Hosted by the app because the screens are in
@@ -274,12 +255,3 @@ schemes:
       config: Debug
       targets:
         - HarnessScreenTests
-  HarnessSnapshots:
-    build:
-      targets:
-        Harness: all
-        HarnessSnapshotTests: [test]
-    test:
-      config: Debug
-      targets:
-        - HarnessSnapshotTests

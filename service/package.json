@@ -7,7 +7,6 @@
     "harness": "src/cli.ts"
   },
   "scripts": {
-    "test": "bun ../shared/src/testing/parallel.ts",
     "start": "bun run src/daemon.ts"
   },
   "dependencies": {

@@ -28,7 +28,7 @@ function importsOf(root: string, file: string): Set<string> {
   return out;
 }
 
-/** Product modules that count: not tests, not the old suite's fixtures, snapshots or test dirs. */
+/** Product modules that count: not tests, not fixtures, snapshots or test dirs. */
 export function productModules(root: string): string[] {
   return [...tsFiles(join(root, "service/src"))]
     .map((f) => relative(root, f))

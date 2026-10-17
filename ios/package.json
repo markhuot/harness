@@ -4,10 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "bun test ./Tools",
     "typecheck": "tsc --noEmit -p .",
-    "themes": "bun ../shared/scripts/export-themes.ts",
-    "sim-check": "bun Tools/sim-check.ts"
+    "themes": "bun ../shared/scripts/export-themes.ts"
   },
   "devDependencies": {
     "@harness/shared": "workspace:*",

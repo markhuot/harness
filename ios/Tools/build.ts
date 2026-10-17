@@ -6,10 +6,7 @@
 //
 //   bun ios/Tools/build.ts sim [--optimized]           Release settings, iphonesimulator, ad-hoc signed, arm64. Compiled without optimization
 //                                                      (-Onone, per-file) unless --optimized: about a third of the clean build time,
-//                                                      and sim-check drives it the same; --optimized for what measures speed or memory
-//   bun ios/Tools/build.ts snapshots                   Debug build-for-testing of the snapshot tests (HarnessSnapshotTests),
-//                                                      into ios/build/dd-snapshots; prints the .xctestrun path
-//                                                      (Tools/snapshots.ts, `bun run sim snapshots`, runs it)
+//                                                      and dev-sim drives it the same; --optimized for what measures speed or memory
 //   bun ios/Tools/build.ts screens --derived-data DIR  Debug build-for-testing of the L4 screen tests (HarnessScreenTests, testing/ios) into DIR;
 //                                                      prints the .xctestrun path (`bun run testing ios` runs it)
 //   bun ios/Tools/build.ts archive --build-number N    Release archive for devices (CFBundleVersion N),
@@ -30,20 +27,17 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { dirname, join, resolve } from "node:path";
 import { bundleInputs, planXcodegen, xcfilelist, xcodegenHash } from "./build-cache";
 import { exportDeveloperDir } from "./sim";
-import { deviceAppUrl, hashApp, planDeviceInstall } from "./sim-reuse";
+import { deviceAppUrl, hashApp, planDeviceInstall } from "./device-install";
 
 export const IOS = resolve(import.meta.dir, "..");
 export const BUILD = join(IOS, "build");
 export const DERIVED_DATA = join(BUILD, "dd");
-/** Its own derived data: the snapshot tests build Debug, the app builds Release. */
-export const SNAPSHOT_DERIVED_DATA = join(BUILD, "dd-snapshots");
 export const TEAM_ID = "47P4ZSALX4";
 export const BUNDLE_ID = "com.markhuot.harness";
 
 export type Method = "dev" | "testflight";
 export type Options =
   | { command: "sim"; optimized: boolean }
-  | { command: "snapshots" }
   | { command: "screens"; derivedData: string }
   | { command: "archive"; buildNumber: string; archivePath: string }
   | { command: "export"; method: Method; archivePath: string; exportPath: string }
@@ -76,7 +70,6 @@ export function parseArgs(argv: string[]): Options {
   }
   const allowed: Record<string, string[]> = {
     sim: ["optimized"],
-    snapshots: [],
     screens: ["derived-data"],
     archive: ["build-number", "archive-path"],
     export: ["method", "archive-path", "export-path"],
@@ -100,8 +93,6 @@ export function parseArgs(argv: string[]): Options {
   switch (command) {
     case "sim":
       return { command, optimized: flags.has("optimized") };
-    case "snapshots":
-      return { command };
     case "screens":
       return { command, derivedData: resolve(need("derived-data")) };
     case "archive":
@@ -245,9 +236,6 @@ export function simArgs(optimized = false): string[] {
     // Ad-hoc signed, not unsigned: the simulator only grants the Keychain to a signed app (its
     // simulated entitlements), and pairing stores the token there.
     "CODE_SIGN_IDENTITY=-", "CODE_SIGNING_REQUIRED=NO",
-    // The debug state probe (Harness/App/DebugProbe.swift) is compiled in for this simulator build
-    // only; the device and archive builds never get it.
-    "SWIFT_ACTIVE_COMPILATION_CONDITIONS=$(inherited) SIM_CHECK",
     // Whole-module optimization of four targets, one after another, is most of a clean build (about 120 s against 40 s).
     ...(optimized ? [] : ["SWIFT_OPTIMIZATION_LEVEL=-Onone", "SWIFT_COMPILATION_MODE=singlefile"]),
     "build",
@@ -259,22 +247,6 @@ function sim(optimized: boolean): string {
   log(`==> Building for the simulator (Release settings, ${optimized ? "optimized" : "unoptimized"}, arm64, ad-hoc signed)`);
   run("sim", simArgs(optimized));
   return join(DERIVED_DATA, "Build/Products/Release-iphonesimulator/Harness.app");
-}
-
-/** Builds the snapshot tests and the app that hosts them; returns the .xctestrun file xcodebuild test-without-building takes. */
-function snapshots(): string {
-  prepare();
-  log("==> Building the snapshot tests (Debug, arm64, ad-hoc signed)");
-  run("snapshots", [
-    "xcodebuild", "-project", join(IOS, "Harness.xcodeproj"), "-scheme", "HarnessSnapshots", "-derivedDataPath", SNAPSHOT_DERIVED_DATA,
-    "-configuration", "Debug", "-sdk", "iphonesimulator", "-destination", "generic/platform=iOS Simulator",
-    "ARCHS=arm64", "ONLY_ACTIVE_ARCH=YES", "CODE_SIGN_IDENTITY=-", "CODE_SIGNING_REQUIRED=NO", "build-for-testing",
-  ]);
-  const products = join(SNAPSHOT_DERIVED_DATA, "Build/Products");
-  const found = new Bun.Glob("*.xctestrun").scanSync({ cwd: products });
-  const file = [...found][0];
-  if (!file) fail(`no .xctestrun in ${products}`);
-  return join(products, file);
 }
 
 /** Builds the L4 screen tests and the app that hosts them for any simulator (iPhone and iPad share the products); returns the .xctestrun file. */
@@ -326,7 +298,7 @@ function exportArchive(o: Extract<Options, { command: "export" }>): string {
   return ipa;
 }
 
-/** The xcodebuild arguments of the device build: Debug, but without SIM_CHECK, so no debug probe. */
+/** The xcodebuild arguments of the device build: Debug, signed automatically. */
 export function deviceArgs(): string[] {
   return [
     "xcodebuild", ...project(), "-configuration", "Debug", "-destination", "generic/platform=iOS",
@@ -378,7 +350,6 @@ if (import.meta.main) {
     } else {
       const out =
         o.command === "sim" ? sim(o.optimized)
-        : o.command === "snapshots" ? snapshots()
         : o.command === "screens" ? screens(o.derivedData)
         : o.command === "archive" ? archive(o)
         : o.command === "export" ? exportArchive(o)

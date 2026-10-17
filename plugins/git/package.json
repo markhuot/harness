@@ -4,8 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "bun build.ts",
-    "test": "bun test --timeout 30000"
+    "build": "bun build.ts"
   },
   "dependencies": {
     "@pierre/diffs": "1.5.1",

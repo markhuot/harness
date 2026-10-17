@@ -8,16 +8,6 @@ export interface Violation {
   reason: string;
 }
 
-/** Old-suite code this suite must not import, as repo-relative path prefixes (extension dropped). */
-export const FORBIDDEN_OLD_PATHS = [
-  "shared/src/testing",
-  "service/src/testing/fakes",
-  "shared/fixtures",
-  "scripts/verify-plan",
-  "app/scripts/",
-  "ios/Tools/sim-check",
-];
-
 /** Folders under testing/ that hold data rather than builders; nothing may import from them. */
 export const DATA_DIRS = ["fixtures", "data"];
 
@@ -37,7 +27,7 @@ const bare = (path: string) => path.replace(/\.ts$/, "").replace(/\/index$/, "")
 /**
  * Every `.ts` file under `testingDir` (tests and builders alike, since a builder's imports reach
  * every test) must stand alone: it may import product code, builders, and non-test helpers, but
- * never a test file, a data folder, or the old suite's helpers.
+ * never a test file or a data folder.
  */
 export function lintTestImports(testingDir: string): Violation[] {
   const root = dirname(testingDir);
@@ -49,14 +39,9 @@ export function lintTestImports(testingDir: string): Violation[] {
     for (const { path: specifier } of scanner.scanImports(source)) {
       const line = lines.findIndex((text) => text.includes(`"${specifier}"`) || text.includes(`'${specifier}'`)) + 1;
       const report = (reason: string) => violations.push({ file: relative(root, file), line, specifier, reason });
-      if (specifier === "@harness/shared/testing" || specifier.startsWith("@harness/shared/testing/")) {
-        report("imports the old suite's helpers");
-        continue;
-      }
       if (!specifier.startsWith(".")) continue;
       const target = bare(relative(root, resolve(dirname(file), specifier)));
-      if (FORBIDDEN_OLD_PATHS.some((old) => target === old || target.startsWith(old))) report("imports the old suite");
-      else if (/\.test$/.test(target)) report("imports another test file");
+      if (/\.test$/.test(target)) report("imports another test file");
       else if (DATA_DIRS.some((dir) => target === `testing/${dir}` || target.startsWith(`testing/${dir}/`))) report("imports test data; build it in the test");
     }
   }

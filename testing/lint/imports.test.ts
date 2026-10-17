@@ -46,32 +46,12 @@ describe("lintTestImports", () => {
     expect(lintTestImports(dir)).toEqual([]);
   });
 
-  test("fails a builder that imports the old suite, since every test inherits it", () => {
-    const dir = repo({
-      "testing/builders/x.ts": `import { fake } from "../../service/src/testing/fakes";\n`,
-    });
-    expect(lintTestImports(dir)).toMatchObject([{ file: "testing/builders/x.ts", reason: "imports the old suite" }]);
-  });
-
   test("fails an import from a data folder", () => {
     const dir = repo({
       "testing/fixtures/world.ts": ``,
       "testing/a.test.ts": `import { world } from "./fixtures/world";\n`,
     });
     expect(lintTestImports(dir).map((v) => v.reason)).toEqual(["imports test data; build it in the test"]);
-  });
-
-  test("fails imports of the old suite", () => {
-    const dir = repo({
-      "testing/a.test.ts": [
-        `import { tempDir } from "@harness/shared/testing";`,
-        `import { fake } from "../service/src/testing/fakes";`,
-        `import { world } from "../shared/fixtures/world";`,
-        `import { plan } from "../scripts/verify-plan";`,
-        `import { check } from "../app/scripts/smoke";`,
-      ].join("\n"),
-    });
-    expect(lintTestImports(dir).map((v) => v.line)).toEqual([1, 2, 3, 4, 5]);
   });
 
   test("scans helpers too, since a helper's import reaches every test", () => {

@@ -5,20 +5,12 @@
   "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",
-  "scripts": {
-    "test": "bun test"
-  },
   "exports": {
     ".": "./src/index.ts",
     "./state": "./src/state/index.ts",
     "./diff": "./src/diff.ts",
     "./themes": "./src/themes/index.ts",
     "./themes/types": "./src/themes/types.ts",
-    "./themes/syntax": "./src/themes/syntax.ts",
-    "./testing": "./src/testing/tmp.ts",
-    "./testing/skip": "./src/testing/skip.ts",
-    "./testing/daemon": "./src/testing/daemon.ts",
-    "./testing/seed": "./src/testing/seed.ts",
-    "./testing/proxy": "./src/testing/proxy.ts"
+    "./themes/syntax": "./src/themes/syntax.ts"
   }
 }

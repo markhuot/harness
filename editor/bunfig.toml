@@ -1,3 +1,0 @@
-[test]
-# happy-dom globals for the editor tests.
-preload = ["./src/test-dom.ts"]

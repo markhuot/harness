@@ -1,7 +1,7 @@
 # testing
 
-`bun run testing` runs the whole gate. Its commands: `l0`, `mac`, `ios`, `walk`, `stress`, `lint`.
-Nothing here imports the old tests or their helpers (`bun run testing lint` enforces it).
+`bun run testing` runs the whole gate: nothing lands on `main` until it passes on the result. Its commands: `l0`, `mac`, `ios`, `walk`, `stress`, `lint`, and `fast` (everything that needs no simulator or Electron; `bun run test` runs it).
+`bun run testing lint` fails a test that imports another test file or a data folder.
 
 ## The shared world (`testing/world`)
 

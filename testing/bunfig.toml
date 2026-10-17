@@ -1,5 +1,4 @@
-# No preload: this suite shares nothing with the old tests' bunfig (the root one preloads
-# shared/src/testing). `bun run testing` runs bun test with this directory as cwd so this file wins.
+# `bun run testing` runs bun test with this directory as cwd so this file wins.
 # testing/mac has its own bunfig (a DOM preload) and runs as its own bun process: `bun run testing mac`.
 [test]
 pathIgnorePatterns = ["mac/**"]

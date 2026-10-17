@@ -5,6 +5,7 @@
 //   ios     L4 iPhone and iPad screens from the world   (--iphone --ipad --only=Class/test --record --out=dir; see ios.ts)
 //   walk    L5 the walkthrough: Mac, iPhone and iPad  (--out=dir for the screenshots; see walk/run.ts)
 //   lint    the test-import lint
+//   fast    the layers that need no simulator and no Electron: lint, L0, L1–L2, L4 Mac (`bun run test`)
 //   (none)  the full gate: lint, L0, L1–L2, ios, walk. Nothing lands on main until it passes.
 
 import { cpus } from "node:os";
@@ -96,18 +97,18 @@ async function runStress(args: string[]): Promise<number> {
 
 export async function main(args: string[]): Promise<number> {
   const [cmd, ...rest] = args;
-  if (cmd === undefined) {
-    const steps: [string, () => number | Promise<number>][] = [
+  if (cmd === undefined || cmd === "fast") {
+    const fast: [string, () => number | Promise<number>][] = [
       ["lint", lint],
       ["L0", l0],
       ["L1–L2", unit],
       ["L4 Mac", mac],
-      ["ios", () => run("ios")],
-      ["walk", () => run("walk")],
     ];
+    const steps: [string, () => number | Promise<number>][] = cmd === "fast" ? fast : [...fast, ["ios", () => run("ios")], ["walk", () => run("walk")]];
     const failed: string[] = [];
     for (const [name, step] of steps) if ((await step()) !== 0) failed.push(name);
-    console.log(failed.length ? `gate failed: ${failed.join(", ")}` : "gate passed");
+    const label = cmd === "fast" ? "fast layers" : "gate";
+    console.log(failed.length ? `${label} failed: ${failed.join(", ")}` : `${label} passed`);
     return failed.length ? 1 : 0;
   }
   return run(cmd, rest);
@@ -127,7 +128,7 @@ async function run(cmd: string, args: string[] = []): Promise<number> {
       return 2;
     }
   }
-  console.error(`Unknown command "${cmd}". Commands: l0, mac, stress, ios, walk, lint (none runs the full gate).`);
+  console.error(`Unknown command "${cmd}". Commands: l0, mac, stress, ios, walk, lint, fast (none runs the full gate).`);
   return 2;
 }
 
