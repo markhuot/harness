@@ -11,6 +11,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
+- On iPhone and iPad, the docked card ghost's purple glow now shows around the whole card and breathes smoothly. It was being cut off at the card's edge and re-drawn every frame, which looked like two gradients competing. A new snapshot test captures the running animation frame by frame and fails if the glow steps or flickers off its curve.
 - On iPhone, iPad and the Mac app, the Tickets tab of a conductor now shows each ticket's ref on its own line above its title, so long titles get the full row width.
 - When Claude Code's login token has expired because the CLI hasn't run for a while, the sidebar's plan usage now says the token expired and that usage comes back after Claude Code next runs. It used to ask you to sign in even though you were signed in.
 - On iPhone, tapping a ticket in the command palette now opens the ticket and leaves the palette closed, instead of the palette reappearing over the ticket.
