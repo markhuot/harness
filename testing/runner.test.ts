@@ -11,13 +11,6 @@ async function runner(...args: string[]) {
 }
 
 describe("runner", () => {
-  test("walk fails until its layer is built, and says so", async () => {
-    const r = await runner("walk");
-    expect(r.code).toBe(1);
-    expect(r.err).toContain("testing walk");
-    expect(r.err).toContain("isn't built yet");
-  });
-
   test("ios refuses an option it doesn't know before it touches a simulator", async () => {
     const r = await runner("ios", "--bogus");
     expect(r.code).toBe(2);
@@ -27,7 +20,7 @@ describe("runner", () => {
   test("an unknown command fails and lists the real ones", async () => {
     const r = await runner("nope");
     expect(r.code).toBe(2);
-    expect(r.err).toContain("stress, ios, walk");
+    expect(r.err).toContain("stress, ios, walk, lint, fast");
   });
 
   test("lint passes on the real tree", async () => {
