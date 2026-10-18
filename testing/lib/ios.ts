@@ -86,6 +86,8 @@ export interface Phone {
   launch(): Promise<void>;
   uninstall(): Promise<void>;
   terminate(): Promise<void>;
+  /** Press Home: the app goes to the background, where it saves what it restores on its next launch (what leaving it for the app switcher does first). */
+  background(): Promise<void>;
   screenshot(path: string): Promise<void>;
 }
 
@@ -159,6 +161,10 @@ export function phone(name: string, udid: string): Phone {
     },
     async terminate() {
       await run(["xcrun", "simctl", "terminate", udid, BUNDLE_ID]);
+    },
+    async background() {
+      await axe("button", "home");
+      await new Promise<void>((r) => setTimeout(r, 1500));
     },
     async screenshot(path) {
       mkdirSync(dirname(path), { recursive: true });

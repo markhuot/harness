@@ -231,10 +231,12 @@ export function steps(start: Start, built: { app: string }): Step[] {
         await ctx.mac.main.waitFor(`${WALK_TICKET.key} in Review after the relaunch`, `document.querySelector('.column ${cardOnBoard}') && ${count("review")} === '1' && document.body.innerText.includes('Connected')`, 60_000);
         await shot(ctx, "07-mac-relaunched");
         await eachPhone(ctx, async (p) => {
+          // Step 4 left the ticket open on its Transcript tab. Home saves the state, then the app is killed.
+          await p.background();
           await p.terminate();
           await p.launch();
-          // Paired state is the keychain's: no pair link this time.
-          await p.see("the board without pairing again", (l) => columnCount(l, "Review") === 1);
+          // Paired state is the keychain's (no pair link this time), and the open ticket comes back on the tab it was on.
+          await p.see("the ticket open on its Transcript tab without pairing again", (l) => l.some((x) => x.includes(DUMMY_HELLO)), 60_000);
         });
         await phoneShots(ctx, "07-relaunched");
       },
