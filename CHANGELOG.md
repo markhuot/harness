@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261018.1811](https://github.com/markhuot/harness/releases/tag/app-20261018.1811) - 2026-10-18
+
 ### Added
 
 - A blocked ticket that waits on you (no restart time, no run going, no tool approval to answer) has an **Unblock** button on Mac, iPhone and iPad, and an "Unblock…" command in the Mac palette. It asks for optional notes, moves the ticket to In progress and sends the agent your notes (or, with none, the reason it was blocked). Both reviews start over.
