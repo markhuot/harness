@@ -16,3 +16,4 @@ export * from "./prompts";
 export * from "./completion";
 export * from "./projectGroups";
 export * from "./notifications";
+export * from "./viewOptions";

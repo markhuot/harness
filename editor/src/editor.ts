@@ -18,6 +18,8 @@ export interface EditorOptions {
   /** Lines to reveal on open */
   range?: LineRange;
   readOnly?: boolean;
+  /** Long lines wrap instead of scrolling sideways. */
+  wrap?: boolean;
   /** What's on disk when it differs from `contents`: an editor reopened with unsaved edits opens dirty. */
   saved?: string;
   /** What scrolls the file: the box it's in (default) or the whole page (the iOS web view, where UIKit owns the scroll view). */
@@ -37,6 +39,8 @@ export interface EditorHandle {
   markSaved(contents?: string): void;
   focus(): void;
   setReadOnly(readOnly: boolean): void;
+  /** Wraps long lines (or scrolls them sideways), keeping the line at the top of the view where it is. */
+  setWrap(wrap: boolean): void;
   /** Puts the cursor at a document offset (a selection to `head` when given) and scrolls it into view. */
   setSelection(anchor: number, head?: number): void;
   /** The lines the selection covers (1-based, inclusive), or null for a caret. */
@@ -61,6 +65,7 @@ export interface EditorProbe {
   dirty: boolean;
   scrollY: number;
   lineCount: number;
+  wrap: boolean;
   /** How many colors the drawn code carries: 0 for plain text (an unknown language, or a huge file) */
   colors: number;
 }
@@ -102,6 +107,7 @@ export function createEditor(parent: HTMLElement, options: EditorOptions): Edito
 
   let contents = options.contents;
   let readOnly = !!options.readOnly;
+  let wrap = !!options.wrap;
   const base = createBaseline(options.saved ?? options.contents, options.saved !== undefined && options.saved !== options.contents);
   const change = emitter<[string]>();
   const dirtyEv = emitter<[boolean]>();
@@ -166,12 +172,12 @@ export function createEditor(parent: HTMLElement, options: EditorOptions): Edito
   };
 
   /** Draws the document into a fresh file (and edit session unless read-only), keeping the scroll position. */
-  const build = (view?: { selections?: ReturnType<Editor<"file">["getViewState"]>["selections"]; scrollTop: number; focused?: boolean }) => {
+  const build = (view?: { selections?: ReturnType<Editor<"file">["getViewState"]>["selections"]; scrollTop: number; line?: number; focused?: boolean }) => {
     const themes = shikiThemes(theme);
     virtualizer = new Virtualizer();
     virtualizer.setup(page ? parent.ownerDocument : parent);
     generation++;
-    file = new VirtualizedFile({ ...themes, disableFileHeader: true, overflow: "scroll", unsafeCSS: chromeCSS }, virtualizer);
+    file = new VirtualizedFile({ ...themes, disableFileHeader: true, overflow: wrap ? "wrap" : "scroll", unsafeCSS: chromeCSS }, virtualizer);
     const input: FileContents = { name: fileName, contents, lang: language() as FileContents["lang"], cacheKey: `editor-${++keys}` };
     file.render({ file: input, containerWrapper: parent });
     if (!readOnly) {
@@ -201,7 +207,7 @@ export function createEditor(parent: HTMLElement, options: EditorOptions): Edito
         });
       }
     }
-    if (view) holdScroll(() => void (scrollEl().scrollTop = view.scrollTop));
+    if (view) holdScroll(() => void (scrollEl().scrollTop = view.line ? (file?.getLinePosition(view.line)?.top ?? 0) : view.scrollTop));
     if (marked && file) file.setSelectedLines(marked);
   };
 
@@ -215,9 +221,24 @@ export function createEditor(parent: HTMLElement, options: EditorOptions): Edito
     parent.replaceChildren();
   };
 
-  /** Draws the document again (new text, or a read-only change), keeping the selection and scroll position. */
-  const rebuild = (next?: string) => {
-    const view = { selections: viewState()?.selections, scrollTop: scrollEl().scrollTop, focused: !!shadowOf(parent)?.activeElement };
+  /** The line (1-based) at the top of the view: the last one that starts at or above the scroll position. */
+  const topLine = () => {
+    if (!file) return 1;
+    const top = scrollEl().scrollTop;
+    let lo = 1;
+    let hi = countLines(contents);
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      const pos = file.getLinePosition(mid);
+      if (pos && pos.top <= top) lo = mid;
+      else hi = mid - 1;
+    }
+    return lo;
+  };
+
+  /** Draws the document again (new text, or a read-only or wrap change), keeping the selection and scroll position (the top line when the line heights change). */
+  const rebuild = (next?: string, anchored = false) => {
+    const view = { selections: viewState()?.selections, scrollTop: scrollEl().scrollTop, line: anchored ? topLine() : undefined, focused: !!shadowOf(parent)?.activeElement };
     teardown();
     if (next !== undefined) contents = next;
     build(view);
@@ -303,6 +324,11 @@ export function createEditor(parent: HTMLElement, options: EditorOptions): Edito
       readOnly = on;
       rebuild();
     },
+    setWrap(on) {
+      if (on === wrap) return;
+      wrap = on;
+      rebuild(undefined, true);
+    },
     setSelection(anchor, head = anchor) {
       const t = text();
       const [a, b] = [positionOf(t, anchor), positionOf(t, head)];
@@ -324,6 +350,7 @@ export function createEditor(parent: HTMLElement, options: EditorOptions): Edito
         dirty: base.dirty,
         scrollY: Math.round(scrollEl().scrollTop || 0),
         lineCount: countLines(t),
+        wrap,
         colors: new Set(Array.from(root?.querySelectorAll("[style*='--diffs-token']") ?? [], (el) => el.getAttribute("style"))).size,
       };
     },

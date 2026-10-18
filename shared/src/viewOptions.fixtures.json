@@ -1,0 +1,24 @@
+{
+  "keys": [
+    ["index.html", ".html"],
+    ["INDEX.HTML", ".html"],
+    ["src/a/b.ts", ".ts"],
+    ["notes.md", ".md"],
+    ["README.MD", ".md"],
+    ["a.tar.gz", ".gz"],
+    ["Makefile", "makefile"],
+    ["docs/Dockerfile", "dockerfile"],
+    [".env", ".env"],
+    [".ENV", ".env"],
+    ["config/.gitignore", ".gitignore"],
+    ["trailing.", "trailing."],
+    ["dir.d/Procfile", "procfile"]
+  ],
+  "rendered": [
+    ["README.md", true],
+    ["a/b.MARKDOWN", true],
+    ["a.mdx", false],
+    ["md", false],
+    ["notes.txt", false]
+  ]
+}

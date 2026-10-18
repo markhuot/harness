@@ -9,10 +9,11 @@ import { BUNDLED_LANGUAGES } from "./language";
 import type { ThemeInput } from "./theme";
 
 export type BridgeCommand =
-  | { type: "open"; contents: string; language?: string; theme?: ThemeInput; range?: LineRange; readOnly?: boolean; saved?: string }
+  | { type: "open"; contents: string; language?: string; theme?: ThemeInput; range?: LineRange; readOnly?: boolean; wrap?: boolean; saved?: string }
   | { type: "diff"; original: string; modified: string; language?: string; theme?: ThemeInput }
   | { type: "theme"; theme: ThemeInput }
   | { type: "reveal"; range: LineRange }
+  | { type: "wrap"; wrap: boolean }
   | { type: "setContents"; contents: string }
   | { type: "markSaved"; contents?: string }
   | { type: "focus" }
@@ -96,6 +97,9 @@ export function mount(win: Window, post: (event: BridgeEvent) => void, parent?: 
           break;
         case "reveal":
           editor?.reveal(cmd.range);
+          break;
+        case "wrap":
+          editor?.setWrap(cmd.wrap);
           break;
         case "setContents":
           editor?.setContents(cmd.contents);
