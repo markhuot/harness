@@ -122,6 +122,8 @@ struct ProjectsSidebar: View {
         .background(bg)
         .navigationTitle("Projects")
         .navigationBarTitleDisplayMode(.inline)
+        // The sidebar column needs no title; the board's bottom-left button toggles it.
+        .toolbar(column ? .hidden : .automatic, for: .navigationBar)
         .alert("Add project", isPresented: $adding) {
             TextField("/Users/you/Sites/app", text: $newPath)
                 .textInputAutocapitalization(.never)

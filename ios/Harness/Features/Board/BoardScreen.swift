@@ -2,14 +2,14 @@ import HarnessKit
 import SwiftUI
 
 /// The board: five columns as horizontally paged lists with a status strip (counts) on top, or
-/// on iPad at regular width all five side by side like the Mac (each with its own header, no
+/// on iPad at regular width and on a phone in landscape all five side by side like the Mac (each with its own header, no
 /// strip), the project filter behind the sidebar button, pull to refresh. Done is paged:
 /// it scrolls into older pages (footer spinner) and its count is the server's total. The
 /// the navigation bar is never shown: on the portrait phone our own bottom bar (BoardBottomBar)
 /// reads Projects, the command palette field (always on screen, its placeholder the project's or
 /// group's name or "All projects"; tapping it opens the palette, PaletteScreen, which finds tickets
 /// and runs commands, "Show child tickets" among them) and New session. On the iPad and the phone in
-/// landscape (`chromeless`) the system's bottom bar holds Projects (the sidebar's toggle on iPad),
+/// landscape, and the iPhone Duo (`chromeless`) the system's bottom bar holds Projects (the sidebar's toggle on iPad),
 /// search (⌘K or ⌘F) and New session (⌘N), the columns run beneath it, and the last two hide while
 /// a ticket panel covers them. The board doesn't filter by a search: that's the Mac's.
 struct BoardScreen: View {
@@ -41,11 +41,20 @@ struct BoardScreen: View {
     /// The room the last card keeps for the bottom bar the columns run under.
     private var belowBar: CGFloat { chromeless ? barInset : 0 }
 
-    private var layout: BoardScreenRules.Layout { sizeClass == .regular ? .columns : .pager }
+    private var layout: BoardScreenRules.Layout { BoardScreenRules.layout(regularWidth: sizeClass == .regular, compactHeight: verticalSizeClass == .compact) }
 
     /// No title bar, and the buttons in the system's bottom bar (which the iPhone Duo moves into its
     /// margins): the iPad, and the phone in landscape. The portrait phone keeps BoardBottomBar.
-    private var chromeless: Bool { BoardScreenRules.hidesChrome(desktop: desktop, compactHeight: verticalSizeClass == .compact) }
+    private var chromeless: Bool { BoardScreenRules.hidesChrome(desktop: desktop, compactHeight: verticalSizeClass == .compact, duo: Self.isDuo) }
+    /// The iPhone Duo (a device or its simulator): the system moves the bottom bar's buttons into its margin.
+    private static let isDuo = (ProcessInfo.processInfo.environment["SIMULATOR_MODEL_IDENTIFIER"] ?? machineIdentifier) == BoardScreenRules.duoModelIdentifier
+
+    private static var machineIdentifier: String {
+        var info = utsname()
+        uname(&info)
+        return withUnsafeBytes(of: &info.machine) { String(cString: $0.bindMemory(to: CChar.self).baseAddress!) }
+    }
+
     /// An open ticket panel covers the board's bottom-right corner, where the bar's search and New session sit.
     private var panelCoversBar: Bool { desktop && router.ticketSheet != nil }
 

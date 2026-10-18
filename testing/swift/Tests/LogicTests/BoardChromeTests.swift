@@ -12,4 +12,15 @@ import HarnessKit
     @Test func thePortraitPhoneKeepsItsOwnBar() {
         #expect(!BoardScreenRules.hidesChrome(desktop: false, compactHeight: false))
     }
+
+    @Test func theDuoUsesTheSystemBarInPortraitToo() {
+        #expect(BoardScreenRules.hidesChrome(desktop: false, compactHeight: false, duo: true))
+    }
+
+    @Test func aLandscapePhoneShowsColumnsSideBySideLikeTheIPad() {
+        #expect(BoardScreenRules.layout(regularWidth: false, compactHeight: true) == .columns)
+        #expect(BoardScreenRules.layout(regularWidth: true, compactHeight: true) == .columns)
+        #expect(BoardScreenRules.layout(regularWidth: true, compactHeight: false) == .columns)
+        #expect(BoardScreenRules.layout(regularWidth: false, compactHeight: false) == .pager)
+    }
 }

@@ -292,8 +292,6 @@ private struct DesktopShell: View {
             ProjectsSidebar(column: true)
                 .background(c.bgSidebar.ignoresSafeArea())
                 .navigationSplitViewColumnWidth(min: 260, ideal: 300, max: 360)
-                // The board's bottom-left button toggles the sidebar; the system's own would be a second one.
-                .toolbar(removing: .sidebarToggle)
         } detail: {
             // The column paints the system background; the phone's sections show RootView's `bg`.
             SectionStack().environment(\.desktopShell, true).background(c.bg.ignoresSafeArea())

@@ -23,9 +23,16 @@ public enum BoardScreenRules {
     // MARK: Layout
 
     /// Whether the board drops its title bar for the system's bottom bar: the iPad's desktop shell,
-    /// and any phone in landscape (compact height, whatever its width). The portrait phone keeps
-    /// its own bottom bar.
-    public static func hidesChrome(desktop: Bool, compactHeight: Bool) -> Bool { desktop || compactHeight }
+    /// any phone in landscape (compact height, whatever its width), and the iPhone Duo in either
+    /// orientation, whose bottom bar moves into its margin. The other portrait phones keep their own bottom bar.
+    public static func hidesChrome(desktop: Bool, compactHeight: Bool, duo: Bool = false) -> Bool { desktop || compactHeight || duo }
+
+    /// The board's layout: side by side at regular width (the iPad, a Plus or Pro Max in landscape),
+    /// and on any phone in landscape, where one page-wide column would be far too wide; else the pager.
+    public static func layout(regularWidth: Bool, compactHeight: Bool) -> Layout { regularWidth || compactHeight ? .columns : .pager }
+
+    /// The machine identifier of the iPhone Duo (`iPhone19,4`), on a device or in its simulator.
+    public static let duoModelIdentifier = "iPhone19,4"
 
     /// How the board lays out its columns: the phone's one-column pager, or every column side by
     /// side (iPad at regular width).
