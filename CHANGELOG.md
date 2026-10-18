@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261018.0039](https://github.com/markhuot/harness/releases/tag/app-20261018.0039) - 2026-10-18
+
 ### Fixed
 
 - For people working on Harness: the plan-usage login-expired check, the conductor Tickets row layout and the dock ghost's running glow are covered by the new `testing/` suite, so deleting the old suite loses none of them.
