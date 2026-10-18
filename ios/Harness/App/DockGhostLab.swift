@@ -21,9 +21,7 @@ struct DockGhostLab: View {
     ]
 
     var body: some View {
-        ZStack {
-            backdrop
-            ScrollView {
+        ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     Toggle("Slow motion (4×)", isOn: $slow)
                         .padding(.horizontal, 6)
@@ -41,8 +39,10 @@ struct DockGhostLab: View {
                 }
                 .padding(.horizontal, DockMetrics.phoneSides(screen: nil))
                 .padding(.vertical, 24)
-            }
         }
+        // A background, not a ZStack sibling: the backdrop is taller than the screen, and as a sibling it
+        // sized the stack past the screen and pushed the top rows out of reach.
+        .background(alignment: .top) { backdrop }
         .navigationTitle("Dock ghost lab")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -60,8 +60,9 @@ struct DockGhostLab: View {
                     .background(i % 3 == 0 ? c.accentSoft : c.bg)
             }
         }
-        .frame(maxHeight: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(c.bg)
+        .clipped()
         .ignoresSafeArea()
     }
 }
