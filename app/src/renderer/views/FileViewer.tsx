@@ -23,6 +23,8 @@ export interface FileEditorProps {
   /** The highlighted lines (1-based, inclusive), or null for none */
   range: { start: number; end: number } | null;
   readOnly: boolean;
+  /** Long lines wrap (else they scroll sideways) */
+  wrap: boolean;
   /** The editor is up (its handle), or gone (null) */
   onHandle: (handle: EditorHandle | null) => void;
   onDirty: (dirty: boolean) => void;
@@ -45,7 +47,7 @@ export function FileEditor(props: FileEditorProps) {
 
   useEffect(() => {
     const p = latest.current;
-    const h = createEditor(host.current!, { contents: p.contents, language: p.name, theme, range: p.range ?? undefined, readOnly: p.readOnly });
+    const h = createEditor(host.current!, { contents: p.contents, language: p.name, theme, range: p.range ?? undefined, readOnly: p.readOnly, wrap: p.wrap });
     handle.current = h;
     // For the app checks (the Mac tests), which read and drive the editor through it.
     (host.current as HTMLElement & { harnessEditor?: EditorHandle }).harnessEditor = h;
@@ -63,6 +65,7 @@ export function FileEditor(props: FileEditorProps) {
   }, []);
   useEffect(() => handle.current?.setTheme(theme), [syntax.name, syntax.appearance]);
   useEffect(() => handle.current?.setReadOnly(props.readOnly), [props.readOnly]);
+  useEffect(() => handle.current?.setWrap(props.wrap), [props.wrap]);
   // A link moving the pane to other lines (the first reveal happens when the editor is created).
   const revealed = useRef(rangeKey);
   useEffect(() => {

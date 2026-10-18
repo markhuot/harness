@@ -73,3 +73,10 @@ export function viewMenu(input: ViewMenuInput): ViewMenu {
   const rendered = view && (input.rendered || changes);
   return { view, sourceEnabled: !changes, showChanges: input.spec && input.canShowChanges, rendered, wrapEnabled: !rendered };
 }
+
+/** A link in a rendered file, made relative to the file's own directory: `./b.md` in `docs/a.md` is `docs/b.md`. Links with a scheme, an anchor or a leading slash are left alone. */
+export function resolveFileRelative(path: string, url: string): string {
+  if (/^[a-z][a-z0-9+.-]*:/i.test(url) || url.startsWith("//") || url.startsWith("/") || url.startsWith("#")) return url;
+  const slash = path.lastIndexOf("/");
+  return slash < 0 ? url : `${path.slice(0, slash + 1)}${url}`;
+}

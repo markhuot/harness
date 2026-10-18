@@ -804,6 +804,13 @@ html[data-input="keyboard"] .card.cursor:not(:focus) {
   flex: 1;
   min-height: 0;
 }
+/* Source: the editor fills the body under the history bar, scrolling in its own box. */
+.spec-source {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 360px;
+}
 .spec-diff-note {
   flex: none;
   margin-right: 8px;

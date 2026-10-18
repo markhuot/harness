@@ -14,10 +14,13 @@
 
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import type { EditorHandle } from "@harness/editor";
-import { formatFileLink, type FileDiff, type FileView } from "@harness/shared";
+import { formatFileLink, viewMenu, wrapKey, type FileDiff, type FileView } from "@harness/shared";
 import { ticketByKey } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import { MenuButton } from "../components/bits";
+import { FileLinkScope, Markdown } from "../components/Markdown";
+import { ViewMenuItems } from "../components/ViewMenuItems";
+import { setWrapped, useWrapped } from "../state/viewPrefs";
 import { usePaneScope, usePopout } from "../components/paneContext";
 import { MovePaneItems, PaneGrip, PaneWindowButton } from "../components/paneHeader";
 import { ChunkBoundary, retryableLazy } from "../components/lazyRetry";
@@ -257,6 +260,14 @@ export function FilePane({ paneId, content, zoomed }: { paneId: string; content:
     updatePanes(scope, (s) => setFileView(s, paneId, { tab: t }));
   };
   const shownPath = view?.path ?? path;
+  // Rendered shows the editor's text as it was when it was chosen (the editor is hidden meanwhile, so it can't change); it's per open file.
+  const fileId = `${rootKey}\u0000${shownPath}`;
+  const [renderedAt, setRenderedAt] = useState<{ id: string; text: string } | null>(null);
+  const renderedText = renderedAt?.id === fileId ? renderedAt.text : null;
+  const textShown = tab === "file" && !!view && !view.binary && view.contents !== null && !view.tooLarge;
+  const menu = viewMenu({ spec: false, path: shownPath, rendered: renderedText !== null, showChanges: false, canShowChanges: false });
+  const wrap = useWrapped(wrapKey(shownPath));
+  const chooseRendered = (on: boolean) => setRenderedAt(on ? { id: fileId, text: handle.current?.getContents() ?? view?.contents ?? "" } : null);
   const absolute = view ? `${view.root.replace(/\/+$/, "")}/${view.path}` : null;
   const linkLines = (): { startLine?: number; endLine?: number } => selectedLines() ?? { startLine: content.startLine, endLine: content.endLine };
   const link = (lines = linkLines()) => formatFileLink({ path: shownPath, ...lines, ...(ticketKey ? { ticketKey } : { projectId: projectId! }) });
@@ -313,6 +324,7 @@ export function FilePane({ paneId, content, zoomed }: { paneId: string; content:
         >
           {(closeMenu) => (
             <>
+              {textShown && <ViewMenuItems menu={menu} wrap={wrap} onRendered={chooseRendered} onWrap={(on) => setWrapped(wrapKey(shownPath), on)} onDone={closeMenu} />}
               <button onClick={() => (closeMenu(), void navigator.clipboard.writeText(shownPath))}>
                 <Icon name="copy" /> Copy path
               </button>
@@ -392,13 +404,20 @@ export function FilePane({ paneId, content, zoomed }: { paneId: string; content:
                   </Suspense>
                 </ChunkBoundary>
               ))}
+            {tab === "file" && renderedText !== null && menu.view && (
+              <div className="file-rendered spec-doc" data-testid="file-rendered">
+                <FileLinkScope ticketKey={ticketKey} projectId={projectId} file={shownPath}>
+                  <Markdown text={renderedText} />
+                </FileLinkScope>
+              </div>
+            )}
             {view.binary ? (
               tab === "file" && <FileProblem icon="image" title="Binary file" detail={`${formatSize(view.size)}; it can't be shown as text.`} />
             ) : view.tooLarge || view.contents === null ? (
               tab === "file" && <FileProblem icon="fileText" title="This file is too large to show" detail={`${formatSize(view.size)}; the viewer shows files up to 2 MB.`} />
             ) : (
               // Stays mounted under the Diff tab (hidden): unmounting it would end the editor, and with it any unsaved edits.
-              <div className="file-editor-slot" hidden={tab === "diff"}>
+              <div className="file-editor-slot" hidden={tab === "diff" || (menu.rendered && renderedText !== null)}>
                 {view.truncated && <div className="file-note">The file grew while it was read; this is only its start, so it can't be edited.</div>}
                 <ChunkBoundary lazies={[fileEditor]} fallback={viewerFailed}>
                   <Suspense fallback={null}>
@@ -408,6 +427,7 @@ export function FilePane({ paneId, content, zoomed }: { paneId: string; content:
                       contents={view.contents}
                       range={selected}
                       readOnly={view.truncated}
+                      wrap={wrap}
                       onHandle={(h) => (handle.current = h)}
                       onDirty={setDirty}
                       onSave={() => void save()}

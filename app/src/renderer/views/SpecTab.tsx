@@ -1,17 +1,29 @@
 // The Spec tab: the ticket's living document (DESIGN.md "Spec revisions and attachments"), with a
-// history bar over it: when the revision on show was written and its note, a Show changes toggle
-// that keeps the rendered spec and marks what that revision changed from the one before it
-// (MarkdownDiff: added text green, removed text red and struck through, in place), and along its
-// bottom edge a timeline with one segment per revision, dragged or scrolled to scrub through them.
+// history bar over it: when the revision on show was written and its note, a "…" menu (Source or
+// Rendered, Wrap lines for the source, and Show changes, which keeps the rendered spec and marks what
+// that revision changed from the one before it: MarkdownDiff, added text green, removed text red and
+// struck through, in place), and along its bottom edge a timeline with one segment per revision,
+// dragged or scrolled to scrub through them. Source is the raw markdown in the file editor, read-only
+// (the spec is edited in Details); it opens Rendered.
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type RefObject } from "react";
-import type { SpecRevisionInfo, Ticket } from "@harness/shared";
+import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type RefObject } from "react";
+import { SPEC_WRAP_KEY, viewMenu, type SpecRevisionInfo, type Ticket } from "@harness/shared";
 import { depChipTitle, dependencyStates, diffUnchanged, specBody, specDiff } from "@harness/shared/state";
 import { useStore } from "../state/store";
 import { FOLLOW_LATEST, revisionAt, scrubTo, segmentTone, shownRevision, wheelScrub, type SpecHistory } from "../state/specHistory";
 import { Icon } from "../components/Icon";
 import { Markdown, MarkdownDiff } from "../components/Markdown";
-import { relativeTime, Switch, TicketKey, useNow } from "../components/bits";
+import { MenuButton, relativeTime, TicketKey, useNow } from "../components/bits";
+import { ViewMenuItems } from "../components/ViewMenuItems";
+import { ChunkBoundary, retryableLazy } from "../components/lazyRetry";
+import { setWrapped, useWrapped } from "../state/viewPrefs";
+import "./file.css";
+
+// The editor loads only when Source is chosen, so the Spec tab stays light.
+const specEditor = retryableLazy(() => import("./FileViewer").then((m) => m.FileEditor));
+const SpecEditor = specEditor.Component;
+const noop = () => {};
+
 import { PromptAttachmentList } from "../components/PromptAttachments";
 
 export function SpecTab({ ticket }: { ticket: Ticket }) {
@@ -21,12 +33,15 @@ export function SpecTab({ ticket }: { ticket: Ticket }) {
   const revisions = state.specRevisions[ticket.id];
   const [history, setHistory] = useState<SpecHistory>(FOLLOW_LATEST);
   const [showChanges, setShowChanges] = useState(false);
+  const [rendered, setRendered] = useState(true);
+  const wrap = useWrapped(SPEC_WRAP_KEY);
   const [bodyErrors, setBodyErrors] = useState<Record<number, Error>>({});
   const shown = shownRevision(history, latest);
   const body = specBody(state, ticket.id, shown);
   /** Show changes compares the revision on show with the one before it. */
   const comparing = showChanges && shown > 1;
   const prevBody = comparing ? specBody(state, ticket.id, shown - 1) : undefined;
+  const menu = viewMenu({ spec: true, rendered, showChanges, canShowChanges: latest > 1 });
   const info = revisions?.find((r) => r.rev === shown);
   const baseline = ticket.specBaselineRevision ?? revisions?.find((r) => r.approvedBaseline)?.rev ?? null;
   const deps = dependencyStates(state, ticket);
@@ -71,7 +86,25 @@ export function SpecTab({ ticket }: { ticket: Ticket }) {
           {showChanges && latest > 1 && (shown === 1 || unchanged) && (
             <span className="spec-diff-note">{shown === 1 ? "First revision: nothing to compare" : `No changes from rev ${shown - 1}`}</span>
           )}
-          {latest > 1 && <Switch checked={showChanges} onChange={setShowChanges} label="Show changes" />}
+          <MenuButton
+            trigger={(toggle) => (
+              <button className="btn btn-ghost btn-icon" data-testid="spec-more" onClick={toggle} title="More" aria-label="More">
+                <Icon name="more" />
+              </button>
+            )}
+          >
+            {(closeMenu) => (
+              <ViewMenuItems
+                menu={menu}
+                wrap={wrap}
+                onRendered={(on) => (setRendered(on), on || setShowChanges(false))}
+                onWrap={(on) => setWrapped(SPEC_WRAP_KEY, on)}
+                showChanges={showChanges}
+                onShowChanges={setShowChanges}
+                onDone={closeMenu}
+              />
+            )}
+          </MenuButton>
         </div>
         {latest > 1 && (
           <SpecTimeline
@@ -108,6 +141,14 @@ export function SpecTab({ ticket }: { ticket: Ticket }) {
         ) : comparing && prevBody !== undefined && diff && (body.trim() || prevBody.trim()) ? (
           <section className="spec-doc" data-testid="spec-doc" data-changes={`${shown - 1}-${shown}`}>
             <MarkdownDiff diff={diff} before={prevBody} after={body} />
+          </section>
+        ) : body.trim() && !menu.rendered ? (
+          <section className="spec-source" data-testid="spec-source">
+            <ChunkBoundary lazies={[specEditor]} fallback={() => <div className="empty">The editor didn't load.</div>}>
+              <Suspense fallback={null}>
+                <SpecEditor key={`${ticket.id}:${shown}`} name="spec.md" contents={body} range={null} readOnly wrap={wrap} onHandle={noop} onDirty={noop} onSave={noop} onBlur={noop} onDispose={noop} />
+              </Suspense>
+            </ChunkBoundary>
           </section>
         ) : body.trim() ? (
           <section className="spec-doc" data-testid="spec-doc">

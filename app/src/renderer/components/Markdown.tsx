@@ -16,7 +16,7 @@
 // annotating it adds that attachment, by its id, to the message being written.
 
 import { createContext, Fragment, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
-import { parseFileLink, type AttachmentKind, type Attachment } from "@harness/shared";
+import { parseFileLink, resolveFileRelative, type AttachmentKind, type Attachment } from "@harness/shared";
 import {
   inlineTokens,
   mediaIn,
@@ -55,18 +55,18 @@ export interface TicketLinks {
   open: (key: string) => void;
 }
 
-const FileLinkScopeContext = createContext<FileLinkContext>({});
+const FileLinkScopeContext = createContext<FileLinkContext & { /** The file the text belongs to: relative links resolve from its directory */ file?: string }>({});
 
 /** Where file links in the Markdown below resolve: the ticket (and project) whose text it is. */
-export function FileLinkScope({ ticketKey, projectId, children }: FileLinkContext & { children: ReactNode }) {
-  const value = useMemo(() => ({ ticketKey, projectId }), [ticketKey, projectId]);
+export function FileLinkScope({ ticketKey, projectId, file, children }: FileLinkContext & { file?: string; children: ReactNode }) {
+  const value = useMemo(() => ({ ticketKey, projectId, file }), [ticketKey, projectId, file]);
   return <FileLinkScopeContext.Provider value={value}>{children}</FileLinkScopeContext.Provider>;
 }
 
 function MdLink({ url, children }: { url: string; children: ReactNode }) {
-  const file = useMemo(() => parseFileLink(url), [url]);
   const store = useOptionalStore();
-  const ctx = useContext(FileLinkScopeContext);
+  const { file: from, ...ctx } = useContext(FileLinkScopeContext);
+  const file = useMemo(() => parseFileLink(from ? resolveFileRelative(from, url) : url), [url, from]);
   const pane = useContext(PaneContext);
   const scope = useContext(PaneScopeContext);
   if (!file) {

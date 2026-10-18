@@ -91,6 +91,13 @@
   min-height: 0;
   overflow: auto;
 }
+/* The rendered markdown view, in the same box the editor fills. */
+.file-rendered {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px 16px 24px;
+}
 .file-diff {
   flex: 1;
   min-height: 0;

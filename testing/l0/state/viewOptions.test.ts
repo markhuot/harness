@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { hasRenderedView, parseWrapPrefs, serializeWrapPrefs, viewMenu, withWrap, wrapKey } from "@harness/shared";
+import { hasRenderedView, parseFileLink, resolveFileRelative, parseWrapPrefs, serializeWrapPrefs, viewMenu, withWrap, wrapKey } from "@harness/shared";
 import fixtures from "../../../shared/src/viewOptions.fixtures.json";
 
 describe("wrap key", () => {
@@ -44,4 +44,21 @@ describe("view menu", () => {
     expect(spec({ showChanges: true, canShowChanges: false })).toMatchObject({ rendered: false, sourceEnabled: true });
   });
   test("spec source wraps", () => expect(spec({ rendered: false })).toMatchObject({ rendered: false, wrapEnabled: true }));
+});
+
+describe("links in a rendered file", () => {
+  test.each([
+    ["docs/a.md", "./b.md#L3", "docs/b.md", 3],
+    ["docs/a.md", "../src/x.ts", "src/x.ts", undefined],
+    ["a.md", "b.md", "b.md", undefined],
+    ["docs/a.md", "/etc/hosts", "/etc/hosts", undefined],
+  ] as const)("%s links %s to %s", (file, url, path, line) => {
+    const link = parseFileLink(resolveFileRelative(file, url));
+    expect(link?.path).toBe(path);
+    expect(link?.startLine).toBe(line);
+  });
+  test("a web link or an anchor stays itself", () => {
+    expect(resolveFileRelative("docs/a.md", "https://x.dev/a")).toBe("https://x.dev/a");
+    expect(parseFileLink(resolveFileRelative("docs/a.md", "#top"))).toBeNull();
+  });
 });
