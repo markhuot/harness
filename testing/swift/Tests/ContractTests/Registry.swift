@@ -18,7 +18,6 @@ let ignoredFields: [String: String] = [
     "Run.costUsd": "Swift has no property for it, and no iPhone screen shows a run's cost",
     "Settings.claudeOauthToken": "A secret: clients decode PublicSettings (claudeOauthTokenSet), never the token",
     "Settings.copilotGithubToken": "A secret: clients decode PublicSettings (copilotGithubTokenSet), never the token",
-    "Ticket.completing": "Swift has no property for it, and no iPhone screen reads it",
     "Ticket.pullRequestHead": "Swift has no property for it, and no iPhone screen reads it",
     "Ticket.startAfterPlanBy": "Swift has no property for it, and no iPhone screen reads it",
 ]
@@ -108,6 +107,7 @@ let codecs: [String: Codec] = [
         "RelatedTicket": .codable(RelatedTicket.self),
         "RemoteKeyMatches": .codable(RemoteKeyMatches.self),
         "ReopenBody": .codable(ReopenBody.self),
+        "UnblockBody": .codable(UnblockBody.self),
         "ReviewState": .codable(ReviewState.self),
         "Run": .codable(Run.self),
         "RunKind": .codable(RunKind.self),
