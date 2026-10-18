@@ -81,6 +81,13 @@ final class ScreenTests: ScreenTestCase {
         try await screen("ticket-child", router: router) { RootView() }
     }
 
+    /// The same child on a tab that collapses the hero: the Back circle keeps its inset from the sheet's corner.
+    func testTicketChildCollapsed() async throws {
+        let router = ticket("HARNESS-8", .children)
+        router.push(.ticket(key: "HARNESS-9", tab: .activity))
+        try await screen("ticket-child-collapsed", router: router) { RootView() }
+    }
+
     /// A markdown file on its rendered view, drawn by the Spec tab's renderer.
     func testFileViewerRendered() async throws {
         try await screen("file-rendered") { NavigationStack { FileViewerScreen(params: FileRouteParams(path: "README.md", ticket: "HARNESS-5"), startRendered: true) } }

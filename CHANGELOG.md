@@ -9,6 +9,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- On iPhone, a child ticket's Back circle now sits the same distance from the top of the sheet as from its left edge, so it is concentric with the sheet's corner on the Pro Max too, whether the title is expanded or collapsed. It no longer rides up against the sheet's top edge when the title is collapsed.
+
 ## [app-20261018.1811](https://github.com/markhuot/harness/releases/tag/app-20261018.1811) - 2026-10-18
 
 ### Added
