@@ -44,6 +44,19 @@ describe("TicketDetail", () => {
     expect(buttons(m).find((b) => b.startsWith("Tickets"))).toBe("Tickets2");
   });
 
+  test("on the Tickets tab a child's ref is its own element before the title row, not inside it", async () => {
+    const m = await mount(<TicketDetail paneId="p1" ticketKey="HARNESS-8" tab={"children" as never} zoomed={false} />);
+    await m.until("the children", () => all(m.container, ".child-row").length === 2);
+    for (const row of all(m.container, ".child-row")) {
+      const main = row.querySelector(".child-main")!;
+      const key = main.querySelector(":scope > .child-key")!;
+      const top = main.querySelector(":scope > .child-top")!;
+      expect(key.compareDocumentPosition(top) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(top.contains(key)).toBe(false);
+      expect(text(top)).not.toContain(text(key));
+    }
+  });
+
   test("the activity tab lists the ticket's entries in order, with their authors' words", async () => {
     const m = await mount(detail("HARNESS-5", "activity"));
     await m.until("activity", () => text(m.container).includes("Submitted for review"));

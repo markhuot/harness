@@ -376,6 +376,8 @@ export function retryAfterMs(value: string | null, now = Date.now()): number | u
 }
 
 const CLAUDE_USAGE_URL = "https://api.anthropic.com/api/oauth/usage";
+/** The usage row's note when the CLI's login is there but its access token has lapsed. */
+export const CLAUDE_USAGE_EXPIRED = "Claude Code's login token has expired. Usage shows again after Claude Code next runs.";
 
 const WINDOWS: { key: string; id: PlanWindow["id"]; label: string; seconds: number }[] = [
   { key: "five_hour", id: "five_hour", label: "5-hour", seconds: 5 * 3600 },
@@ -1106,6 +1108,7 @@ export class ClaudeCodeDriver implements Driver {
     const tokens = [this.token(), ...(await (this.opts.loginTokens ?? (() => claudeLoginTokens(this.env)))())].filter((t): t is string => !!t);
     if (!tokens.length) throw new PlanUsageError("Sign in to Claude Code to see plan usage");
     let lastError: PlanUsageError | null = null;
+    let expired = false;
     for (const token of [...new Set(tokens)]) {
       try {
         const res = await (this.opts.fetch ?? fetch)(CLAUDE_USAGE_URL, {
@@ -1113,7 +1116,11 @@ export class ClaudeCodeDriver implements Driver {
           signal: AbortSignal.timeout(15_000),
         });
         if (res.status === 401 || res.status === 403) {
-          lastError = new PlanUsageError("Sign in to Claude Code to see plan usage");
+          // The CLI renews its access token only when it runs (Harness never spends the refresh token,
+          // which would sign the CLI out), so a login that sat idle past its expiry is refused too.
+          // That's not signed out: say so, whichever token was tried last.
+          if (/expired/i.test(await res.text().catch(() => ""))) expired = true;
+          lastError = new PlanUsageError(expired ? CLAUDE_USAGE_EXPIRED : "Sign in to Claude Code to see plan usage");
           continue;
         }
         if (res.status === 429 || res.status >= 500) throw new PlanUsageError(`Claude's usage endpoint answered ${res.status}`, true, retryAfterMs(res.headers.get("retry-after")));

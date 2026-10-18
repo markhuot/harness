@@ -116,10 +116,10 @@ function ChildRow({ child: c, onOpen }: { child: Ticket; onOpen: (key: string) =
       onContextMenu={(e) => void ticketContextMenu(e, scope, c.key, () => onOpen(c.key), paneId, undefined, boardScope)}
     >
       <div className="child-main">
+        <span className="child-key">
+          <TicketKey ticket={c} />
+        </span>
         <div className="child-top">
-          <span className="child-key">
-            <TicketKey ticket={c} />
-          </span>
           <span className="child-title">{c.title || "Untitled"}</span>
           {isWorking(state.tickets, c) && <span className="spinner" title={workingTitle(c)} />}
           {c.status === "review" && (

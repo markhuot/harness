@@ -114,26 +114,13 @@ struct DockGhostCard: View {
     }
 
     private func card(phase: Double) -> some View {
+        let blurRoom: CGFloat = 30
         let wave = Self.wave(phase: phase)
         // Reduce Motion keeps only a soft breathe of the glow: nothing travels, rises or scales.
         let lift = reduceMotion || !armed ? 0 : wave
-        return HStack(spacing: 10) {
-            Image(systemName: "arrow.down.to.line")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(c.accent)
-            Text("Dock")
-                .font(.headline)
-                .foregroundStyle(c.text)
-            Text(title)
-                .font(.subheadline)
-                .foregroundStyle(c.text2)
-                .lineLimit(1)
-                .truncationMode(.tail)
-            Spacer(minLength: 0)
-        }
-        .padding(.horizontal, 22)
-        .frame(height: DockMetrics.height)
-        .glassEffect(.regular.tint(c.accent.opacity(0.06)), in: .capsule)
+        // The glass and its label never see the phase: SwiftUI skips them when only the phase
+        // changes, so the glass isn't re-rendered each frame against a moving backdrop.
+        return DockGhostFace(title: title).equatable()
         // The breathing is opacity only: a glass tint or blur radius that changes every frame is
         // re-rendered in steps, which read as the purple stuttering around the card.
         .overlay {
@@ -145,10 +132,14 @@ struct DockGhostCard: View {
         .background {
             Capsule()
                 .fill(c.accent)
-                .opacity(0.14 + 0.20 * wave)
-                .blur(radius: 13)
                 .padding(.horizontal, 6)
+                // Room around the capsule inside the rasterized layer, or the blur is cut at the card's edge.
+                .padding(blurRoom)
+                .blur(radius: 13)
+                // Rasterized once, blur included; the opacity below is applied to that bitmap.
                 .drawingGroup()
+                .padding(-blurRoom)
+                .opacity(0.14 + 0.20 * wave)
         }
         // A light that circles the rim once per pulse. The gradient is angular and fades to clear at
         // both ends, so a full turn (phase 1) draws exactly what rest (phase 0) does: no jump at the loop.
@@ -169,6 +160,34 @@ struct DockGhostCard: View {
         }
         .scaleEffect(1 + 0.01 * lift)
         .offset(y: -Self.bounce * lift)
+    }
+}
+
+/// The ghost's glass and label, which don't change while it pulses.
+private struct DockGhostFace: View, Equatable {
+    let title: String
+    @Environment(\.palette) private var c
+
+    nonisolated static func == (a: Self, b: Self) -> Bool { a.title == b.title }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "arrow.down.to.line")
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(c.accent)
+            Text("Dock")
+                .font(.headline)
+                .foregroundStyle(c.text)
+            Text(title)
+                .font(.subheadline)
+                .foregroundStyle(c.text2)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 22)
+        .frame(height: DockMetrics.height)
+        .glassEffect(.regular.tint(c.accent.opacity(0.06)), in: .capsule)
     }
 }
 

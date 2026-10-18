@@ -115,8 +115,8 @@ private struct TicketDetailChildRow: View {
         let attention = Conductor.attentionOf(child)
         let showDriver = state.hasCustomDriver(child)
         VStack(alignment: .leading, spacing: 6) {
+            TicketKeyLabel(ticket: child).fixedSize()
             HStack(spacing: 7) {
-                TicketKeyLabel(ticket: child).fixedSize()
                 Text(child.title.isEmpty ? "Untitled" : child.title)
                     .font(.scaled(size: 14.5, weight: .medium))
                     .foregroundStyle(c.text)
