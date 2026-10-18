@@ -108,6 +108,65 @@ private func router(open keys: [String] = [], dock: Bool = false) -> Router {
         #expect(again.dockedSheets.map(\.rootKey) == ["A-2", "A-1"])
     }
 
+    @Test func aLinkedTabIsNotDoubledByTheRestoredSheetForTheSameTicket() {
+        let json = router(open: ["A-1", "A-2"]).persistedState(now: t0)
+        let launched = Router()
+        launched.openTicket(key: "A-2", tab: .spec)
+        launched.restorePersistedState(json, now: t0)
+        #expect(launched.dockedSheets.map(\.rootKey) == ["A-2", "A-1"])
+    }
+
+    @Test func aLinkNamingATabBeatsTheTabRememberedForTheOpenTicket() {
+        let r = router(open: ["A-1"])
+        r.setTicketTab("files", key: "A-1")
+        r.openTicket(key: "A-1", tab: .spec)
+        #expect(r.ticketTab(key: "A-1") == .spec)
+        // A link to a ticket pushed inside the sheet, or one that replaces the root's tab, too.
+        r.setTicketTab("files", key: "A-1")
+        r.dockSheet()
+        r.openTicket(key: "A-1", tab: .spec)
+        #expect(r.ticketTab(key: "A-1") == .spec)
+    }
+
+    @Test func aNewSheetDoesNotTakeItsTabFromAnotherSheetHoldingTheSameTicket() {
+        let r = Router()
+        r.openTicket(key: "A-1", tab: nil)
+        r.setTicketTab("files", key: "A-1")
+        r.openTicket(key: "B-1", tab: nil)
+        r.setTicketSheetPath([.ticket(key: "A-1", tab: nil)])
+        // The top sheet's own pushed A-1 has no pick; the sheet behind has "files".
+        #expect(r.ticketTab(key: "A-1") == nil)
+    }
+
+    @Test func leavingAServerSavesItsSheetsAndClearsThemBeforeTheNextRestores() {
+        let defaults = FakeDefaults()
+        let r = router(open: ["A-1", "A-2"])
+        r.boardColumn = .review
+        r.leavePersisted(to: defaults, server: "s1", now: t0)
+        #expect(r.ticketSheetState == .gone)
+        #expect(r.boardColumn == nil)
+
+        router(open: ["B-1"]).savePersisted(to: defaults, server: "s2", now: t0)
+        r.restorePersisted(from: defaults, server: "s2", now: t0)
+        #expect(r.dockedSheets.map(\.rootKey) == ["B-1"])
+        // Saving now writes only the second server's tickets under its key; the first's is intact.
+        r.savePersisted(to: defaults, server: "s2", now: t0)
+        let back = Router()
+        back.restorePersisted(from: defaults, server: "s1", now: t0)
+        #expect(back.dockedSheets.map(\.rootKey) == ["A-2", "A-1"])
+        #expect(back.boardColumn == .review)
+    }
+
+    @Test func theOlderDockKeyIsEmptiedEvenWhenTheServerHasItsOwnState() {
+        let defaults = FakeDefaults()
+        defaults.values[Router.persistedDockKey] = #"[{"root":{"ticket":{"key":"OLD-1"}},"path":[]}]"#
+        router(open: ["A-1"]).savePersisted(to: defaults, server: "s1", now: t0)
+        let r = Router()
+        r.restorePersisted(from: defaults, server: "s1", now: t0)
+        #expect(r.dockedSheets.map(\.rootKey) == ["A-1"])
+        #expect(defaults.values[Router.persistedDockKey] == "")
+    }
+
     // MARK: Board column
 
     @Test func theBoardColumnRoundTripsWithoutAnySheet() {

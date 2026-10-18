@@ -347,10 +347,10 @@ public final class Router {
         }
     }
 
-    /// The tab ticket `key`'s screen last showed on the top sheet (else any sheet); nil when none
-    /// was picked.
+    /// The tab ticket `key`'s screen last showed on the sheet that owns it (the most recent sheet
+    /// with that ticket); nil when none was picked there, so the route's own tab applies.
     public func ticketTab(key: String) -> TicketTab? {
-        sheets.first?.tabs[key] ?? sheets.lazy.compactMap { $0.tabs[key] }.first
+        sheets.first { $0.ticketKeys.contains(key) }?.tabs[key]
     }
 
     /// Presented → docked, paths and all.
@@ -427,7 +427,11 @@ public final class Router {
         var list = sheets
         if let i = list.firstIndex(where: { $0.shows(root) }) {
             var s = list.remove(at: i)
-            if case let .ticket(key, tab?) = root, s.showsOnTop(key) { _ = s.showTab(tab) }
+            // The tab a link names is the one the screen shows now, so it wins over a remembered pick.
+            if case let .ticket(key, tab?) = root, s.showsOnTop(key) {
+                _ = s.showTab(tab)
+                s.tabs[key] = tab
+            }
             // A link to lines of the file already docked scrolls its open editor there (the editor
             // stays, since it may hold edits).
             if case let .file(params) = root, params.start != nil { s.reveal(params) }
@@ -435,7 +439,10 @@ public final class Router {
         } else if case let .ticket(key, tab) = root, let i = list.firstIndex(where: { $0.rootKey == key }) {
             var s = list.remove(at: i)
             s.path = []
-            if let tab { s.root = .ticket(key: key, tab: tab) }
+            if let tab {
+                s.root = .ticket(key: key, tab: tab)
+                s.tabs[key] = tab
+            }
             list.insert(s, at: 0)
         } else {
             nextTicketSheetID += 1
@@ -581,19 +588,34 @@ extension Router {
             sheets = restored
             ticketSheetDocked = docked
         } else {
-            // Behind what is already up, less any sheet that shows the same thing.
-            sheets += restored.filter { r in !sheets.contains { $0.root == r.root } }
+            // Behind what is already up, less any sheet that shows the same thing (a ticket by
+            // its key, whatever tab each names, as `presentTicketSheet` matches).
+            let up = sheets
+            sheets += restored.filter { r in
+                !up.contains { $0.rootKey != nil ? $0.rootKey == r.rootKey : $0.root == r.root }
+            }
         }
     }
 
-    /// Restores this server's saved state from `defaults`, or the old docked-only key when there is none.
+    /// Restores this server's saved state from `defaults`, or the old docked-only key when there is
+    /// none. The old key is emptied either way, so it can't migrate into another server later.
     public func restorePersisted(from defaults: any ChangesDefaults, server: String, now: Date = Date()) {
+        let legacy = defaults.string(forKey: Self.persistedDockKey)
         if let json = defaults.string(forKey: Self.persistedStateKey(server: server)), !json.isEmpty {
             restorePersistedState(json, now: now)
-        } else if let legacy = defaults.string(forKey: Self.persistedDockKey), !legacy.isEmpty {
+        } else if let legacy, !legacy.isEmpty {
             restoreLegacyDock(legacy)
-            defaults.setString("", forKey: Self.persistedDockKey)
         }
+        if let legacy, !legacy.isEmpty { defaults.setString("", forKey: Self.persistedDockKey) }
+    }
+
+    /// Leaves `server` (the connection switched or dropped): saves its state, then closes every
+    /// ticket sheet and forgets the column, so the next server restores onto a clean router and the
+    /// two servers' tickets never mix.
+    public func leavePersisted(to defaults: any ChangesDefaults, server: String, now: Date = Date()) {
+        savePersisted(to: defaults, server: server, now: now)
+        dismissAllSheets()
+        boardColumn = nil
     }
 
     /// Saves this server's state into `defaults` (an empty string when there is none).

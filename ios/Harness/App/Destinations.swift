@@ -13,8 +13,8 @@ struct RouteScreen: View {
     var body: some View {
         Group {
             switch route {
-            // The tab last picked on a ticket sheet wins, so a screen that mounts again (a layout
-            // flip, a relaunch) opens on it.
+            // The tab last picked on the ticket's sheet wins (a link that names a tab writes it
+            // there), so a screen that mounts again (a layout flip, a relaunch) opens on it.
             case let .ticket(key, tab): TicketDetailScreen(key: key, initialTab: router.ticketTab(key: key) ?? tab)
             case let .triage(id): TriageScreen(sessionId: id)
             case let .file(params): FileViewerScreen(params: params)

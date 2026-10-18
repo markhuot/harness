@@ -12,8 +12,9 @@ public enum BoardScreenRules {
         [TicketStatus.blocked, .review, .inProgress, .planning].first { !shown[$0].isEmpty }
     }
 
-    /// The column a visit opens on: the one last viewed when it is a column the board has, else the
-    /// landing column. Nil when neither applies (stay on the first column).
+    /// The column a visit opens on: the one last viewed when it is a column the board has (every
+    /// known status is one, shown empty or not; an unknown status has none), else the landing
+    /// column. Nil when neither applies (stay on the first column).
     public static func openingColumn(remembered: TicketStatus?, shown: Columns) -> TicketStatus? {
         if let remembered, TicketStatus.allKnown.contains(remembered) { return remembered }
         return landingColumn(shown)
