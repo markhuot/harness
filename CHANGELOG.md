@@ -11,6 +11,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
+- For people working on Harness: the plan-usage login-expired check, the conductor Tickets row layout and the dock ghost's running glow are covered by the new `testing/` suite, so deleting the old suite loses none of them.
 - For people working on Harness: an interrupted or half-failed walkthrough now removes its simulator installs and temp folders, and a killed iOS tool run can no longer leave a broken Xcode shim that makes every later walkthrough fail.
 - On iPhone and iPad, the docked card ghost's purple glow now shows around the whole card and breathes smoothly. It was being cut off at the card's edge and re-drawn every frame, which looked like two gradients competing. A new snapshot test captures the running animation frame by frame and fails if the glow steps or flickers off its curve.
 - On iPhone, iPad and the Mac app, the Tickets tab of a conductor now shows each ticket's ref on its own line above its title, so long titles get the full row width.

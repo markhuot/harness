@@ -38,7 +38,6 @@ export const EXCLUSIONS: Exclusion[] = [
   { file: "service/src/terminals/pty.ts", reason: "Starts a real shell on a real pseudo-terminal; the registry is tested against a fake PTY", layer: "L4 (a real terminal in the app)" },
 
   // -- Drivers: a real CLI, a real API --
-  { file: "service/src/drivers/claude-code.ts", reason: "Spawns the claude CLI and parses its stream-json; its model list parsing is tested (claude-code-models.ts)", layer: "L3 (driver contract against a fake CLI)" },
   { file: "service/src/drivers/anthropic-api.ts", reason: "Calls the Messages API with a native tool loop", layer: "L3 (driver contract against a fake CLI/API)" },
   { file: "service/src/drivers/github-copilot.ts", reason: "Spawns the Copilot CLI and parses its output", layer: "L3 (driver contract against a fake CLI)" },
 
