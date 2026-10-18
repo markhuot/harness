@@ -71,38 +71,6 @@ public enum DockMetrics {
         return max(0, floor, screenHeight - stackTop - homeIndicator)
     }
 
-    /// The point `fraction` (0...1, wrapping) of the way around a capsule `width` × `height`, at an even
-    /// speed along its outline: from the middle of the left end, clockwise (up, along the top, round the
-    /// right end, back along the bottom). The dock ghost's rim light travels this path.
-    public static func capsulePoint(fraction: Double, width: CGFloat, height: CGFloat) -> CGPoint {
-        let w = max(width, height), h = min(width, height)
-        let r = h / 2, straight = w - h
-        let quarter = CGFloat.pi * r / 2
-        let perimeter = 2 * straight + 4 * quarter
-        guard perimeter > 0 else { return CGPoint(x: width / 2, y: height / 2) }
-        let f = fraction - fraction.rounded(.down)
-        var s = CGFloat(f) * perimeter
-        func arc(_ cx: CGFloat, _ start: CGFloat, _ length: CGFloat) -> CGPoint {
-            let theta = start + length / r
-            return CGPoint(x: cx + r * cos(theta), y: r + r * sin(theta))
-        }
-        let point: CGPoint
-        if s < quarter {
-            point = arc(r, .pi, s)
-        } else if (s - quarter) < straight {
-            point = CGPoint(x: r + s - quarter, y: 0)
-        } else if (s - quarter - straight) < 2 * quarter {
-            point = arc(w - r, -.pi / 2, s - quarter - straight)
-        } else if (s - 3 * quarter - straight) < straight {
-            s -= 3 * quarter + straight
-            point = CGPoint(x: w - r - s, y: h)
-        } else {
-            point = arc(r, .pi / 2, s - 3 * quarter - 2 * straight)
-        }
-        // A capsule taller than wide runs the same path on its side.
-        return width >= height ? point : CGPoint(x: point.y, y: point.x)
-    }
-
     /// The overflow card's label: "N more docked tickets" beside the shown cards, "N docked tickets"
     /// when it stands for all of them.
     public static func moreLabel(count: Int, all: Bool) -> String {

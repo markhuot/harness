@@ -80,51 +80,7 @@ struct DockGhostCard: View {
     var pulsePhase: Double?
     /// Snapshots can't set the system's Reduce Motion, so they ask for it here.
     var forceReduceMotion = false
-    /// The layers to draw; the dock ghost lab (DockGhostLab) turns them off one at a time.
-    var layers: Layers = .all
-    /// Seconds for one pulse; the lab slows it down.
-    var period: Double = Self.pulsePeriod
-    /// How the rim light is drawn; the lab compares them.
-    var rimStyle: RimStyle = .angular
-    /// How bright and wide the rim light is; the lab compares them.
-    var rimLook = RimLook()
     @Environment(\.palette) private var c
-
-    struct RimLook {
-        /// The accent's opacity at the light's center.
-        var opacity = 0.7
-        var width: CGFloat = 1.5
-        /// How much of the turn the light covers, 0...1.
-        var spread = 1.0
-        /// A near-white core at the light's center, so it reads on the purple card.
-        var whiteCore = false
-    }
-
-    enum RimStyle {
-        /// An AngularGradient whose start angle turns with the phase.
-        case angular
-        /// The same, flattened into a Metal-rendered bitmap each frame.
-        case angularRaster
-        /// One fixed AngularGradient, rasterized once and turned by a rotation transform, masked to the rim.
-        case rotated
-        /// A radial highlight whose center travels around the rim at an even speed.
-        case traveling
-    }
-
-    struct Layers: OptionSet {
-        let rawValue: Int
-        /// The Liquid Glass capsule; without it the face is a flat fill.
-        static let glass = Layers(rawValue: 1 << 0)
-        /// The accent wash over the glass that breathes with the pulse.
-        static let tint = Layers(rawValue: 1 << 1)
-        /// The blurred accent glow behind the glass.
-        static let glow = Layers(rawValue: 1 << 2)
-        /// The light circling the rim.
-        static let rim = Layers(rawValue: 1 << 3)
-        /// The rise and scale at the top of the pulse.
-        static let lift = Layers(rawValue: 1 << 4)
-        static let all: Layers = [.glass, .tint, .glow, .rim, .lift]
-    }
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
 
     private var reduceMotion: Bool { forceReduceMotion || systemReduceMotion }
@@ -143,7 +99,7 @@ struct DockGhostCard: View {
         TimelineView(.animation(paused: !armed || pulsePhase != nil)) { context in
             let phase = pulsePhase
                 ?? context.date.timeIntervalSinceReferenceDate
-                    .truncatingRemainder(dividingBy: period) / period
+                    .truncatingRemainder(dividingBy: Self.pulsePeriod) / Self.pulsePeriod
             card(phase: phase)
         }
         .opacity(armed ? 1 : 0)
@@ -161,106 +117,72 @@ struct DockGhostCard: View {
         let blurRoom: CGFloat = 30
         let wave = Self.wave(phase: phase)
         // Reduce Motion keeps only a soft breathe of the glow: nothing travels, rises or scales.
-        let lift = reduceMotion || !armed || !layers.contains(.lift) ? 0 : wave
+        let lift = reduceMotion || !armed ? 0 : wave
         // The glass and its label never see the phase: SwiftUI skips them when only the phase
         // changes, so the glass isn't re-rendered each frame against a moving backdrop.
-        return DockGhostFace(title: title, glass: layers.contains(.glass)).equatable()
+        return DockGhostFace(title: title).equatable()
         // The breathing is opacity only: a glass tint or blur radius that changes every frame is
         // re-rendered in steps, which read as the purple stuttering around the card.
         .overlay {
-            if layers.contains(.tint) {
-                Capsule()
-                    .fill(c.accent.opacity(0.10 * wave))
-                    .allowsHitTesting(false)
-            }
+            Capsule()
+                .fill(c.accent.opacity(0.10 * wave))
+                .allowsHitTesting(false)
         }
         // A soft accent glow behind the glass, breathing with the pulse.
         .background {
-            if layers.contains(.glow) {
-                Capsule()
-                    .fill(c.accent)
-                    .padding(.horizontal, 6)
-                    // Room around the capsule inside the rasterized layer, or the blur is cut at the card's edge.
-                    .padding(blurRoom)
-                    .blur(radius: 13)
-                    // Rasterized once, blur included; the opacity below is applied to that bitmap.
-                    .drawingGroup()
-                    .padding(-blurRoom)
-                    .opacity(0.14 + 0.20 * wave)
-            }
+            Capsule()
+                .fill(c.accent)
+                .padding(.horizontal, 6)
+                // Room around the capsule inside the rasterized layer, or the blur is cut at the card's edge.
+                .padding(blurRoom)
+                .blur(radius: 13)
+                // Rasterized once, blur included; the opacity below is applied to that bitmap.
+                .drawingGroup()
+                .padding(-blurRoom)
+                .opacity(0.14 + 0.20 * wave)
         }
-        // A light that circles the rim once per pulse. The gradient is angular and fades to clear at
-        // both ends, so a full turn (phase 1) draws exactly what rest (phase 0) does: no jump at the loop.
+        // A light that circles the rim once per pulse, so a full turn (phase 1) draws exactly what rest
+        // (phase 0) does: no jump at the loop.
         .overlay {
-            if !reduceMotion && layers.contains(.rim) { rim(phase: phase) }
+            if !reduceMotion { rimLight(phase: phase) }
         }
         .scaleEffect(1 + 0.01 * lift)
         .offset(y: -Self.bounce * lift)
     }
 
-    private func angularLight(angle: Double) -> AngularGradient {
-        let half = rimLook.spread / 2
-        // Fades to the accent at zero opacity, not .clear: .clear is transparent black, which leaves a grey band.
+    /// One fixed angular gradient, rasterized once and turned by a rotation, masked to the rim. Changing
+    /// an AngularGradient's angle each frame instead re-renders it in wedges that flicker on a card this
+    /// wide. The light covers about a third of the turn and fades to the accent at zero opacity, not
+    /// .clear (transparent black, which leaves a grey band).
+    private func rimLight(phase: Double) -> some View {
         let edge = c.accent.opacity(0)
-        let peak = c.accent.opacity(rimLook.opacity)
-        var stops: [Gradient.Stop] = [.init(color: edge, location: 0)]
-        if half < 0.5 { stops.append(.init(color: edge, location: 0.5 - half)) }
-        if rimLook.whiteCore {
-            stops += [
-                .init(color: peak, location: 0.5 - half / 3),
-                .init(color: Color.white.opacity(0.95), location: 0.5),
-                .init(color: peak, location: 0.5 + half / 3),
-            ]
-        } else {
-            stops.append(.init(color: peak, location: 0.5))
+        return GeometryReader { geo in
+            // A square the card's diagonal wide, so the turning gradient always covers the rim.
+            let side = hypot(geo.size.width, geo.size.height)
+            Rectangle()
+                .fill(AngularGradient(
+                    stops: [
+                        .init(color: edge, location: 0.325),
+                        .init(color: c.accent, location: 0.5),
+                        .init(color: edge, location: 0.675),
+                    ],
+                    center: .center))
+                .frame(width: side, height: side)
+                .drawingGroup()
+                .rotationEffect(.degrees(360 * phase))
+                .position(x: geo.size.width / 2, y: geo.size.height / 2)
         }
-        if half < 0.5 { stops.append(.init(color: edge, location: 0.5 + half)) }
-        stops.append(.init(color: edge, location: 1))
-        return AngularGradient(stops: stops, center: .center, angle: .degrees(angle))
-    }
-
-    @ViewBuilder private func rim(phase: Double) -> some View {
-        let line = rimLook.width
-        switch rimStyle {
-        case .angular:
-            Capsule().strokeBorder(angularLight(angle: 360 * phase), lineWidth: line)
-        case .angularRaster:
-            Capsule().strokeBorder(angularLight(angle: 360 * phase), lineWidth: line).drawingGroup()
-        case .rotated:
-            GeometryReader { geo in
-                let side = hypot(geo.size.width, geo.size.height)
-                Rectangle()
-                    .fill(angularLight(angle: 0))
-                    .frame(width: side, height: side)
-                    .drawingGroup()
-                    .rotationEffect(.degrees(360 * phase))
-                    .position(x: geo.size.width / 2, y: geo.size.height / 2)
-            }
-            .mask { Capsule().strokeBorder(lineWidth: line) }
-        case .traveling:
-            GeometryReader { geo in
-                let size = geo.size
-                // Starts where the angular light does at rest (the left end) and goes the same way round.
-                let p = DockMetrics.capsulePoint(fraction: phase, width: size.width, height: size.height)
-                Capsule().strokeBorder(
-                    RadialGradient(
-                        colors: [c.accent.opacity(0.7), c.accent.opacity(0)],
-                        center: UnitPoint(x: p.x / max(size.width, 1), y: p.y / max(size.height, 1)),
-                        startRadius: 0,
-                        endRadius: size.width * 0.45),
-                    lineWidth: line)
-            }
-        }
+        .mask { Capsule().strokeBorder(lineWidth: 2) }
+        .allowsHitTesting(false)
     }
 }
 
 /// The ghost's glass and label, which don't change while it pulses.
 private struct DockGhostFace: View, Equatable {
     let title: String
-    var glass = true
     @Environment(\.palette) private var c
 
-    nonisolated static func == (a: Self, b: Self) -> Bool { a.title == b.title && a.glass == b.glass }
+    nonisolated static func == (a: Self, b: Self) -> Bool { a.title == b.title }
 
     var body: some View {
         HStack(spacing: 10) {
@@ -279,10 +201,7 @@ private struct DockGhostFace: View, Equatable {
         }
         .padding(.horizontal, 22)
         .frame(height: DockMetrics.height)
-        .background {
-            if !glass { Capsule().fill(c.bgElev) }
-        }
-        .glassEffect(glass ? .regular.tint(c.accent.opacity(0.06)) : .identity, in: .capsule)
+        .glassEffect(.regular.tint(c.accent.opacity(0.06)), in: .capsule)
     }
 }
 

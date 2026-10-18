@@ -9,6 +9,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- On iPhone and iPad, the light that circles the docking card's rim no longer flickers. It was redrawn from scratch every frame, and on a card that wide the redraw broke it into steps that jumped and blinked. It is now drawn once and turned, and it is a shorter, brighter purple, so it stands out against the card's glass.
+
 ## [app-20261018.0039](https://github.com/markhuot/harness/releases/tag/app-20261018.0039) - 2026-10-18
 
 ### Fixed
