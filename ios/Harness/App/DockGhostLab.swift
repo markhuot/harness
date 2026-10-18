@@ -9,17 +9,17 @@ struct DockGhostLab: View {
     @Environment(\.palette) private var c
     @State private var slow = false
 
-    /// Taking layers away showed only the rim light flickers, so these rows draw the rim four ways:
-    /// alone on a flat card (1–4), then on the whole card (5–8).
-    private static let variants: [(name: String, layers: DockGhostCard.Layers, rim: DockGhostCard.RimStyle)] = [
-        ("1 · Angular gradient (as shipped), rim only", [.rim], .angular),
-        ("2 · Angular, Metal raster, rim only", [.rim], .angularRaster),
-        ("3 · Rotated bitmap, rim only", [.rim], .rotated),
-        ("4 · Traveling radial, rim only", [.rim], .traveling),
-        ("5 · Angular gradient (as shipped), whole card", .all, .angular),
-        ("6 · Angular, Metal raster, whole card", .all, .angularRaster),
-        ("7 · Rotated bitmap, whole card", .all, .rotated),
-        ("8 · Traveling radial, whole card", .all, .traveling),
+    typealias Look = DockGhostCard.RimLook
+    /// Only the rim light flickers, and only when drawn as an AngularGradient whose angle changes; a fixed
+    /// gradient turned by a rotation is clean. These rows try how bright and wide that light should be on
+    /// the whole card, where the shipped 0.7 purple barely shows.
+    private static let variants: [(name: String, layers: DockGhostCard.Layers, rim: DockGhostCard.RimStyle, look: Look)] = [
+        ("1 · As shipped (flickers)", .all, .angular, Look()),
+        ("2 · Rotated, shipped brightness", .all, .rotated, Look()),
+        ("3 · Rotated, full purple, 2pt", .all, .rotated, Look(opacity: 1, width: 2)),
+        ("4 · Rotated, full purple, 2pt, short light", .all, .rotated, Look(opacity: 1, width: 2, spread: 0.35)),
+        ("5 · Rotated, white core, 2pt, short light", .all, .rotated, Look(opacity: 1, width: 2, spread: 0.35, whiteCore: true)),
+        ("6 · Rotated, white core, 2.5pt, half turn", .all, .rotated, Look(opacity: 1, width: 2.5, spread: 0.5, whiteCore: true)),
     ]
 
     var body: some View {
@@ -35,7 +35,7 @@ struct DockGhostLab: View {
                                 .padding(.horizontal, 6)
                             DockGhostCard(
                                 title: "HARNESS-7 Add the pulse", armed: true, layers: variant.layers,
-                                period: DockGhostCard.pulsePeriod * (slow ? 4 : 1), rimStyle: variant.rim)
+                                period: DockGhostCard.pulsePeriod * (slow ? 4 : 1), rimStyle: variant.rim, rimLook: variant.look)
                         }
                     }
                 }

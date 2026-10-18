@@ -86,7 +86,19 @@ struct DockGhostCard: View {
     var period: Double = Self.pulsePeriod
     /// How the rim light is drawn; the lab compares them.
     var rimStyle: RimStyle = .angular
+    /// How bright and wide the rim light is; the lab compares them.
+    var rimLook = RimLook()
     @Environment(\.palette) private var c
+
+    struct RimLook {
+        /// The accent's opacity at the light's center.
+        var opacity = 0.7
+        var width: CGFloat = 1.5
+        /// How much of the turn the light covers, 0...1.
+        var spread = 1.0
+        /// A near-white core at the light's center, so it reads on the purple card.
+        var whiteCore = false
+    }
 
     enum RimStyle {
         /// An AngularGradient whose start angle turns with the phase.
@@ -187,18 +199,28 @@ struct DockGhostCard: View {
     }
 
     private func angularLight(angle: Double) -> AngularGradient {
-        AngularGradient(
-            stops: [
-                .init(color: .clear, location: 0),
-                .init(color: c.accent.opacity(0.7), location: 0.5),
-                .init(color: .clear, location: 1),
-            ],
-            center: .center,
-            angle: .degrees(angle))
+        let half = rimLook.spread / 2
+        // Fades to the accent at zero opacity, not .clear: .clear is transparent black, which leaves a grey band.
+        let edge = c.accent.opacity(0)
+        let peak = c.accent.opacity(rimLook.opacity)
+        var stops: [Gradient.Stop] = [.init(color: edge, location: 0)]
+        if half < 0.5 { stops.append(.init(color: edge, location: 0.5 - half)) }
+        if rimLook.whiteCore {
+            stops += [
+                .init(color: peak, location: 0.5 - half / 3),
+                .init(color: Color.white.opacity(0.95), location: 0.5),
+                .init(color: peak, location: 0.5 + half / 3),
+            ]
+        } else {
+            stops.append(.init(color: peak, location: 0.5))
+        }
+        if half < 0.5 { stops.append(.init(color: edge, location: 0.5 + half)) }
+        stops.append(.init(color: edge, location: 1))
+        return AngularGradient(stops: stops, center: .center, angle: .degrees(angle))
     }
 
     @ViewBuilder private func rim(phase: Double) -> some View {
-        let line: CGFloat = 1.5
+        let line = rimLook.width
         switch rimStyle {
         case .angular:
             Capsule().strokeBorder(angularLight(angle: 360 * phase), lineWidth: line)
