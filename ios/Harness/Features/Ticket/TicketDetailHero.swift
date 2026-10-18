@@ -152,6 +152,9 @@ struct TicketDetailHero: View {
         .buttonStyle(.glass)
         .buttonBorderShape(.circle)
         .padding(.trailing, 10)
+        // Raised so its top inset equals its 14pt leading inset: the circle then shares the sheet
+        // corner's center instead of sitting lower than it is from the side.
+        .offset(y: inTicketPanel ? 0 : -8)
         .accessibilityLabel("Back")
         .accessibilityIdentifier("ticket-back")
     }

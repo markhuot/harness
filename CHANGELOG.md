@@ -25,7 +25,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
-- On iPhone and iPad, a ticket opened from its parent has a round glass Back button, and the "Part of" row now sits right above the status instead of floating well clear of it.
+- On iPhone and iPad, a ticket opened from its parent has a round glass Back button, and the "Part of" row now sits right above the status instead of floating well clear of it. On the iPhone sheet the Back button sits concentric with the sheet's rounded corner.
 
 - On the Spec tab, Show changes moved from the history bar into the new "…" menu, beside Source and Rendered.
 
