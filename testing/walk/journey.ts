@@ -190,6 +190,57 @@ export function steps(start: Start, built: { app: string }): Step[] {
       },
     },
     {
+      name: "5b. wrap a file type's long lines, and read a markdown file rendered",
+      async run(ctx) {
+        const main = ctx.mac.main;
+        const pane = (file: string) => `document.querySelector('.file-pane[data-file="${file}"]')`;
+        const editor = `${pane(EDITED_FILE)}.querySelector('[data-testid="file-editor"]')`;
+        const lastLine = `(() => { const lines = ${editor}.querySelector('diffs-container').shadowRoot.querySelectorAll('[data-line]'); return lines[lines.length - 1]; })()`;
+        const pickFromMenu = async (file: string, item: string) => {
+          await main.click(`.file-pane[data-file="${file}"] button[title="More"]`);
+          await main.click(`[data-testid="${item}"]`);
+        };
+        // A line much wider than the pane: one row tall until it wraps.
+        await main.evaluate(`(() => { const ed = ${editor}.harnessEditor; ed.focus(); ed.setSelection(ed.getContents().length); })()`);
+        await main.type(`// ${"a long line that has to wrap ".repeat(14)}`);
+        const height = () => main.evaluate<number>(`${lastLine}.getBoundingClientRect().height`);
+        const single = await height();
+        await pickFromMenu(EDITED_FILE, "view-wrap");
+        await main.waitFor("the long line wrapped", `${lastLine}.getBoundingClientRect().height > ${single * 1.5}`);
+        if (!(await main.evaluate<boolean>(`${editor}.harnessEditor.probe().wrap`))) throw new Error("the editor doesn't report wrap");
+        const stored = await main.evaluate<string>(`localStorage.getItem('harness.wrap')`);
+        if (stored !== '{".ts":true}') throw new Error(`wrap is stored as ${stored}, not for .ts only`);
+        await shot(ctx, "05b-mac-file-wrapped");
+        await pickFromMenu(EDITED_FILE, "view-wrap");
+        await main.waitFor("the long line scrolling sideways again", `${lastLine}.getBoundingClientRect().height <= ${single * 1.1}`);
+        // The long line was only for the wrap check: leave greeting.ts as saved.
+        await main.click(`.file-pane[data-file="${EDITED_FILE}"] [data-testid=file-save]`);
+
+        await main.press("p", "KeyP", MOD.meta);
+        await main.waitFor("the file palette", `document.querySelector('input')`);
+        await main.type("README");
+        await main.waitFor("README.md in the palette", `document.body.innerText.includes('README.md')`);
+        await main.press("Enter", "Enter");
+        await main.waitFor("README.md open", `${pane("README.md")}?.querySelector('[data-testid="file-editor"]')`);
+        await pickFromMenu("README.md", "view-rendered");
+        await main.waitFor("the rendered README", `${pane("README.md")}.querySelector('[data-testid="file-rendered"]')?.innerText.includes('A project for the walkthrough.')`);
+        await shot(ctx, "05b-mac-file-rendered");
+        await pickFromMenu("README.md", "view-source");
+        await main.waitFor("the source again", `!${pane("README.md")}.querySelector('[data-testid="file-rendered"]')`);
+
+        // The Spec tab's Source view: the spec's markdown in the same editor, wrapped by the .md setting.
+        await main.click("button.tab[data-tab=spec]");
+        await main.click("[data-testid=spec-more]");
+        await main.click("[data-testid=view-source]");
+        await main.waitFor("the spec's source in the editor", `document.querySelector('[data-testid="spec-source"] diffs-container')?.shadowRoot?.querySelector('[data-line]')?.textContent.trim().length > 0`);
+        await main.click("[data-testid=spec-more]");
+        await main.waitFor("the Spec menu", `document.querySelector('[data-testid="view-wrap"]')`);
+        await shot(ctx, "05b-mac-spec-menu-source");
+        await main.click("[data-testid=view-rendered]");
+        await main.waitFor("the rendered spec again", `document.querySelector('[data-testid="spec-doc"]') && !document.querySelector('[data-testid="spec-source"]')`);
+      },
+    },
+    {
       name: "6. open the terminal and pop it out into its own window",
       async run(ctx) {
         const main = ctx.mac.main;
