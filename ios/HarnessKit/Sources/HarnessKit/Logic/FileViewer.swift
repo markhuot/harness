@@ -12,10 +12,13 @@ import Foundation
 public struct FileLinkContext: Codable, Equatable, Sendable {
     public var ticketKey: String?
     public var projectId: String?
+    /// The file the markdown belongs to (a rendered file): relative links resolve from its directory.
+    public var file: String?
 
-    public init(ticketKey: String? = nil, projectId: String? = nil) {
+    public init(ticketKey: String? = nil, projectId: String? = nil, file: String? = nil) {
         self.ticketKey = ticketKey
         self.projectId = projectId
+        self.file = file
     }
 }
 

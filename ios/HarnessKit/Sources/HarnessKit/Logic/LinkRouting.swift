@@ -15,7 +15,8 @@ public enum LinkRouting {
         case noRoot
     }
 
-    public static func target(_ url: String, context: FileLinkContext) -> Target {
+    public static func target(_ original: String, context: FileLinkContext) -> Target {
+        let url = context.file.map { ViewOptions.resolveFileRelative($0, original) } ?? original
         // `/^[a-z][a-z0-9+.-]*:/i.test(url) && !/^harness:/i.test(url) ? null : parseFileLink(url)`
         if hasScheme(url) && !hasHarnessScheme(url) { return .external(url) }
         guard let link = FileLinks.parseFileLink(url) else { return .external(url) }

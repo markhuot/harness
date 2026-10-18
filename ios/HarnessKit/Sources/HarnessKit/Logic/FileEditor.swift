@@ -36,11 +36,13 @@ public struct FileEditorTheme: Equatable, Sendable {
 public enum FileEditorCommand: Equatable, Sendable {
     /// Opens a fresh editor. `language` is the file's path or name (the editor resolves it).
     /// `saved` is what's on disk when the editor reopens with unsaved edits (it opens dirty).
-    case open(contents: String, language: String, theme: FileEditorTheme, range: ClosedRange<Int>?, readOnly: Bool, saved: String?)
+    case open(contents: String, language: String, theme: FileEditorTheme, range: ClosedRange<Int>?, readOnly: Bool, wrap: Bool, saved: String?)
     /// Opens the side-by-side diff, the original on the left.
     case diff(original: String, modified: String, language: String, theme: FileEditorTheme)
     case theme(FileEditorTheme)
     case reveal(ClosedRange<Int>)
+    /// Wraps long lines (or scrolls them sideways), keeping the top line of the view where it is
+    case wrap(Bool)
     /// Replaces the document as a clean reload of what's on disk (keeps no undo history)
     case setContents(String)
     /// What `save` handed out is on disk now (nil: the document as it is)
@@ -55,10 +57,10 @@ public enum FileEditorCommand: Equatable, Sendable {
             .object(["start": .number(Double(r.lowerBound)), "end": .number(Double(r.upperBound))])
         }
         switch self {
-        case let .open(contents, language, theme, r, readOnly, saved):
+        case let .open(contents, language, theme, r, readOnly, wrap, saved):
             var o: [String: JSONValue] = [
                 "type": .string("open"), "contents": .string(contents), "language": .string(language),
-                "theme": theme.json, "readOnly": .bool(readOnly),
+                "theme": theme.json, "readOnly": .bool(readOnly), "wrap": .bool(wrap),
             ]
             if let r { o["range"] = range(r) }
             if let saved, saved != contents { o["saved"] = .string(saved) }
@@ -70,6 +72,7 @@ public enum FileEditorCommand: Equatable, Sendable {
             ])
         case let .theme(theme): return .object(["type": .string("theme"), "theme": theme.json])
         case let .reveal(r): return .object(["type": .string("reveal"), "range": range(r)])
+        case let .wrap(on): return .object(["type": .string("wrap"), "wrap": .bool(on)])
         case let .setContents(s): return .object(["type": .string("setContents"), "contents": .string(s)])
         case let .markSaved(s):
             var o: [String: JSONValue] = ["type": .string("markSaved")]
@@ -78,6 +81,15 @@ public enum FileEditorCommand: Equatable, Sendable {
         case .focus: return .object(["type": .string("focus")])
         case .scrollToCursor: return .object(["type": .string("scrollToCursor")])
         case let .getContents(id): return .object(["type": .string("getContents"), "id": .string(id)])
+        }
+    }
+
+    /// Commands that move the view or the cursor: meaningless (and unwanted) while the editor is hidden
+    /// under a rendered view.
+    public var needsVisibleEditor: Bool {
+        switch self {
+        case .reveal, .focus, .scrollToCursor: true
+        default: false
         }
     }
 
