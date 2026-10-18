@@ -57,7 +57,9 @@ struct RootView: View {
             // storage, which is dropped when the app is swiped away), for a day. They come back
             // as they were once there's a server to show them from.
             .onChange(of: app.store != nil ? app.active?.id : nil, initial: true) { old, server in
-                if let old { router.leavePersisted(to: UserDefaults.standard, server: old) }
+                // (`initial: true` reports old == new on the first pass: nothing to leave yet, and
+                // saving the empty router would wipe the state about to be restored.)
+                if let old, old != server { router.leavePersisted(to: UserDefaults.standard, server: old) }
                 if let server { router.restorePersisted(from: UserDefaults.standard, server: server) }
             }
             .onChange(of: router.dockedSheets) { old, new in
