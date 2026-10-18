@@ -4,13 +4,14 @@ import SwiftUI
 /// The board: five columns as horizontally paged lists with a status strip (counts) on top, or
 /// on iPad at regular width all five side by side like the Mac (each with its own header, no
 /// strip), the project filter behind the sidebar button, pull to refresh. Done is paged:
-/// it scrolls into older pages (footer spinner) and its count is the server's total. On the phone
-/// there's no navigation bar: our own bottom bar (BoardBottomBar) reads Projects, the command
-/// palette field (always on screen, its placeholder the project's or group's name or "All projects";
-/// tapping it opens the palette, PaletteScreen, which finds tickets and runs commands, "Show child
-/// tickets" among them) and New session; in the iPad's DesktopShell they're in the top bar instead
-/// (the palette button, ⌘K or ⌘F, and New session, ⌘N, trailing) and there's no bottom bar. The
-/// board doesn't filter by a search: that's the Mac's.
+/// it scrolls into older pages (footer spinner) and its count is the server's total. The
+/// the navigation bar is never shown: on the portrait phone our own bottom bar (BoardBottomBar)
+/// reads Projects, the command palette field (always on screen, its placeholder the project's or
+/// group's name or "All projects"; tapping it opens the palette, PaletteScreen, which finds tickets
+/// and runs commands, "Show child tickets" among them) and New session. On the iPad and the phone in
+/// landscape (`chromeless`) the system's bottom bar holds Projects (the sidebar's toggle on iPad),
+/// search (⌘K or ⌘F) and New session (⌘N), the columns run beneath it, and the last two hide while
+/// a ticket panel covers them. The board doesn't filter by a search: that's the Mac's.
 struct BoardScreen: View {
     @Environment(BoardStore.self) private var store
     @Environment(AppModel.self) private var app
@@ -19,6 +20,7 @@ struct BoardScreen: View {
     @Environment(\.palette) private var c
     @Environment(\.desktopShell) private var desktop
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
 
     /// The column on screen (the pager's scroll position).
     @State private var page: TicketStatus? = .planning
@@ -32,8 +34,20 @@ struct BoardScreen: View {
     /// Runs the cards' menu actions; the board presents what they ask for (a context menu can't
     /// present a sheet), once for every card.
     @State private var ticketActions = TicketActionRunner()
+    /// How far the system's bottom bar (and the home indicator) reaches up from the screen's edge:
+    /// the columns run under it, and their last card scrolls clear of it.
+    @State private var barInset: CGFloat = 0
+
+    /// The room the last card keeps for the bottom bar the columns run under.
+    private var belowBar: CGFloat { chromeless ? barInset : 0 }
 
     private var layout: BoardScreenRules.Layout { sizeClass == .regular ? .columns : .pager }
+
+    /// No title bar, and the buttons in the system's bottom bar (which the iPhone Duo moves into its
+    /// margins): the iPad, and the phone in landscape. The portrait phone keeps BoardBottomBar.
+    private var chromeless: Bool { BoardScreenRules.hidesChrome(desktop: desktop, compactHeight: verticalSizeClass == .compact) }
+    /// An open ticket panel covers the board's bottom-right corner, where the bar's search and New session sit.
+    private var panelCoversBar: Bool { desktop && router.ticketSheet != nil }
 
     /// New session's icon: the pencil on a square, like Mail and Notes' compose button.
     static let newSessionSymbol = "square.and.pencil"
@@ -48,6 +62,9 @@ struct BoardScreen: View {
             }
             if layout == .pager { pager(ctx) } else { columns(ctx) }
         }
+        // The columns scroll on under the bottom bar's glass (landscape phone, iPad), not stop above it.
+        .ignoresSafeArea(.container, edges: chromeless ? .bottom : [])
+        .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.bottom } action: { barInset = $0 }
         .background(c.bg)
         .environment(ticketActions)
         .modifier(TicketActionHost(runner: ticketActions))
@@ -59,15 +76,15 @@ struct BoardScreen: View {
                 .accessibilityHidden(true)
         }
         .safeAreaInset(edge: .top, spacing: 0) { ConnectionBanner() }
-        // The title still names the back button on a pushed ticket; on the phone the bar itself is
-        // hidden, so the board starts right under the status bar and the field's placeholder
-        // names the project instead.
+        // The title still names the back button on a pushed ticket and the iPad's window; the bar
+        // itself is never shown, so the board starts right under the status bar and the project
+        // is named by the search field's placeholder (portrait phone) or not at all.
         .navigationTitle(scopeName(ctx))
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar(desktop ? .automatic : .hidden, for: .navigationBar)
-        // The columns scroll on under the phone's bar's glass.
+        .toolbar(.hidden, for: .navigationBar)
+        // The columns scroll on under the portrait phone's bar's glass.
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if !desktop { BoardBottomBar(placeholder: scopeName(ctx), newSession: newSessionButton(ctx)) }
+            if !chromeless { BoardBottomBar(placeholder: scopeName(ctx), newSession: newSessionButton(ctx)) }
         }
         .toolbar { toolbar(ctx) }
         // Paging follows the board's filter (a project or a group); a refetch drops the paging (so
@@ -109,7 +126,7 @@ struct BoardScreen: View {
             ScrollView(.horizontal) {
                 HStack(spacing: 0) {
                     ForEach(TicketStatus.allKnown, id: \.self) { status in
-                        BoardColumnView(status: status, ctx: ctx, onDiscard: discard)
+                        BoardColumnView(status: status, ctx: ctx, onDiscard: discard, inset: EdgeInsets(top: 14, leading: 14, bottom: 14 + belowBar, trailing: 14))
                             .containerRelativeFrame(.horizontal)
                             .id(status)
                     }
@@ -144,7 +161,7 @@ struct BoardScreen: View {
                             BoardColumnView(
                                 status: status, ctx: ctx,
                                 onDiscard: discard,
-                                inset: EdgeInsets(top: 6, leading: 8, bottom: 10, trailing: 8))
+                                inset: EdgeInsets(top: 6, leading: 8, bottom: 10 + belowBar, trailing: 8))
                         }
                         .frame(width: sizing.width)
                         .id(status)
@@ -191,15 +208,25 @@ struct BoardScreen: View {
 
     // MARK: Toolbar
 
-    /// iPad (DesktopShell): the split view's toggle, and the palette and New session trailing. The
-    /// phone has no toolbar items: BoardBottomBar holds them.
+    /// The system's bottom bar on the iPad and the landscape phone: Projects leading, search and
+    /// New session trailing (those two hide while a ticket panel covers them). The portrait phone
+    /// has no toolbar items: BoardBottomBar holds them.
     @ToolbarContentBuilder private func toolbar(_ ctx: BoardContext) -> some ToolbarContent {
-        if desktop {
-            ToolbarItem(placement: .primaryAction) {
-                Button("Command palette", systemImage: "magnifyingglass") { router.present(.palette(files: false)) }
+        if chromeless {
+            ToolbarItem(placement: .bottomBar) { ProjectsButton(action: toggleProjects) }
+            ToolbarSpacer(.flexible, placement: .bottomBar)
+            if !panelCoversBar {
+                ToolbarItem(placement: .bottomBar) {
+                    Button("Command palette", systemImage: "magnifyingglass") { router.present(.palette(files: false)) }
+                }
+                ToolbarItem(placement: .bottomBar) { newSession(ctx) }
             }
-            ToolbarItem(placement: .primaryAction) { newSession(ctx) }
         }
+    }
+
+    /// The iPad's sidebar is a column that toggles; on the phone Projects is a sheet.
+    private func toggleProjects() {
+        if desktop { app.setPref(\.sidebarHidden, app.prefs.sidebarHidden != true) } else { router.present(.projects) }
     }
 
     private func scopeName(_ ctx: BoardContext) -> String { ctx.scopeName ?? "All projects" }

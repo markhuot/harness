@@ -46,8 +46,8 @@ TESTFLIGHT=0
 
 # xcode-select points at the Command Line Tools on this Mac; use the full Xcode for this process
 # only rather than switching it globally.
-if [[ -z "${DEVELOPER_DIR:-}" && -d /Applications/Xcode-27.0.0.app/Contents/Developer ]]; then
-  export DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer
+if [[ -z "${DEVELOPER_DIR:-}" && -d /Applications/Xcode-27.1.0.app/Contents/Developer ]]; then
+  export DEVELOPER_DIR=/Applications/Xcode-27.1.0.app/Contents/Developer
 fi
 
 # The release tag on HEAD (annotated only: `git describe` without --tags skips lightweight tags).

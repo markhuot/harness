@@ -1,7 +1,7 @@
 // `bun run testing ios`: L4 on the iPhone and iPad. The screens (testing/ios/ScreenTests) are
 // rendered from the shared world and compared with testing/ios/references/<device>/.
 //
-//   bun run testing ios [--iphone] [--ipad] [--only=Class/testName] [--record] [--out=dir]
+//   bun run testing ios [--iphone] [--ipad] [--duo] [--only=Class/testName] [--record] [--out=dir]
 //
 //   --record    write the reference images instead of comparing (the only way they are ever written)
 //   --out=dir   also write every rendered screen to <dir>/<device>/<name>.png (a spec's screenshots)
@@ -24,10 +24,10 @@ const root = resolve(testing, "..");
 export const BUILD_DIR = join(testing, ".build");
 const DERIVED_DATA = join(BUILD_DIR, "dd");
 const STAMP = join(BUILD_DIR, "stamp.json");
-const PINNED_XCODE = "/Applications/Xcode-27.0.0.app/Contents/Developer";
+const PINNED_XCODE = "/Applications/Xcode-27.1.0.app/Contents/Developer";
 
 export interface IosOptions {
-  devices: ("iphone" | "ipad")[];
+  devices: ("iphone" | "ipad" | "duo")[];
   record: boolean;
   out?: string;
   only?: string;
@@ -41,14 +41,15 @@ export function parseArgs(argv: string[]): IosOptions {
   for (const a of argv) {
     if (a === "--iphone") devices.push("iphone");
     else if (a === "--ipad") devices.push("ipad");
+    else if (a === "--duo") devices.push("duo");
     else if (a === "--record") record = true;
     else if (a.startsWith("--out=")) out = resolve(a.slice(6));
     else if (a.startsWith("--only=")) only = a.slice(7);
-    else throw new Error(`unknown option ${a}; usage: testing ios [--iphone] [--ipad] [--only=Class/testName] [--record] [--out=dir]`);
+    else throw new Error(`unknown option ${a}; usage: testing ios [--iphone] [--ipad] [--duo] [--only=Class/testName] [--record] [--out=dir]`);
   }
   if (out === "") throw new Error("--out needs a directory");
   if (only !== undefined && !/^[A-Za-z0-9_]+(\/[A-Za-z0-9_]+)?$/.test(only)) throw new Error(`--only takes Class or Class/testName, got ${only}`);
-  return { devices: devices.length ? [...new Set(devices)] : ["iphone", "ipad"], record, out, only };
+  return { devices: devices.length ? [...new Set(devices)] : ["iphone", "ipad", "duo"], record, out, only };
 }
 
 /** What a build is made of: everything the app and the screen-test bundle compile or bundle. */
@@ -140,7 +141,7 @@ export async function ios(argv: string[]): Promise<number> {
     return 1;
   }
   if (!existsSync(join(env().DEVELOPER_DIR!, "Platforms/iPhoneSimulator.platform"))) {
-    console.error(`✗ ios: Xcode 27.0 isn't at ${env().DEVELOPER_DIR}; this suite runs on the iOS 27.0 runtime only (CLAUDE.md → Simulators). Don't install another.`);
+    console.error(`✗ ios: Xcode 27.1 isn't at ${env().DEVELOPER_DIR}; this suite runs on the iOS 27.0 runtime only (CLAUDE.md → Simulators). Don't install another.`);
     return 1;
   }
 
@@ -161,7 +162,7 @@ export async function ios(argv: string[]): Promise<number> {
     if (o.out) testEnv.TEST_RUNNER_HARNESS_OUT = o.out;
     const only = o.only ? ` -only-testing:HarnessScreenTests/${o.only}` : "";
     const script = `exec xcodebuild test-without-building -xctestrun '${xctestrun}' -destination "id=$SIM_UDID"${only}`;
-    const r = await run(["bun", "ios/Tools/sim.ts", "with-lock", ...(device === "ipad" ? ["--ipad"] : []), "--", "sh", "-c", script], testEnv);
+    const r = await run(["bun", "ios/Tools/sim.ts", "with-lock", ...(device === "ipad" ? ["--ipad"] : device === "duo" ? ["--duo"] : []), "--", "sh", "-c", script], testEnv);
     const output = r.out + r.err;
     writeFileSync(join(BUILD_DIR, `test-${device}.log`), output);
     const seconds = ((performance.now() - t0) / 1000).toFixed(1);

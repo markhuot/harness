@@ -78,14 +78,14 @@ desktop agree on keys, reducers, themes and markdown. See [ios/README.md](ios/RE
   installed with devicectl), `archive --build-number N`, `export --method dev|testflight` and
   `verify`. Every configuration uses the bundle id `com.markhuot.harness`, so a Debug build
   replaces a TestFlight or release install on the same device. Use
-  `DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer` when `xcode-select` points
+  `DEVELOPER_DIR=/Applications/Xcode-27.1.0.app/Contents/Developer` when `xcode-select` points
   at the Command Line Tools.
 - **Try it on the simulator:** `bun ios/Tools/dev-sim.ts` is the dev loop: it seeds a throwaway
   daemon, installs a fresh build on the shared simulator, pairs it and reads the screen through
   [AXe](https://github.com/cameroncooke/AXe). The automated checks of the iPhone and iPad apps are
   `bun run testing ios` and `bun run testing walk` (see Tests).
 - **Simulator:** `bun run sim` (`ios/Tools/sim.ts`) manages the small pool of simulators everyone shares
-  (`harness-shared`, `harness-shared-2`; `HARNESS_SIM_POOL_SIZE` sets how many). `ensure` creates `harness-shared` (iPhone 18 Pro, pinned to the iOS 27.0 runtime; it never falls
+  (`harness-shared`, `harness-shared-2`; `HARNESS_SIM_POOL_SIZE` sets how many). `ensure` creates `harness-shared` (iPhone 18 Pro, pinned to the iOS 27.0 runtime; `--ipad` and `--duo` ensure `harness-shared-ipad` and `harness-shared-duo`, the latter an iPhone Duo on the iOS 27.1 runtime; it never falls
   back to another runtime or downloads one), boots it and prints its UDID.
   `with-lock -- <command>` waits for a free simulator (the second is only created while there is disk for it), then runs the command with `SIM_UDID` set.
   `status` shows who holds each, `shutdown` stops the free ones, and `disk` fails below 5 GiB
@@ -258,5 +258,5 @@ bun run testing walk     # one journey through the real service, Mac app, iPhone
 bun run testing stress   # L0–L2 repeatedly, shuffled, in parallel
 ```
 
-The simulator layers use the shared pool (`bun run sim`, below) and need the iOS 27.0 runtime;
+The simulator layers use the shared pool (`bun run sim`, below) and need the iOS 27.0 runtime (the iPhone Duo run, iOS 27.1);
 `testing ios` and `testing walk` stop when `bun run sim disk` finds under 5 GiB free.

@@ -9,7 +9,7 @@ const root = join(import.meta.dir, "../..");
 
 /** The Xcode CLAUDE.md pins for simulator work, when installed; the Swift package needs only a toolchain. */
 function developerDir(): Record<string, string> {
-  const pinned = "/Applications/Xcode-27.0.0.app/Contents/Developer";
+  const pinned = "/Applications/Xcode-27.1.0.app/Contents/Developer";
   return process.env.DEVELOPER_DIR || !existsSync(pinned) ? {} : { DEVELOPER_DIR: pinned };
 }
 

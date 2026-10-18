@@ -10,7 +10,7 @@ import { homedir } from "node:os";
 import { until } from "./wait";
 
 export const BUNDLE_ID = "com.markhuot.harness";
-export const PINNED_XCODE = "/Applications/Xcode-27.0.0.app/Contents/Developer";
+export const PINNED_XCODE = "/Applications/Xcode-27.1.0.app/Contents/Developer";
 
 /** AXe's describe-ui JSON → every AXLabel, as it reads on screen (AXe escapes "/" as "\/"). */
 export function parseLabels(describeUi: string): string[] {

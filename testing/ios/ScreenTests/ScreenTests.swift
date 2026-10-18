@@ -12,6 +12,20 @@ final class ScreenTests: ScreenTestCase {
         try await screen("board") { RootView() }
     }
 
+    /// Landscape: no title bar, Projects bottom left, search and New session bottom right (the
+    /// system's bottom bar, which the Duo moves into its margins), the board running under them.
+    func testBoardLandscape() async throws {
+        // The iPad's portrait board is already this layout (iPad scenes don't take the geometry request).
+        try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .pad, "the iPad board is chromeless in portrait too")
+        try await screen("board-landscape", landscape: true) { RootView() }
+    }
+
+    /// A Plus or Pro Max phone in landscape is regular width, which brings the iPad's sidebar layout.
+    func testBoardLandscapeRegularWidth() async throws {
+        try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .pad || ReferenceImages.device == "duo", "a phone's layout")
+        try await screen("board-landscape-regular", landscape: true, regularWidth: true) { RootView() }
+    }
+
     func testProjectsSheet() async throws {
         let router = Router()
         router.present(.projects)

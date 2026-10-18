@@ -1060,7 +1060,7 @@ the transport (`WorldTransport`) and the socket (`WorldSocket`) replaced. A requ
 no route for fails the test. No daemon, install, pairing or accessibility polling.
 
 ```sh
-bun run testing ios                          # check, iPhone then iPad (harness-shared, harness-shared-ipad)
+bun run testing ios                          # check, iPhone, iPad then iPhone Duo (harness-shared, harness-shared-ipad, harness-shared-duo)
 bun run testing ios --iphone --only=ScreenTests/testBoard
 bun run testing ios --record                 # write/update the references after an intended change
 bun run testing ios --out=/tmp/shots         # also write every render
@@ -1078,8 +1078,8 @@ bun run testing ios --out=/tmp/shots         # also write every render
   `RelativeTimeText` and `NowReader`), light/dark by window style. A render waits for the display's
   frames to stop changing and the transport to have nothing in flight, never for a fixed delay.
   Spinners that repeat forever are frozen where they stand so a busy ticket can still settle.
-- **References:** `testing/ios/references/<iphone|ipad>/`, committed. They depend on the
-  simulator's iOS runtime (27.0, the only one we use) and the device size.
+- **References:** `testing/ios/references/<iphone|ipad|duo>/`, committed. They depend on the
+  simulator's iOS runtime (27.0, or 27.1 for the iPhone Duo) and the device size.
 - **A diff:** a failure writes `<name>.actual.png` and `<name>.diff.png` to a temp directory and
   prints the paths. A pixel differs when a channel is more than the tolerance off, and a budget of
   differing pixels is allowed. A missing reference fails and says how to record it.
@@ -1090,7 +1090,7 @@ bun run testing ios --out=/tmp/shots         # also write every render
 Several tickets build at once on a Mac with little free disk. CLAUDE.md → Simulators has the rules;
 for this app they come down to:
 
-- Test only on iOS 27.0. Never download a runtime or create a simulator.
+- Test only on iOS 27.0 (iPhone, iPad) and iOS 27.1 (the iPhone Duo). Never download a runtime or create a simulator.
 - Use the shared `harness-shared` simulator through `bun run sim with-lock -- …`. dev-sim,
   `testing ios` and `testing walk` take the lock themselves.
 - Build with `-derivedDataPath ios/build/dd` inside your own worktree and nowhere else.

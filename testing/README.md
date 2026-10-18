@@ -34,9 +34,9 @@ The screens render from the world in a test bundle hosted by the app (`HarnessSc
 through the real `HarnessClient` and `BoardStore` with only the transport (`WorldTransport`) and the
 socket (`WorldSocket`) replaced. A request the world has no route for fails the test.
 
-- Images are compared in `testing/ios/references/{iphone,ipad}/` with a per-pixel channel tolerance
+- Images are compared in `testing/ios/references/{iphone,ipad,duo}/` with a per-pixel channel tolerance
   and a budget of differing pixels (`ReferenceImages.swift`). They are pinned to the iOS 27.0
-  runtime.
+  runtime (27.1 for the iPhone Duo).
 - `--record` writes references. Nothing else does, and a missing reference fails the test.
 - A failure writes `<name>.actual.png` and `<name>.diff.png` to a temp directory and prints the
   paths. `--out=dir` also writes every rendered image there.

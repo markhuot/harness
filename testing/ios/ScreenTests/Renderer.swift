@@ -25,18 +25,47 @@ enum Renderer {
         (UIApplication.shared.connectedScenes.first as? UIWindowScene)?.screen.bounds.size ?? CGSize(width: 402, height: 874)
     }
 
-    static func render<V: View>(_ view: V, world: ScreenWorld, dark: Bool = false) async throws -> UIImage {
+    /// Turns the scene to landscape or back to portrait and waits until the screen has the new shape,
+    /// so the render gets the real landscape size, safe areas and size classes.
+    static func rotate(landscape: Bool) async throws {
+        guard let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first else { return }
+        func isLandscape() -> Bool { scene.screen.bounds.width > scene.screen.bounds.height }
+        guard isLandscape() != landscape else { return }
+        scene.requestGeometryUpdate(.iOS(interfaceOrientations: landscape ? .landscapeRight : .portrait)) { _ in }
+        for _ in 0..<100 where isLandscape() != landscape { try await Task.sleep(for: .milliseconds(50)) }
+        guard isLandscape() == landscape else { throw Rotation.stuck(landscape) }
+        try await Task.sleep(for: .milliseconds(300))
+    }
+
+    enum Rotation: Error { case stuck(Bool) }
+
+    /// `regularWidth` renders a landscape phone as a Plus or Pro Max does: regular width, compact height.
+    static func render<V: View>(_ view: V, world: ScreenWorld, dark: Bool = false, landscape: Bool = false, regularWidth: Bool = false) async throws -> UIImage {
         UIView.setAnimationsEnabled(false)
+        try await rotate(landscape: landscape)
         let size = screenSize
         let style: UIUserInterfaceStyle = dark ? .dark : .light
         let root = UIHostingController(rootView: view.transaction { $0.animation = nil; $0.disablesAnimations = true })
         root.overrideUserInterfaceStyle = style
+        let host: UIViewController
+        if regularWidth {
+            let parent = UIViewController()
+            parent.addChild(root)
+            root.view.frame = parent.view.bounds
+            root.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            parent.view.addSubview(root.view)
+            root.didMove(toParent: parent)
+            parent.setOverrideTraitCollection(UITraitCollection(horizontalSizeClass: .regular), forChild: root)
+            host = parent
+        } else {
+            host = root
+        }
         let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
         let window = scene.map { UIWindow(windowScene: $0) } ?? UIWindow()
         window.frame = CGRect(origin: .zero, size: size)
         window.windowLevel = .alert + 100
         window.overrideUserInterfaceStyle = style
-        window.rootViewController = root
+        window.rootViewController = host
         window.isHidden = false
         defer {
             window.isHidden = true

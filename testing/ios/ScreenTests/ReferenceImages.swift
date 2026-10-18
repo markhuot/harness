@@ -22,7 +22,12 @@ enum ReferenceImages {
     static var recording: Bool { env["HARNESS_RECORD"] == "1" }
     static var outDir: URL? { env["HARNESS_OUT"].flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0) } }
     static let testingDir = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-    static var device: String { UIDevice.current.userInterfaceIdiom == .pad ? "ipad" : "iphone" }
+    /// The folder of references: the iPad, the iPhone Duo (a phone with its own layout, so its own images), or the iPhone.
+    static var device: String {
+        if UIDevice.current.userInterfaceIdiom == .pad { return "ipad" }
+        let simulator = (env["SIMULATOR_MODEL_IDENTIFIER"] ?? "") + (env["SIMULATOR_DEVICE_NAME"] ?? "")
+        return simulator.localizedCaseInsensitiveContains("duo") ? "duo" : "iphone"
+    }
     static var referenceDir: URL { testingDir.appending(path: "ios/references/\(device)") }
     static var failureDir: URL {
         (env["HARNESS_FAILURES"].flatMap { $0.isEmpty ? nil : URL(fileURLWithPath: $0) } ?? FileManager.default.temporaryDirectory.appending(path: "harness-screens")).appending(path: device)

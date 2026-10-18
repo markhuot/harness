@@ -49,7 +49,7 @@ function buildWidgets(): { appex: string; helper: string } {
   const out = join(appDir, "out", "widgets");
   const env = { ...process.env };
   // xcode-select may point at the Command Line Tools; the build needs the full Xcode.
-  const xcode = "/Applications/Xcode-27.0.0.app/Contents/Developer";
+  const xcode = "/Applications/Xcode-27.1.0.app/Contents/Developer";
   if (!env.DEVELOPER_DIR && existsSync(xcode)) env.DEVELOPER_DIR = xcode;
   const run = (cmd: string[], what: string) => {
     const r = Bun.spawnSync(cmd, { cwd: ios, env, stdout: "pipe", stderr: "pipe" });

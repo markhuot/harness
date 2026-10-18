@@ -7,10 +7,10 @@ The iPhone and iPad app, in SwiftUI (version 2.0, which replaced the 1.x React N
 
 Disk is tight and several tickets build at once. Follow [ARCHITECTURE.md § Disk budget](ARCHITECTURE.md#disk-budget-parallel-agents) (one simulator, `-derivedDataPath ios/build/dd`, clean up when done).
 
-Every command below needs Xcode 27. When `xcode-select` points at the Command Line Tools, set:
+Every command below needs Xcode 27.1. When `xcode-select` points at the Command Line Tools, set:
 
 ```sh
-export DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer
+export DEVELOPER_DIR=/Applications/Xcode-27.1.0.app/Contents/Developer
 ```
 
 ## Generate the Xcode project

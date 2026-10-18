@@ -41,8 +41,9 @@ describe("the build stamp", () => {
 
 describe("testing ios arguments", () => {
   test("no device flag runs both devices; flags pick one", () => {
-    expect(parseArgs([]).devices).toEqual(["iphone", "ipad"]);
+    expect(parseArgs([]).devices).toEqual(["iphone", "ipad", "duo"]);
     expect(parseArgs(["--ipad"]).devices).toEqual(["ipad"]);
+    expect(parseArgs(["--duo"]).devices).toEqual(["duo"]);
     expect(parseArgs(["--ipad", "--iphone", "--ipad"]).devices).toEqual(["ipad", "iphone"]);
   });
 

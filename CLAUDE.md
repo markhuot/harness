@@ -34,7 +34,7 @@ gate once when you're done, not after every edit.
 2. **Service behaviour**: `bun test` inside `testing/` (L1–L3: the service, its API and the wire
    contract), or one file with `cd testing && bun test <path>`.
 3. **Mac views**: `bun run testing mac` (React under happy-dom against the shared world).
-4. **A screen's look** in the iPhone and iPad apps: `bun run testing ios` (`--iphone`, `--ipad`,
+4. **A screen's look** in the iPhone, iPad and iPhone Duo apps: `bun run testing ios` (`--iphone`, `--ipad`, `--duo`,
    `--only=ScreenTests/<test>`; `--out=<dir>` writes the renders for a spec's screenshots;
    `--record` updates the references after an intended change, and you read the diff). It builds
    once and reuses the build while the sources are unchanged.
@@ -49,13 +49,14 @@ gate once when you're done, not after every edit.
 Several agents build and test the iPhone app at once on a Mac with little free disk, so they share
 one runtime and a small pool of simulators.
 
-- Test only on the iOS 27.0 runtime, with
-  `DEVELOPER_DIR=/Applications/Xcode-27.0.0.app/Contents/Developer`. Never download or install
+- Test iPhone and iPad only on the iOS 27.0 runtime and the iPhone Duo only on iOS 27.1 (the 27.1
+  runtime supports no other device), always with Xcode 27.1:
+  `DEVELOPER_DIR=/Applications/Xcode-27.1.0.app/Contents/Developer`. Never download or install
   another runtime (`xcodebuild -downloadPlatform`, `xcrun simctl runtime add`, Xcode's Components
-  settings, and so on). Each one takes about 8 GB. If 27.0 is missing, block and ask.
+  settings, and so on). Each one takes about 8 GB. If 27.0 or 27.1 is missing, block and ask.
 - Never create a simulator of your own. Use the shared pool through `bun run sim`
   (`ios/Tools/sim.ts`): `harness-shared` and `harness-shared-2` (iPhones; the lock takes whichever is
-  free) and `harness-shared-ipad` for `--ipad`. Don't use, shut down, or delete simulators someone
+  free) and `harness-shared-ipad` for `--ipad` and `harness-shared-duo` for `--duo`. Don't use, shut down, or delete simulators someone
   else owns (`harness-HARNESS-*`).
 - Run everything that touches a simulator (install, launch, screenshots, AXe taps, dev-sim) under its
   lock, so two agents never install different builds over each other:
@@ -63,7 +64,7 @@ one runtime and a small pool of simulators.
   ticket. `bun run testing ios` and `bun run testing walk` take the lock themselves.
 - Before a heavy build (xcodebuild, `bun run testing ios` or `walk`, `release:publish`), run
   `bun run sim disk`. It exits 1 when less than 5 GiB is free: then block and ask rather than
-  build. It also names any iOS runtime other than 27.0; pass that on to the human, don't delete it.
+  build. It also names any iOS runtime other than 27.0 and 27.1; pass that on to the human, don't delete it.
   `testing ios` and `testing walk` run it before they build.
 - The walkthrough records every process it starts and kills them when it ends; the next run reaps
   what a killed one left. Don't kill its processes by hand.

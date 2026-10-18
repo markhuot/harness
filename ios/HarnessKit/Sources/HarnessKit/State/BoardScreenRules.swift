@@ -22,6 +22,11 @@ public enum BoardScreenRules {
 
     // MARK: Layout
 
+    /// Whether the board drops its title bar for the system's bottom bar: the iPad's desktop shell,
+    /// and any phone in landscape (compact height, whatever its width). The portrait phone keeps
+    /// its own bottom bar.
+    public static func hidesChrome(desktop: Bool, compactHeight: Bool) -> Bool { desktop || compactHeight }
+
     /// How the board lays out its columns: the phone's one-column pager, or every column side by
     /// side (iPad at regular width).
     public enum Layout: Equatable, Sendable {

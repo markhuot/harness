@@ -292,6 +292,8 @@ private struct DesktopShell: View {
             ProjectsSidebar(column: true)
                 .background(c.bgSidebar.ignoresSafeArea())
                 .navigationSplitViewColumnWidth(min: 260, ideal: 300, max: 360)
+                // The board's bottom-left button toggles the sidebar; the system's own would be a second one.
+                .toolbar(removing: .sidebarToggle)
         } detail: {
             // The column paints the system background; the phone's sections show RootView's `bg`.
             SectionStack().environment(\.desktopShell, true).background(c.bg.ignoresSafeArea())
@@ -348,6 +350,8 @@ struct SidebarToolbarItem: ToolbarContent {
 /// it as a glass circle of its own, for a bar that isn't a toolbar (the phone board's).
 struct ProjectsButton: View {
     var circle = false
+    /// What a tap does, when not showing the Projects sheet.
+    var action: (() -> Void)?
     @Environment(Router.self) private var router
     @Environment(BoardStore.self) private var store
     @Environment(\.palette) private var c
@@ -365,7 +369,7 @@ struct ProjectsButton: View {
 
     private var button: some View {
         let triaging = store.state.triageSessions().filter { $0.triageStatus == .triaging || $0.busy }.count
-        return Button { router.present(.projects) } label: {
+        return Button { if let action { action() } else { router.present(.projects) } } label: {
             Image(systemName: "sidebar.left")
                 .font(circle ? .system(size: 19, weight: .medium) : nil)
                 .frame(width: circle ? 34 : nil, height: circle ? 34 : nil)

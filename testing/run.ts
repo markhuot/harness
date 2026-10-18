@@ -59,7 +59,7 @@ async function mac(): Promise<number> {
 
 /** The Xcode the Simulators rules in CLAUDE.md pin, when it's installed; else whatever `swift` resolves. */
 function developerDir(): Record<string, string> {
-  const pinned = "/Applications/Xcode-27.0.0.app/Contents/Developer";
+  const pinned = "/Applications/Xcode-27.1.0.app/Contents/Developer";
   return process.env.DEVELOPER_DIR || !existsSync(pinned) ? {} : { DEVELOPER_DIR: pinned };
 }
 

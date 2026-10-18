@@ -9,6 +9,11 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Changed
+
+- On iPhone in landscape and on iPad, the board no longer shows a title bar or the project's name. The Projects button sits at the bottom left, and search and New session sit at the bottom right, in the system's bottom bar, so the iPhone Duo moves them into its margins. The columns run to the bottom of the screen and scroll up beneath the buttons. On iPad, search and New session hide while a ticket panel covers them, and the sidebar's own toggle is gone because the bottom-left button opens and closes the sidebar. The portrait phone keeps its search bar.
+- For people working on Harness: screen tests now run on Xcode 27.1, and `bun run testing ios` also runs an iPhone Duo simulator (`--duo`, `harness-shared-duo` on iOS 27.1, which supports no other device; iPhone and iPad stay on iOS 27.0). Landscape and regular-width-phone board screens have references.
+
 ### Fixed
 
 - On iPhone, a child ticket's Back circle now sits the same distance from the top of the sheet as from its left edge, so it is concentric with the sheet's corner on the Pro Max too, whether the title is expanded or collapsed. It no longer rides up against the sheet's top edge when the title is collapsed.
