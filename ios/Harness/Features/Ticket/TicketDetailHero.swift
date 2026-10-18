@@ -122,7 +122,7 @@ struct TicketDetailHero: View {
     /// and level with them, so the title, its chevron and the buttons share one middle.
     @ViewBuilder private func header(compact: Bool, crumb: ParentCrumb?) -> some View {
         let back = showsBack
-        let row = HStack(spacing: 0) {
+        let row = HStack(alignment: inTicketPanel ? .center : .top, spacing: 0) {
             if back { backButton }
             // With a crumb the title block's own top padding (clear of the sheet's corner) isn't
             // needed, so the crumb sits close to the status row.
@@ -152,9 +152,10 @@ struct TicketDetailHero: View {
         .buttonStyle(.glass)
         .buttonBorderShape(.circle)
         .padding(.trailing, 10)
-        // Raised so its top inset equals its 14pt leading inset: the circle then shares the sheet
-        // corner's center instead of sitting lower than it is from the side.
-        .offset(y: inTicketPanel ? 0 : -8)
+        // Pinned to the top of the row, whatever the title wraps to or whether it is collapsed, and
+        // dropped so its top inset equals its 14pt leading inset: the circle then shares the sheet
+        // corner's center.
+        .offset(y: inTicketPanel ? 0 : 4)
         .accessibilityLabel("Back")
         .accessibilityIdentifier("ticket-back")
     }
