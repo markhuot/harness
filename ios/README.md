@@ -142,9 +142,9 @@ each `openurl` it taps Open on iOS's "Open in “Harness”?" prompt, which the 
 simulator stops at. Pairing counts only once the board's column chips ("Planning, 1") show, and a
 link only once the screen changes. Otherwise the run exits 1 with the labels it saw, before any
 screenshot, and it cancels a leftover prompt first, so a stale pair link can't be accepted later.
-To read the screen yourself, `axe describe-ui` lists the AXLabels. It needs the Xcode shim that
-dev-sim and the walkthrough create:
-`DEVELOPER_DIR=~/Library/Caches/harness-xcode-shim/xcode-shim/Xcode.app/Contents/Developer axe describe-ui --udid <udid>`.
+To read the screen yourself, `axe describe-ui --udid <udid>` lists the AXLabels. It needs AXe 1.8 or
+newer (`brew upgrade cameroncooke/axe/axe`): 1.5 reads the screen under Xcode 27.1 but its taps
+never land, and so does 1.8's default tap style, so taps use `--tap-style physical`.
 
 `--seed-only [--keep]` only starts and seeds the daemon and prints what it seeded, without a
 simulator, build or app.

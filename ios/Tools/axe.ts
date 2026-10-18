@@ -1,10 +1,6 @@
-// Reading and tapping the simulator's screen through AXe (brew install cameroncooke/axe/axe), for
+// Reading and tapping the simulator's screen through AXe (brew install cameroncooke/axe/axe, 1.8 or newer: older ones can't tap in Xcode 27.1's simulators), for
 // dev-sim.ts: the same accessibility-tree approach as the walkthrough, so a dev loop
 // knows what's on screen instead of sleeping and hoping.
-import { existsSync, mkdirSync, readdirSync, renameSync, rmSync } from "node:fs";
-import { homedir } from "node:os";
-import { join, resolve } from "node:path";
-
 /** AXe's describe-ui JSON → every AXLabel, as it reads on screen (AXe escapes "/" as "\/"). */
 export function parseLabels(describeUi: string): string[] {
   return [...describeUi.matchAll(/"AXLabel" : "([^"]*)"/g)].map((m) => m[1]!.replace(/\\\//g, "/"));
@@ -37,57 +33,62 @@ export function screenKey(labels: string[]): string {
 }
 
 /**
- * AXe looks for SimulatorKit under Developer/Library/PrivateFrameworks, which Xcode 27 moved to
- * Contents/SharedFrameworks, so it gets a symlinked Xcode with the framework where it expects it.
- * The same shim testing/lib/ios.ts makes (and in the same place, so either one can create it).
+ * The middle of the part of the element labelled `label` that shows on screen (its AXFrame reads
+ * "{{x, y}, {w, h}}"), or null when it isn't: absent, or laid out wholly beyond the screen's frame.
+ * A chip half scrolled off the edge is tapped on its visible half, which AXe's own label lookup (the
+ * middle of the whole chip) misses. Taps use `--tap-style physical`: under Xcode 27.1 AXe's default
+ * tap never lands.
  */
-export function xcodeShim(developerDir: string): string {
-  const real = resolve(developerDir, "..");
-  const root = join(homedir(), "Library", "Caches", "harness-xcode-shim", "xcode-shim");
-  const contents = join(root, "Xcode.app", "Contents");
-  const dev = join(contents, "Developer");
-  if (existsSync(join(dev, "Library", "PrivateFrameworks", "SimulatorKit.framework"))) return dev;
-  // Built beside the cache dir and renamed into place, so a killed run never leaves a half-built shim
-  // and another agent's walk never sees one.
-  const tmp = `${root}.tmp-${process.pid}`;
-  rmSync(tmp, { recursive: true, force: true });
-  const tmpContents = join(tmp, "Xcode.app", "Contents");
-  const tmpDev = join(tmpContents, "Developer");
-  mkdirSync(join(tmpDev, "Library", "PrivateFrameworks"), { recursive: true });
-  const link = (from: string, to: string) => Bun.spawnSync(["ln", "-s", from, to]);
-  for (const e of readdirSync(real)) if (e !== "Developer") link(join(real, e), join(tmpContents, e));
-  for (const e of readdirSync(developerDir)) if (e !== "Library") link(join(developerDir, e), join(tmpDev, e));
-  for (const e of readdirSync(join(developerDir, "Library"))) if (e !== "PrivateFrameworks") link(join(developerDir, "Library", e), join(tmpDev, "Library", e));
-  const priv = join(developerDir, "Library", "PrivateFrameworks");
-  if (existsSync(priv)) for (const e of readdirSync(priv)) link(join(priv, e), join(tmpDev, "Library", "PrivateFrameworks", e));
-  link(join(real, "SharedFrameworks", "SimulatorKit.framework"), join(tmpDev, "Library", "PrivateFrameworks", "SimulatorKit.framework"));
-  // Whatever is at `root` lacks the framework (checked above), so it is a leftover of a killed run.
-  rmSync(root, { recursive: true, force: true });
+export function labelCenter(describeUi: string, label: string): { x: number; y: number } | null {
+  let tree: unknown;
   try {
-    renameSync(tmp, root);
+    tree = JSON.parse(describeUi);
   } catch {
-    // Another process put a complete shim there first: use theirs.
-    rmSync(tmp, { recursive: true, force: true });
-    if (!existsSync(join(dev, "Library", "PrivateFrameworks", "SimulatorKit.framework"))) throw new Error(`could not build the Xcode shim at ${root}`);
+    return null;
   }
-  // The cache dir's old name, from before the shim was shared.
-  rmSync(join(homedir(), "Library", "Caches", "harness-sim-check"), { recursive: true, force: true });
-  return dev;
+  const rect = (frame: unknown) => {
+    const n = typeof frame === "string" ? frame.match(/-?\d+(?:\.\d+)?/g)?.map(Number) : undefined;
+    return n?.length === 4 ? { x: n[0]!, y: n[1]!, w: n[2]!, h: n[3]! } : null;
+  };
+  const screen = rect((Array.isArray(tree) ? (tree[0] as { AXFrame?: unknown } | undefined) : undefined)?.AXFrame);
+  const visit = (node: unknown): { x: number; y: number } | null => {
+    if (Array.isArray(node)) {
+      for (const n of node) {
+        const hit = visit(n);
+        if (hit) return hit;
+      }
+      return null;
+    }
+    if (node === null || typeof node !== "object") return null;
+    const o = node as { AXLabel?: unknown; AXFrame?: unknown; children?: unknown };
+    const r = o.AXLabel === label ? rect(o.AXFrame) : null;
+    if (r) {
+      // The visible part of it, so a chip half scrolled off the edge is tapped on its visible half.
+      const left = Math.max(r.x, screen?.x ?? r.x);
+      const top = Math.max(r.y, screen?.y ?? r.y);
+      const right = Math.min(r.x + r.w, screen ? screen.x + screen.w : r.x + r.w);
+      const bottom = Math.min(r.y + r.h, screen ? screen.y + screen.h : r.y + r.h);
+      if (right > left && bottom > top) return { x: (left + right) / 2, y: (top + bottom) / 2 };
+    }
+    return visit(o.children);
+  };
+  return visit(tree);
 }
 
 export const hasAxe = () => Bun.spawnSync(["which", "axe"]).exitCode === 0;
 
 /** An AXe driver for one simulator. */
 export function axeFor(udid: string, developerDir: string) {
-  let shim = "";
   const run = async (...a: string[]) => {
-    shim ||= xcodeShim(developerDir);
-    const p = Bun.spawn(["axe", ...a, "--udid", udid], { env: { ...process.env, DEVELOPER_DIR: shim }, stdout: "pipe", stderr: "pipe" });
+    const p = Bun.spawn(["axe", ...a, "--udid", udid], { env: { ...process.env, DEVELOPER_DIR: developerDir }, stdout: "pipe", stderr: "pipe" });
     const [out, , code] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text(), p.exited]);
     return code === 0 ? out : "";
   };
   return {
     labels: async () => parseLabels(await run("describe-ui")),
-    tap: (label: string) => run("tap", "--label", label),
+    tap: async (label: string) => {
+      const at = labelCenter(await run("describe-ui"), label);
+      return at ? run("tap", "-x", String(at.x), "-y", String(at.y), "--tap-style", "physical") : run("tap", "--label", label, "--tap-style", "physical");
+    },
   };
 }

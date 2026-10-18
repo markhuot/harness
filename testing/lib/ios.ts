@@ -3,9 +3,8 @@
 // Nothing here takes a lock: the caller already holds it (`bun run sim with-lock`), and the
 // simulator is left booted for the next run.
 
-import { existsSync, mkdirSync, readdirSync, renameSync, rmSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { homedir } from "node:os";
+import { mkdirSync } from "node:fs";
+import { dirname, join } from "node:path";
 
 import { until } from "./wait";
 
@@ -15,6 +14,55 @@ export const PINNED_XCODE = "/Applications/Xcode-27.1.0.app/Contents/Developer";
 /** AXe's describe-ui JSON → every AXLabel, as it reads on screen (AXe escapes "/" as "\/"). */
 export function parseLabels(describeUi: string): string[] {
   return [...describeUi.matchAll(/"AXLabel" : "([^"]*)"/g)].map((m) => m[1]!.replace(/\\\//g, "/"));
+}
+
+/**
+ * The middle of the part of the element labelled `label` that shows on screen (its AXFrame reads
+ * "{{x, y}, {w, h}}"), or null when it isn't: absent, or laid out wholly beyond the screen's frame,
+ * like a side-by-side column's header scrolled out of view. A chip half scrolled off the edge is
+ * tapped on its visible half, which AXe's own label lookup (the middle of the whole chip) misses.
+ * Taps use `--tap-style physical`: under Xcode 27.1 AXe's default tap never lands.
+ */
+export function labelCenter(describeUi: string, label: string): { x: number; y: number } | null {
+  let tree: unknown;
+  try {
+    tree = JSON.parse(describeUi);
+  } catch {
+    return null;
+  }
+  const rect = (frame: unknown) => {
+    const n = typeof frame === "string" ? frame.match(/-?\d+(?:\.\d+)?/g)?.map(Number) : undefined;
+    return n?.length === 4 ? { x: n[0]!, y: n[1]!, w: n[2]!, h: n[3]! } : null;
+  };
+  const screen = rect((Array.isArray(tree) ? (tree[0] as { AXFrame?: unknown } | undefined) : undefined)?.AXFrame);
+  const visit = (node: unknown): { x: number; y: number } | null => {
+    if (Array.isArray(node)) {
+      for (const n of node) {
+        const hit = visit(n);
+        if (hit) return hit;
+      }
+      return null;
+    }
+    if (node === null || typeof node !== "object") return null;
+    const o = node as { AXLabel?: unknown; AXFrame?: unknown; children?: unknown };
+    const r = o.AXLabel === label ? rect(o.AXFrame) : null;
+    if (r) {
+      // The visible part of it, so a chip half scrolled off the edge is tapped on its visible half.
+      const left = Math.max(r.x, screen?.x ?? r.x);
+      const top = Math.max(r.y, screen?.y ?? r.y);
+      const right = Math.min(r.x + r.w, screen ? screen.x + screen.w : r.x + r.w);
+      const bottom = Math.min(r.y + r.h, screen ? screen.y + screen.h : r.y + r.h);
+      if (right > left && bottom > top) return { x: (left + right) / 2, y: (top + bottom) / 2 };
+    }
+    return visit(o.children);
+  };
+  return visit(tree);
+}
+
+/** The screen's size in points: the root element's frame in describe-ui's JSON. */
+export function screenSize(describeUi: string): { w: number; h: number } | null {
+  const n = describeUi.match(/"AXFrame" : "\{\{-?[\d.]+, -?[\d.]+\}, \{([\d.]+), ([\d.]+)\}\}"/);
+  return n ? { w: Number(n[1]), h: Number(n[2]) } : null;
 }
 
 const COLUMN_CHIP = /^(Planning|In progress|Blocked|Review|Done), \d+$/;
@@ -30,39 +78,6 @@ export function screenState(labels: string[]): "prompt" | "board" | "other" {
 export function columnCount(labels: string[], status: string): number | undefined {
   const hit = labels.find((l) => l.startsWith(`${status}, `) && COLUMN_CHIP.test(l));
   return hit ? Number(hit.slice(status.length + 2)) : undefined;
-}
-
-/** AXe looks for SimulatorKit under Developer/Library/PrivateFrameworks, which Xcode 27 moved; it gets a symlinked Xcode that has it (the same shim and place dev-sim uses). */
-function xcodeShim(developerDir: string): string {
-  const real = resolve(developerDir, "..");
-  const root = join(homedir(), "Library", "Caches", "harness-xcode-shim", "xcode-shim");
-  const contents = join(root, "Xcode.app", "Contents");
-  const dev = join(contents, "Developer");
-  if (existsSync(join(dev, "Library", "PrivateFrameworks", "SimulatorKit.framework"))) return dev;
-  // Built beside the shared cache and renamed into place, so a run on the other simulator never
-  // sees (or is handed) a half-built shim.
-  const tmp = `${root}.tmp-${process.pid}`;
-  rmSync(tmp, { recursive: true, force: true });
-  const tmpContents = join(tmp, "Xcode.app", "Contents");
-  const tmpDev = join(tmpContents, "Developer");
-  mkdirSync(join(tmpDev, "Library", "PrivateFrameworks"), { recursive: true });
-  const link = (from: string, to: string) => Bun.spawnSync(["ln", "-s", from, to]);
-  for (const e of readdirSync(real)) if (e !== "Developer") link(join(real, e), join(tmpContents, e));
-  for (const e of readdirSync(developerDir)) if (e !== "Library") link(join(developerDir, e), join(tmpDev, e));
-  for (const e of readdirSync(join(developerDir, "Library"))) if (e !== "PrivateFrameworks") link(join(developerDir, "Library", e), join(tmpDev, "Library", e));
-  const priv = join(developerDir, "Library", "PrivateFrameworks");
-  if (existsSync(priv)) for (const e of readdirSync(priv)) link(join(priv, e), join(tmpDev, "Library", "PrivateFrameworks", e));
-  link(join(real, "SharedFrameworks", "SimulatorKit.framework"), join(tmpDev, "Library", "PrivateFrameworks", "SimulatorKit.framework"));
-  // A dir left by a killed run has no SimulatorKit link and would make the rename fail forever: clear it.
-  rmSync(root, { recursive: true, force: true });
-  try {
-    renameSync(tmp, root);
-  } catch {
-    // Another process put a shim there first (a non-empty directory can't be replaced): use theirs.
-    rmSync(tmp, { recursive: true, force: true });
-    if (!existsSync(join(dev, "Library", "PrivateFrameworks", "SimulatorKit.framework"))) throw new Error(`could not build the Xcode shim at ${root}`);
-  }
-  return dev;
 }
 
 async function run(cmd: string[], env: Record<string, string> = {}): Promise<{ code: number; out: string; err: string }> {
@@ -82,7 +97,8 @@ export interface Phone {
   labels(): Promise<string[]>;
   /** Wait until `match` is true of the screen's labels; fails naming `what` and the labels last seen. */
   see(what: string, match: (labels: string[]) => boolean, ms?: number): Promise<string[]>;
-  tap(label: string): Promise<void>;
+  /** Tap the element labelled `label`; with `then`, tap it again (up to three times) until the screen matches, since a tap the simulator drops looks the same as one that worked. */
+  tap(label: string, then?: { what: string; match: (labels: string[]) => boolean }): Promise<void>;
   launch(): Promise<void>;
   uninstall(): Promise<void>;
   terminate(): Promise<void>;
@@ -100,8 +116,33 @@ export function phone(name: string, udid: string): Phone {
   };
   /** AXe's output, or null when it failed (distinct from a screen with nothing on it). */
   const axe = async (...a: string[]) => {
-    const r = await run(["axe", ...a, "--udid", udid], { DEVELOPER_DIR: xcodeShim(developerDir) });
+    const r = await run(["axe", ...a, "--udid", udid], { DEVELOPER_DIR: developerDir });
     return r.code === 0 ? r.out : null;
+  };
+  /** Taps the element by its point (see labelCenter); one that isn't on screen (a column scrolled out of view) goes to `axe tap`, which brings it in. */
+  const tapLabel = async (label: string) => {
+    // A screen that just changed (a pager sliding, the iPad's panel opening) reports frames mid-move,
+    // so the point is read until two looks 200 ms apart agree. An element in the tree but off the
+    // screen (the iPad's side-by-side columns overflow it) is swiped into view first.
+    let at: { x: number; y: number } | null = null;
+    let swipes = 0;
+    for (let look = 0; look < 20; look++) {
+      const ui = (await axe("describe-ui")) ?? "";
+      const next = labelCenter(ui, label);
+      const settled = next !== null && at !== null && next.x === at.x && next.y === at.y;
+      at = next;
+      if (settled) break;
+      if (next === null && swipes < 8 && parseLabels(ui).includes(label)) {
+        const size = screenSize(ui);
+        if (size) {
+          swipes++;
+          await axe("swipe", "--start-x", String(size.w * 0.9), "--start-y", String(size.h / 2), "--end-x", String(size.w * 0.1), "--end-y", String(size.h / 2), "--duration", "0.3");
+        }
+      }
+      await new Promise<void>((r) => setTimeout(r, 200));
+    }
+    if (!at) return axe("tap", "--label", label, "--tap-style", "physical");
+    return axe("tap", "-x", String(at.x), "-y", String(at.y), "--tap-style", "physical");
   };
   const labels = async () => parseLabels((await axe("describe-ui")) ?? "");
   const see = async (what: string, match: (l: string[]) => boolean, ms = 30_000) => {
@@ -136,22 +177,32 @@ export function phone(name: string, udid: string): Phone {
     },
     async pair(link) {
       await simctl("openurl", udid, link);
-      let tapped = false;
       let tapping = false;
+      let lastTap = 0;
       return see("the board after pairing", (l) => {
-        if (!tapped && !tapping && screenState(l) === "prompt") {
+        // The prompt can be in the tree before it takes touches, so a tap that lands too early is
+        // tried again while the prompt is still up two seconds later.
+        if (!tapping && screenState(l) === "prompt" && Date.now() - lastTap > 2000) {
           tapping = true;
-          // Only a tap that succeeded counts; a failed one is tried again on the next look.
-          void axe("tap", "--label", "Open").then((out) => {
-            tapped = out !== null;
+          void tapLabel("Open").then((out) => {
+            if (out !== null) lastTap = Date.now();
             tapping = false;
           });
         }
         return screenState(l) === "board";
       });
     },
-    async tap(label) {
-      await axe("tap", "--label", label);
+    async tap(label, then) {
+      for (let attempt = 1; ; attempt++) {
+        await tapLabel(label);
+        if (!then) return;
+        try {
+          await see(then.what, then.match, attempt < 3 ? 6_000 : 30_000);
+          return;
+        } catch (e) {
+          if (attempt >= 3) throw e;
+        }
+      }
     },
     async launch() {
       await simctl("launch", udid, BUNDLE_ID);
@@ -163,8 +214,18 @@ export function phone(name: string, udid: string): Phone {
       await run(["xcrun", "simctl", "terminate", udid, BUNDLE_ID]);
     },
     async background() {
-      await axe("button", "home");
-      await new Promise<void>((r) => setTimeout(r, 1500));
+      // A Home press the simulator drops leaves the app in front, and it then never saves its state:
+      // press it until the app's root element (labelled "Harness") has left the screen.
+      for (let press = 0; press < 5; press++) {
+        await axe("button", "home");
+        await new Promise<void>((r) => setTimeout(r, 1500));
+        if (parseLabels((await axe("describe-ui")) ?? "")[0] !== "Harness") {
+          // The app saves on the scene's move to the background, which can trail the Home screen by a moment on a busy simulator.
+          await new Promise<void>((r) => setTimeout(r, 2500));
+          return;
+        }
+      }
+      throw new Error(`${name}: the Home button never took the app out of the foreground`);
     },
     async screenshot(path) {
       mkdirSync(dirname(path), { recursive: true });

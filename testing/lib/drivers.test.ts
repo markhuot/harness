@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { daemonEnv } from "./daemon";
-import { columnCount, parseLabels, screenState } from "./ios";
+import { columnCount, labelCenter, parseLabels, screenState } from "./ios";
 import { macEnv } from "./mac";
 
 test("the daemon starts on port 0 with the dummy driver in the run's home, whatever the host's own Harness settings say", () => {
@@ -31,4 +31,14 @@ test("the open-link prompt is told from the board, and a column chip's count is 
   expect(columnCount(labels, "Review")).toBe(2);
   expect(columnCount(labels, "In progress")).toBe(10);
   expect(columnCount(labels, "Done")).toBeUndefined();
+});
+
+test("a label's centre comes from its frame, and is null when it's absent or laid out off the screen", () => {
+  const tree = JSON.stringify([{ AXLabel: "Harness", AXFrame: "{{0, 0}, {834, 1210}}", children: [{ AXLabel: "Cancel", AXFrame: "{{10, 20}, {100, 40}}", children: [] }, { children: [{ AXLabel: "Open", AXFrame: "{{200.5, 400}, {120, 50}}" }] }, { AXLabel: "Review, 1", AXFrame: "{{1040, 40}, {120, 36}}" }, { AXLabel: "Done, 3", AXFrame: "{{800, 40}, {100, 36}}" }] }]);
+  expect(labelCenter(tree, "Open")).toEqual({ x: 260.5, y: 425 });
+  expect(labelCenter(tree, "Nope")).toBeNull();
+  expect(labelCenter(tree, "Review, 1")).toBeNull();
+  // Half scrolled off the right edge: tapped on the half that shows.
+  expect(labelCenter(tree, "Done, 3")).toEqual({ x: 817, y: 58 });
+  expect(labelCenter("not json", "Open")).toBeNull();
 });

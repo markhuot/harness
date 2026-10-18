@@ -159,10 +159,8 @@ export function steps(start: Start, built: { app: string }): Step[] {
           await p.see("the ticket in Review", (l) => columnCount(l, "Review") === 1 && columnCount(l, "Planning") === 0);
           await p.tap("Review, 1");
           await p.see(`${WALK_TICKET.key} card`, (l) => l.some((x) => x.startsWith(`${WALK_TICKET.key} ${WALK_TICKET.spec}`)));
-          await p.tap(`${WALK_TICKET.key} ${WALK_TICKET.spec}`);
-          await p.see("the ticket's tabs", (l) => l.includes("Transcript"));
-          await p.tap("Transcript");
-          await p.see("the dummy driver's opening line", (l) => l.some((x) => x.includes(DUMMY_HELLO)));
+          await p.tap(`${WALK_TICKET.key} ${WALK_TICKET.spec}`, { what: "the ticket's tabs", match: (l) => l.includes("Transcript") });
+          await p.tap("Transcript", { what: "the dummy driver's opening line", match: (l) => l.some((x) => x.includes(DUMMY_HELLO)) });
         });
         await phoneShots(ctx, "04-transcript");
       },
