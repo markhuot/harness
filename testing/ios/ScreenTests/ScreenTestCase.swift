@@ -30,6 +30,7 @@ class ScreenTestCase: XCTestCase {
     /// settings in UserDefaults, so a screen would otherwise render whatever the last test left.
     static func resetPersistedState() {
         let defaults = UserDefaults.standard
+        for key in defaults.dictionaryRepresentation().keys where key.hasPrefix(Router.persistedStatePrefix) { defaults.removeObject(forKey: key) }
         for key in [Router.persistedDockKey, "planUsageFilter", "planUsageMode", "browserSizeRowOpen", "harness.git.viewed", "harness.git.diffStyle", PaletteCommandRecents.key, PaletteRecents.filesKey] {
             defaults.removeObject(forKey: key)
         }

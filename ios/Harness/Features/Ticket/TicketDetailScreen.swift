@@ -97,6 +97,7 @@ struct TicketDetailScreen: View {
     private func pick(_ t: TicketTab) {
         hero.moved(to: t)
         tab = t
+        router.setTicketTab(t, key: ticketKey)
     }
 
     /// Off this screen's place on the stack (the last ticket route with the link's key; a ticket

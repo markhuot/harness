@@ -82,15 +82,23 @@ struct BoardScreen: View {
                 store.loader.loadMoreDone(ctx.filter)
             }
         }
-        // The first visit lands on the most useful column: what needs you, else what's moving.
+        // A visit opens on the column last viewed (kept in the Router, so a layout flip or a
+        // relaunch returns to it), else the most useful one: what needs you, else what's moving.
         // Side by side, the board starts at Planning like the Mac's.
         .onChange(of: store.state.ready, initial: true) { _, ready in
             guard ready, !landed else { return }
             landed = true
-            if layout == .pager, let first = BoardScreenRules.landingColumn(ctx.shown) { jump(to: first, animated: false) }
+            if layout == .pager {
+                if let first = BoardScreenRules.openingColumn(remembered: router.boardColumn, shown: ctx.shown) { jump(to: first, animated: false) }
+            } else if let remembered = router.boardColumn {
+                // Rotating to the side-by-side layout keeps the column in view.
+                leading = remembered
+            }
         }
-        .onChange(of: page) { _, _ in
+        .onChange(of: page) { _, page in
             if jumping { jumping = false } else { haptic(.select) }
+            // The phone remembers its column (the landing jump counts), so a flip or a relaunch returns to it.
+            if landed, layout == .pager, let page { router.boardColumn = page }
         }
     }
 

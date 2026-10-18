@@ -437,13 +437,24 @@ such menu, since its cards are over the ticket.
 ticket the board hasn't paged in still has its title, and drops the sheets of keys the server
 reports missing (`missingKeys`) through `removeTicket`.
 
-The list survives a relaunch on the device only: RootView saves `persistedDock` (the roots and
-paths as JSON; `Route` and `TicketSheet.Root` are `Codable`) to UserDefaults under
-`harness.dockedTickets` whenever `dockedSheets` changes, and restores it docked
-(`restorePersistedDock`) once there's a store. UserDefaults rather than `@SceneStorage`, which state
-restoration drops when the app is swiped away. A restored entry whose root doesn't decode is
-dropped, and a path keeps its routes up to the first that doesn't, so a build that adds a route
-never fails a launch. Only the top mounts at launch; the rest stay parked until opened.
+The sheets survive a relaunch on the device only: RootView saves `persistedState` (every sheet's
+root, path and per-ticket tabs, their order, whether the top is docked, the phone's board column
+(`Router.boardColumn`) and the save time; `Route` and `TicketSheet.Root` are `Codable`) to
+UserDefaults under `harness.restore.<server id>` when the scene goes to the background, and
+restores it once there's a store, open sheets open and docked ones docked. State older than 24
+hours isn't restored. A link or notification that opened a sheet at launch keeps the top; the
+saved sheets join the dock behind it. The old global `harness.dockedTickets` is read once as a
+fallback. UserDefaults rather than `@SceneStorage`, which state restoration drops when the app is
+swiped away. A restored entry whose root doesn't decode is dropped, and a path keeps its routes up
+to the first that doesn't, so a build that adds a route never fails a launch. A restored ticket
+that has gone shows the ticket screen's "not found" (or `DockedTicketsKeeper` closes it once the
+server reports it missing). Only the top mounts at launch; the rest stay parked until opened.
+
+A layout flip (the Plus/Max rotating across the size class) swaps the system sheet for the side
+panel and back, so the content mounts again: the selected tab lives on the sheet
+(`TicketSheet.tabs`, written by the ticket screen), not only in view state. The system reports the
+withdrawn sheet as a dismissal; `sheetDismissedBySystem` ignores it while the panel shows and for
+`layoutFlipGrace` after a flip.
 
 At compact width SceneChrome presents the ticket as one plain `.large` system sheet
 (`TicketSheetHost`) while the Router is `.presented`; the sheet is a view of the Router's state, and

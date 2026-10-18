@@ -9,7 +9,13 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- On iPhone, the app reopens on the board column you last looked at, and any ticket, new session, file or terminal sheets you had open or docked come back as they were, on the same screen and tab. This holds after the app is closed and reopened, for up to a day. A link or notification that opens the app still takes you where it points, and the saved sheets wait in the dock behind it. iPad restores its sheets the same way.
+
 ### Fixed
+
+- On iPhone Plus and Max, rotating to landscape and back keeps the board column, and a ticket you have open stays open on the same screen and tab, instead of the sheet closing.
 
 - On iPhone and iPad, the light that circles the docking card's rim no longer flickers. It was redrawn from scratch every frame, and on a card that wide the redraw broke it into steps that jumped and blinked. It is now drawn once and turned, and it is a shorter, brighter purple, so it stands out against the card's glass.
 

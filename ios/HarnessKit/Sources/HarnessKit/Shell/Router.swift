@@ -49,7 +49,7 @@ import Observation
 ///   off; when it was the top, the next becomes the top, docked. Projects docks the presented one and keeps the dock.
 /// Other `sheet`s (pickers…) and `cover` work as before and come up over it. A ticket window has
 /// no ticket sheet: tickets push on its stack. The list survives a relaunch through
-/// `persistedDock` / `restorePersistedDock(_:)`, which the app keeps on the device.
+/// `persistedState` / `restorePersistedState(_:)`, which the app keeps on the device.
 @MainActor
 @Observable
 public final class Router {
@@ -76,7 +76,20 @@ public final class Router {
     /// Main scope: the presented ticket sheet sits beside the board (the iPad's side panel at
     /// regular width) rather than covering it (the iPhone's sheet), so the board still counts as on
     /// screen (`PresenceRules`). The view layer sets it from the width; it changes nothing else.
-    public var sheetIsBesideBoard = false
+    public var sheetIsBesideBoard = false {
+        didSet { if oldValue != sheetIsBesideBoard { layoutChangedAt = Date() } }
+    }
+
+    /// When `sheetIsBesideBoard` last flipped (a rotation or resize across the size class).
+    @ObservationIgnored private var layoutChangedAt: Date?
+
+    /// How long after a layout flip a system dismissal is taken for the flip itself, not the user.
+    public static let layoutFlipGrace: TimeInterval = 1.5
+
+    /// The last board column the phone showed (the pager's page), kept here, above the board
+    /// screen (which is a new view on every layout flip and section switch), so it comes back. It
+    /// is saved with the sheets (`persistedState`) and restored with them.
+    @ObservationIgnored public var boardColumn: TicketStatus?
 
     /// Main scope: opens a ticket route in a window of its own (`popOutSheet()`). Nil where the
     /// device has no windows to open. Observed, so `canPopOutSheet` follows it.
@@ -327,6 +340,19 @@ public final class Router {
         sheets[0].path = path
     }
 
+    /// Notes that the screen for ticket `key` now shows `tab`, on every ticket sheet that has it.
+    public func setTicketTab(_ tab: TicketTab, key: String) {
+        for i in sheets.indices where sheets[i].ticketKeys.contains(key) && sheets[i].tabs[key] != tab {
+            sheets[i].tabs[key] = tab
+        }
+    }
+
+    /// The tab ticket `key`'s screen last showed on the top sheet (else any sheet); nil when none
+    /// was picked.
+    public func ticketTab(key: String) -> TicketTab? {
+        sheets.first?.tabs[key] ?? sheets.lazy.compactMap { $0.tabs[key] }.first
+    }
+
     /// Presented → docked, paths and all.
     public func dockSheet() {
         if !sheets.isEmpty { ticketSheetDocked = true }
@@ -347,8 +373,14 @@ public final class Router {
     /// it): that closes the ticket, like any dismissal. `dock` is only the armed release of the hold
     /// gesture (DockArming), which docks it instead. Nothing happens unless the ticket sheet was
     /// presented, so a dismissal the app itself made first can't close a second ticket.
-    public func sheetDismissedBySystem(dock: Bool) {
+    ///
+    /// A layout flip (the iPhone Plus/Max rotating across the size class) also takes the system
+    /// sheet down, and SwiftUI can report that as a dismissal: it isn't one. While the panel is the
+    /// ticket's surface, and for `layoutFlipGrace` after a flip, nothing closes.
+    public func sheetDismissedBySystem(dock: Bool, now: Date = Date()) {
         guard ticketSheetState == .presented else { return }
+        if sheetIsBesideBoard { return }
+        if let flipped = layoutChangedAt, now.timeIntervalSince(flipped) < Self.layoutFlipGrace { return }
         if dock { dockSheet() } else { dismissSheet() }
     }
 
@@ -484,42 +516,133 @@ public final class Router {
     }
 }
 
-// MARK: The dock across launches
+// MARK: The sheets and the board column across launches
 
 extension Router {
-    /// Where the app keeps `persistedDock` (UserDefaults, on the device only).
+    /// The key a server's saved state sits under (UserDefaults, on the device only).
+    public static func persistedStateKey(server: String) -> String { "\(persistedStatePrefix)\(server)" }
+
+    /// Every server's saved state key starts with this.
+    public static let persistedStatePrefix = "harness.restore."
+
+    /// The one global key the docked tickets were saved under before state was kept per server.
+    /// Read once as a fallback (docked only), then emptied.
     public static let persistedDockKey = "harness.dockedTickets"
 
-    /// The ticket sheets as JSON (roots, paths, order; the first is the top), for the device to keep
-    /// across launches. Nil when there are none.
-    public var persistedDock: String? {
-        guard !sheets.isEmpty else { return nil }
-        let entries = sheets.map { PersistedSheet(root: $0.root, path: $0.path) }
-        guard let data = try? JSONEncoder().encode(entries) else { return nil }
+    /// How long saved state stays good: one saved longer ago is discarded, the app lands normally.
+    public static let persistedStateMaxAge: TimeInterval = 24 * 60 * 60
+
+    /// The state the device keeps across launches: every ticket sheet (roots, paths, tabs, order,
+    /// and whether the top is docked), the board column and when it was saved. Nil when there is
+    /// nothing worth keeping.
+    public func persistedState(now: Date = Date()) -> String? {
+        guard sheets.isEmpty == false || boardColumn != nil else { return nil }
+        let state = PersistedState(
+            version: 1, savedAt: now, docked: ticketSheetDocked, column: boardColumn?.rawValue,
+            sheets: sheets.map { PersistedSheet(root: $0.root, path: $0.path, tabs: $0.tabs) })
+        guard let data = try? JSONEncoder.persisted.encode(state) else { return nil }
         return String(decoding: data, as: UTF8.self)
     }
 
-    /// Brings back `persistedDock`'s sheets, docked, when this main router has none yet. An entry
-    /// that no longer decodes is dropped (a path keeps the screens up to the first that doesn't);
-    /// garbage restores nothing.
-    public func restorePersistedDock(_ json: String?) {
-        guard scope == .main, sheets.isEmpty, let json,
-              let entries = try? JSONDecoder().decode(LossyList<PersistedSheet>.self, from: Data(json.utf8)).items,
-              !entries.isEmpty else { return }
-        sheets = entries.map { e in
-            nextTicketSheetID += 1
-            return TicketSheet(id: nextTicketSheetID, root: e.root, path: e.path)
+    /// Brings back what `persistedState` kept, on a main router, unless it is older than
+    /// `persistedStateMaxAge`. Sheets come back as saved (open stays open, docked stays docked).
+    /// When sheets are already up (a link opened at launch got there first) they stay on top and
+    /// the saved ones join the dock behind them, so a restore never replaces a destination. An
+    /// entry that no longer decodes is dropped (a path keeps the screens up to the first that
+    /// doesn't); garbage restores nothing. False when nothing was restored (garbage, or too old).
+    @discardableResult
+    public func restorePersistedState(_ json: String?, now: Date = Date()) -> Bool {
+        guard scope == .main, let json,
+              let state = try? JSONDecoder.persisted.decode(PersistedState.self, from: Data(json.utf8)),
+              now.timeIntervalSince(state.savedAt) <= Self.persistedStateMaxAge else { return false }
+        if boardColumn == nil, let raw = state.column, let column = TicketStatus.allKnown.first(where: { $0.rawValue == raw }) {
+            boardColumn = column
         }
-        ticketSheetDocked = true
+        restore(state.sheets, docked: state.docked)
+        return true
     }
 
-    /// `persistedDock` read from and written to `defaults`.
-    public func restorePersistedDock(from defaults: any ChangesDefaults) {
-        restorePersistedDock(defaults.string(forKey: Self.persistedDockKey))
+    /// The docked-only payload an older build kept: restored docked, whatever its age.
+    public func restoreLegacyDock(_ json: String?) {
+        guard scope == .main, let json,
+              let entries = try? JSONDecoder().decode(LossyList<PersistedSheet>.self, from: Data(json.utf8)).items else { return }
+        restore(entries, docked: true)
     }
 
-    public func savePersistedDock(to defaults: any ChangesDefaults) {
-        defaults.setString(persistedDock ?? "", forKey: Self.persistedDockKey)
+    private func restore(_ entries: [PersistedSheet], docked: Bool) {
+        guard !entries.isEmpty else { return }
+        let restored = entries.map { e -> TicketSheet in
+            nextTicketSheetID += 1
+            var sheet = TicketSheet(id: nextTicketSheetID, root: e.root, path: e.path)
+            sheet.tabs = e.tabs
+            return sheet
+        }
+        if sheets.isEmpty {
+            sheets = restored
+            ticketSheetDocked = docked
+        } else {
+            // Behind what is already up, less any sheet that shows the same thing.
+            sheets += restored.filter { r in !sheets.contains { $0.root == r.root } }
+        }
+    }
+
+    /// Restores this server's saved state from `defaults`, or the old docked-only key when there is none.
+    public func restorePersisted(from defaults: any ChangesDefaults, server: String, now: Date = Date()) {
+        if let json = defaults.string(forKey: Self.persistedStateKey(server: server)), !json.isEmpty {
+            restorePersistedState(json, now: now)
+        } else if let legacy = defaults.string(forKey: Self.persistedDockKey), !legacy.isEmpty {
+            restoreLegacyDock(legacy)
+            defaults.setString("", forKey: Self.persistedDockKey)
+        }
+    }
+
+    /// Saves this server's state into `defaults` (an empty string when there is none).
+    public func savePersisted(to defaults: any ChangesDefaults, server: String, now: Date = Date()) {
+        defaults.setString(persistedState(now: now) ?? "", forKey: Self.persistedStateKey(server: server))
+    }
+}
+
+private extension JSONEncoder {
+    static var persisted: JSONEncoder {
+        let e = JSONEncoder()
+        e.dateEncodingStrategy = .secondsSince1970
+        return e
+    }
+}
+
+private extension JSONDecoder {
+    static var persisted: JSONDecoder {
+        let d = JSONDecoder()
+        d.dateDecodingStrategy = .secondsSince1970
+        return d
+    }
+}
+
+/// What the device keeps: the sheets, the board column and when.
+private struct PersistedState: Codable {
+    var version: Int
+    var savedAt: Date
+    var docked: Bool
+    var column: String?
+    var sheets: [PersistedSheet]
+
+    private enum CodingKeys: String, CodingKey { case version, savedAt, docked, column, sheets }
+
+    init(version: Int, savedAt: Date, docked: Bool, column: String?, sheets: [PersistedSheet]) {
+        self.version = version
+        self.savedAt = savedAt
+        self.docked = docked
+        self.column = column
+        self.sheets = sheets
+    }
+
+    init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        version = try c.decode(Int.self, forKey: .version)
+        savedAt = try c.decode(Date.self, forKey: .savedAt)
+        docked = try c.decode(Bool.self, forKey: .docked)
+        column = try c.decodeIfPresent(String.self, forKey: .column)
+        sheets = try c.decode(LossyList<PersistedSheet>.self, forKey: .sheets).items
     }
 }
 
@@ -528,21 +651,25 @@ extension Router {
 private struct PersistedSheet: Codable {
     var root: TicketSheet.Root
     var path: [Route]
+    var tabs: [String: TicketTab]
 
-    init(root: TicketSheet.Root, path: [Route]) {
+    init(root: TicketSheet.Root, path: [Route], tabs: [String: TicketTab] = [:]) {
         self.root = root
         self.path = path
+        self.tabs = tabs
     }
 
-    private enum CodingKeys: String, CodingKey { case root, path }
+    private enum CodingKeys: String, CodingKey { case root, path, tabs }
 
     init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         root = try c.decode(TicketSheet.Root.self, forKey: .root)
         path = []
+        tabs = (try? c.decode([String: TicketTab].self, forKey: .tabs)) ?? [:]
         guard var routes = try? c.nestedUnkeyedContainer(forKey: .path) else { return }
         while !routes.isAtEnd, let route = try? routes.decode(Route.self) { path.append(route) }
     }
+
 }
 
 /// An array whose elements that fail to decode are skipped.
@@ -590,6 +717,9 @@ public struct TicketSheet: Hashable, Sendable, Identifiable {
     public internal(set) var root: Root
     /// Pushed above `root`.
     public internal(set) var path: [Route] = []
+    /// The tab each ticket on this sheet last showed, by key, so a screen that mounts again (a
+    /// layout flip swaps the system sheet for the side panel, a relaunch) opens on it.
+    public internal(set) var tabs: [String: TicketTab] = [:]
     /// The lines the latest link to this file marked, once a link has marked some after the card
     /// opened: the open editor scrolls to them. Not persisted (a restored card opens on its root's lines).
     public internal(set) var revealed: FileReveal?

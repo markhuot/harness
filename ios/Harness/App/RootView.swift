@@ -47,15 +47,20 @@ struct RootView: View {
             }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active { WindowDirectory.shared.mainActive(router, scene: scene) }
+                // The one save point: a swipe away from the app switcher comes after this.
+                if phase == .background, let server = app.active?.id {
+                    router.savePersisted(to: UserDefaults.standard, server: server)
+                }
             }
-            // The docked tickets survive a relaunch, on this device only (UserDefaults rather than
-            // scene storage, which is dropped when the app is swiped away). They come back docked
-            // once there's a server to show them from.
-            .onChange(of: app.store != nil, initial: true) { _, connected in
-                if connected { router.restorePersistedDock(from: UserDefaults.standard) }
+            // The ticket sheets (open and docked, with their screens and tabs) and the board's
+            // column survive a relaunch, on this device only (UserDefaults rather than scene
+            // storage, which is dropped when the app is swiped away), for a day. They come back
+            // as they were once there's a server to show them from.
+            .onChange(of: app.store != nil ? app.active?.id : nil, initial: true) { old, server in
+                if old != nil { router.boardColumn = nil }
+                if let server { router.restorePersisted(from: UserDefaults.standard, server: server) }
             }
             .onChange(of: router.dockedSheets) { old, new in
-                router.savePersistedDock(to: UserDefaults.standard)
                 // A ticket that closed for good comes back fresh: nothing of its screen is kept.
                 // That includes the tickets pushed inside it.
                 let open = Set(new.flatMap(\.ticketKeys))
@@ -197,6 +202,9 @@ private struct SceneChrome: ViewModifier {
         }, set: { new in
             guard new == nil else { return }
             guard ticketSheet != nil else { router.sheet = nil; return }
+            // The system sheet withdrawing for the side panel reports a nil too: not a dismissal
+            // (`sheetDismissedBySystem` ignores it while the panel shows and just after a flip).
+            guard !router.sheetIsBesideBoard else { return }
             let dock = hold.takeIntent()
             withAnimation(.snappy) { router.sheetDismissedBySystem(dock: dock) }
         })
