@@ -12,7 +12,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 ### Changed
 
 - On iPhone in landscape, on iPad and on the iPhone Duo, the board no longer shows a title bar or the project's name. The Projects button sits at the bottom left, and search and New session sit at the bottom right, in the system's bottom bar, so the iPhone Duo moves all three into its margins (in portrait too). The columns run to the bottom of the screen and scroll up beneath the buttons. A phone in landscape shows the columns side by side at the iPad's width instead of one page-wide column. On iPad, search and New session hide while a ticket panel covers them, and the sidebar no longer has a title or its own toggle, because the bottom-left button opens and closes it. Other portrait phones keep their search bar.
-- For people working on Harness: screen tests now run on Xcode 27.1, and `bun run testing ios` also runs an iPhone Duo simulator (`--duo`, `harness-shared-duo` on iOS 27.1, which supports no other device; iPhone and iPad stay on iOS 27.0). Landscape and regular-width-phone board screens have references.
+- For people working on Harness: screen tests now run on Xcode 27.1, and `bun run testing ios` also runs an iPhone Duo simulator (`--duo`, `harness-shared-duo` on iOS 27.1, which supports no other device; iPhone and iPad stay on iOS 27.0). Landscape and regular-width-phone board screens have references. The walkthrough and dev-sim now need AXe 1.8 or newer (`brew upgrade cameroncooke/axe/axe`) and tap with its physical tap style, because AXe 1.5's taps never land in Xcode 27.1's simulators.
 
 ### Fixed
 
