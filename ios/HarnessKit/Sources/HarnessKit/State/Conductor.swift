@@ -262,6 +262,37 @@ public enum Conductor {
         "Restarts on its own at \(time), after the usage limit resets"
     }
 
+    /// The disabled button an approved review ticket shows in place of Approve (the twin of
+    /// `approvedStandIn` in shared/src/state/conductor.ts).
+    public enum ApprovedStandIn: Equatable, Sendable {
+        case agentReview, completing, agentReviewNeeded
+
+        public var label: String {
+            switch self {
+            case .agentReview: "Waiting on agent review"
+            case .completing: "Moving to done…"
+            case .agentReviewNeeded: "Agent review needed"
+            }
+        }
+
+        public var title: String {
+            switch self {
+            case .agentReview: "The human review is approved; the ticket lands once the agent review passes"
+            case .completing: "Both reviews passed: the complete run is landing the work"
+            case .agentReviewNeeded: "The human review is approved but the agent review hasn't passed and none is running: More → Re-run agent review"
+            }
+        }
+    }
+
+    /// What a review ticket with the human review approved shows where Approve was. nil for any other
+    /// ticket, and for one a conductor manages (its Approve stays, turned off). Keys on `completing`,
+    /// not `busy`, since an agent review run sets busy too.
+    public static func approvedStandIn(_ t: Ticket, managed: Bool = false) -> ApprovedStandIn? {
+        guard t.status == .review, t.draft != true, t.humanReview == .approved, !managed else { return nil }
+        if t.completing == true || HarnessProtocol.reviewPassed(t.agentReview) { return .completing }
+        return t.busy ? .agentReview : .agentReviewNeeded
+    }
+
     /// Depth in the sibling dependency graph, by upper-cased key: 0 = depends on no sibling, n = 1 +
     /// deepest sibling dep. Deps outside the set are ignored; cycles are cut (a ticket revisited
     /// mid-walk counts as 0).

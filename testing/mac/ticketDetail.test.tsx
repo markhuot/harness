@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { TicketDetail } from "../../app/src/renderer/views/TicketDetail";
 import { world } from "../world";
-import { all, mount, text } from "./render";
+import { all, click, edited, mount, text } from "./render";
 
 const detail = (key: string, tab: "spec" | "activity" | "transcript" | "details" = "spec") => <TicketDetail paneId="p1" ticketKey={key} tab={tab} zoomed={false} />;
 const buttons = (m: { container: HTMLElement }) => all(m.container, "button").map((b) => text(b));
@@ -28,6 +28,44 @@ describe("TicketDetail", () => {
     expect(buttons(done)).toContain("Re-open");
     expect(buttons(done)).not.toContain("Start work");
     expect(buttons(done).some((b) => b.startsWith("Approve"))).toBe(false);
+  });
+
+  test("a blocked ticket offers Unblock; its dialog sends the notes, which are optional", async () => {
+    const m = await mount(detail("HARNESS-4"));
+    await m.until("loads", () => text(m.container).includes("Choose a storage backend"));
+    expect(buttons(m)).toContain("Unblock");
+    await click(m, all(m.container, "button").find((b) => text(b) === "Unblock")!);
+    const dialog = all(document.body, ".modal-foot button").find((b) => text(b).startsWith("Unblock"))!;
+    expect(dialog.hasAttribute("disabled")).toBe(false);
+    await click(m, dialog);
+    expect(m.client.requests).toContain("POST /tickets/HARNESS-4/unblock");
+  });
+
+  test("a blocked ticket with a restart time or a pending approval offers no Unblock", async () => {
+    const timed = await mount(detail("HARNESS-4"), { world: edited((w) => void (w.tickets.find((t) => t.key === "HARNESS-4")!.resumeAt = world.now + 60_000)) });
+    await timed.until("loads", () => text(timed.container).includes("Choose a storage backend"));
+    expect(buttons(timed)).not.toContain("Unblock");
+    expect(all(timed.container, "[data-testid=restart-waiting]")).toHaveLength(1);
+    timed.unmount();
+
+    const approval = await mount(detail("WEB-2"));
+    await approval.until("the approval", () => text(approval.container).includes("The agent wants to use Bash"));
+    expect(buttons(approval)).not.toContain("Unblock");
+  });
+
+  test("an approved review shows what it waits on instead of an empty row", async () => {
+    const standIn = async (patch: Record<string, unknown>) => {
+      const m = await mount(detail("HARNESS-5"), { world: edited((w) => void Object.assign(w.tickets.find((t) => t.key === "HARNESS-5")!, { humanReview: "approved", ...patch })) });
+      await m.until("loads", () => text(m.container).includes("Speed up the board"));
+      const found = text(all(m.container, "[data-testid=approved-stand-in]")[0]);
+      expect(buttons(m).some((b) => b.startsWith("Approve"))).toBe(false);
+      m.unmount();
+      return found;
+    };
+    expect(await standIn({ agentReview: "pending", busy: true })).toBe("Waiting on agent review");
+    expect(await standIn({ agentReview: "approved", completing: true, busy: true })).toBe("Moving to done…");
+    expect(await standIn({ agentReview: "approved" })).toBe("Moving to done…");
+    expect(await standIn({ agentReview: "changes_requested" })).toBe("Agent review needed");
   });
 
   test("a pending tool approval shows what the agent wants to run and the ways to answer", async () => {

@@ -10,7 +10,7 @@ import { conductorManagedReason, managingConductor, type Ticket } from "@harness
 import { autoStartWaitingOn, startLabel, startState, type DepState } from "@harness/shared/state";
 import { landCommands, landMenu, type LandChoice, type LandMenu } from "./approveMenu";
 
-export type TicketActionId = "start" | "approve" | "requestChanges" | "reopen" | "rerunReview" | "markDone" | "cancelRun" | "delete";
+export type TicketActionId = "start" | "unblock" | "approve" | "requestChanges" | "reopen" | "rerunReview" | "markDone" | "cancelRun" | "delete";
 
 export interface TicketAction {
   id: TicketActionId;
@@ -52,6 +52,11 @@ export function ticketActions(ticket: Ticket, ctx: TicketActionContext): TicketA
 
   const start = startState(ticket, ctx.deps);
   if (start === "start" || start === "approve") primary.push({ id: "start", label: startLabel(start), enabled: !compacting });
+
+  // A block that waits on the human: no restart time, no run going, no tool approval to answer.
+  if (ticket.status === "blocked" && !ticket.resumeAt && !ticket.busy && !ticket.pendingApproval) {
+    primary.push({ id: "unblock", label: "Unblock", enabled: !compacting });
+  }
 
   // Approving lands the work once both reviews pass; there's no separate Complete step. A
   // conductor's child keeps its (turned off) Approve once approved: the conductor lands it.

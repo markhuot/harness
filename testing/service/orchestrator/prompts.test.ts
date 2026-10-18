@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { PROMPT_IDS, parseTemplate, type ActivityEntry } from "@harness/shared";
 import { isPromptId, promptTemplateError, PROMPTS, renderPrompt } from "../../../service/src/orchestrator/prompt-templates";
-import { activityLines, changesRequestedPrompt, completePrompt, conductorUpdatePrompt, pullRequestList, reopenPrompt, replanPrompt, reviewPrompt, systemPrompt, workStartPrompt } from "../../../service/src/orchestrator/prompts";
+import { activityLines, changesRequestedPrompt, completePrompt, conductorUpdatePrompt, pullRequestList, reopenPrompt, replanPrompt, reviewPrompt, systemPrompt, unblockPrompt, workStartPrompt } from "../../../service/src/orchestrator/prompts";
 import { makeTicket } from "../../builders/ticket";
 
 test("every prompt id has a definition, and the registry holds nothing else", () => {
@@ -120,4 +120,13 @@ test("the system prompt for a work run mentions the tools a work run has; a tria
   expect(work).toContain("submit_for_review");
   expect(triage).not.toContain("submit_for_review");
   expect(work.startsWith("You are an autonomous coding agent running inside Harness")).toBe(true);
+});
+
+test("the unblock prompt carries the notes and the block reason, or says no notes were given", () => {
+  const t = makeTicket({ status: "blocked", key: "ACME-1", blockedReason: "Which colour?" });
+  const withNotes = unblockPrompt(t, " Blue ");
+  expect(withNotes).toContain("Blue");
+  expect(withNotes).toContain("Which colour?");
+  expect(unblockPrompt(t, "")).toContain("no notes");
+  expect(unblockPrompt(makeTicket({ status: "blocked" }), "x")).not.toContain("It was blocked because");
 });

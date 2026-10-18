@@ -16,6 +16,8 @@ public enum TicketAction: Equatable, Sendable {
     /// one approving without an action. `managedReason` is set when a conductor approves in the
     /// human's place (the item is then disabled).
     case approve(title: String, primary: Approve.Request, choices: [Approve.MenuChoice], managedReason: String?)
+    /// Unblock a blocked ticket the human has to answer (no restart time, no run, no tool approval).
+    case unblock
     case requestChanges
     case reopen
     /// "Run agent review" / "Re-run agent review".
@@ -28,6 +30,7 @@ public enum TicketAction: Equatable, Sendable {
         switch self {
         case let .start(approvePlan): approvePlan ? "Approve plan" : "Start work"
         case let .approve(title, _, _, _): title
+        case .unblock: "Unblock"
         case .requestChanges: "Request changes"
         case .reopen: "Re-open"
         case let .rerunAgentReview(title): title
@@ -84,6 +87,11 @@ public enum TicketActions {
         let start = Conductor.startState(ticket, deps)
         if start == .start || start == .approve {
             primary.append(TicketActionItem(.start(approvePlan: start == .approve), enabled: !compacting))
+        }
+
+        // A block that waits on the human: no restart time, no run going, no tool approval to answer.
+        if ticket.status == .blocked, Conductor.restartsAt(ticket) == nil, !ticket.busy, ticket.pendingApproval == nil {
+            primary.append(TicketActionItem(.unblock, enabled: !compacting))
         }
 
         // Approving lands the work once both reviews pass; there's no separate Complete step. A

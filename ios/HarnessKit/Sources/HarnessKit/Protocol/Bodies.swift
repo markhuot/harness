@@ -337,6 +337,12 @@ public struct ReopenBody: Codable, Sendable, Equatable {
     public init(notes: String) { self.notes = notes }
 }
 
+/// Unblock a blocked ticket: back to in progress. The notes answer the block and are optional.
+public struct UnblockBody: Codable, Sendable, Equatable {
+    public var notes: String?
+    public init(notes: String? = nil) { self.notes = notes }
+}
+
 public struct ApprovalBody: Codable, Sendable, Equatable {
     /// allow_once: this exact call; allow_tool: every future call of this tool on this ticket; deny
     public var decision: ApprovalDecision

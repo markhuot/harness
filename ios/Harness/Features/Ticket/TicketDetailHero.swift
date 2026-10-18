@@ -239,6 +239,11 @@ struct TicketDetailHero: View {
         ForEach(Array(set.primary.enumerated()), id: \.offset) { _, item in
             primaryButton(item)
         }
+        // Approved review: no Approve to draw, so a disabled button says what it's waiting on.
+        if let standIn = Conductor.approvedStandIn(ticket, managed: Completion.managingConductor(ticket: ticket, parent: parent) != nil) {
+            HButton(standIn.label, icon: "clock", small: true, fullWidth: false, accessibilityLabel: standIn.title) {}
+                .disabled(true)
+        }
         // A running ticket has no action of its own: a disabled stand-in keeps the row from looking empty.
         if ticket.status == .inProgress {
             HButton("Working…", icon: "clock", small: true, fullWidth: false) {}
@@ -258,6 +263,9 @@ struct TicketDetailHero: View {
                     .disabled(!item.enabled)
                 approveMenu(choices).disabled(!item.enabled)
             }
+        case .unblock:
+            HButton(item.action.title, icon: "play", variant: .primary, small: true, fullWidth: false, haptic: nil) { run(item.action) }
+                .disabled(!item.enabled)
         case .reopen:
             HButton(item.action.title, icon: "refresh", small: true, fullWidth: false) { run(item.action) }
                 .disabled(!item.enabled)

@@ -11,7 +11,7 @@ import type { TicketAction } from "../state/ticketActions";
 import { MOD, Modal } from "./bits";
 import { LandSheet, type LandSheetState } from "./LandButton";
 
-type Dialog = { kind: "changes" | "reopen"; ticketId: string } | { kind: "land"; ticketId: string; sheet: LandSheetState };
+type Dialog = { kind: "changes" | "reopen" | "unblock"; ticketId: string } | { kind: "land"; ticketId: string; sheet: LandSheetState };
 
 export interface TicketActionRunner {
   /** Run `action` on `ticket`. Approve takes `choice` (a way to approve), else its primary one. `onDeleted` runs after a confirmed delete went through. */
@@ -47,6 +47,8 @@ export function useTicketActionRunner(): TicketActionRunner {
       }
       case "requestChanges":
         return setDialog({ kind: "changes", ticketId: ticket.id });
+      case "unblock":
+        return setDialog({ kind: "unblock", ticketId: ticket.id });
       case "reopen":
         return setDialog({ kind: "reopen", ticketId: ticket.id });
       case "rerunReview":
@@ -68,6 +70,7 @@ export function useTicketActionRunner(): TicketActionRunner {
   const modals = (
     <>
       {ticket && dialog?.kind === "changes" && <RequestChangesModal ticket={ticket} onClose={close} />}
+      {ticket && dialog?.kind === "unblock" && <RequestChangesModal unblock ticket={ticket} onClose={close} />}
       {ticket && dialog?.kind === "reopen" && <RequestChangesModal reopen ticket={ticket} onClose={close} />}
       {ticket && dialog?.kind === "land" && (
         <LandSheet key={dialog.sheet.action} ticket={ticket} sheet={dialog.sheet} onSubmit={(instructions) => approveWith(ticket, dialog.sheet.action, instructions)} onClose={close} />
@@ -78,13 +81,15 @@ export function useTicketActionRunner(): TicketActionRunner {
 }
 
 /** Notes for the agent that send the ticket back to In progress: request changes (review) or re-open (done). */
-export function RequestChangesModal({ ticket, onClose, reopen = false }: { ticket: Ticket; onClose: () => void; reopen?: boolean }) {
+export function RequestChangesModal({ ticket, onClose, reopen = false, unblock = false }: { ticket: Ticket; onClose: () => void; reopen?: boolean; unblock?: boolean }) {
   const { client } = useStore();
   const act = useAction();
   const [notes, setNotes] = useState("");
   const submit = async () => {
-    if (!notes.trim()) return;
-    const ok = reopen
+    if (!unblock && !notes.trim()) return;
+    const ok = unblock
+      ? await act(() => client.unblockTicket(ticket.key, { notes }), "Unblocked")
+      : reopen
       ? await act(() => client.reopenTicket(ticket.key, { notes }), "Re-opened")
       : await act(() => client.humanReview(ticket.key, { decision: "request_changes", notes }), "Changes requested");
     if (ok) onClose();
@@ -92,7 +97,7 @@ export function RequestChangesModal({ ticket, onClose, reopen = false }: { ticke
   return (
     <Modal onClose={onClose}>
       <div className="modal-head">
-        <strong>{reopen ? "Re-open" : "Request changes"}</strong>
+        <strong>{unblock ? "Unblock" : reopen ? "Re-open" : "Request changes"}</strong>
         <span className="muted mono">{keyLabel(ticket)}</span>
       </div>
       <div className="modal-body">
@@ -100,13 +105,15 @@ export function RequestChangesModal({ ticket, onClose, reopen = false }: { ticke
           autoFocus
           className="textarea"
           rows={6}
-          placeholder={reopen ? "What should the agent do now?" : "What should the agent change?"}
+          placeholder={unblock ? "Answer the block, or leave empty to let the agent carry on" : reopen ? "What should the agent do now?" : "What should the agent change?"}
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && (e.metaKey || e.ctrlKey) && void submit()}
         />
         <div className="field-hint" style={{ marginTop: 6 }}>
-          {reopen
+          {unblock
+            ? "The ticket moves from Blocked to In progress and the agent gets your notes, if any."
+            : reopen
             ? "The ticket moves from Done back to In progress and the agent gets your notes. If its worktree was removed, it's recreated."
             : "The ticket moves back to In progress and the agent gets your notes."}
         </div>
@@ -116,8 +123,8 @@ export function RequestChangesModal({ ticket, onClose, reopen = false }: { ticke
         <button className="btn btn-ghost" onClick={onClose}>
           Cancel
         </button>
-        <button className="btn btn-primary" disabled={!notes.trim()} onClick={submit}>
-          Send to agent <span className="kbd">{MOD}↩</span>
+        <button className="btn btn-primary" disabled={!unblock && !notes.trim()} onClick={submit}>
+          {unblock ? "Unblock" : "Send to agent"} <span className="kbd">{MOD}↩</span>
         </button>
       </div>
     </Modal>

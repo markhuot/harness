@@ -11,6 +11,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Added
 
+- A blocked ticket that waits on you (no restart time, no run going, no tool approval to answer) has an **Unblock** button on Mac, iPhone and iPad, and an "Unblock…" command in the Mac palette. It asks for optional notes, moves the ticket to In progress and sends the agent your notes (or, with none, the reason it was blocked). Both reviews start over.
+
+- A review ticket whose human review is approved no longer shows an empty row of buttons. It shows a disabled **Waiting on agent review**, **Moving to done…** or **Agent review needed** (re-run it from More), so you can see what it is waiting on.
+
 - In the file viewer on Mac, iPhone and iPad, the "…" menu now has Wrap lines. Long lines wrap instead of scrolling sideways, and the choice is remembered for that file type on that device: wrap one `.html` file and every `.html` file opens wrapped, while other types are unaffected. Toggling it keeps you on the same line.
 
 - Markdown files (`.md`, `.markdown`) can be viewed rendered. The "…" menu switches between Source and Rendered, using the same renderer as the Spec tab and showing your unsaved edits. Links to other files in a rendered file open beside it.

@@ -24,6 +24,20 @@ struct WorldJSON {
 
     func list(_ key: String) -> [[String: Any]] { root[key] as? [[String: Any]] ?? [] }
 
+    /// Sets fields on one ticket wherever the world holds it (the board's list and its detail).
+    mutating func patch(_ key: String, _ fields: [String: Any]) {
+        var tickets = list("tickets")
+        if let i = tickets.firstIndex(where: { $0["key"] as? String == key }) { tickets[i].merge(fields) { $1 } }
+        root["tickets"] = tickets
+        var details = root["details"] as? [String: Any] ?? [:]
+        if var detail = details[key] as? [String: Any], var ticket = detail["ticket"] as? [String: Any] {
+            ticket.merge(fields) { $1 }
+            detail["ticket"] = ticket
+            details[key] = detail
+        }
+        root["details"] = details
+    }
+
     /// Changes one ticket's title wherever the world holds it (the board's list and its detail).
     mutating func retitle(_ key: String, to title: String) {
         var tickets = list("tickets")

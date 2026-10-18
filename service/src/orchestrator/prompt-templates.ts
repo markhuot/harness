@@ -798,6 +798,28 @@ They may have review comments to address (\`gh pr view {{branch}} --comments\` s
 Do the work and verify it the way a work run does: a test for each behaviour change, the tests and typecheck passing, screenshots in Status for visible changes. The spec is at revision {{specRevision}}: add what the human wants to its Goal as requirements, rewriting any requirement it changes, and rewrite the Status statements the work changes so they describe the current state, with no section for this round. Then call \`submit_for_review\` again with \`spec_is_up_to_date\` true. The submit note covers only these changes.`,
   },
 
+  "run.unblock": {
+    group: "run",
+    label: "Unblocked",
+    description: "Sends a blocked ticket back to its agent when the human unblocks it. Keep the \"## What the human says\" heading.",
+    variables: {
+      ticket: TICKET,
+      notes: "What the human wrote when unblocking, or empty",
+      blockedReason: "Why the ticket was blocked, or empty",
+      specRevision: "The spec's current revision number",
+      branch: BRANCH,
+    },
+    template: `{{ticket}} was blocked, and the human has unblocked it.
+
+{{#if blockedReason}}It was blocked because:
+{{blockedReason}}
+
+{{/if}}## What the human says
+{{#if notes}}{{notes}}{{else}}(no notes: the human is telling you to carry on. Check that the cause of the block is gone, and if it isn't, call \`block\` again with what you need.){{/if}}
+
+Pick the work up where it stopped: the spec, the agent notes and the branch's commits (\`git log\`) show where it got to. Both reviews start over. Verify the work the way a work run does: a test for each behaviour change, the tests and typecheck passing, screenshots in Status for visible changes. The spec is at revision {{specRevision}}: if the human's answer changes what's wanted, rewrite the Goal and the requirements it touches, and rewrite the Status statements the work changes so they describe the current state. Then call \`submit_for_review\` with \`spec_is_up_to_date\` true. The submit note covers only this round.`,
+  },
+
   "run.replan": {
     group: "run",
     label: "Re-plan",

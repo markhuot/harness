@@ -1,7 +1,7 @@
 // Pure derivations for conductor tickets and their children (Children tab, board rollup,
 // board dimming / hiding). No React, no I/O.
 
-import { TICKET_STATUSES, type Ticket, type TicketStatus } from "../index";
+import { reviewPassed, TICKET_STATUSES, type Ticket, type TicketStatus } from "../index";
 
 export const isChild = (t: Ticket) => t.parentId !== null;
 
@@ -187,6 +187,34 @@ export function restartsAt(t: Ticket): number | null {
 /** The restarting card's clock: "Restarts on its own at 2:35 PM" (`time` already formatted). */
 export function restartTitle(time: string): string {
   return `Restarts on its own at ${time}, after the usage limit resets`;
+}
+
+/** The disabled button an approved review ticket shows in place of Approve. */
+export type ApprovedStandIn = "agentReview" | "completing" | "agentReviewNeeded";
+
+export const APPROVED_STAND_IN_LABEL: Record<ApprovedStandIn, string> = {
+  agentReview: "Waiting on agent review",
+  completing: "Moving to done…",
+  agentReviewNeeded: "Agent review needed",
+};
+
+export const APPROVED_STAND_IN_TITLE: Record<ApprovedStandIn, string> = {
+  agentReview: "The human review is approved; the ticket lands once the agent review passes",
+  completing: "Both reviews passed: the complete run is landing the work",
+  agentReviewNeeded: "The human review is approved but the agent review hasn't passed and none is running: More → Re-run agent review",
+};
+
+/**
+ * What a review ticket with the human review approved shows where Approve was: it has no action
+ * of its own, so the button says what it's waiting on. null for any other ticket, and for a ticket
+ * a conductor manages (its Approve stays, turned off). It keys on `completing`, not `busy`, since
+ * an agent review run sets busy too.
+ */
+export function approvedStandIn(t: Ticket, managed = false): ApprovedStandIn | null {
+  if (t.status !== "review" || t.draft || t.humanReview !== "approved" || managed) return null;
+  if (t.completing) return "completing";
+  if (reviewPassed(t.agentReview)) return "completing"; // the complete run is about to start
+  return t.busy ? "agentReview" : "agentReviewNeeded";
 }
 
 /**

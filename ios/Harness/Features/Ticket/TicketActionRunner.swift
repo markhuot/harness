@@ -11,7 +11,7 @@ import SwiftUI
 final class TicketActionRunner {
     /// A sheet asking for input before an action goes out.
     struct Prompt: Identifiable {
-        enum Kind { case requestChanges, reopen, approveCustom }
+        enum Kind { case requestChanges, reopen, unblock, approveCustom }
         let id = UUID()
         let kind: Kind
         let ticket: Ticket
@@ -30,6 +30,8 @@ final class TicketActionRunner {
         case let .approve(_, primary, _, _):
             haptic(.success)
             send(primary, api, ticket, actions)
+        case .unblock:
+            prompt = Prompt(kind: .unblock, ticket: ticket)
         case .requestChanges:
             prompt = Prompt(kind: .requestChanges, ticket: ticket)
         case .reopen:
@@ -86,6 +88,7 @@ struct TicketActionHost: ViewModifier {
                 switch prompt.kind {
                 case .requestChanges: TicketDetailNotesSheet(ticket: prompt.ticket)
                 case .reopen: TicketDetailNotesSheet(ticket: prompt.ticket, reopen: true)
+                case .unblock: TicketDetailNotesSheet(ticket: prompt.ticket, unblock: true)
                 case .approveCustom: TicketDetailApproveCustomSheet(ticket: prompt.ticket)
                 }
             }
@@ -99,6 +102,7 @@ extension TicketAction {
         switch self {
         case .start: "play"
         case .approve: "checkmark"
+        case .unblock: "play"
         case .requestChanges: "pencil"
         case .reopen: "arrow.counterclockwise"
         case .rerunAgentReview: "arrow.clockwise"

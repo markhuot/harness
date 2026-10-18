@@ -22,6 +22,7 @@ import type {
   MessageBody,
   MessageDraftBody,
   ReopenBody,
+  UnblockBody,
   ApprovalBody,
   BranchInfo,
   Project,
@@ -251,6 +252,10 @@ export class HarnessClient {
   humanReview(key: string, body: HumanReviewBody) {
     return this.request<Ticket>("POST", `/tickets/${key}/review`, body);
   }
+  unblockTicket(key: string, body: UnblockBody = {}) {
+    return this.request<Ticket>("POST", `/tickets/${key}/unblock`, body);
+  }
+
   reopenTicket(key: string, body: ReopenBody) {
     return this.request<Ticket>("POST", `/tickets/${key}/reopen`, body);
   }

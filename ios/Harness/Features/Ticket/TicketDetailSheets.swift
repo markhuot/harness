@@ -80,6 +80,8 @@ struct TicketDetailSheetField: View {
 struct TicketDetailNotesSheet: View {
     let ticket: Ticket
     var reopen = false
+    /// Unblock a blocked ticket: the notes are optional.
+    var unblock = false
 
     @Environment(BoardStore.self) private var store
     @Environment(Actions.self) private var actions
@@ -88,13 +90,15 @@ struct TicketDetailNotesSheet: View {
     @State private var notes = ""
 
     var body: some View {
-        TicketDetailSheetFrame(title: reopen ? "Re-open" : "Request changes", subtitle: Keys.keyLabel(ticket)) {
-            HButton("Send", variant: .primary, fullWidth: false) { submit() }
-                .disabled(TicketDetailLogic.trim(notes).isEmpty)
+        TicketDetailSheetFrame(title: unblock ? "Unblock" : reopen ? "Re-open" : "Request changes", subtitle: Keys.keyLabel(ticket)) {
+            HButton(unblock ? "Unblock" : "Send", variant: .primary, fullWidth: false) { submit() }
+                .disabled(!unblock && TicketDetailLogic.trim(notes).isEmpty)
                 .submitShortcut()
         } content: {
-            TicketDetailSheetField(text: $notes, placeholder: reopen ? "What should the agent do now?" : "What should the agent change?", minHeight: 160, autoFocus: true)
-            Text(reopen
+            TicketDetailSheetField(text: $notes, placeholder: unblock ? "Answer the block, or leave empty to let the agent carry on" : reopen ? "What should the agent do now?" : "What should the agent change?", minHeight: 160, autoFocus: true)
+            Text(unblock
+                ? "The ticket moves from Blocked to In progress and the agent gets your notes, if any."
+                : reopen
                 ? "The ticket moves from Done back to In progress and the agent gets your notes. If its worktree was removed, it's recreated."
                 : "The ticket moves back to In progress and the agent gets your notes.")
                 .font(.scaled(size: 13))
@@ -106,7 +110,9 @@ struct TicketDetailNotesSheet: View {
         let key = ticket.key
         let text = notes
         Task {
-            let ok: Ticket? = if reopen {
+            let ok: Ticket? = if unblock {
+                await actions.run { try await store.connectedAPI().unblockTicket(key, UnblockBody(notes: text)) }
+            } else if reopen {
                 await actions.run { try await store.connectedAPI().reopenTicket(key, ReopenBody(notes: text)) }
             } else {
                 await actions.run { try await store.connectedAPI().humanReview(key, HumanReviewBody(decision: .requestChanges, notes: text)) }

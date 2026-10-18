@@ -11,6 +11,9 @@ import {
   autoStartWaitingOn,
   startState,
   restartsAt,
+  approvedStandIn,
+  APPROVED_STAND_IN_LABEL,
+  APPROVED_STAND_IN_TITLE,
   restartTitle,
   CHANGES_LABEL,
   CHANGES_TAB,
@@ -527,6 +530,8 @@ function DetailHeader({
   );
   // Stopped on a usage limit: the service restarts it on its own after the limit resets.
   const restart = restartsAt(ticket);
+  // Approved review: no Approve to draw, so a disabled button says what it's waiting on.
+  const standIn = approvedStandIn(ticket, !!managedReason);
 
   return (
     <div className="detail-head">
@@ -638,12 +643,22 @@ function DetailHeader({
               <Icon name="edit" /> {a.label}
             </button>
           ))}
+          {standIn && (
+            <button className="btn" data-testid="approved-stand-in" data-state={standIn} disabled title={APPROVED_STAND_IN_TITLE[standIn]}>
+              <Icon name="clock" /> {APPROVED_STAND_IN_LABEL[standIn]}
+            </button>
+          )}
           {/* A running ticket has no action of its own: a disabled stand-in keeps the row from looking empty. */}
           {ticket.status === "in_progress" && (
             <button className="btn" data-testid="working" disabled>
               <Icon name="clock" /> Working…
             </button>
           )}
+          {set.primary.filter((a) => a.id === "unblock").map((a) => (
+            <button key={a.id} className="btn btn-primary" data-testid="unblock" disabled={!a.enabled} onClick={() => run(a)}>
+              <Icon name="play" /> {a.label}
+            </button>
+          ))}
           {set.primary.filter((a) => a.id === "reopen").map((a) => (
             <button key={a.id} className="btn" disabled={!a.enabled} onClick={() => run(a)}>
               <Icon name="refresh" /> {a.label}
@@ -679,6 +694,7 @@ function DetailHeader({
 /** The More menu's icons. */
 const MORE_ICONS: Record<TicketActionId, IconName> = {
   start: "play",
+  unblock: "play",
   approve: "check",
   requestChanges: "edit",
   reopen: "refresh",
@@ -740,6 +756,7 @@ export function useTicketActions(owner: string, ticket: Ticket, onDeleted: () =>
     "ticket.rerunReview": fromPalette("ticket.rerunReview"),
     "ticket.cancelRun": fromPalette("ticket.cancelRun"),
     "ticket.markDone": fromPalette("ticket.markDone"),
+    "ticket.unblock": fromPalette("ticket.unblock"),
     "ticket.reopen": fromPalette("ticket.reopen"),
     "ticket.copyKey": copyKey,
     "ticket.openExternal": !!external && (() => void window.harness?.openExternal(external!)),

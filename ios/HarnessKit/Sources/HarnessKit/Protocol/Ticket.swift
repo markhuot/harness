@@ -120,6 +120,9 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
     /// True while a compact run for this ticket is queued or running: messages and ticket actions are
     /// refused until it ends. nil from an older service.
     public var compacting: Bool?
+    /// True while the ticket's complete run is queued or running (derived by the service; `busy` is
+    /// also set by agent review runs). nil from an older service.
+    public var completing: Bool?
     /// The size of the conversation the ticket's next resumed run re-reads (DESIGN.md "Context
     /// gauge"); null when the ticket has no resumable session. Absent from an older service.
     public var context: Patch<ContextUsage>
@@ -150,7 +153,7 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
         useWorktree: Patch<Bool> = .absent, skipAgentReview: Bool? = nil, skipHumanReview: Bool? = nil,
         completionAction: Patch<CompletionAction> = .absent, completionInstructions: Patch<String> = .absent,
         pullRequestUrl: Patch<String> = .absent, pullRequests: [PullRequestLink] = [], hasChanges: Patch<Bool> = .absent, draft: Bool? = nil, promptAttachments: [Attachment]? = nil, messageDraft: Patch<MessageDraft> = .absent, blockedReason: String? = nil, resumeAt: Patch<Timestamp> = .absent, busy: Bool = false,
-        compacting: Bool? = nil, context: Patch<ContextUsage> = .absent,
+        compacting: Bool? = nil, completing: Bool? = nil, context: Patch<ContextUsage> = .absent,
         pendingApproval: PendingApproval? = nil, allowedTools: [String] = [], permissionMode: PermissionMode? = nil,
         model: String? = nil, position: Double = 0, completedAt: Patch<Timestamp> = .absent,
         createdAt: Timestamp, updatedAt: Timestamp
@@ -195,6 +198,7 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
         self.resumeAt = resumeAt
         self.busy = busy
         self.compacting = compacting
+        self.completing = completing
         self.context = context
         self.pendingApproval = pendingApproval
         self.allowedTools = allowedTools

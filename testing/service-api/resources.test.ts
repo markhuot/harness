@@ -95,6 +95,7 @@ test("a ticket that isn't in review can't be reviewed, completed or re-opened (4
   expect(await rig.call("POST", `/tickets/${t.key}/review`, { decision: "approve" })).toMatchObject({ status: 409, body: { error: `${t.key} is not in review` } });
   expect(await rig.call("POST", `/tickets/${t.key}/complete`, {})).toMatchObject({ status: 409 });
   expect(await rig.call("POST", `/tickets/${t.key}/reopen`, {})).toMatchObject({ status: 409 });
+  expect(await rig.call("POST", `/tickets/${t.key}/unblock`, {})).toMatchObject({ status: 409 });
   expect(await rig.call("POST", `/tickets/${t.key}/session`, { action: "fork" })).toMatchObject({ status: 400 });
   expect((await rig.ok<{ ticket: Ticket }>("GET", `/tickets/${t.key}`)).ticket.status).toBe("planning");
 });

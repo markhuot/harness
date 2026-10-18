@@ -229,6 +229,10 @@ public final class HarnessClient: Sendable {
         try await request("POST", "/tickets/\(key)/review", body: body)
     }
 
+    public func unblockTicket(_ key: String, _ body: UnblockBody = UnblockBody()) async throws -> Ticket {
+        try await request("POST", "/tickets/\(key)/unblock", body: body)
+    }
+
     public func reopenTicket(_ key: String, _ body: ReopenBody) async throws -> Ticket {
         try await request("POST", "/tickets/\(key)/reopen", body: body)
     }

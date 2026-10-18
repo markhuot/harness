@@ -664,6 +664,21 @@ export function reopenPrompt(ticket: Ticket, notes: string, base?: string, overr
   );
 }
 
+/** A blocked ticket the human moved back to in progress; the notes are optional. */
+export function unblockPrompt(ticket: Ticket, notes: string, overrides?: PromptOverrides | null): string {
+  return renderPrompt(
+    "run.unblock",
+    {
+      ticket: ticketLabel(ticket),
+      notes: notes.trim(),
+      blockedReason: ticket.blockedReason?.trim() ?? "",
+      specRevision: String(ticket.specRevision ?? 1),
+      branch: ticket.branch ?? "",
+    },
+    overrides,
+  );
+}
+
 /** The Plan run's first message after an agent called return_to_planning. */
 export function replanPrompt(ticket: Ticket, reason: string, humanMessage: string, startAfterPlan: boolean, overrides?: PromptOverrides | null): string {
   return renderPrompt(
@@ -717,6 +732,7 @@ export function promptsWith(overrides: PromptOverrides | null | undefined) {
     conductorUpdatePrompt: (changes: Parameters<typeof conductorUpdatePrompt>[0]) => conductorUpdatePrompt(changes, overrides),
     changesRequestedPrompt: (notes: string, by: "agent" | "human" | "conductor", specRevision?: number) => changesRequestedPrompt(notes, by, specRevision, overrides),
     reopenPrompt: (ticket: Ticket, notes: string, base?: string) => reopenPrompt(ticket, notes, base, overrides),
+    unblockPrompt: (ticket: Ticket, notes: string) => unblockPrompt(ticket, notes, overrides),
     replanPrompt: (ticket: Ticket, reason: string, humanMessage: string, startAfterPlan: boolean) => replanPrompt(ticket, reason, humanMessage, startAfterPlan, overrides),
     triagePrompt: (input: Parameters<typeof triagePrompt>[0]) => triagePrompt(input, overrides),
   };

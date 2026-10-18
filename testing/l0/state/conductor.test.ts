@@ -22,6 +22,7 @@ import {
   readHideChildren,
   restartTitle,
   restartsAt,
+  approvedStandIn,
   startLabel,
   startState,
   waitingOn,
@@ -259,6 +260,28 @@ describe("restartsAt / restartTitle", () => {
 
   test("the title embeds the formatted time", () => {
     expect(restartTitle("2:35 PM")).toContain("at 2:35 PM,");
+  });
+});
+
+describe("approvedStandIn", () => {
+  const approved = (o = {}) => t("A-1", { status: "review", humanReview: "approved", agentReview: "pending", ...o });
+  test("an agent review that is running is waited on", () => {
+    expect(approvedStandIn(approved({ busy: true }))).toBe("agentReview");
+  });
+  test("a complete run queued or running, or an agent review that passed, is moving to done", () => {
+    expect(approvedStandIn(approved({ busy: true, completing: true }))).toBe("completing");
+    expect(approvedStandIn(approved({ agentReview: "approved" }))).toBe("completing");
+    expect(approvedStandIn(approved({ agentReview: "skipped" }))).toBe("completing");
+  });
+  test("an agent review that hasn't passed with nothing running needs a re-run", () => {
+    expect(approvedStandIn(approved())).toBe("agentReviewNeeded");
+    expect(approvedStandIn(approved({ agentReview: "changes_requested" }))).toBe("agentReviewNeeded");
+  });
+  test("no stand-in unless review is approved by the human, or when a conductor manages it", () => {
+    expect(approvedStandIn(approved({ humanReview: "pending" }))).toBeNull();
+    expect(approvedStandIn(approved({ status: "in_progress" }))).toBeNull();
+    expect(approvedStandIn(approved({ draft: true }))).toBeNull();
+    expect(approvedStandIn(approved(), true)).toBeNull();
   });
 });
 

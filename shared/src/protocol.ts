@@ -1071,6 +1071,7 @@ export const PROMPT_IDS = [
   "run.conductor_update",
   "run.changes_requested",
   "run.reopen",
+  "run.unblock",
   "run.replan",
   "run.triage",
 ] as const;
@@ -1916,6 +1917,11 @@ export interface SpecConflict {
 /** Re-open a done ticket: back to in progress, with notes for the agent */
 export interface ReopenBody {
   notes: string;
+}
+
+/** Unblock a blocked ticket: back to in progress. The notes answer the block and are optional. */
+export interface UnblockBody {
+  notes?: string;
 }
 
 export interface ApprovalBody {

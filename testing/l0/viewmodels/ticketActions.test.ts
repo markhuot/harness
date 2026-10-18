@@ -54,6 +54,15 @@ describe("ticketActions", () => {
     expect(s.primary[0]).toMatchObject({ id: "approve", enabled: true });
     expect(s.primary[0]!.managedReason).toBeUndefined();
   });
+  test("a blocked ticket waiting on the human offers Unblock; a restart time, a run or a tool approval hides it", () => {
+    const blocked = (o = {}) => makeTicket({ status: "blocked", ...o });
+    expect(ticketActions(blocked(), ctx()).primary[0]).toMatchObject({ id: "unblock", label: "Unblock", enabled: true });
+    expect(ids(ticketActions(blocked({ resumeAt: 123 }), ctx()).primary)).toEqual([]);
+    expect(ids(ticketActions(blocked({ busy: true }), ctx()).primary)).toEqual([]);
+    expect(ids(ticketActions(blocked({ pendingApproval: { id: "a" } as never }), ctx()).primary)).toEqual([]);
+    expect(ticketActions(blocked({ compacting: true }), ctx()).primary[0]).toMatchObject({ id: "unblock", enabled: false });
+    expect(ids(ticketActions(makeTicket({ status: "in_progress" }), ctx()).primary)).toEqual([]);
+  });
   test("done offers Re-open and no Move to done", () => {
     const s = ticketActions(makeTicket({ status: "done" }), ctx());
     expect(ids(s.primary)).toEqual(["reopen"]);

@@ -54,6 +54,21 @@ final class ScreenTests: ScreenTestCase {
         try await screen("ticket-transcript", router: ticket("HARNESS-5", .transcript)) { RootView() }
     }
 
+    /// HARNESS-4: blocked on a question for the human, no restart time: the Unblock button shows.
+    func testTicketBlocked() async throws {
+        try await screen("ticket-blocked", router: ticket("HARNESS-4", .spec)) { RootView() }
+    }
+
+    /// HARNESS-5 with the human review approved and its complete run going: the disabled "Moving to done…" shows.
+    func testTicketCompleting() async throws {
+        var json = try WorldJSON.load()
+        json.patch("HARNESS-5", ["humanReview": "approved", "busy": true, "completing": true])
+        let completing = await ScreenWorld(json)
+        let image = try await render(completing, router: ticket("HARNESS-5", .spec)) { RootView() }
+        ReferenceImages.assert(image, named: "ticket-completing")
+        XCTAssertEqual(completing.transport.unrouted, [])
+    }
+
     /// HARNESS-8: a conductor, with its two children on the Tickets tab.
     func testTicketChildren() async throws {
         try await screen("ticket-children", router: ticket("HARNESS-8", .children)) { RootView() }

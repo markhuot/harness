@@ -96,6 +96,7 @@ public enum PaletteCommands {
                     out.append(PaletteCommand(id: "ticket.approve.\(i)", label: label, group: "Ticket", symbol: symbol(a), action: .approve(c.value)))
                 }
             case .start: out.append(row("ticket.start", a.title, a, keywords: ["Start ticket"]))
+            case .unblock: out.append(row("ticket.unblock", "Unblock…", a, keywords: ["Resume ticket", "Answer block"]))
             case .requestChanges: out.append(row("ticket.requestChanges", "Request changes…", a, keywords: ["Reject", "Send back"]))
             case .reopen: out.append(row("ticket.reopen", "Re-open…", a, keywords: ["Reopen ticket"]))
             case let .rerunAgentReview(title): out.append(row("ticket.rerunReview", title, a, keywords: ["Rerun agent review"]))
@@ -119,6 +120,7 @@ public enum PaletteCommands {
         switch a {
         case .start: "play"
         case .approve: "checkmark"
+        case .unblock: "play"
         case .requestChanges: "pencil"
         case .reopen: "arrow.counterclockwise"
         case .rerunAgentReview: "arrow.clockwise"

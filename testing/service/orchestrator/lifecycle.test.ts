@@ -172,3 +172,49 @@ test("a steered message the driver never takes is queued as its own run when the
   // Same column, same conversation: the queued run resumes what the first one saved.
   expect(steering.requests[1]!.state).toEqual({ sessionId: "fake-session", costUsd: 0.01 });
 });
+
+test("the human unblocks a blocked ticket: back to in progress with the notes in the prompt, both reviews reset", async () => {
+  const h = makeOrchestrator();
+  h.driver.script(failScript("the CLI exited with code 2"));
+  const t = await h.orch.createTicket({ projectId: h.project.id, spec: "Do it", ...ONE_RUN });
+  await h.settle();
+  h.store.tickets.update(t.id, { humanReview: "approved", agentReview: "approved" });
+  h.driver.script(replyScript("carrying on"));
+  const out = await h.orch.unblockTicket(t.key, { notes: "  Use blue  " });
+  expect(out).toMatchObject({ status: "in_progress", blockedReason: null });
+  await h.settle();
+  const prompt = h.driver.requests.at(-1)!.prompt;
+  expect(prompt).toContain("Use blue");
+  expect(prompt).toContain("the CLI exited with code 2");
+  expect(h.ticket(t.key)).toMatchObject({ humanReview: "pending" });
+});
+
+test("unblocking without notes falls back to the block reason", async () => {
+  const h = makeOrchestrator();
+  h.driver.script(failScript("worktree trouble"));
+  const t = await h.orch.createTicket({ projectId: h.project.id, spec: "Do it", ...ONE_RUN });
+  await h.settle();
+  h.driver.script(replyScript("ok"));
+  await h.orch.unblockTicket(t.key, {});
+  await h.settle();
+  expect(h.driver.requests.at(-1)!.prompt).toContain("no notes");
+  expect(h.ticket(t.key).status).toBe("review");
+});
+
+test("unblock is refused (409) for a ticket that isn't blocked, is busy, or waits on a tool approval", async () => {
+  const h = makeOrchestrator();
+  const t = await h.orch.createTicket({ projectId: h.project.id, spec: "Do it", ...ONE_RUN });
+  await h.settle();
+  await expect(h.orch.unblockTicket(t.key, {})).rejects.toMatchObject({ status: 409 });
+  h.store.tickets.update(t.id, { status: "blocked", blockedReason: "q", pendingApproval: { id: "a1", toolName: "Bash" } as never });
+  await expect(h.orch.unblockTicket(t.key, {})).rejects.toMatchObject({ status: 409 });
+  h.store.tickets.update(t.id, { pendingApproval: null });
+  const hold = gate();
+  h.driver.script([{ wait: hold }]);
+  await h.orch.sendMessage(t.key, "a question while blocked");
+  await h.driver.runStarted(2);
+  expect(h.ticket(t.key)).toMatchObject({ status: "blocked", busy: true });
+  await expect(h.orch.unblockTicket(t.key, {})).rejects.toMatchObject({ status: 409 });
+  hold.open();
+  await h.settle();
+});

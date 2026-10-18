@@ -394,7 +394,7 @@ public enum PromptId: OpenEnum {
     case systemTriage, systemChildren, systemBranches, systemFiles, systemTurns, systemSpec, systemNotes, systemFileLinks
     case systemBoard, systemBoardChanges, systemConfig, systemApprovals, systemBrowser
     case runWorkStart, runConductorStart, runReview, runCompleteMerge, runCompletePr, runCompleteCleanup, runCompleteCustom
-    case runConductorUpdate, runChangesRequested, runReopen, runReplan, runTriage
+    case runConductorUpdate, runChangesRequested, runReopen, runUnblock, runReplan, runTriage
     case unknown(String)
     /// PROMPT_IDS, in order
     public static let allKnown: [Self] = [
@@ -403,7 +403,7 @@ public enum PromptId: OpenEnum {
         .systemTriage, .systemChildren, .systemBranches, .systemFiles, .systemTurns, .systemSpec, .systemNotes, .systemFileLinks,
         .systemBoard, .systemBoardChanges, .systemConfig, .systemApprovals, .systemBrowser,
         .runWorkStart, .runConductorStart, .runReview, .runCompleteMerge, .runCompletePr, .runCompleteCleanup, .runCompleteCustom,
-        .runConductorUpdate, .runChangesRequested, .runReopen, .runReplan, .runTriage,
+        .runConductorUpdate, .runChangesRequested, .runReopen, .runUnblock, .runReplan, .runTriage,
     ]
     public var rawValue: String {
         switch self {
@@ -443,6 +443,7 @@ public enum PromptId: OpenEnum {
         case .runConductorUpdate: "run.conductor_update"
         case .runChangesRequested: "run.changes_requested"
         case .runReopen: "run.reopen"
+        case .runUnblock: "run.unblock"
         case .runReplan: "run.replan"
         case .runTriage: "run.triage"
         case let .unknown(r): r

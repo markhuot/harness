@@ -293,6 +293,7 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
     if (b?.decision !== "approve" && b?.decision !== "request_changes") throw new HarnessError(400, "decision must be approve or request_changes");
     return o.humanReview(params.key!, b);
   });
+  add("POST", "/tickets/:key/unblock", async ({ params, body }) => o.unblockTicket(params.key!, (await body()) ?? {}));
   add("POST", "/tickets/:key/reopen", async ({ params, body }) => o.reopenTicket(params.key!, (await body()) ?? {}));
   add("POST", "/tickets/:key/complete", async ({ params, body }) => o.completeTicket(params.key!, (await body()) ?? {}));
   add("POST", "/tickets/:key/session", async ({ params, body }) => o.sessionAction(params.key!, await body()));

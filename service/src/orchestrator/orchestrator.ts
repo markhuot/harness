@@ -29,6 +29,7 @@ import type {
   FileView,
   HumanReviewBody,
   ReopenBody,
+  UnblockBody,
   Project,
   PublicSettings,
   RelatedTicket,
@@ -2086,6 +2087,26 @@ export class Orchestrator {
     }
     const run = this.enqueueRun(sessionId, kind, text, undefined, { attachments });
     this.appendStatus(sessionId, run.id, STEER_FALLBACK_STATUS);
+  }
+
+  /**
+   * Move a blocked ticket back to in progress with the human's optional notes. Both reviews start
+   * over: a block can keep an old approval (a failed complete run blocks with its reviews intact),
+   * and the resumed work must not land on it. Refused while a tool approval waits (begin() would
+   * clear it) or a run is going.
+   */
+  async unblockTicket(key: string, body: UnblockBody): Promise<Ticket> {
+    const ticket = this.requireTicket(key);
+    this.notDraft(ticket, "unblocked");
+    this.notCompacting(ticket, "unblocked");
+    if (ticket.status !== "blocked") throw conflict(`${ticket.key} is ${ticket.status}, not blocked: there's nothing to unblock`);
+    if (ticket.pendingApproval) throw conflict(`${ticket.key} is waiting on a tool approval (${ticket.pendingApproval.toolName}); answer it instead`);
+    if (ticket.busy) throw conflict(`${ticket.key} is running; unblock it once the run ends`);
+    const notes = typeof body?.notes === "string" ? body.notes.trim() : "";
+    this.addActivityLine(ticket, "unblocked", "human", notes || "Unblocked by the human", { ...(notes ? { note: notes } : {}), ...this.moveMeta(ticket, "in_progress") });
+    this.autoRetries.delete(ticket.id);
+    await this.begin(ticket, this.prompts().unblockPrompt(ticket, notes), { agentReview: "pending", humanReview: "pending" }, "Unblocked by human", [], "human");
+    return this.store.tickets.get(ticket.id)!;
   }
 
   /** Send a done ticket back to in progress with the human's notes (the done-column "request changes"). */
