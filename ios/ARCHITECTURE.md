@@ -416,7 +416,7 @@ done, red blocked; a pencil for New session), the ref whole and the title trunca
 (`DockedTicketLabel`), and an ✕ that closes just that ticket; a tap anywhere else opens it. It's one accessibility element,
 "<ref>, <title>, docked" (`ticket-dock`), with a Close action, and its ✕ is "Close <key>"
 (`ticket-dock-close`). `DockCards.split` (HarnessKit) decides how many cards show: up to
-`phoneVisible` (2) or `padVisible` (5), the most recent at the bottom, then a `DockedMoreCard`
+`phoneVisible` + 1 (3 rows) or `padVisible` + 1 (6 rows) show as they are; past that, `phoneVisible` (2) or `padVisible` (5), the most recent at the bottom, then a `DockedMoreCard`
 ("N more…" and a stack icon, `ticket-dock-more`, "<n> more docked tickets") on top counting the
 rest, in the same glass capsule. It expands into `DockedCardList`: the docked tickets as the same
 glass cards, the most recent at the bottom, scrolled to the bottom and scrolling up past the height
@@ -499,7 +499,7 @@ asking whether the hit view is the root, which SwiftUI's gesture views make unre
 The container never mounts again while the app runs: cards insert and remove by id, so opening a sheet from the board, switching
 tickets from a card, or docking changes only the cards that change. Each card is `DockedCard`, 52pt
 tall, 8pt from the home indicator and in from the sides as far as the board's bottom bar (its
-concentric inset, `DockMetrics.phoneSides(screen:)`), the most recent at the bottom, up to two, then
+concentric inset, `DockMetrics.phoneSides(screen:)`), the most recent at the bottom, up to three; with more, two and
 "N more…" on top. The dock is shown while there are waiting cards or the hold-to-dock ghost, and
 fades out (`DockCards.isShown`) while a keyboard is up, a picker, the palette or a cover is
 (`Router.sheet`, `.cover`), or a dialog the Router doesn't know about is: an alert, action sheet,

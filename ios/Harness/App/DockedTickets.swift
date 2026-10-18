@@ -474,8 +474,8 @@ struct DockedCardsReport: Equatable {
 }
 
 /// The docked tickets as cards, the same on both platforms: newest at the bottom, up to the layout's
-/// `maxVisible` (fewer when the height doesn't fit them), then "N more…", which expands a scrolling list
-/// of them all on a blurred backdrop. A tap opens a card in the sheet (or panel) and its ✕ closes it
+/// `maxVisible + 1` (fewer when the height doesn't fit them); with more, `maxVisible` and "N more…",
+/// which expands a scrolling list of them all on a blurred backdrop. A tap opens a card in the sheet (or panel) and its ✕ closes it
 /// (a file holding unsaved edits asks first). Cards insert and remove by id, so switching tickets
 /// animates only the cards that change; the container itself is never torn down or slid away with
 /// them. The iPhone hosts it in a window of its own above the board and the ticket sheet
@@ -516,7 +516,7 @@ struct DockedCardsContainer: View {
         .animation(reduceMotion ? .easeInOut(duration: 0.2) : .snappy, value: sheets.map(\.id))
         .animation(.snappy, value: expanded)
         // Nothing left to expand: back to the cards.
-        .onChange(of: sheets.count) { _, n in if n <= layout.maxVisible, !layout.collapsed { expanded = false } }
+        .onChange(of: sheets.count) { _, n in if n <= layout.maxVisible + 1, !layout.collapsed { expanded = false } }
         .onChange(of: sheets.isEmpty) { _, empty in
             if empty { expanded = false; stack = nil }
         }

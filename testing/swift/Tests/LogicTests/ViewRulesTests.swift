@@ -104,3 +104,30 @@ private func ext(_ id: String, _ source: BrowserExtensionSource) -> BrowserExten
         #expect(!clean.accessibilityLabel(compacting: false).hasSuffix("misses"))
     }
 }
+
+@Suite struct DockCardsTests {
+    private func shape(_ count: Int, _ maxVisible: Int, fitting: Int? = nil) -> [Int] {
+        let s = DockCards.split(count: count, maxVisible: maxVisible, fitting: fitting)
+        return [s.cards, s.more]
+    }
+
+    @Test func phoneShowsThreeCardsBeforeAMoreRow() {
+        #expect(shape(0, DockCards.phoneVisible) == [0, 0])
+        #expect(shape(3, DockCards.phoneVisible) == [3, 0])
+        #expect(shape(4, DockCards.phoneVisible) == [2, 2])
+        #expect(shape(7, DockCards.phoneVisible) == [2, 5])
+        #expect(DockCards.rows(count: 3, maxVisible: DockCards.phoneVisible) == 3)
+        #expect(DockCards.rows(count: 9, maxVisible: DockCards.phoneVisible) == 3)
+    }
+
+    @Test func padShowsSixCardsBeforeAMoreRow() {
+        #expect(shape(6, DockCards.padVisible) == [6, 0])
+        #expect(shape(7, DockCards.padVisible) == [5, 2])
+    }
+
+    @Test func aShortPadColumnKeepsItsCap() {
+        #expect(shape(3, DockCards.padVisible, fitting: 3) == [3, 0])
+        #expect(shape(4, DockCards.padVisible, fitting: 3) == [2, 2])
+        #expect(DockCards.rows(count: 4, maxVisible: DockCards.padVisible, fitting: 3) == 3)
+    }
+}
