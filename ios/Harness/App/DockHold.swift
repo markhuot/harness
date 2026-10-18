@@ -84,7 +84,20 @@ struct DockGhostCard: View {
     var layers: Layers = .all
     /// Seconds for one pulse; the lab slows it down.
     var period: Double = Self.pulsePeriod
+    /// How the rim light is drawn; the lab compares them.
+    var rimStyle: RimStyle = .angular
     @Environment(\.palette) private var c
+
+    enum RimStyle {
+        /// An AngularGradient whose start angle turns with the phase.
+        case angular
+        /// The same, flattened into a Metal-rendered bitmap each frame.
+        case angularRaster
+        /// One fixed AngularGradient, rasterized once and turned by a rotation transform, masked to the rim.
+        case rotated
+        /// A radial highlight whose center travels around the rim at an even speed.
+        case traveling
+    }
 
     struct Layers: OptionSet {
         let rawValue: Int
@@ -167,22 +180,55 @@ struct DockGhostCard: View {
         // A light that circles the rim once per pulse. The gradient is angular and fades to clear at
         // both ends, so a full turn (phase 1) draws exactly what rest (phase 0) does: no jump at the loop.
         .overlay {
-            if !reduceMotion && layers.contains(.rim) {
-                Capsule()
-                    .strokeBorder(
-                        AngularGradient(
-                            stops: [
-                                .init(color: .clear, location: 0),
-                                .init(color: c.accent.opacity(0.7), location: 0.5),
-                                .init(color: .clear, location: 1),
-                            ],
-                            center: .center,
-                            angle: .degrees(360 * phase)),
-                        lineWidth: 1.5)
-            }
+            if !reduceMotion && layers.contains(.rim) { rim(phase: phase) }
         }
         .scaleEffect(1 + 0.01 * lift)
         .offset(y: -Self.bounce * lift)
+    }
+
+    private func angularLight(angle: Double) -> AngularGradient {
+        AngularGradient(
+            stops: [
+                .init(color: .clear, location: 0),
+                .init(color: c.accent.opacity(0.7), location: 0.5),
+                .init(color: .clear, location: 1),
+            ],
+            center: .center,
+            angle: .degrees(angle))
+    }
+
+    @ViewBuilder private func rim(phase: Double) -> some View {
+        let line: CGFloat = 1.5
+        switch rimStyle {
+        case .angular:
+            Capsule().strokeBorder(angularLight(angle: 360 * phase), lineWidth: line)
+        case .angularRaster:
+            Capsule().strokeBorder(angularLight(angle: 360 * phase), lineWidth: line).drawingGroup()
+        case .rotated:
+            GeometryReader { geo in
+                let side = hypot(geo.size.width, geo.size.height)
+                Rectangle()
+                    .fill(angularLight(angle: 0))
+                    .frame(width: side, height: side)
+                    .drawingGroup()
+                    .rotationEffect(.degrees(360 * phase))
+                    .position(x: geo.size.width / 2, y: geo.size.height / 2)
+            }
+            .mask { Capsule().strokeBorder(lineWidth: line) }
+        case .traveling:
+            GeometryReader { geo in
+                let size = geo.size
+                // Starts where the angular light does at rest (the left end) and goes the same way round.
+                let p = DockMetrics.capsulePoint(fraction: phase, width: size.width, height: size.height)
+                Capsule().strokeBorder(
+                    RadialGradient(
+                        colors: [c.accent.opacity(0.7), c.accent.opacity(0)],
+                        center: UnitPoint(x: p.x / max(size.width, 1), y: p.y / max(size.height, 1)),
+                        startRadius: 0,
+                        endRadius: size.width * 0.45),
+                    lineWidth: line)
+            }
+        }
     }
 }
 

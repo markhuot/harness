@@ -2,22 +2,24 @@
 import HarnessKit
 import SwiftUI
 
-/// `-debugScreen dockGhost`: the dock ghost running for real, once per row with one layer taken away, over
-/// a busy backdrop like the ticket sheet it sits on. A flicker can't be seen in a still, so this is for
-/// watching on a device: the row where it stops names the layer that causes it.
+/// `-debugScreen dockGhost`: the dock ghost running for real, once per row with its layers or rim light
+/// drawn differently, over a busy backdrop like the ticket sheet it sits on. A flicker can't be seen in a
+/// still, so this is for watching on a device: the row where it stops names the cause.
 struct DockGhostLab: View {
     @Environment(\.palette) private var c
     @State private var slow = false
 
-    private static let variants: [(name: String, layers: DockGhostCard.Layers)] = [
-        ("A · Everything (as shipped)", .all),
-        ("B · No rim light", DockGhostCard.Layers.all.subtracting(.rim)),
-        ("C · No glow", DockGhostCard.Layers.all.subtracting(.glow)),
-        ("D · No tint wash", DockGhostCard.Layers.all.subtracting(.tint)),
-        ("E · No lift", DockGhostCard.Layers.all.subtracting(.lift)),
-        ("F · Flat, no glass", DockGhostCard.Layers.all.subtracting(.glass)),
-        ("G · Glass + rim only", [.glass, .rim]),
-        ("H · Flat + rim only", [.rim]),
+    /// Taking layers away showed only the rim light flickers, so these rows draw the rim four ways:
+    /// alone on a flat card (1–4), then on the whole card (5–8).
+    private static let variants: [(name: String, layers: DockGhostCard.Layers, rim: DockGhostCard.RimStyle)] = [
+        ("1 · Angular gradient (as shipped), rim only", [.rim], .angular),
+        ("2 · Angular, Metal raster, rim only", [.rim], .angularRaster),
+        ("3 · Rotated bitmap, rim only", [.rim], .rotated),
+        ("4 · Traveling radial, rim only", [.rim], .traveling),
+        ("5 · Angular gradient (as shipped), whole card", .all, .angular),
+        ("6 · Angular, Metal raster, whole card", .all, .angularRaster),
+        ("7 · Rotated bitmap, whole card", .all, .rotated),
+        ("8 · Traveling radial, whole card", .all, .traveling),
     ]
 
     var body: some View {
@@ -33,7 +35,7 @@ struct DockGhostLab: View {
                                 .padding(.horizontal, 6)
                             DockGhostCard(
                                 title: "HARNESS-7 Add the pulse", armed: true, layers: variant.layers,
-                                period: DockGhostCard.pulsePeriod * (slow ? 4 : 1))
+                                period: DockGhostCard.pulsePeriod * (slow ? 4 : 1), rimStyle: variant.rim)
                         }
                     }
                 }
