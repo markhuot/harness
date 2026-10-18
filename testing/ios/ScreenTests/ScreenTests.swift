@@ -74,6 +74,13 @@ final class ScreenTests: ScreenTestCase {
         try await screen("ticket-children", router: ticket("HARNESS-8", .children)) { RootView() }
     }
 
+    /// HARNESS-9, a child of HARNESS-8 pushed onto its sheet: the glass Back circle and the "Part of" row.
+    func testTicketChild() async throws {
+        let router = ticket("HARNESS-8", .children)
+        router.push(.ticket(key: "HARNESS-9", tab: .spec))
+        try await screen("ticket-child", router: router) { RootView() }
+    }
+
     /// A markdown file on its rendered view, drawn by the Spec tab's renderer.
     func testFileViewerRendered() async throws {
         try await screen("file-rendered") { NavigationStack { FileViewerScreen(params: FileRouteParams(path: "README.md", ticket: "HARNESS-5"), startRendered: true) } }

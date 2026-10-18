@@ -124,9 +124,11 @@ struct TicketDetailHero: View {
         let back = showsBack
         let row = HStack(spacing: 0) {
             if back { backButton }
-            VStack(alignment: .leading, spacing: inTicketPanel ? 4 : 10) {
+            // With a crumb the title block's own top padding (clear of the sheet's corner) isn't
+            // needed, so the crumb sits close to the status row.
+            VStack(alignment: .leading, spacing: inTicketPanel ? 4 : crumb == nil ? 10 : 2) {
                 if let crumb { crumb }
-                title(compact: compact, hasBack: back)
+                title(compact: compact, hasBack: back, hasCrumb: crumb != nil)
             }
         }
         if inTicketPanel {
@@ -143,18 +145,18 @@ struct TicketDetailHero: View {
     private var backButton: some View {
         Button { dismiss() } label: {
             Image(systemName: "chevron.left")
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(c.accent)
-                .frame(width: 36, height: 44)
-                .contentShape(.rect)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(c.text)
+                .frame(width: 24, height: 24)
         }
-        .buttonStyle(.plain)
-        .padding(.leading, -8)
+        .buttonStyle(.glass)
+        .buttonBorderShape(.circle)
+        .padding(.trailing, 10)
         .accessibilityLabel("Back")
         .accessibilityIdentifier("ticket-back")
     }
 
-    private func title(compact: Bool, hasBack: Bool) -> some View {
+    private func title(compact: Bool, hasBack: Bool, hasCrumb: Bool) -> some View {
         let text = Text(ticket.title.isEmpty ? "Untitled" : ticket.title)
             .font(.scaled(size: compact ? 16 : 19, weight: .bold))
             .foregroundStyle(c.text)
@@ -184,7 +186,7 @@ struct TicketDetailHero: View {
             // is the space on both sides, so the title adds none extra.
             .padding(.leading, hasBack ? 0 : 14)
             .padding(.trailing, 14)
-            .padding(.top, inTicketPanel ? 10 : compact ? 20 : 25)
+            .padding(.top, inTicketPanel || hasCrumb ? 10 : compact ? 20 : 25)
             .padding(.bottom, compact ? 10 : 5)
             .contentShape(.rect)
         }
