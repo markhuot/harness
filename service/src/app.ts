@@ -132,7 +132,7 @@ export async function createHarness(opts: CreateHarnessOptions): Promise<Harness
     bus,
     settings: () => settings().notifications,
     presence,
-    apns: new ApnsClient({ transport: opts.apnsTransport ?? new Http2Transport(), now }),
+    apns: new ApnsClient({ transport: opts.apnsTransport ?? new Http2Transport() }),
     log: opts.log,
     now,
   });

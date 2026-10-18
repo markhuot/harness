@@ -41,32 +41,28 @@ function xcodeShim(developerDir: string): string {
   if (existsSync(join(dev, "Library", "PrivateFrameworks", "SimulatorKit.framework"))) return dev;
   // Built beside the shared cache and renamed into place, so a run on the other simulator never
   // sees (or is handed) a half-built shim.
-  const final = root;
   const tmp = `${root}.tmp-${process.pid}`;
   rmSync(tmp, { recursive: true, force: true });
-  const contentsFinal = join(final, "Xcode.app", "Contents");
-  const devFinal = join(contentsFinal, "Developer");
-  const build = (r: string) => {
-  const contents = join(r, "Xcode.app", "Contents");
-  const dev = join(contents, "Developer");
-  mkdirSync(join(dev, "Library", "PrivateFrameworks"), { recursive: true });
+  const tmpContents = join(tmp, "Xcode.app", "Contents");
+  const tmpDev = join(tmpContents, "Developer");
+  mkdirSync(join(tmpDev, "Library", "PrivateFrameworks"), { recursive: true });
   const link = (from: string, to: string) => Bun.spawnSync(["ln", "-s", from, to]);
-  for (const e of readdirSync(real)) if (e !== "Developer") link(join(real, e), join(contents, e));
-  for (const e of readdirSync(developerDir)) if (e !== "Library") link(join(developerDir, e), join(dev, e));
-  for (const e of readdirSync(join(developerDir, "Library"))) if (e !== "PrivateFrameworks") link(join(developerDir, "Library", e), join(dev, "Library", e));
+  for (const e of readdirSync(real)) if (e !== "Developer") link(join(real, e), join(tmpContents, e));
+  for (const e of readdirSync(developerDir)) if (e !== "Library") link(join(developerDir, e), join(tmpDev, e));
+  for (const e of readdirSync(join(developerDir, "Library"))) if (e !== "PrivateFrameworks") link(join(developerDir, "Library", e), join(tmpDev, "Library", e));
   const priv = join(developerDir, "Library", "PrivateFrameworks");
-  if (existsSync(priv)) for (const e of readdirSync(priv)) link(join(priv, e), join(dev, "Library", "PrivateFrameworks", e));
-  link(join(real, "SharedFrameworks", "SimulatorKit.framework"), join(dev, "Library", "PrivateFrameworks", "SimulatorKit.framework"));
-  };
-  build(tmp);
+  if (existsSync(priv)) for (const e of readdirSync(priv)) link(join(priv, e), join(tmpDev, "Library", "PrivateFrameworks", e));
+  link(join(real, "SharedFrameworks", "SimulatorKit.framework"), join(tmpDev, "Library", "PrivateFrameworks", "SimulatorKit.framework"));
+  // A dir left by a killed run has no SimulatorKit link and would make the rename fail forever: clear it.
+  rmSync(root, { recursive: true, force: true });
   try {
-    renameSync(tmp, final);
+    renameSync(tmp, root);
   } catch {
     // Another process put a shim there first (a non-empty directory can't be replaced): use theirs.
     rmSync(tmp, { recursive: true, force: true });
-    if (!existsSync(join(devFinal, "Library", "PrivateFrameworks", "SimulatorKit.framework"))) throw new Error(`could not build the Xcode shim at ${final}`);
+    if (!existsSync(join(dev, "Library", "PrivateFrameworks", "SimulatorKit.framework"))) throw new Error(`could not build the Xcode shim at ${root}`);
   }
-  return devFinal;
+  return dev;
 }
 
 async function run(cmd: string[], env: Record<string, string> = {}): Promise<{ code: number; out: string; err: string }> {

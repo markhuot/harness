@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
-import { conductorManagedReason, isConductor, keyLabel, managingConductor, MAX_PROMPT_ATTACHMENTS, resolveBaseBranch, type Attachment, type RelatedTicket, type RemoteKeyMatches, type Ticket, type TicketStatus } from "@harness/shared";
+import { conductorManagedReason, isConductor, keyLabel, managingConductor, MAX_PROMPT_ATTACHMENTS, resolveBaseBranch, type Attachment, type RelatedTicket, type RemoteKeyMatches, type Ticket } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import { messageDraftSession, unloadMessageDrafts } from "../state/messageDraftSession";
 import {
@@ -520,7 +520,7 @@ function DetailHeader({
   const { state } = useStore();
   const openTicket = useOpenTicket();
   const popout = usePopout();
-  const { k, label, parent, project, set, land, conductor, managedReason, startMode, waitingToStart, choose, run, modals } = useTicketActions(
+  const { k, label, parent, project, set, managedReason, startMode, waitingToStart, choose, run, modals } = useTicketActions(
     owner,
     ticket,
     onClose,

@@ -129,6 +129,8 @@ export async function reapRuns(dir: string, except?: string, startOf: (pid: numb
     await killRecords(records, 3000, startOf);
     reaped.push(...live);
     file.remove();
+    // The Mac profile the killed run made (walk/main.ts names it after the run file's pid).
+    rmSync(join(dir, `profile-${name.slice(0, -".pids".length)}`), { recursive: true, force: true });
   }
   return reaped;
 }

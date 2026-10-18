@@ -1,9 +1,9 @@
-// The journey process: started by walk/run.ts inside both simulator locks. Kills what it started on
+// The journey process: started by walk/run.ts inside both simulator locks. Tears the run down on
 // SIGINT and SIGTERM as well as on the way out of a failed or finished run.
 
 import { join } from "node:path";
 import { killRecords, RunFile } from "../lib/procs";
-import { runSteps } from "./journey";
+import { interrupt, runSteps } from "./journey";
 
 const arg = (name: string) => {
   const v = process.argv.find((a) => a.startsWith(`--${name}=`))?.slice(name.length + 3);
@@ -20,7 +20,12 @@ const runDir = arg("run-dir");
 const runs = new RunFile(join(runDir, `${process.pid}.pids`));
 for (const [sig, code] of [["SIGINT", 130], ["SIGTERM", 143]] as const) {
   process.on(sig, () => {
-    void killRecords(runs.records()).finally(() => process.exit(code));
+    void interrupt()
+      .then(() => killRecords(runs.records()))
+      .finally(() => {
+        runs.remove();
+        process.exit(code);
+      });
   });
 }
 

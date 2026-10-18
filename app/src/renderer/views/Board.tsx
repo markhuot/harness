@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { isConductor, keyLabel, resolveBaseBranch, TICKET_STATUSES, type Ticket } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
-import { cardPropsEqual, type CardProps, type CardSelection } from "../state/boardCard";
+import { cardPropsEqual, type CardSelection } from "../state/boardCard";
 import {
   autoStartTitle,
   APPROVED_TITLE,
@@ -48,8 +48,6 @@ import { focusPaneBy } from "../components/paneFocus";
 import { modality } from "../state/inputModality";
 import { cursorPos, firstCard, moveCursor, resolveCursor, type CursorDir, type CursorPos } from "../state/boardNav";
 import "./board.css";
-
-/** How a card shows that its ticket is open: in the focused pane, in another pane, or not at all. */
 
 /** The board: pane content in the workspace (components/PaneWorkspace.tsx). */
 export function BoardPane() {

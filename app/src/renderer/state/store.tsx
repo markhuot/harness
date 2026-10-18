@@ -41,7 +41,6 @@ import {
   openTicket,
   pruneTickets,
   retainPaneScopes,
-  storedPaneStore,
   updateAllPanes,
   updatePanes,
   usePanes,

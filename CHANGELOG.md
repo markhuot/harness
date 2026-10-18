@@ -11,6 +11,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
+- For people working on Harness: an interrupted or half-failed walkthrough now removes its simulator installs and temp folders, and a killed iOS tool run can no longer leave a broken Xcode shim that makes every later walkthrough fail.
 - On iPhone, tapping a ticket in the command palette now opens the ticket and leaves the palette closed, instead of the palette reappearing over the ticket.
 
 ### Changed

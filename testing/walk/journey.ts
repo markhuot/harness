@@ -61,27 +61,35 @@ export interface Start {
 
 export async function begin(start: Start, runs: RunFile): Promise<Ctx> {
   const dir = realpathSync(mkdtempSync(join(tmpdir(), "harness-walk-")));
-  const repo = seedRepo(dir);
-  const daemon = await startDaemon(runs, join(dir, "home"));
-  // Every phase of every run goes to the dummy driver; the default would be a real agent.
-  const phase = { driver: "dummy", model: null };
-  await daemon.call("PATCH", "/settings", { phaseModels: { plan: phase, work: phase, review: phase, adviser: phase, complete: phase } });
-  const project = await daemon.call<{ id: string }>("POST", "/projects", { path: repo, key: WALK_PROJECT.key, name: WALK_PROJECT.name, skipAgentReview: true });
-  const ws = await daemon.socket();
-  mkdirSync(start.out, { recursive: true });
-  return {
+  const ctx: Ctx = {
     dir,
-    repo,
+    repo: "",
     runs,
     shots: start.out,
-    daemon,
-    ws,
+    // Set as setup gets to them; teardown skips the ones a failed setup never reached.
+    daemon: undefined as never,
+    ws: undefined as never,
     // Step 1 launches it.
     mac: undefined as never,
     phones: start.phones.map((p) => phone(p.name, p.udid)),
-    projectId: project.id,
+    projectId: "",
     terminalId: "",
   };
+  try {
+    ctx.repo = seedRepo(dir);
+    ctx.daemon = await startDaemon(runs, join(dir, "home"));
+    // Every phase of every run goes to the dummy driver; the default would be a real agent.
+    const phase = { driver: "dummy", model: null };
+    await ctx.daemon.call("PATCH", "/settings", { phaseModels: { plan: phase, work: phase, review: phase, adviser: phase, complete: phase } });
+    const project = await ctx.daemon.call<{ id: string }>("POST", "/projects", { path: ctx.repo, key: WALK_PROJECT.key, name: WALK_PROJECT.name, skipAgentReview: true });
+    ctx.projectId = project.id;
+    ctx.ws = await ctx.daemon.socket();
+    mkdirSync(start.out, { recursive: true });
+  } catch (e) {
+    await teardown(ctx);
+    throw e;
+  }
+  return ctx;
 }
 
 const cardOnBoard = `.card[data-key="${WALK_TICKET.key}"]`;
@@ -234,8 +242,22 @@ export function steps(start: Start, built: { app: string }): Step[] {
   ];
 }
 
+/** The run in progress, for `interrupt` (a signal arrives while a step is awaiting). */
+let active: { ctx: Ctx; start: Start } | undefined;
+
+/** Tear down the run in progress and remove what it made, for SIGINT and SIGTERM. Does nothing once normal teardown has begun. */
+export async function interrupt(): Promise<void> {
+  const run = active;
+  active = undefined;
+  if (!run) return;
+  await teardown(run.ctx);
+  rmSync(run.ctx.dir, { recursive: true, force: true });
+  rmSync(run.start.macUserData, { recursive: true, force: true });
+}
+
 export async function runSteps(start: Start, runs: RunFile, built: { app: string }, log: (m: string) => void = console.log): Promise<void> {
   const ctx = await begin(start, runs);
+  active = { ctx, start };
   let passed = false;
   try {
     for (const step of steps(start, built)) {
@@ -251,12 +273,15 @@ export async function runSteps(start: Start, runs: RunFile, built: { app: string
     }
     passed = true;
   } finally {
-    await teardown(ctx);
+    // From here teardown is ours; a signal now must not run it a second time.
+    const interrupted = active === undefined;
+    active = undefined;
+    if (!interrupted) await teardown(ctx);
     // A failed run keeps its home, checkout and Mac profile for a look; a passing one leaves nothing in the temp dir.
     if (passed) {
       rmSync(ctx.dir, { recursive: true, force: true });
       rmSync(start.macUserData, { recursive: true, force: true });
-    } else log(`kept ${ctx.dir} (service home and checkout) and ${start.macUserData} (Mac profile) for inspection`);
+    } else if (!interrupted) log(`kept ${ctx.dir} (service home and checkout) and ${start.macUserData} (Mac profile) for inspection`);
   }
 }
 

@@ -1,7 +1,7 @@
 // Reading and tapping the simulator's screen through AXe (brew install cameroncooke/axe/axe), for
 // dev-sim.ts: the same accessibility-tree approach as the walkthrough, so a dev loop
 // knows what's on screen instead of sleeping and hoping.
-import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, renameSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -47,15 +47,31 @@ export function xcodeShim(developerDir: string): string {
   const contents = join(root, "Xcode.app", "Contents");
   const dev = join(contents, "Developer");
   if (existsSync(join(dev, "Library", "PrivateFrameworks", "SimulatorKit.framework"))) return dev;
-  rmSync(root, { recursive: true, force: true });
-  mkdirSync(join(dev, "Library", "PrivateFrameworks"), { recursive: true });
+  // Built beside the cache dir and renamed into place, so a killed run never leaves a half-built shim
+  // and another agent's walk never sees one.
+  const tmp = `${root}.tmp-${process.pid}`;
+  rmSync(tmp, { recursive: true, force: true });
+  const tmpContents = join(tmp, "Xcode.app", "Contents");
+  const tmpDev = join(tmpContents, "Developer");
+  mkdirSync(join(tmpDev, "Library", "PrivateFrameworks"), { recursive: true });
   const link = (from: string, to: string) => Bun.spawnSync(["ln", "-s", from, to]);
-  for (const e of readdirSync(real)) if (e !== "Developer") link(join(real, e), join(contents, e));
-  for (const e of readdirSync(developerDir)) if (e !== "Library") link(join(developerDir, e), join(dev, e));
-  for (const e of readdirSync(join(developerDir, "Library"))) if (e !== "PrivateFrameworks") link(join(developerDir, "Library", e), join(dev, "Library", e));
+  for (const e of readdirSync(real)) if (e !== "Developer") link(join(real, e), join(tmpContents, e));
+  for (const e of readdirSync(developerDir)) if (e !== "Library") link(join(developerDir, e), join(tmpDev, e));
+  for (const e of readdirSync(join(developerDir, "Library"))) if (e !== "PrivateFrameworks") link(join(developerDir, "Library", e), join(tmpDev, "Library", e));
   const priv = join(developerDir, "Library", "PrivateFrameworks");
-  if (existsSync(priv)) for (const e of readdirSync(priv)) link(join(priv, e), join(dev, "Library", "PrivateFrameworks", e));
-  link(join(real, "SharedFrameworks", "SimulatorKit.framework"), join(dev, "Library", "PrivateFrameworks", "SimulatorKit.framework"));
+  if (existsSync(priv)) for (const e of readdirSync(priv)) link(join(priv, e), join(tmpDev, "Library", "PrivateFrameworks", e));
+  link(join(real, "SharedFrameworks", "SimulatorKit.framework"), join(tmpDev, "Library", "PrivateFrameworks", "SimulatorKit.framework"));
+  // Whatever is at `root` lacks the framework (checked above), so it is a leftover of a killed run.
+  rmSync(root, { recursive: true, force: true });
+  try {
+    renameSync(tmp, root);
+  } catch {
+    // Another process put a complete shim there first: use theirs.
+    rmSync(tmp, { recursive: true, force: true });
+    if (!existsSync(join(dev, "Library", "PrivateFrameworks", "SimulatorKit.framework"))) throw new Error(`could not build the Xcode shim at ${root}`);
+  }
+  // The cache dir's old name, from before the shim was shared.
+  rmSync(join(homedir(), "Library", "Caches", "harness-sim-check"), { recursive: true, force: true });
   return dev;
 }
 
