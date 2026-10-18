@@ -87,7 +87,7 @@ final class FileEditorSession {
             // The web view's process died while the last load is an error: reopen on the edits the
             // model still holds.
             if openedOnce, let latest = model.latest {
-                fileHost.send(.open(contents: latest, language: language, theme: theme, range: range, readOnly: false, saved: model.saved))
+                fileHost.send(.open(contents: latest, language: language, theme: theme, range: range, readOnly: false, wrap: wrap, saved: model.saved))
             }
             return
         }
@@ -98,7 +98,27 @@ final class FileEditorSession {
         }
         fileHost.send(.open(
             contents: model.latest ?? contents, language: language, theme: theme, range: range,
-            readOnly: !editable, saved: model.saved))
+            readOnly: !editable, wrap: wrap, saved: model.saved))
+    }
+
+    // MARK: view options
+
+    /// Long lines wrap in this file type (the setting is per extension, on this device).
+    var wrap: Bool { WrapSettings.shared.isWrapped(ViewOptions.wrapKey(language)) }
+
+    func setWrap(_ on: Bool) {
+        WrapSettings.shared.set(ViewOptions.wrapKey(language), on)
+        fileHost.send(.wrap(on))
+    }
+
+    /// The text a rendered view shows: the editor's, unsaved edits included.
+    var currentText: String { model.latest ?? loader.file.value?.contents ?? "" }
+
+    /// A rendered view covers the editor (or stops covering it): the keyboard goes down and, while it's
+    /// hidden, the editor stops taking commands that move its view.
+    func setEditorVisible(_ visible: Bool) {
+        fileHost.visible = visible
+        if !visible { fileHost.resignFocus() }
     }
 
     /// A link to this open file marked other lines: the editor scrolls to and marks them.

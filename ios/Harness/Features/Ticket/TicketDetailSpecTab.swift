@@ -1,12 +1,15 @@
 import HarnessKit
 import SwiftUI
+import UIKit
 
 /// The Spec tab, where a ticket opens: the ticket's living spec (markdown with nested lists and
 /// inline images), what it depends on, the files attached to its prompt, and a history bar over it. The bar scrubs through the spec's
 /// revisions with the timeline along its bottom edge (loaded as they're needed), tags the approved plan, and follows the newest
-/// revision as it lands unless the user has scrubbed back (SpecScrubber). Show changes keeps the
-/// rendered spec and marks what the shown revision changed from the one before it, in place
-/// (MarkdownView with `previous`).
+/// revision as it lands unless the user has scrubbed back (SpecScrubber). The bar's "…" menu holds
+/// Source / Rendered, Wrap lines (source only) and Show changes, which keeps the rendered spec and marks what
+/// the shown revision changed from the one before it, in place (MarkdownView with `previous`).
+/// Source is the raw markdown in the file editor, read-only (the spec is edited in Details); the tab
+/// opens Rendered.
 struct TicketDetailSpecTab: View {
     let ticket: Ticket
 
@@ -15,6 +18,7 @@ struct TicketDetailSpecTab: View {
     @Environment(\.palette) private var c
     @State private var scrubber = SpecScrubber()
     @State private var showChanges = false
+    @State private var rendered = true
     @State private var failed: String?
     /// Why the revision Show changes compares with couldn't load
     @State private var previousFailed: String?
@@ -27,8 +31,13 @@ struct TicketDetailSpecTab: View {
         let body = state.specBody(ticket.id, rev: rev)
         let previousBody = previous.flatMap { state.specBody(ticket.id, rev: $0) }
         let deps = state.dependencyStates(ticket)
+        let menu = ViewMenu(spec: true, rendered: rendered, showChanges: showChanges, canShowChanges: latest > 1)
+        let source = !menu.rendered && body.map { !TicketDetailLogic.trim($0).isEmpty } == true
         VStack(spacing: 0) {
-            SpecHistoryBar(ticket: ticket, scrubber: $scrubber, showChanges: $showChanges, latest: latest)
+            SpecHistoryBar(ticket: ticket, scrubber: $scrubber, showChanges: $showChanges, rendered: $rendered, menu: menu, latest: latest)
+            if source, let body {
+                SpecSourceView(text: body)
+            } else {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     if !deps.isEmpty {
@@ -79,6 +88,7 @@ struct TicketDetailSpecTab: View {
             }
             .scrollDismissesKeyboard(.interactively)
             .ticketHeroScroll()
+            }
         }
         // The revision list: once, and again when a revision it doesn't have shows up.
         .task(id: "\(ticket.id)#\(latest)#\(store.epoch)") {
@@ -121,6 +131,8 @@ private struct SpecHistoryBar: View {
     let ticket: Ticket
     @Binding var scrubber: SpecScrubber
     @Binding var showChanges: Bool
+    @Binding var rendered: Bool
+    let menu: ViewMenu
     let latest: Int
 
     @Environment(BoardStore.self) private var store
@@ -155,7 +167,7 @@ private struct SpecHistoryBar: View {
                     .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel(SpecHistory.accessibilityLabel(line))
-                    if latest > 1 { showChangesButton(rev: rev) }
+                    moreMenu(rev: rev)
                 }
                 .padding(.horizontal, 14)
                 .padding(.top, 6)
@@ -173,27 +185,60 @@ private struct SpecHistoryBar: View {
         }
     }
 
-    private func showChangesButton(rev: Int) -> some View {
-        let on = showChanges && rev > 1
-        return Button {
-            haptic(.select)
-            showChanges.toggle()
+    private func moreMenu(rev: Int) -> some View {
+        Menu {
+            ViewMenuSection(
+                menu: menu, wrap: WrapSettings.shared.isWrapped(ViewOptions.specWrapKey),
+                setRendered: { on in
+                    rendered = on
+                    if !on { showChanges = false }
+                },
+                setWrap: { WrapSettings.shared.set(ViewOptions.specWrapKey, $0) },
+                showChanges: showChanges,
+                setShowChanges: { showChanges = $0 })
         } label: {
-            HStack(spacing: 5) {
-                Icon(on ? "check" : "branch", size: 11, weight: .semibold)
-                Text("Show changes").font(.scaled(size: 13, weight: .medium))
-            }
-            .foregroundStyle(rev <= 1 ? c.text3 : on ? c.onAccent : c.text2)
-            .padding(.horizontal, 10)
-            .frame(height: 28)
-            .background(on ? c.accent : c.bgActive, in: .capsule)
-            .contentShape(.capsule)
+            Image(systemName: "ellipsis.circle")
+                .font(.system(size: 17))
+                .foregroundStyle(c.text2)
+                .frame(width: 32, height: 32)
+                .contentShape(.rect)
         }
-        .buttonStyle(.plain)
-        .fixedSize()
-        .disabled(rev <= 1)
-        .accessibilityAddTraits(on ? .isSelected : [])
-        .accessibilityHint(rev <= 1 ? "The first revision has nothing to compare with" : "Compares this revision with the one before it")
+        .accessibilityLabel("More")
+    }
+}
+
+/// The spec's raw markdown in the file editor: read-only, wrapped by the `.md` setting, theme and
+/// all the same as a file. The page scrolls itself, so this fills the room under the history bar.
+private struct SpecSourceView: View {
+    let text: String
+
+    @Environment(\.palette) private var c
+    @State private var host = EditorWebHost()
+    /// What the page opens with when it's ready, which may come after `text` changed.
+    @State private var latest = LatestText()
+
+    private final class LatestText { var text = "" }
+
+    var body: some View {
+        let wrap = WrapSettings.shared.isWrapped(ViewOptions.specWrapKey)
+        EditorSurface(host: host)
+            .onAppear {
+                host.setBackground(UIColor(c.bg))
+                host.onReady = { [weak host, latest, theme = FileEditorTheme(c.theme.pluginInfo)] in
+                    host?.send(.open(contents: latest.text, language: "spec.md", theme: theme, range: nil, readOnly: true,
+                                    wrap: WrapSettings.shared.isWrapped(ViewOptions.specWrapKey), saved: nil))
+                }
+            }
+            .onChange(of: text, initial: true) { _, text in
+                latest.text = text
+                host.send(.setContents(text))
+            }
+            .onChange(of: wrap) { _, on in host.send(.wrap(on)) }
+            .onChange(of: c.theme.pluginInfo) { _, info in
+                host.setBackground(UIColor(c.bg))
+                host.send(.theme(FileEditorTheme(info)))
+            }
+            .accessibilityIdentifier("spec-source")
     }
 }
 

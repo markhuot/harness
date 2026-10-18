@@ -69,8 +69,12 @@ final class EditorWebHost: NSObject {
         webView.underPageBackgroundColor = color
     }
 
+    /// False while something covers the editor (a rendered markdown view): commands that move its view or
+    /// cursor wait for it to show again, since a hidden editor has nothing to scroll to or type into.
+    @ObservationIgnored var visible = true
+
     func send(_ command: FileEditorCommand) {
-        guard ready else { return }
+        guard ready, visible || !command.needsVisibleEditor else { return }
         webView.evaluateJavaScript(command.script, completionHandler: nil)
     }
 

@@ -59,6 +59,11 @@ final class ScreenTests: ScreenTestCase {
         try await screen("ticket-children", router: ticket("HARNESS-8", .children)) { RootView() }
     }
 
+    /// A markdown file on its rendered view, drawn by the Spec tab's renderer.
+    func testFileViewerRendered() async throws {
+        try await screen("file-rendered") { NavigationStack { FileViewerScreen(params: FileRouteParams(path: "README.md", ticket: "HARNESS-5"), startRendered: true) } }
+    }
+
     func testFileViewer() async throws {
         try await screen("file") { NavigationStack { FileViewerScreen(params: FileRouteParams(path: "src/board.ts", ticket: "HARNESS-5")) } }
     }

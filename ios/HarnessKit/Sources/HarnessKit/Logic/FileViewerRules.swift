@@ -117,6 +117,14 @@ public enum FileViewerRules {
         return .lines(truncated: view.truncated)
     }
 
+    /// The file is drawn in the editor (not "too large" or "binary"), so the view options apply to it.
+    public static func showsEditor(_ view: FileView) -> Bool {
+        switch fileBody(view) {
+        case .lines, .empty: true
+        case .tooLarge, .binary: false
+        }
+    }
+
     /// `diff` nil means it hasn't started loading , which shows the spinner too.
     public static func diffBody(_ diff: FileLoad<FileDiff>?, rows: [PatchRow]) -> DiffBodyState {
         switch diff {

@@ -15,13 +15,15 @@ struct FileViewerScreen: View {
     var cardID: Int?
     /// Lines a later link marked in this open card (`TicketSheet.revealed`).
     var reveal: FileReveal?
+    /// Opens a markdown file on its rendered view (the screen tests draw it without a web view).
+    var startRendered = false
 
     @Environment(\.palette) private var c
 
     var body: some View {
         let target = FileViewer.readFileParams(params)
         if let target, let root = target.root {
-            FileViewerContent(root: root, path: target.path, range: target.range, cardID: cardID, reveal: reveal)
+            FileViewerContent(root: root, path: target.path, range: target.range, cardID: cardID, reveal: reveal, startRendered: startRendered)
         } else {
             EmptyState(
                 icon: "fileText",
@@ -47,6 +49,7 @@ private struct FileViewerContent: View {
     let range: ClosedRange<Int>?
     let cardID: Int?
     let reveal: FileReveal?
+    let startRendered: Bool
 
     @Environment(BoardStore.self) private var store
     @Environment(Router.self) private var router
@@ -64,6 +67,8 @@ private struct FileViewerContent: View {
     @State private var session: FileEditorSession?
     @State private var tab = FileViewerTab.file
     @State private var askingToLeave = false
+    /// The text the rendered view shows (the editor's, as it was when Rendered was chosen), nil for the source.
+    @State private var renderedText: String?
     /// The lines a later link marked, once one has: they replace the opening link's.
     @State private var revealedRange: ClosedRange<Int>?
     private var saveOnBlur: Bool { SettingsRules.saveOnBlur(store.state.settings?.saveOnBlur) }
@@ -97,8 +102,11 @@ private struct FileViewerContent: View {
                     case let .ok(v):
                         ZStack {
                             FileBody(view: v, host: session.fileHost)
-                                .opacity(shown == .file ? 1 : 0)
-                                .allowsHitTesting(shown == .file)
+                                .opacity(shown == .file && renderedText == nil ? 1 : 0)
+                                .allowsHitTesting(shown == .file && renderedText == nil)
+                            if let renderedText, shown == .file {
+                                RenderedFile(text: renderedText, path: v.path, root: root)
+                            }
                             if hasDiff {
                                 FileDiffBody(path: v.path, diff: loader.diff, rows: loader.rows, host: session.diffHost) { await session.retry() }
                                     .opacity(shown == .diff ? 1 : 0)
@@ -128,7 +136,7 @@ private struct FileViewerContent: View {
                 }
             }
             ToolbarItem(placement: .principal) { title(shownPath) }
-            ToolbarItem(placement: .topBarTrailing) { moreMenu(shownPath) }
+            ToolbarItem(placement: .topBarTrailing) { moreMenu(shownPath, showsText: shown == .file && view.map(FileViewerRules.showsEditor) == true) }
         }
         .confirmationDialog("Save changes to \(FileViewerRules.fileName(shownPath))?", isPresented: $askingToLeave, titleVisibility: .visible) {
             Button("Save") {
@@ -161,6 +169,10 @@ private struct FileViewerContent: View {
             }
             session = s
             await s.start()
+            if startRendered, let v = s.loader.file.value, FileViewerRules.showsEditor(v), ViewOptions.hasRenderedView(v.path) {
+                renderedText = s.currentText
+                s.setEditorVisible(false)
+            }
         }
         .onChange(of: front, initial: true) { _, front in
             if front {
@@ -243,8 +255,18 @@ private struct FileViewerContent: View {
         .accessibilityElement(children: .combine)
     }
 
-    private func moreMenu(_ shownPath: String) -> some View {
+    private func moreMenu(_ shownPath: String, showsText: Bool) -> some View {
         Menu {
+            if let session, showsText {
+                ViewMenuSection(
+                    menu: ViewMenu(spec: false, path: shownPath, rendered: renderedText != nil), wrap: session.wrap,
+                    setRendered: { on in
+                        renderedText = on ? session.currentText : nil
+                        session.setEditorVisible(!on)
+                    },
+                    setWrap: { session.setWrap($0) })
+                Divider()
+            }
             Button("Copy path", systemImage: "doc.on.doc") {
                 UIPasteboard.general.string = shownPath
                 haptic(.success)
@@ -400,8 +422,31 @@ private struct FileErrorView: View {
 }
 
 
+/// A markdown file drawn by the Spec tab's renderer. Relative links open beside the file.
+private struct RenderedFile: View {
+    let text: String
+    let path: String
+    let root: FileRoot
+
+    @Environment(\.palette) private var c
+
+    var body: some View {
+        let context: FileLinkContext = switch root {
+        case let .ticket(key): FileLinkContext(ticketKey: key, file: path)
+        case let .project(id): FileLinkContext(projectId: id, file: path)
+        }
+        ScrollView {
+            MarkdownView(text: text, size: 16, lineHeight: 1.5, headingSpace: 2, linkContext: context)
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .background(c.bg)
+        .accessibilityIdentifier("file-rendered")
+    }
+}
+
 /// An editor's web view over the app background, with a spinner until its page is ready.
-private struct EditorSurface: View {
+struct EditorSurface: View {
     let host: EditorWebHost
 
     @Environment(\.palette) private var c

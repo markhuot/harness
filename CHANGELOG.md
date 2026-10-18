@@ -11,7 +11,17 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Added
 
+- In the file viewer on Mac, iPhone and iPad, the "…" menu now has Wrap lines. Long lines wrap instead of scrolling sideways, and the choice is remembered for that file type on that device: wrap one `.html` file and every `.html` file opens wrapped, while other types are unaffected. Toggling it keeps you on the same line.
+
+- Markdown files (`.md`, `.markdown`) can be viewed rendered. The "…" menu switches between Source and Rendered, using the same renderer as the Spec tab and showing your unsaved edits. Links to other files in a rendered file open beside it.
+
+- The Spec tab can show the spec's raw markdown: its new "…" menu switches between Rendered and Source (read-only; editing stays in Details), and Wrap lines applies to Source.
+
 - On iPhone, the app reopens on the board column you last looked at, and any ticket, new session, file or terminal sheets you had open or docked come back as they were, on the same screen and tab. This holds after the app is closed and reopened, for up to a day. A link or notification that opens the app still takes you where it points, and the saved sheets wait in the dock behind it. iPad restores its sheets the same way.
+
+### Changed
+
+- On the Spec tab, Show changes moved from the history bar into the new "…" menu, beside Source and Rendered.
 
 ### Fixed
 
