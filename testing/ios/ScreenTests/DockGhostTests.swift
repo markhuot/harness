@@ -42,6 +42,8 @@ final class DockGhostTests: ScreenTestCase {
     func testDockGhostRunningGlowFollowsTheWave() async throws {
         let size = CGSize(width: Renderer.screenSize.width, height: 200)
         UIView.setAnimationsEnabled(true)
+        // Runs when the test fails too, so a failure here can't leave animations on for the renders after it.
+        addTeardownBlock { @MainActor in UIView.setAnimationsEnabled(false) }
         let root = UIHostingController(rootView: world.environment(
             DockGhostCard(title: "HAR-7 Add the pulse", armed: true)
                 .padding(.horizontal, DockMetrics.phoneSides(screen: nil))
@@ -55,7 +57,7 @@ final class DockGhostTests: ScreenTestCase {
         window.overrideUserInterfaceStyle = .dark
         window.rootViewController = root
         window.isHidden = false
-        defer { window.isHidden = true; window.rootViewController = nil }
+        addTeardownBlock { @MainActor in window.isHidden = true; window.rootViewController = nil }
         try await Task.sleep(for: .milliseconds(500))
 
         // Brightness of a band above the card's top edge, middle half of its width: only the glow is there.
@@ -63,13 +65,17 @@ final class DockGhostTests: ScreenTestCase {
         format.scale = Renderer.scale
         format.opaque = true
         let renderer = UIGraphicsImageRenderer(size: size, format: format)
-        var samples: [(wave: Double, glow: Double)] = []
+        // Each frame's glow with the wave's value over the window the frame was drawn in: a draw that
+        // stalls on a loaded Mac was taken some time between the two clocks, not at the first of them.
+        var samples: [(wave: Double, low: Double, high: Double, glow: Double)] = []
         var images: [UIImage] = []
         let start = Date()
         while Date().timeIntervalSince(start) < DockGhostCard.pulsePeriod * 1.25 {
-            let now = Date()
+            let before = Date()
             let image = renderer.image { _ in window.drawHierarchy(in: CGRect(origin: .zero, size: size), afterScreenUpdates: true) }
-            guard let cg = image.cgImage, let px = ReferenceImages.Pixels(cg) else { continue }
+            let after = Date()
+            func skip() async throws { try await Task.sleep(for: .milliseconds(1)) }
+            guard let cg = image.cgImage, let px = ReferenceImages.Pixels(cg) else { try await skip(); continue }
             // The card's top edge in this frame (it bounces), found down the middle column: the first
             // row brighter than any glow. The band sits from 11 to 3 points above it.
             let mid = px.width / 2
@@ -83,10 +89,14 @@ final class DockGhostTests: ScreenTestCase {
                     count += 1
                 }
             }
-            let phase = now.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: DockGhostCard.pulsePeriod) / DockGhostCard.pulsePeriod
-            samples.append((DockGhostCard.wave(phase: phase), total / count))
+            func wave(_ t: Date) -> Double {
+                DockGhostCard.wave(phase: t.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: DockGhostCard.pulsePeriod) / DockGhostCard.pulsePeriod)
+            }
+            let span = after.timeIntervalSince(before)
+            let across = (0...16).map { wave(before.addingTimeInterval(span * Double($0) / 16)) }
+            samples.append((wave(before.addingTimeInterval(span / 2)), across.min() ?? 0, across.max() ?? 0, total / count))
             images.append(image)
-            try await Task.sleep(for: .milliseconds(1))
+            try await skip()
         }
         XCTAssertGreaterThan(samples.count, 30, "too few frames to judge the pulse")
 
@@ -95,7 +105,11 @@ final class DockGhostTests: ScreenTestCase {
         let mw = samples.map(\.wave).reduce(0, +) / n, mg = samples.map(\.glow).reduce(0, +) / n
         let b = samples.map { ($0.wave - mw) * ($0.glow - mg) }.reduce(0, +) / max(samples.map { ($0.wave - mw) * ($0.wave - mw) }.reduce(0, +), 1e-9)
         let a = mg - b * mw
-        let worst = samples.map { abs($0.glow - (a + b * $0.wave)) }.max() ?? 0
+        // A frame is off the curve by how far its glow is from the curve's value anywhere in the window it was drawn in.
+        let worst = samples.map { s -> Double in
+            let at = (s.glow - a) / b
+            return b * max(s.low - at, at - s.high, 0)
+        }.max() ?? 0
         XCTAssertGreaterThan(b, 0.5, "the glow doesn't breathe with the wave (slope \(b))")
         XCTAssertLessThan(worst, max(b * 0.35, 1), "a frame's glow was \(worst) off the wave's curve (slope \(b)): the glow is stepping or flickering")
 

@@ -47,8 +47,10 @@ struct RootView: View {
             }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active { WindowDirectory.shared.mainActive(router, scene: scene) }
-                // The one save point: a swipe away from the app switcher comes after this.
-                if phase == .background, let server = app.active?.id {
+                // The save points: the scene leaving the foreground. `.inactive` comes first and is saved too,
+                // because a kill right after Home (the app switcher's swipe, a test's terminate) can land before
+                // `.background` is delivered on a busy device.
+                if phase != .active, let server = app.active?.id {
                     router.savePersisted(to: UserDefaults.standard, server: server)
                 }
             }

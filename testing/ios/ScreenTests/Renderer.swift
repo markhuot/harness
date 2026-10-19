@@ -39,6 +39,28 @@ enum Renderer {
 
     enum Rotation: Error { case stuck(Bool) }
 
+    /// The iPad's safe area the references were recorded under (an iPad Pro 11-inch, portrait, Windowed Apps,
+    /// the default of a fresh simulator): the status bar's 32 points on top and the home indicator's 20 below.
+    /// A simulator in another state (Full Screen Apps puts 25 below; a modified one has been seen with the
+    /// content 22 points off) draws every screen at another offset, so the render stops with the values
+    /// rather than correcting them: a layout regression can't hide behind a normalisation, and a diff that
+    /// is only a shifted image isn't read as one.
+    struct SceneMismatch: Error, CustomStringConvertible {
+        let found: String
+        var description: String {
+            "the simulator isn't in the state the iPad references were recorded in: \(found); expected the iPad Pro 11-inch in portrait (834 x 1210), safe area top 32 and bottom 20 (Settings > Multitasking & Gestures > Windowed Apps). Put it back and render again; re-recording would bake the shifted layout into the references."
+        }
+    }
+
+    static func checkSceneMatchesReferences(window: UIWindow, scene: UIWindowScene?, size: CGSize) throws {
+        guard UIDevice.current.userInterfaceIdiom == .pad, size.width == 834 || size.width == 1210 else { return }
+        let insets = window.safeAreaInsets
+        let portrait = size.width < size.height
+        // A landscape iPad turns the insets; only portrait is pinned.
+        guard portrait, insets.top != 32 || insets.bottom != 20 else { return }
+        throw SceneMismatch(found: "screen \(size.width) x \(size.height), safe area top \(insets.top) bottom \(insets.bottom), status bar \(scene?.statusBarManager?.statusBarFrame.height ?? -1)")
+    }
+
     /// `regularWidth` renders a landscape phone as a Plus or Pro Max does: regular width, compact height.
     static func render<V: View>(_ view: V, world: ScreenWorld, dark: Bool = false, landscape: Bool = false, regularWidth: Bool = false) async throws -> UIImage {
         UIView.setAnimationsEnabled(false)
@@ -67,6 +89,7 @@ enum Renderer {
         window.overrideUserInterfaceStyle = style
         window.rootViewController = host
         window.isHidden = false
+        try checkSceneMatchesReferences(window: window, scene: scene, size: size)
         defer {
             window.isHidden = true
             window.rootViewController = nil

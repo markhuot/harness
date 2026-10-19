@@ -16,6 +16,11 @@ export function parseLabels(describeUi: string): string[] {
   return [...describeUi.matchAll(/"AXLabel" : "([^"]*)"/g)].map((m) => m[1]!.replace(/\\\//g, "/"));
 }
 
+/** Whether the app's preferences (`defaults read`) hold a restorable state saved at or after `sinceSeconds` (Unix time): its JSON carries `savedAt` in seconds. */
+export function savedAfter(defaultsRead: string, sinceSeconds: number): boolean {
+  return [...defaultsRead.matchAll(/savedAt\\*"\s*:\s*([0-9]+(?:\.[0-9]+)?)/g)].some((m) => Number(m[1]) >= sinceSeconds);
+}
+
 /**
  * The middle of the part of the element labelled `label` that shows on screen (its AXFrame reads
  * "{{x, y}, {w, h}}"), or null when it isn't: absent, or laid out wholly beyond the screen's frame,
@@ -96,7 +101,7 @@ export interface Phone {
   /** Every accessibility label on screen. */
   labels(): Promise<string[]>;
   /** Wait until `match` is true of the screen's labels; fails naming `what` and the labels last seen. */
-  see(what: string, match: (labels: string[]) => boolean, ms?: number): Promise<string[]>;
+  see(what: string, match: (labels: string[]) => boolean, ms?: number, minLooks?: number): Promise<string[]>;
   /** Tap the element labelled `label`; with `then`, tap it again (up to three times) until the screen matches, since a tap the simulator drops looks the same as one that worked. */
   tap(label: string, then?: { what: string; match: (labels: string[]) => boolean }): Promise<void>;
   launch(): Promise<void>;
@@ -145,7 +150,7 @@ export function phone(name: string, udid: string): Phone {
     return axe("tap", "-x", String(at.x), "-y", String(at.y), "--tap-style", "physical");
   };
   const labels = async () => parseLabels((await axe("describe-ui")) ?? "");
-  const see = async (what: string, match: (l: string[]) => boolean, ms = 30_000) => {
+  const see = async (what: string, match: (l: string[]) => boolean, ms = 30_000, minLooks = 1) => {
     let last: string[] = [];
     try {
       return await until(`${name}: ${what}`, ms, async () => {
@@ -157,7 +162,7 @@ export function phone(name: string, udid: string): Phone {
         }
         last = parseLabels(out);
         return match(last) ? last : undefined;
-      });
+      }, minLooks);
     } catch (e) {
       throw new Error(`${(e as Error).message.replace(/last seen: .*$/, "")}on screen: ${last.slice(0, 25).join(" | ") || "(nothing)"}`);
     }
@@ -196,11 +201,19 @@ export function phone(name: string, udid: string): Phone {
       for (let attempt = 1; ; attempt++) {
         await tapLabel(label);
         if (!then) return;
+        let shown: string[] = [];
         try {
-          await see(then.what, then.match, attempt < 3 ? 6_000 : 30_000);
+          // Two looks at least: on a loaded Mac one describe outlasts the whole 6 s, and a tap that
+          // landed shows only in the next look. Tapping again on one stale look is a double tap.
+          await see(then.what, (l) => ((shown = l), then.match(l)), attempt < 3 ? 6_000 : 30_000, 2);
           return;
         } catch (e) {
           if (attempt >= 3) throw e;
+          // The target is gone but the screen isn't what was expected yet: the tap landed and the screen is still moving, so wait for it rather than tap what may no longer be there.
+          if (shown.length > 0 && !shown.includes(label)) {
+            await see(then.what, then.match, 30_000, 2);
+            return;
+          }
         }
       }
     },
@@ -215,17 +228,33 @@ export function phone(name: string, udid: string): Phone {
     },
     async background() {
       // A Home press the simulator drops leaves the app in front, and it then never saves its state:
-      // press it until the app's root element (labelled "Harness") has left the screen.
-      for (let press = 0; press < 5; press++) {
+      // press it until the app's root element (labelled "Harness") has left the screen. The look
+      // after a press is slow on a loaded Mac, so a press is judged by two looks, not a fixed pause.
+      const since = Date.now() / 1000;
+      let home = false;
+      for (let press = 0; press < 5 && !home; press++) {
         await axe("button", "home");
-        await new Promise<void>((r) => setTimeout(r, 1500));
-        if (parseLabels((await axe("describe-ui")) ?? "")[0] !== "Harness") {
-          // The app saves on the scene's move to the background, which can trail the Home screen by a moment on a busy simulator.
-          await new Promise<void>((r) => setTimeout(r, 2500));
-          return;
-        }
+        try {
+          await see("the app out of the foreground", (l) => l[0] !== "Harness", 6_000, 2);
+          home = true;
+        } catch {}
       }
-      throw new Error(`${name}: the Home button never took the app out of the foreground`);
+      if (!home) throw new Error(`${name}: the Home button never took the app out of the foreground`);
+      // The app saves what it restores when its scene leaves the foreground, which can trail the Home
+      // screen on a busy simulator. A save is the one with a time from after the press: waiting on
+      // "a saved state exists" would pass on an older one.
+      try {
+        await until(`${name}: the app's saved state`, 30_000, async () => {
+          const r = await run(["xcrun", "simctl", "spawn", udid, "defaults", "read", BUNDLE_ID]);
+          if (r.code !== 0) {
+            await new Promise<void>((res) => setTimeout(res, 250));
+            return undefined;
+          }
+          return savedAfter(r.out, since) ? true : undefined;
+        });
+      } catch (e) {
+        throw new Error(`${(e as Error).message}: the app never wrote its restorable state after Home`);
+      }
     },
     async screenshot(path) {
       mkdirSync(dirname(path), { recursive: true });

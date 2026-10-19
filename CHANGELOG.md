@@ -16,6 +16,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
+- On iPhone and iPad, a ticket you had open now comes back after Home and a relaunch even when the app is killed right after Home. The app saves what it restores as soon as it leaves the foreground, not only once it reaches the background.
+- For people working on Harness: the walkthrough no longer fails on a loaded Mac from fixed pauses. After Home it waits until the app has written its saved state, and a tap is repeated only after two looks at the screen show the target still there and the screen unchanged, so a slow look no longer causes a double tap. The glow test in the iPhone screen tests judges each frame against the wave over the time the frame was drawn in, and turns animations back off when it fails, so it can't change what later tests render.
 - On iPhone, a child ticket's Back circle now sits the same distance from the top of the sheet as from its left edge, so it is concentric with the sheet's corner on the Pro Max too, whether the title is expanded or collapsed. It no longer rides up against the sheet's top edge when the title is collapsed.
 
 ## [app-20261018.1811](https://github.com/markhuot/harness/releases/tag/app-20261018.1811) - 2026-10-18

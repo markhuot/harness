@@ -42,15 +42,18 @@ export function withDeadline<T>(what: string, ms: number, promise: Promise<T>, l
  * Call `probe` back to back until it returns something other than `undefined`/`false`/`null`.
  * For probes that are themselves slow to answer (an AXe describe, a CDP evaluate): the probe's own
  * duration paces the loop, and the deadline bounds it. Anything with an event to wait on uses it instead.
+ * A probe that takes longer than the deadline (an AXe describe on a loaded Mac) has still only looked
+ * once, and one look that missed doesn't show the thing never came: the deadline doesn't fail the wait
+ * before `minProbes` probes have answered.
  */
-export async function until<T>(what: string, ms: number, probe: () => Promise<T | undefined | false | null> | T | undefined | false | null): Promise<T> {
+export async function until<T>(what: string, ms: number, probe: () => Promise<T | undefined | false | null> | T | undefined | false | null, minProbes = 1): Promise<T> {
   const deadline = performance.now() + ms;
   let last: unknown;
-  for (;;) {
+  for (let probes = 1; ; probes++) {
     const seen = await probe();
     if (seen !== undefined && seen !== false && seen !== null) return seen;
     last = seen;
-    if (performance.now() >= deadline) throw new DeadlineError(what, ms, describeState(last));
+    if (probes >= minProbes && performance.now() >= deadline) throw new DeadlineError(what, ms, describeState(last));
     // Let queued events (sockets, child output) run between probes.
     await new Promise<void>((r) => setImmediate(r));
   }

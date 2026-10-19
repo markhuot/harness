@@ -61,7 +61,7 @@ renderer↔main IPC the L4 layers can't reach); relaunch each app and check the 
   markers), seeded through the real API.
 - Every wait is on an observable (a `/ws` event, a DOM mutation over DevTools, an accessibility
   label through AXe, a process's output) and has a deadline that names the step and the last state
-  seen. There are no sleeps and no retries.
+  seen. There are no sleeps. A tap is repeated only when two looks at the screen after it show the target still there and nothing changed, and Home is checked by the app's saved state, not a pause.
 - `walk/run.ts` builds the Mac app and the iOS app once, then takes the iPhone and iPad locks in a
   fixed order (`bun run sim with-lock`) and runs `walk/main.ts` inside them. The simulators are left
   booted; only the app installs are removed.

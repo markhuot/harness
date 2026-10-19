@@ -25,6 +25,19 @@ test("until fails at its deadline with the last thing the probe saw", async () =
   expect(err.message).toContain("waiting for the badge");
 });
 
+test("until doesn't fail on a probe that outlasts the deadline until enough probes have answered", async () => {
+  let calls = 0;
+  const slow = async () => {
+    await new Promise<void>((r) => setTimeout(r, 40));
+    return ++calls < 2 ? undefined : "landed";
+  };
+  // The 10 ms deadline passes during the first probe; the second one sees the result.
+  expect(await until("x", 10, slow, 2)).toBe("landed");
+  // Without the floor the same wait fails after one look.
+  calls = 0;
+  await expect(until("x", 10, slow)).rejects.toBeInstanceOf(DeadlineError);
+});
+
 test("describeState is one short line, and says so when there is nothing", () => {
   expect(describeState(undefined)).toBe("nothing yet");
   expect(describeState("")).toBe("an empty value");
