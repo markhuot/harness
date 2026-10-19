@@ -26,6 +26,25 @@ final class ScreenTests: ScreenTestCase {
         try await screen("board-landscape-regular", landscape: true, regularWidth: true) { RootView() }
     }
 
+    /// A ticket docked: its card floats above the system bottom bar, which stays where the system puts it.
+    func testBoardDocked() async throws {
+        try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .pad, "the iPad's cards are a corner stack beside its panel")
+        let router = Router()
+        router.openTicket(key: "HARNESS-4", tab: .spec)
+        router.dockSheet()
+        try await screen("board-docked", router: router) { RootView() }
+    }
+
+    /// A ticket open with another one docked: the composer sits above the card.
+    func testTicketWithDockedCard() async throws {
+        try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .pad, "the iPad's cards are a corner stack beside its panel")
+        let router = Router()
+        router.openTicket(key: "HARNESS-4", tab: .spec)
+        router.dockSheet()
+        router.openTicket(key: "HARNESS-5", tab: .spec)
+        try await screen("ticket-docked-card", router: router) { RootView() }
+    }
+
     func testProjectsSheet() async throws {
         let router = Router()
         router.present(.projects)
