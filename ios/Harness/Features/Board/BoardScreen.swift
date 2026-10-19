@@ -7,9 +7,8 @@ import SwiftUI
 /// it scrolls into older pages (footer spinner) and its count is the server's total. The
 /// the navigation bar is never shown: the system's bottom bar holds Projects (the sidebar's toggle on
 /// iPad), search (⌘K or ⌘F) and New session (⌘N), the columns run beneath it, and the last two hide
-/// while a ticket panel covers them. On the portrait phone search is a wide field ("Search or run a
-/// command"); elsewhere a magnifier. Either opens the palette, PaletteScreen, which finds tickets
-/// and runs commands, "Show child tickets" among them. The docked cards float above the bar
+/// while a ticket panel covers them. Search is a magnifier that opens the palette, PaletteScreen,
+/// which finds tickets and runs commands, "Show child tickets" among them. The docked cards float above the bar
 /// (DockedSheetInset.barInset). The board doesn't filter by a search: that's the Mac's.
 struct BoardScreen: View {
     @Environment(BoardStore.self) private var store
@@ -47,10 +46,6 @@ struct BoardScreen: View {
     }
 
     private var layout: BoardScreenRules.Layout { BoardScreenRules.layout(regularWidth: sizeClass == .regular, compactHeight: verticalSizeClass == .compact) }
-
-    /// The portrait phone's search is a wide field-styled button in the bar; elsewhere (the iPad,
-    /// the phone in landscape) it's a magnifier like the rest of the bar's buttons.
-    private var searchIsField: Bool { !desktop && verticalSizeClass != .compact }
 
     /// An open ticket panel covers the board's bottom-right corner, where the bar's search and New session sit.
     private var panelCoversBar: Bool { desktop && router.ticketSheet != nil }
@@ -215,45 +210,18 @@ struct BoardScreen: View {
     // MARK: Toolbar
 
     /// The system's bottom bar everywhere: Projects leading, search and New session trailing (those
-    /// two hide while a ticket panel covers them). On the portrait phone search is a wide field.
+    /// two hide while a ticket panel covers them).
     @ToolbarContentBuilder private func toolbar(_ ctx: BoardContext) -> some ToolbarContent {
         ToolbarItem(placement: .bottomBar) { ProjectsButton(action: toggleProjects) }
-        if searchIsField {
-            ToolbarItem(placement: .bottomBar) { searchField(ctx) }
-        } else {
-            ToolbarSpacer(.flexible, placement: .bottomBar)
-        }
+        ToolbarSpacer(.flexible, placement: .bottomBar)
         if !panelCoversBar {
-            if !searchIsField {
-                ToolbarItem(placement: .bottomBar) {
-                    Button("Command palette", systemImage: "magnifyingglass") { router.present(.palette(files: false)) }
-                }
+            ToolbarItem(placement: .bottomBar) {
+                Button("Command palette", systemImage: "magnifyingglass") { router.present(.palette(files: false)) }
+                    .accessibilityHint("Search tickets or run a command in \(scopeName(ctx))")
+                    .accessibilityIdentifier("palette-field")
             }
             ToolbarItem(placement: .bottomBar) { newSession(ctx) }
         }
-    }
-
-    /// The command palette's field as a button (the palette is a sheet with its own text field), so
-    /// the bar never changes shape and no keyboard fights the docked tickets.
-    private func searchField(_ ctx: BoardContext) -> some View {
-        Button { router.present(.palette(files: false)) } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 17, weight: .medium))
-                    .foregroundStyle(c.text2)
-                Text("Search or run a command")
-                    .font(.scaled(size: 17))
-                    .foregroundStyle(c.text3)
-                    .lineLimit(1)
-                Spacer(minLength: 0)
-            }
-            .frame(maxWidth: .infinity, minHeight: DockMetrics.barHeight - 12)
-            .contentShape(.rect)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Command palette")
-        .accessibilityHint("Search tickets or run a command in \(scopeName(ctx))")
-        .accessibilityIdentifier("palette-field")
     }
 
     /// The iPad's sidebar is a column that toggles; on the phone Projects is a sheet.
