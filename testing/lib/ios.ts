@@ -228,15 +228,15 @@ export function phone(name: string, udid: string): Phone {
     },
     async background() {
       // A Home press the simulator drops leaves the app in front, and it then never saves its state:
-      // press it until the app's root element (labelled "Harness") has left the screen. The look
-      // after a press is slow on a loaded Mac, so a press is judged by two looks, not a fixed pause.
+      // press it until the Home screen is up (its dock has Safari; the app's own screens never do).
+      // The app's root element can't tell: with a ticket sheet over the board it isn't first in the tree
+      // either way. The look after a press is slow on a loaded Mac, so a press is judged by two looks, not a fixed pause.
       const since = Date.now() / 1000;
-      const before = (await labels()).slice(0, 12).join(" | ");
       let home = false;
       for (let press = 0; press < 5 && !home; press++) {
         await axe("button", "home");
         try {
-          await see("the app out of the foreground", (l) => l[0] !== "Harness", 6_000, 2);
+          await see("the Home screen", (l) => l.includes("Safari"), 6_000, 2);
           home = true;
         } catch {}
       }
@@ -259,7 +259,7 @@ export function phone(name: string, udid: string): Phone {
           return savedAfter(r.out, since) ? true : undefined;
         });
       } catch (e) {
-        throw new Error(`${(e as Error).message}: the app never wrote its restorable state after Home (pressed at ${since}; ${found}; on screen before Home: ${before})`);
+        throw new Error(`${(e as Error).message}: the app never wrote its restorable state after Home (pressed at ${since}; ${found}`);
       }
     },
     async screenshot(path) {
