@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { daemonEnv } from "./daemon";
-import { columnCount, labelCenter, parseLabels, screenState } from "./ios";
+import { columnCount, keyboardClearance, labelCenter, parseLabels, screenState } from "./ios";
 import { macEnv } from "./mac";
 
 test("the daemon starts on port 0 with the dummy driver in the run's home, whatever the host's own Harness settings say", () => {
@@ -41,4 +41,16 @@ test("a label's centre comes from its frame, and is null when it's absent or lai
   // Half scrolled off the right edge: tapped on the half that shows.
   expect(labelCenter(tree, "Done, 3")).toEqual({ x: 817, y: 58 });
   expect(labelCenter("not json", "Open")).toBeNull();
+});
+
+test("the composer's bottom and the keyboard's top come from the tree, so a composer behind the keyboard is told from one above it", () => {
+  const tree = (composerY: number) => JSON.stringify([{ AXFrame: "{{0, 0}, {402, 874}}", children: [{ AXLabel: "Message the agent", AXFrame: `{{16, ${composerY}}, {300, 44}}` }, { type: "Keyboard", AXFrame: "{{0, 560}, {402, 314}}" }, { AXLabel: "space", AXFrame: "{{100, 800}, {200, 44}}" }] }]);
+  expect(keyboardClearance(tree(500), "Message the agent")).toEqual({ elementBottom: 544, keyboardTop: 560 });
+  expect(keyboardClearance(tree(600), "Message the agent").elementBottom).toBeGreaterThan(560);
+  expect(keyboardClearance(JSON.stringify([{ AXFrame: "{{0, 0}, {1, 1}}" }]), "Message the agent")).toEqual({ elementBottom: null, keyboardTop: null });
+});
+
+test("a keyboard without a keyboard element in the tree is found by its space bar", () => {
+  const tree = JSON.stringify([{ AXFrame: "{{0, 0}, {402, 874}}", children: [{ AXLabel: "Message the agent", AXFrame: "{{16, 480}, {300, 44}}" }, { AXLabel: "space", AXFrame: "{{100, 780}, {200, 44}}" }] }]);
+  expect(keyboardClearance(tree, "Message the agent")).toEqual({ elementBottom: 524, keyboardTop: 780 });
 });

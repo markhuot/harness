@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { buildPairUrl } from "../../shared/src/pairing";
 import { MOD } from "../lib/cdp";
 import { startDaemon, type Daemon, type Socket } from "../lib/daemon";
-import { columnCount, phone, type Phone } from "../lib/ios";
+import { columnCount, keyboardClearance, phone, type Phone } from "../lib/ios";
 import { launchMac, type MacApp } from "../lib/mac";
 import { killRecords, RunFile } from "../lib/procs";
 import { until } from "../lib/wait";
@@ -163,6 +163,22 @@ export function steps(start: Start, built: { app: string }): Step[] {
           await p.tap("Transcript", { what: "the dummy driver's opening line", match: (l) => l.some((x) => x.includes(DUMMY_HELLO)) });
         });
         await phoneShots(ctx, "04-transcript");
+      },
+    },
+    {
+      name: "4b. raise the keyboard on the ticket: the composer rides above it",
+      async run(ctx) {
+        // The phone's composer is a safe-area bar: the keyboard lifts it rather than covering it.
+        const phone = ctx.phones.find((p) => p.name === "iPhone")!;
+        await phone.tap("Message the agent", { what: "the keyboard up", match: () => true });
+        let clearance = keyboardClearance(await phone.ui(), "Message the agent");
+        for (let i = 0; i < 20 && clearance.keyboardTop === null; i++) {
+          await Bun.sleep(500);
+          clearance = keyboardClearance(await phone.ui(), "Message the agent");
+        }
+        await phone.screenshot(join(ctx.shots, "04b-keyboard-iphone.png"));
+        if (clearance.keyboardTop === null || clearance.elementBottom === null) throw new Error(`the keyboard or the composer isn't on the iPhone's screen (${JSON.stringify(clearance)})`);
+        if (clearance.elementBottom > clearance.keyboardTop) throw new Error(`the composer ends at ${clearance.elementBottom}, under the keyboard that starts at ${clearance.keyboardTop}`);
       },
     },
     {

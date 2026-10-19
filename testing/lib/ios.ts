@@ -64,6 +64,34 @@ export function labelCenter(describeUi: string, label: string): { x: number; y: 
   return visit(tree);
 }
 
+/**
+ * Where the keyboard and a labelled element sit in AXe's describe-ui JSON: the element's frame
+ * bottom and the keyboard's top (or its space bar's), in points. Either is null when it isn't in the tree.
+ */
+export function keyboardClearance(describeUi: string, label: string): { elementBottom: number | null; keyboardTop: number | null } {
+  let tree: unknown;
+  try {
+    tree = JSON.parse(describeUi);
+  } catch {
+    return { elementBottom: null, keyboardTop: null };
+  }
+  const found = { elementBottom: null as number | null, keyboardTop: null as number | null };
+  const visit = (node: unknown): void => {
+    if (Array.isArray(node)) return node.forEach(visit);
+    if (node === null || typeof node !== "object") return;
+    const o = node as { AXLabel?: unknown; AXFrame?: unknown; type?: unknown; role?: unknown; children?: unknown };
+    const n = typeof o.AXFrame === "string" ? o.AXFrame.match(/-?\d+(?:\.\d+)?/g)?.map(Number) : undefined;
+    if (n?.length === 4) {
+      if (o.AXLabel === label && found.elementBottom === null) found.elementBottom = n[1]! + n[3]!;
+      // The keyboard is its keys: the space bar is on every layout, and sits below the keyboard's own top.
+      if ((o.type === "Keyboard" || o.role === "AXKeyboard" || o.AXLabel === "space") && (found.keyboardTop === null || n[1]! < found.keyboardTop)) found.keyboardTop = n[1]!;
+    }
+    visit(o.children);
+  };
+  visit(tree);
+  return found;
+}
+
 /** The screen's size in points: the root element's frame in describe-ui's JSON. */
 export function screenSize(describeUi: string): { w: number; h: number } | null {
   const n = describeUi.match(/"AXFrame" : "\{\{-?[\d.]+, -?[\d.]+\}, \{([\d.]+), ([\d.]+)\}\}"/);
@@ -110,6 +138,8 @@ export interface Phone {
   /** Press Home: the app goes to the background, where it saves what it restores on its next launch (what leaving it for the app switcher does first). */
   background(): Promise<void>;
   screenshot(path: string): Promise<void>;
+  /** AXe's describe-ui JSON for the screen now, or "" when AXe failed. */
+  ui(): Promise<string>;
 }
 
 export function phone(name: string, udid: string): Phone {
@@ -263,6 +293,9 @@ export function phone(name: string, udid: string): Phone {
       } catch (e) {
         throw new Error(`${(e as Error).message}: the app never wrote its restorable state after Home (pressed at ${since}; ${found}`);
       }
+    },
+    async ui() {
+      return (await axe("describe-ui")) ?? "";
     },
     async screenshot(path) {
       mkdirSync(dirname(path), { recursive: true });
