@@ -33,6 +33,34 @@ public enum BoardScreenRules {
         case columns
     }
 
+    /// Where the pager's column tabs go: the Duo's trailing margin, the top strip, or nowhere.
+    public enum Tabs: Equatable, Sendable {
+        /// Every column is on screen, so there is nothing to switch.
+        case none
+        /// A strip across the top (an ordinary phone, which has no margin to spare).
+        case topStrip
+        /// A vertical glass rail in the trailing margin (the Duo).
+        case rail
+    }
+
+    /// The trailing safe-area margin that can hold the rail: wider than any phone's (a phone has none in
+    /// portrait), narrower than the Duo's.
+    public static let railMinMargin: Double = 40
+    /// The margin that leaves room beside each icon for its count.
+    public static let railCountsMinMargin: Double = 64
+
+    /// Tabs follow the layout (only the pager needs them); the margin picks the rail over the strip.
+    public static func tabs(layout: Layout, trailingMargin: Double) -> Tabs {
+        guard layout == .pager else { return .none }
+        return trailingMargin >= railMinMargin ? .rail : .topStrip
+    }
+
+    /// Whether the rail shows counts under its icons, by the margin it has.
+    public static func railShowsCounts(trailingMargin: Double) -> Bool { trailingMargin >= railCountsMinMargin }
+
+    /// A rail count: the number, capped at "99+" to fit the margin.
+    public static func railCountLabel(_ n: Int) -> String { n > 99 ? "99+" : String(n) }
+
     /// The narrowest a side-by-side column gets before the board scrolls sideways instead (the Mac's
     /// is 216): five fit an 11-inch iPad in landscape, not in portrait.
     public static let columnMinWidth: Double = 216

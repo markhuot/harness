@@ -38,6 +38,8 @@ struct BoardScreen: View {
     /// How far the system's bottom bar (and the home indicator) reaches up from the screen's edge:
     /// the columns run under it, and their last card scrolls clear of it.
     @State private var barInset: CGFloat = 0
+    /// The system's trailing safe-area margin, where the Duo's rail sits.
+    @State private var trailingMargin: CGFloat = 0
 
     /// The room the last card keeps for the bottom bar the columns run under.
     /// On the phone, plus the room the docked cards floating over the bar take.
@@ -46,6 +48,8 @@ struct BoardScreen: View {
     }
 
     private var layout: BoardScreenRules.Layout { BoardScreenRules.layout(regularWidth: sizeClass == .regular, compactHeight: verticalSizeClass == .compact) }
+
+    private var tabs: BoardScreenRules.Tabs { BoardScreenRules.tabs(layout: layout, trailingMargin: trailingMargin) }
 
     /// An open ticket panel covers the board's bottom-right corner, where the bar's search and New session sit.
     private var panelCoversBar: Bool { desktop && router.ticketSheet != nil }
@@ -57,11 +61,26 @@ struct BoardScreen: View {
         let ctx = BoardContext(store.state, app.prefs)
         let layout = layout
         VStack(spacing: 0) {
-            if layout == .pager {
+            if tabs == .topStrip {
                 BoardStatusStrip(
                     page: page ?? .planning, count: { ctx.count($0) }, onTap: goTo)
             }
             if layout == .pager { pager(ctx) } else { columns(ctx) }
+        }
+        .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.trailing } action: { trailingMargin = $0 }
+        // The rail sits in the margin the system leaves at the trailing edge, so the cards never go under it.
+        .overlay(alignment: .trailing) {
+            if tabs == .rail {
+                // The pager's scroll view reaches under the margin; the next column's edge mustn't show beside the rail.
+                ZStack {
+                    c.bg
+                    BoardStatusRail(
+                        page: page ?? .planning, count: { ctx.count($0) },
+                        showsCounts: BoardScreenRules.railShowsCounts(trailingMargin: trailingMargin), onTap: goTo)
+                }
+                .frame(width: trailingMargin)
+                .ignoresSafeArea(.container, edges: .trailing)
+            }
         }
         // The columns scroll on under the bottom bar's glass, not stop above it.
         .ignoresSafeArea(.container, edges: .bottom)

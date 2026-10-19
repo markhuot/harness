@@ -54,6 +54,52 @@ struct BoardStatusStrip: View {
     }
 }
 
+/// The Duo's column tabs: the five status dots stacked in one glass capsule in the trailing margin,
+/// the focused one on a lifted pill, each with its count under it when the margin has room.
+struct BoardStatusRail: View {
+    let page: TicketStatus
+    let count: (TicketStatus) -> Int
+    let showsCounts: Bool
+    let onTap: (TicketStatus) -> Void
+
+    @Environment(\.palette) private var c
+
+    var body: some View {
+        GlassEffectContainer {
+            VStack(spacing: 2) {
+                ForEach(TicketStatus.allKnown, id: \.self) { s in tab(s) }
+            }
+            .padding(4)
+            .glassEffect(.regular, in: .capsule)
+        }
+    }
+
+    private func tab(_ s: TicketStatus) -> some View {
+        let on = s == page
+        let n = count(s)
+        return Button { onTap(s) } label: {
+            VStack(spacing: 3) {
+                StatusDot(status: s, size: 12)
+                if showsCounts {
+                    Text(BoardScreenRules.railCountLabel(n))
+                        .font(.scaled(size: 11, weight: on ? .semibold : .medium))
+                        .monospacedDigit()
+                        .foregroundStyle(on ? c.text : c.text3)
+                }
+            }
+            .frame(width: 44, height: showsCounts ? 46 : 38)
+            .background(on ? c.bgElev : .clear, in: .capsule)
+            .overlay(Capsule().strokeBorder(on ? c.border : .clear, lineWidth: 1 / 3))
+            .contentShape(.capsule)
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(statusLabel(s)), \(n)")
+        .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
+    }
+}
+
 /// One of the iPad's side-by-side columns, as on the Mac: a rounded panel with a header (dot,
 /// label, count) over its cards. The header reads "Planning, 3" like a phone chip (the UI tests and
 /// dev-sim look for it), and a tap scrolls the column into view.
