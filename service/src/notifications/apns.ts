@@ -2,7 +2,7 @@
 // JWT signed with the team's APNs key, one key per environment) over HTTP/2.
 
 import { connect, constants, type ClientHttp2Session } from "node:http2";
-import { readdirSync, readFileSync } from "node:fs";
+import { chmodSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ApnsEnvironment } from "@harness/shared";
@@ -61,26 +61,96 @@ export async function apnsJwt(keyId: string, teamId: string, pem: string, now = 
  */
 export const JWT_TTL_MS = 40 * 60_000;
 
+/** A key's token is never replaced sooner than this, even after Apple rejects it. */
+export const JWT_MIN_REFRESH_MS = 20 * 60_000;
+
+interface SignedToken {
+  jwt: string;
+  at: number;
+}
+
+/**
+ * One provider token per key. Concurrent sends share a single in-flight signing (several tokens for
+ * one key within moments is what Apple answers with 429 TooManyProviderTokenUpdates), and with a
+ * `file` the tokens survive a restart.
+ */
 export class ApnsTokens {
-  private cache = new Map<string, { jwt: string; at: number }>();
+  private cache = new Map<string, SignedToken>();
+  private signing = new Map<string, Promise<SignedToken>>();
+  private loaded = false;
   constructor(
     private readKey: (path: string) => string = (p) => readFileSync(p, "utf8"),
     private now: () => number = Date.now,
+    private opts: { file?: string; log?: (msg: string) => void } = {},
   ) {}
 
-  async get(key: ApnsKeyFile, teamId: string): Promise<string> {
-    const id = `${teamId}:${key.keyId}:${key.path}`;
-    const hit = this.cache.get(id);
-    const t = this.now();
-    if (hit && t - hit.at < JWT_TTL_MS) return hit.jwt;
-    const jwt = await apnsJwt(key.keyId, teamId, this.readKey(key.path), t);
-    this.cache.set(id, { jwt, at: t });
-    return jwt;
+  private load() {
+    if (this.loaded) return;
+    this.loaded = true;
+    if (!this.opts.file) return;
+    try {
+      const stored = JSON.parse(readFileSync(this.opts.file, "utf8")) as Record<string, Partial<SignedToken>>;
+      for (const [id, v] of Object.entries(stored)) {
+        if (typeof v?.jwt === "string" && typeof v.at === "number") this.cache.set(id, { jwt: v.jwt, at: v.at });
+      }
+    } catch {
+      // Missing, unreadable or corrupt: sign afresh.
+    }
   }
 
-  /** Drop a token Apple refused (403 ExpiredProviderToken / InvalidProviderToken) so the next send signs a new one. */
-  forget(key: ApnsKeyFile, teamId: string) {
-    this.cache.delete(`${teamId}:${key.keyId}:${key.path}`);
+  private save() {
+    const file = this.opts.file;
+    if (!file) return;
+    try {
+      const tmp = `${file}.${process.pid}.tmp`;
+      writeFileSync(tmp, JSON.stringify(Object.fromEntries(this.cache)), { mode: 0o600 });
+      chmodSync(tmp, 0o600);
+      renameSync(tmp, file);
+    } catch (err) {
+      this.opts.log?.(`notifications: couldn't save the APNs tokens: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  private sign(id: string, key: ApnsKeyFile, teamId: string): Promise<SignedToken> {
+    const inflight = this.signing.get(id);
+    if (inflight) return inflight;
+    const t = this.now();
+    const p = (async () => {
+      const jwt = await apnsJwt(key.keyId, teamId, this.readKey(key.path), t);
+      const token = { jwt, at: t };
+      this.cache.set(id, token);
+      this.save();
+      this.opts.log?.(`notifications: signed a new APNs token for the ${key.environment} key ${key.keyId}`);
+      return token;
+    })();
+    // A failed signing isn't remembered: the next send tries again.
+    const done = () => this.signing.delete(id);
+    p.then(done, done);
+    this.signing.set(id, p);
+    return p;
+  }
+
+  async get(key: ApnsKeyFile, teamId: string): Promise<string> {
+    this.load();
+    const id = `${teamId}:${key.keyId}:${key.path}`;
+    const hit = this.cache.get(id);
+    if (hit && this.now() - hit.at < JWT_TTL_MS) return hit.jwt;
+    return (await this.sign(id, key, teamId)).jwt;
+  }
+
+  /**
+   * A new token to replace `rejected`, which Apple refused (403 ExpiredProviderToken /
+   * InvalidProviderToken). Null when signing again can't help: the current token is younger than
+   * the refresh floor, so a wrong key or team is likelier than an expired token. When another send
+   * already replaced it, that token is returned.
+   */
+  async renew(key: ApnsKeyFile, teamId: string, rejected: string): Promise<string | null> {
+    this.load();
+    const id = `${teamId}:${key.keyId}:${key.path}`;
+    const hit = this.cache.get(id);
+    if (hit && hit.jwt !== rejected) return hit.jwt;
+    if (hit && this.now() - hit.at < JWT_MIN_REFRESH_MS) return null;
+    return (await this.sign(id, key, teamId)).jwt;
   }
 }
 
@@ -109,13 +179,27 @@ export class Http2Transport implements ApnsTransport {
     const drop = () => {
       if (this.sessions.get(origin) === s) this.sessions.delete(origin);
     };
-    s.on("error", drop);
-    s.on("goaway", drop);
+    // Close what Apple has given up on rather than leaving it half open, so the next request opens a new connection.
+    s.on("error", () => {
+      drop();
+      s.destroy();
+    });
+    s.on("goaway", () => {
+      drop();
+      s.close();
+    });
     s.on("close", drop);
     // An idle connection mustn't keep the service's event loop alive.
     s.unref();
     this.sessions.set(origin, s);
     return s;
+  }
+
+  private drop(origin: string) {
+    const s = this.sessions.get(origin);
+    if (!s) return;
+    this.sessions.delete(origin);
+    s.close();
   }
 
   post(origin: string, path: string, headers: Record<string, string>, body: string): Promise<ApnsHttpResponse> {
@@ -131,7 +215,11 @@ export class Http2Transport implements ApnsTransport {
       } catch (err) {
         return reject(err);
       }
-      req.setTimeout(REQUEST_TIMEOUT_MS, () => req.close(constants.NGHTTP2_CANCEL));
+      req.setTimeout(REQUEST_TIMEOUT_MS, () => {
+        req.close(constants.NGHTTP2_CANCEL);
+        // No answer: the connection is suspect, so the retry gets a new one.
+        this.drop(origin);
+      });
       let status = 0;
       let responseHeaders: ApnsHttpResponse["headers"] = {};
       const chunks: Buffer[] = [];
@@ -173,6 +261,12 @@ export interface ApnsResult {
 /** How long Apple keeps a notification for a device that's off or out of reach. */
 const EXPIRATION_S = 24 * 60 * 60;
 
+/** Waits before each retry of a send that failed at the connection (or with a 500/503). */
+const TRANSIENT_BACKOFF_MS = [250, 1_000];
+
+/** Apple's throttle on provider tokens clears fast; one retry after this wait, with the same token. */
+const THROTTLE_WAIT_MS = 2_000;
+
 export class ApnsClient {
   private tokens: ApnsTokens;
 
@@ -182,44 +276,88 @@ export class ApnsClient {
       tokens?: ApnsTokens;
       origins?: Record<ApnsEnvironment, string>;
       now?: () => number;
+      sleep?: (ms: number) => Promise<void>;
+      log?: (msg: string) => void;
     },
   ) {
     this.tokens = opts.tokens ?? new ApnsTokens();
   }
 
-  async send(key: ApnsKeyFile, teamId: string, n: ApnsSend, retried = false): Promise<ApnsResult> {
+  async send(key: ApnsKeyFile, teamId: string, n: ApnsSend): Promise<ApnsResult> {
+    const sleep = this.opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+    const label = `notifications: apns ${n.environment}`;
     let jwt: string;
     try {
       jwt = await this.tokens.get(key, teamId);
     } catch (err) {
       return { ok: false, status: 0, reason: `Couldn't sign with ${key.path}: ${err instanceof Error ? err.message : String(err)}` };
     }
-    const now = this.opts.now?.() ?? Date.now();
-    const headers: Record<string, string> = {
-      authorization: `bearer ${jwt}`,
-      "apns-topic": n.topic,
-      "apns-push-type": "alert",
-      "apns-priority": "10",
-      "apns-expiration": String(Math.floor(now / 1000) + EXPIRATION_S),
-    };
     const origin = (this.opts.origins ?? APNS_ORIGINS)[n.environment];
-    let res: ApnsHttpResponse;
-    try {
-      res = await this.opts.transport.post(origin, `/3/device/${n.deviceToken}`, headers, JSON.stringify(n.payload));
-    } catch (err) {
-      return { ok: false, status: 0, reason: err instanceof Error ? err.message : String(err) };
+    let renewed = false;
+    let throttled = false;
+    let transient = 0;
+    let retries = 0;
+    const retry = async (why: string, wait: number) => {
+      retries++;
+      this.opts.log?.(`${label}: retrying in ${wait}ms (${why})`);
+      await sleep(wait);
+    };
+    const finish = (r: ApnsResult): ApnsResult => {
+      if (retries > 0) this.opts.log?.(r.ok ? `${label}: retry succeeded after ${retries}` : `${label}: gave up after ${retries} ${retries === 1 ? "retry" : "retries"}: ${r.status} ${r.reason ?? ""}`.trim());
+      return r;
+    };
+    for (;;) {
+      const now = this.opts.now?.() ?? Date.now();
+      const headers: Record<string, string> = {
+        authorization: `bearer ${jwt}`,
+        "apns-topic": n.topic,
+        "apns-push-type": "alert",
+        "apns-priority": "10",
+        "apns-expiration": String(Math.floor(now / 1000) + EXPIRATION_S),
+      };
+      let res: ApnsHttpResponse;
+      try {
+        res = await this.opts.transport.post(origin, `/3/device/${n.deviceToken}`, headers, JSON.stringify(n.payload));
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : String(err);
+        // A reset, refused or unanswered stream: the transport opens a new connection for the retry.
+        if (transient < TRANSIENT_BACKOFF_MS.length) {
+          await retry(reason, TRANSIENT_BACKOFF_MS[transient++]!);
+          continue;
+        }
+        return finish({ ok: false, status: 0, reason });
+      }
+      if (res.status === 200) return finish({ ok: true, status: 200, reason: null });
+      let reason: string | null = null;
+      try {
+        reason = (JSON.parse(res.body) as { reason?: string }).reason ?? null;
+      } catch {}
+      const failure: ApnsResult = { ok: false, status: res.status, reason: reason ?? (res.body.trim() || null) };
+      if (res.status === 429 && reason === "TooManyProviderTokenUpdates" && !throttled) {
+        // Never mint another token for this: that is what Apple is throttling.
+        throttled = true;
+        await retry(reason, THROTTLE_WAIT_MS);
+        continue;
+      }
+      // A token Apple stopped accepting (it expired, or the key was revoked and replaced): sign anew once.
+      if (res.status === 403 && (reason === "ExpiredProviderToken" || reason === "InvalidProviderToken") && !renewed) {
+        renewed = true;
+        let next: string | null = null;
+        try {
+          next = await this.tokens.renew(key, teamId, jwt);
+        } catch {}
+        if (next) {
+          jwt = next;
+          await retry(reason, 0);
+          continue;
+        }
+      }
+      if ((res.status === 500 || res.status === 503) && transient < TRANSIENT_BACKOFF_MS.length) {
+        await retry(`${res.status} ${reason ?? ""}`.trim(), TRANSIENT_BACKOFF_MS[transient++]!);
+        continue;
+      }
+      return finish(failure);
     }
-    if (res.status === 200) return { ok: true, status: 200, reason: null };
-    let reason: string | null = null;
-    try {
-      reason = (JSON.parse(res.body) as { reason?: string }).reason ?? null;
-    } catch {}
-    // A token Apple stopped accepting (it expired, or the key was revoked and replaced): sign anew once.
-    if (res.status === 403 && (reason === "ExpiredProviderToken" || reason === "InvalidProviderToken") && !retried) {
-      this.tokens.forget(key, teamId);
-      return this.send(key, teamId, n, true);
-    }
-    return { ok: false, status: res.status, reason: reason ?? (res.body.trim() || null) };
   }
 
   close() {

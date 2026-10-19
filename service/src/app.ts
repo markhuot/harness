@@ -22,7 +22,7 @@ import { PresenceRegistry } from "./notifications/presence";
 import { NotificationService } from "./notifications/dispatcher";
 import { TerminalRegistry } from "./terminals/registry";
 import { spawnBunPty, type SpawnPty } from "./terminals/pty";
-import { ApnsClient, Http2Transport, type ApnsTransport } from "./notifications/apns";
+import { ApnsClient, ApnsTokens, Http2Transport, type ApnsTransport } from "./notifications/apns";
 
 export interface CreateHarnessOptions {
   home: string;
@@ -132,7 +132,11 @@ export async function createHarness(opts: CreateHarnessOptions): Promise<Harness
     bus,
     settings: () => settings().notifications,
     presence,
-    apns: new ApnsClient({ transport: opts.apnsTransport ?? new Http2Transport() }),
+    apns: new ApnsClient({
+      transport: opts.apnsTransport ?? new Http2Transport(),
+      tokens: new ApnsTokens(undefined, now, { file: paths.apnsTokensPath, log: opts.log }),
+      log: opts.log,
+    }),
     log: opts.log,
     now,
   });

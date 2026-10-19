@@ -16,6 +16,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
+- Push notifications that Apple throttled (429 TooManyProviderTokenUpdates) or whose connection dropped (refused stream, protocol error, no answer, 500/503) are now retried a couple of times instead of lost. Pushes sent at the same moment share one signed provider token per key, which is kept in `~/.harness/apns-tokens.json` across restarts and never replaced more than once per 20 minutes. `service.log` shows each new token, each retry and how it ended.
 - An agent chatting on a ticket (for example one in review, asked to open a pull request) can now add that pull request to its own ticket with `update_ticket`'s `pull_request_urls`, as a work run already could, instead of being refused because the ticket is its own.
 
 ### Changed

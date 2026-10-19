@@ -12,6 +12,8 @@ export interface HarnessPaths {
   home: string;
   dbPath: string;
   tokenPath: string;
+  /** APNs provider tokens, kept across restarts (0600) */
+  apnsTokensPath: string;
   logsDir: string;
   logPath: string;
   worktreesDir: string;
@@ -53,6 +55,7 @@ export function harnessPaths(home: string): HarnessPaths {
     home,
     dbPath: join(home, "harness.db"),
     tokenPath: join(home, "token"),
+    apnsTokensPath: join(home, "apns-tokens.json"),
     logsDir,
     logPath: join(logsDir, "service.log"),
     worktreesDir: join(home, "worktrees"),
