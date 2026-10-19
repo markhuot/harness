@@ -148,6 +148,8 @@ private struct TicketDetailBody: View {
     @State private var settling = PageSettling()
     @Environment(\.sheetResting) private var sheetResting
     @Environment(\.inTicketPanel) private var inTicketPanel
+    @Environment(DockedSheetInset.self) private var dockInset: DockedSheetInset?
+    @Environment(Router.self) private var router
     /// The annotator a tab body opened (the Browser tab's Annotate): presented here, outside the
     /// pager, so a page redrawing under it can't take it down.
     @State private var annotating: AnnotationRequest?
@@ -273,7 +275,9 @@ private struct TicketDetailBody: View {
             ForEach(pages, id: \.self) { page in
                 let t = page == strip ? shown : page
                 pageBody(t, strip: page, tornOff: tornOff)
-                    .modifier(HeroRoom(hero: hero, overlap: max(0, pageMaxY - hero.distance - composerTop)))
+                    .modifier(HeroRoom(hero: hero, overlap: max(0, pageMaxY - hero.distance - composerTop)
+                        // The docked cards float above the composer, over the page's bottom.
+                        + TicketDock.stackRoom(cards: inTicketPanel ? 0 : router.waitingSheets.count, inset: dockInset)))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     // A page's frame, not the pager's: the pager reports its frame before it reached
                     // under the composer, and a page keeps the home indicator's inset of its own.
@@ -293,6 +297,8 @@ private struct TicketDetailBody: View {
             }
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
+        // No blur or fade under the composer: its glass is the only thing between it and the tab.
+        .scrollEdgeEffectHidden(true, for: .bottom)
         // Down to the bottom of the screen, under the composer, so its glass shows the tab through
         // it (the page TabView clips its pages to its own frame).
         .ignoresSafeArea(.container, edges: .bottom)

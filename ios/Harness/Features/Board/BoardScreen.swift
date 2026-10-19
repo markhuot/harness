@@ -69,7 +69,16 @@ struct BoardScreen: View {
             barInset = $0
             dockInset?.barInset = $0
         }
-        .onDisappear { dockInset?.barInset = 0 }
+        .onDisappear {
+            dockInset?.barInset = 0
+            dockInset?.boardBar = nil
+        }
+        // The cards float over the bar at the bar's own width (and beside a button the system lifted).
+        .background {
+            BarButtonsProbe(trigger: barInset) { items in
+                dockInset?.boardBar = DockBar.bar(items: items, inset: barInset)
+            }
+        }
         .background(c.bg)
         .environment(ticketActions)
         .modifier(TicketActionHost(runner: ticketActions))

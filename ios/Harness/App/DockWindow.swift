@@ -176,11 +176,21 @@ private struct PhoneDock: View {
                           keyboardUp: state.keyboardUp, dialogUp: state.dialogUp)
     }
 
+    /// The bar the cards float above: the open ticket's composer, or the board's system bar when none
+    /// is open (a docked sheet is a card, so the board shows). A ticket screen without a composer has
+    /// no bar to clear.
+    private var placement: DockPlacement {
+        let ticketUp = router.ticketSheet != nil && router.ticketSheetState != .docked
+        let bar = ticketUp
+            ? inset.composerRow.flatMap { row in screen.map { DockBar.above(row: row, screenHeight: $0.height) } }
+            : inset.boardBar
+        return DockMetrics.phonePlacement(bar: bar, screen: screen)
+    }
+
     var body: some View {
         let shown = shown
         GeometryReader { geo in
-            DockedCardsContainer(sheets: router.waitingSheets, layout: .phone(screen: screen, region: geo.size,
-                                                        lift: DockMetrics.lift(barInset: inset.barInset, homeIndicator: screen?.homeIndicator ?? 0)),
+            DockedCardsContainer(sheets: router.waitingSheets, layout: .phone(placement: placement, region: geo.size),
                                  ghost: hold.armed ? router.ticketSheet?.title : nil,
                                  docked: router.ticketSheetState == .docked, shown: shown, onReport: report)
                 .frame(width: geo.size.width, height: geo.size.height, alignment: .bottom)

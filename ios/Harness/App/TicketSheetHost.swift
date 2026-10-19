@@ -169,6 +169,12 @@ extension EnvironmentValues {
     /// edge: the phone's dock floats its cards above it. 0 while the board isn't the screen showing.
     /// The ticket sheet covers the board without changing it, so the cards stay put under it.
     var barInset: CGFloat = 0
+    /// The board's system bar as measured (its buttons' edges), which the cards take the width of. Nil
+    /// while the board isn't the screen showing.
+    var boardBar: DockBar?
+    /// The open ticket's composer row in the window: the cards float above it while a ticket is up.
+    /// Nil without a composer (a screen without one, a keyboard-less sheet that is gone).
+    var composerRow: CGRect?
     /// A keyboard is up: the dock is faded out, so the ticket's composer keeps no room for it.
     var keyboardUp = false
     /// The iPad: how much of the board's bottom the docked card stack takes (DockedCardsContainer); 0
@@ -214,16 +220,16 @@ extension View {
 
 /// What the ticket sheet's screens keep clear at the bottom while other tickets wait in the dock,
 /// which is drawn over the sheet: everything below the top of the card stack (the sheet runs to the
-/// screen's edge, so no home indicator's inset is left over). The composer sits `TicketDock.barGap`
-/// above it (`TicketDock.composerGap`), as the board's bar does. None while a keyboard is up, where
-/// the dock is hidden and the composer rides the keyboard.
+/// screen's edge, so no home indicator's inset is left over). A screen with a composer keeps its own
+/// room above the composer instead (`TicketDock.stackRoom`), where the cards float. None while a
+/// keyboard is up, where the dock is hidden and the composer rides the keyboard.
 private struct SheetDockRoom: ViewModifier {
     @Environment(Router.self) private var router
     @Environment(\.concentricScreen) private var screen
     @Environment(DockedSheetInset.self) private var dockInset: DockedSheetInset?
 
     func body(content: Content) -> some View {
-        let room = TicketDock.sheetRoom(cards: router.waitingSheets.count, screen: screen, inset: dockInset)
+        let room = dockInset?.composerRow == nil ? TicketDock.sheetRoom(cards: router.waitingSheets.count, screen: screen, inset: dockInset) : 0
         content
             .safeAreaInset(edge: .bottom, spacing: 0) { Color.clear.frame(height: room) }
             .animation(.snappy, value: room)
@@ -235,9 +241,6 @@ private struct SheetDockRoom: ViewModifier {
 @MainActor enum TicketDock {
     /// One card's height.
     static let height = DockedCardMetrics.height
-    /// How far the composer sits above the docked cards, the same on every phone.
-    static let barGap = DockMetrics.barGap
-
     /// What the board gives up above its system bottom bar while tickets are docked, so the last
     /// cards scroll clear of the dock floating over the bar.
     static func boardRoom(screen: ConcentricBar.Screen?, inset: DockedSheetInset?, count: Int) -> CGFloat {
@@ -248,8 +251,7 @@ private struct SheetDockRoom: ViewModifier {
 
     /// What a section gives up at its bottom while tickets are docked, so the cards sit under the
     /// board's bottom bar rather than over it: everything below the bottom card's top edge, less
-    /// the home indicator's inset the section already keeps clear. The bar keeps `barGap` above
-    /// that (BoardScreen). Before the card is measured, one card plus its gap.
+    /// the home indicator's inset the section already keeps clear. Before the card is measured, one card plus its gap.
     static func clearance(screen: ConcentricBar.Screen?, stackTop: CGFloat?, count: Int) -> CGFloat {
         DockMetrics.clearance(screenHeight: screen?.height, stackTop: stackTop, homeIndicator: screen?.homeIndicator ?? 0,
                               rows: DockCards.rows(count: count, maxVisible: DockCards.phoneVisible))
@@ -263,9 +265,11 @@ private struct SheetDockRoom: ViewModifier {
                                      rows: DockCards.rows(count: cards, maxVisible: DockCards.phoneVisible))
     }
 
-    /// How far above the dock the ticket's composer sits at rest; nil leaves its usual concentric gap.
-    static func composerGap(cards: Int, inset: DockedSheetInset?) -> CGFloat? {
-        cards > 0 && inset?.keyboardUp != true ? barGap : nil
+    /// What a ticket screen keeps clear above its composer for the cards floating over it: the stack
+    /// and its gap to the composer. None without cards, or with a keyboard up (the dock is hidden then).
+    static func stackRoom(cards: Int, inset: DockedSheetInset?) -> CGFloat {
+        guard cards > 0, inset?.keyboardUp != true else { return 0 }
+        return DockMetrics.stackHeight(rows: DockCards.rows(count: cards, maxVisible: DockCards.phoneVisible)) + DockMetrics.phoneBottomGap
     }
 }
 

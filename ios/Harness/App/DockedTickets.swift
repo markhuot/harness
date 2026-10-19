@@ -421,13 +421,12 @@ struct DockedCardsLayout {
 
     static let margin = DockMetrics.cornerMargin
 
-    /// Full width above the ticket, in from the sides like a concentric bar, `lift` above their usual
-    /// place so they clear the board's system bottom bar.
-    static func phone(screen: ConcentricBar.Screen?, region: CGSize, lift: CGFloat = 0) -> DockedCardsLayout {
-        let sides = DockMetrics.phoneSides(screen: screen)
+    /// Over the bar the cards float above (the board's system bar, the ticket's composer), at the gaps
+    /// its `placement` gives.
+    static func phone(placement: DockPlacement, region: CGSize) -> DockedCardsLayout {
         return DockedCardsLayout(
             region: region, alignment: .bottom, columnAlignment: .center,
-            insets: EdgeInsets(top: 0, leading: sides, bottom: DockMetrics.phoneBottomGap + lift, trailing: sides),
+            insets: EdgeInsets(top: 0, leading: placement.leading, bottom: placement.bottom, trailing: placement.trailing),
             cardWidth: nil, listWidth: nil, listHeightCap: nil, maxVisible: DockCards.phoneVisible, fitting: nil,
             edge: .bottom, backdropAnchor: .bottom, backdropRadius: region.height * 1.1, backdropFillsRegion: false,
             ghostSlot: true)

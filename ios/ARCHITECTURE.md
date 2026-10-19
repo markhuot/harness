@@ -505,11 +505,14 @@ share sheet or photo or document picker presented from the main window's control
 poll in the dock window looks for. The container publishes where the top of the collapsed stack is
 (`DockedSheetInset.stackTop`): `DockClearance` gives the board's bottom clearance down to that
 measured top (`DockMetrics.clearance`, with or without a keyboard). The board's system bottom bar
-can't be moved, so the board reports its height (`DockedSheetInset.barInset`) and the dock floats
-its cards above it (`DockMetrics.lift`); the board keeps its own room above the bar
-(`DockMetrics.boardClearance`, `DockClearance(board:)` skips it) and the ticket sheet leaves the bar and cards where they are. In the ticket sheet each screen keeps the same room at its bottom
-(`SheetDockRoom`, inside the stack's screens like the board's), and the composer sits
-`TicketDock.barGap` above it (`TicketDock.composerGap`); a keyboard drops both
+can't be moved, so the board measures its buttons (`BarButtonsProbe`, into `DockedSheetInset.boardBar`) and the
+dock floats its cards above the bar at the bar's own edges (`DockBar`, `DockMetrics.phonePlacement`); a
+button the system lifted out of the row (the Duo stacks search above New session in its margin) shares
+the cards' row instead, and the cards end short of it. The board keeps its own room above the bar
+(`DockMetrics.boardClearance`, `DockClearance(board:)` skips it). With a ticket open the cards float above its
+composer (`DockedSheetInset.composerRow`, read by the composer) at its width, and the ticket's pages keep
+room for them above it (`TicketDock.stackRoom`); a ticket screen without a composer keeps the old room
+at its bottom (`SheetDockRoom`, inside the stack's screens like the board's). A keyboard drops the room
 (`DockedSheetInset.keyboardUp`), as the dock is hidden then and the composer rides the keys. "N more…"
 expands every waiting ticket into the `DockedCardList` over the screen on the backdrop; a tap on the
 backdrop collapses it. A tap on a card makes its ticket the sheet (`activateSheet`, plus `restoreDock`

@@ -35,14 +35,13 @@ struct ConcentricScreenReader: ViewModifier {
 
 /// A bottom bar's horizontal and bottom padding: concentric with the phone's corners at rest, and
 /// `horizontal`/`bottom` while `raised` (over the keyboard, where there are no corners to follow)
-/// or where the screen has none. At rest, `above` (when given) replaces the concentric gap below,
-/// where the bar sits `above` over whatever its slot ends at (the docked cards).
+/// or where the screen has none.
 private struct ConcentricBottomPadding: ViewModifier {
     let barHeight: CGFloat
     let raised: Bool
     let horizontal: CGFloat
     let bottom: CGFloat
-    let above: CGFloat?
+    let onFrame: ((CGRect) -> Void)?
     @Environment(\.concentricScreen) private var screen
     @Environment(\.concentricBottomGap) private var bottomGap
 
@@ -50,17 +49,18 @@ private struct ConcentricBottomPadding: ViewModifier {
         let p = (raised ? nil : ConcentricBar.padding(screen, barHeight: barHeight, bottomGap: bottomGap))
             ?? ConcentricBar.Padding(horizontal: horizontal, bottom: bottom)
         content
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { onFrame?($0) }
             .padding(.horizontal, p.horizontal)
-            .padding(.bottom, raised ? p.bottom : above ?? p.bottom)
+            .padding(.bottom, p.bottom)
     }
 }
 
 extension View {
     /// Pads a bottom bar `barHeight` tall (its single row) so its ends are concentric with the
     /// phone's corners; see ConcentricBottomPadding.
+    /// `onFrame` reads the bar's frame in the window, inside its padding.
     func concentricBottomPadding(barHeight: CGFloat, raised: Bool, horizontal: CGFloat, bottom: CGFloat,
-                                 above: CGFloat? = nil) -> some View {
-        modifier(ConcentricBottomPadding(barHeight: barHeight, raised: raised, horizontal: horizontal, bottom: bottom,
-                                         above: above))
+                                 onFrame: ((CGRect) -> Void)? = nil) -> some View {
+        modifier(ConcentricBottomPadding(barHeight: barHeight, raised: raised, horizontal: horizontal, bottom: bottom, onFrame: onFrame))
     }
 }
