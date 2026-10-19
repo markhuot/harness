@@ -39,16 +39,16 @@ enum Renderer {
 
     enum Rotation: Error { case stuck(Bool) }
 
-    /// The iPad's safe area the references were recorded under (an iPad Pro 11-inch, portrait, Windowed Apps,
-    /// the default of a fresh simulator): the status bar's 32 points on top and the home indicator's 20 below.
-    /// A simulator in another state (Full Screen Apps puts 25 below; a modified one has been seen with the
-    /// content 22 points off) draws every screen at another offset, so the render stops with the values
+    /// The iPad's safe area the references were recorded under (an iPad Pro 11-inch, portrait, Full Screen Apps):
+    /// the status bar's 32 points on top and 25 below. A fresh simulator starts in Windowed Apps (20 below, and
+    /// a window the walkthrough's taps don't get through), and an older one has been seen drawing every
+    /// screen 22 points higher. Another state draws every screen at another offset, so the render stops with the values
     /// rather than correcting them: a layout regression can't hide behind a normalisation, and a diff that
     /// is only a shifted image isn't read as one.
     struct SceneMismatch: Error, CustomStringConvertible {
         let found: String
         var description: String {
-            "the simulator isn't in the state the iPad references were recorded in: \(found); expected the iPad Pro 11-inch in portrait (834 x 1210), safe area top 32 and bottom 20 (Settings > Multitasking & Gestures > Windowed Apps). Put it back and render again; re-recording would bake the shifted layout into the references."
+            "the simulator isn't in the state the iPad references were recorded in: \(found); expected the iPad Pro 11-inch in portrait (834 x 1210), safe area top 32 and bottom 25 (Settings > Multitasking & Gestures > Full Screen Apps). Put it back and render again; re-recording would bake the shifted layout into the references."
         }
     }
 
@@ -57,7 +57,7 @@ enum Renderer {
         let insets = window.safeAreaInsets
         let portrait = size.width < size.height
         // A landscape iPad turns the insets; only portrait is pinned.
-        guard portrait, insets.top != 32 || insets.bottom != 20 else { return }
+        guard portrait, insets.top != 32 || insets.bottom != 25 else { return }
         throw SceneMismatch(found: "screen \(size.width) x \(size.height), safe area top \(insets.top) bottom \(insets.bottom), status bar \(scene?.statusBarManager?.statusBarFrame.height ?? -1)")
     }
 
