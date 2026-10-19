@@ -9,12 +9,17 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- On the iPhone Duo, the board's status tabs (Planning, In Progress, Blocked, Review, Done) now sit in one glass rail in the right margin, replacing the strip across the top. The focused column's icon is highlighted, each icon carries its count, and tapping one scrolls the board to that column. An ordinary iPhone keeps the top strip, and the open Duo and iPad show every column with no tabs.
+
 ### Fixed
 
 - An agent chatting on a ticket (for example one in review, asked to open a pull request) can now add that pull request to its own ticket with `update_ticket`'s `pull_request_urls`, as a work run already could, instead of being refused because the ticket is its own.
 
 ### Changed
 
+- Status dots on iPhone and iPad now use the Mac's partial fills: in progress half full, review three quarters, and planning, blocked and done solid, so the statuses read apart by shape as well as color.
 - On iPhone and the iPhone Duo, a docked ticket's card now takes the width of the bar it floats above: the board's system bottom bar (edge to edge of its buttons) or the open ticket's message box. On the Duo, where the system puts search up in the margin, the card sits level with search and ends before it. With a ticket open, the card now floats above the message box instead of below it, and the ticket scrolls clear of it. The message box no longer blurs or fades the tab's content scrolling beneath it, so the content shows through its glass.
 - For people working on Harness: the dock no longer works out its position from the device's corner radius or a separate gap above the composer. It measures the bar's own buttons (or the composer) and sits above them, so the iPhone and the Duo share one layout path.
 - For people working on Harness: the walkthrough now raises the keyboard on an iPhone's open ticket and fails if the composer ends up under it, since the composer rides the keyboard as a safe-area bar.

@@ -44,7 +44,39 @@ struct StatusDot: View {
     @Environment(\.palette) private var c
 
     var body: some View {
-        Circle().fill(c.status(status)).frame(width: size, height: size).accessibilityHidden(true)
+        let color = c.status(status)
+        ZStack {
+            Circle().fill(color).opacity(fill >= 1 ? 1 : 0)
+            if fill > 0, fill < 1 { PieSlice(fraction: fill).fill(color) }
+            Circle().strokeBorder(color, lineWidth: max(1, size * 0.17))
+        }
+        .frame(width: size, height: size)
+        .accessibilityHidden(true)
+    }
+
+    /// How much of the dot is filled, as on the desktop: in progress half, review three quarters, the rest solid.
+    var fill: Double { Self.fill(status) }
+
+    static func fill(_ s: TicketStatus) -> Double {
+        switch s {
+        case .inProgress: 0.5
+        case .review: 0.75
+        default: 1
+        }
+    }
+}
+
+/// A pie wedge from 12 o'clock clockwise (the desktop's conic-gradient).
+struct PieSlice: Shape {
+    let fraction: Double
+
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        let c = CGPoint(x: rect.midX, y: rect.midY)
+        p.move(to: c)
+        p.addArc(center: c, radius: min(rect.width, rect.height) / 2, startAngle: .degrees(-90), endAngle: .degrees(-90 + 360 * fraction), clockwise: false)
+        p.closeSubpath()
+        return p
     }
 }
 
