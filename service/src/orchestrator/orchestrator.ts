@@ -3326,12 +3326,13 @@ ${numberLines(r.body)}`;
   }
 
   /**
-   * A work run's own ticket, when its only field is pullRequestUrls: the one edit a work run makes
-   * to its own card (it adds the pull requests it opened outside the completion run). Anything
-   * else on its own ticket is refused by boardTarget.
+   * A work or chat run's own ticket, when its only field is pullRequestUrls: the one edit these runs
+   * make to their own card (they add the pull requests they opened outside the completion run, and a
+   * chat on a ticket in review opens one when the human asks for it). Anything else on its own ticket
+   * is refused by boardTarget.
    */
   private ownWorkPullRequests(ctx: ToolContext, key: string, fields: string[]): Ticket | null {
-    if (ctx.runKind !== "work" || fields.length !== 1 || fields[0] !== "pullRequestUrls") return null;
+    if ((ctx.runKind !== "work" && ctx.runKind !== "chat") || fields.length !== 1 || fields[0] !== "pullRequestUrls") return null;
     const own = this.ctxTicket(ctx);
     // Resolved like ownPlanTarget does, so an earlier key (alias) of this ticket counts too. A remote ID never identifies a ticket.
     const target = this.agentTarget(String(key ?? "").trim());

@@ -9,6 +9,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- An agent chatting on a ticket (for example one in review, asked to open a pull request) can now add that pull request to its own ticket with `update_ticket`'s `pull_request_urls`, as a work run already could, instead of being refused because the ticket is its own.
+
 ### Changed
 
 - On iPhone and the iPhone Duo, a docked ticket's card now takes the width of the bar it floats above: the board's system bottom bar (edge to edge of its buttons) or the open ticket's message box. On the Duo, where the system puts search up in the margin, the card sits level with search and ends before it. With a ticket open, the card now floats above the message box instead of below it, and the ticket scrolls clear of it. The message box no longer blurs or fades the tab's content scrolling beneath it, so the content shows through its glass.

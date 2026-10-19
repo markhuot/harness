@@ -86,6 +86,36 @@ test("update_ticket edits another ticket's title and dependencies, but never the
   expect(h.ticket(me.key).title).not.toBe("Nope");
 });
 
+test("update_ticket takes pull_request_urls alone on the agent's own ticket in a work run, and refuses any other field with it", async () => {
+  const { results, h, me } = await agent([
+    ["update_ticket", { key: "ACME-2", pull_request_urls: ["https://github.com/acme/app/pull/7"] }],
+    ["update_ticket", { key: "ACME-2", title: "Nope", pull_request_urls: ["https://github.com/acme/app/pull/8"] }],
+  ]);
+  expect(results[0]!.isError).toBe(false);
+  expect(h.ticket(me.key).pullRequests.map((p) => p.url)).toEqual(["https://github.com/acme/app/pull/7"]);
+  expect(results[1]!.isError).toBe(true);
+  expect(h.ticket(me.key).title).not.toBe("Nope");
+});
+
+test("a chat run records a pull request on its own ticket with update_ticket, but can't edit anything else on it", async () => {
+  const h = makeOrchestrator({ tools: undefined });
+  const first = callTools([["submit_for_review", { note: "done", spec_is_up_to_date: true }]]);
+  const chat = callTools([
+    ["update_ticket", { key: "ACME-1", pull_request_urls: ["https://github.com/acme/app/pull/9"] }],
+    ["update_ticket", { key: "ACME-1", title: "Nope" }],
+  ]);
+  h.driver.script(first.steps, chat.steps);
+  const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x", skipAgentReview: true });
+  await h.settle();
+  await h.orch.sendMessage(t.key, "I opened a PR, record it");
+  await h.settle();
+  expect(h.driver.requests[1]!.kind).toBe("chat");
+  expect(chat.results[0]!.isError).toBe(false);
+  expect(h.ticket(t.key).pullRequests.map((p) => p.url)).toEqual(["https://github.com/acme/app/pull/9"]);
+  expect(chat.results[1]!.isError).toBe(true);
+  expect(h.ticket(t.key).title).not.toBe("Nope");
+});
+
 test("move_ticket moves another ticket to a column; in_progress isn't offered", async () => {
   const { results, h, other } = await agent([["move_ticket", { key: "ACME-1", status: "blocked" }], ["move_ticket", { key: "ACME-1", status: "in_progress" }]]);
   expect(results[0]!.text).toBe("Moved ACME-1 (status: blocked).");
