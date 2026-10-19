@@ -78,3 +78,31 @@ test("a wait on a page that reloads under it starts again in the new context, an
     server.stop(true);
   }
 });
+
+test("a wait whose page keeps losing its context stops retrying at the deadline, and doesn't spin in between", async () => {
+  let evaluations = 0;
+  const server = Bun.serve({
+    port: 0,
+    fetch: (req, s) => (s.upgrade(req) ? undefined : new Response("no")),
+    websocket: {
+      message(ws, raw) {
+        const { id } = JSON.parse(String(raw)) as { id: number };
+        evaluations++;
+        ws.send(JSON.stringify({ id, error: { message: "Execution context was destroyed." } }));
+      },
+    },
+  });
+  try {
+    const cdp = new Cdp(`ws://localhost:${server.port}`);
+    await cdp.opened();
+    const page = new Page(cdp, "s", { targetId: "t", type: "page", url: "file:///app" });
+    await expect(page.waitFor("the board", "true", 300)).rejects.toThrow(/the board/);
+    const atDeadline = evaluations;
+    expect(atDeadline).toBeLessThan(20);
+    await new Promise<void>((res) => setTimeout(res, 200));
+    expect(evaluations - atDeadline).toBeLessThanOrEqual(2);
+    cdp.close();
+  } finally {
+    server.stop(true);
+  }
+});

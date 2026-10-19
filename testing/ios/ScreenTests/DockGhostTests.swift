@@ -94,11 +94,14 @@ final class DockGhostTests: ScreenTestCase {
             }
             let span = after.timeIntervalSince(before)
             let across = (0...16).map { wave(before.addingTimeInterval(span * Double($0) / 16)) }
-            samples.append((wave(before.addingTimeInterval(span / 2)), across.min() ?? 0, across.max() ?? 0, total / count))
             images.append(image)
+            // A draw that stalled for a good part of the period was taken anywhere along the curve: its
+            // window is too wide to say anything, so it isn't scored (the count below fails a run starved of frames).
+            guard span <= DockGhostCard.pulsePeriod * 0.1 else { try await skip(); continue }
+            samples.append((wave(before.addingTimeInterval(span / 2)), across.min() ?? 0, across.max() ?? 0, total / count))
             try await skip()
         }
-        XCTAssertGreaterThan(samples.count, 30, "too few frames to judge the pulse")
+        XCTAssertGreaterThan(samples.count, 30, "too few quick frames to judge the pulse (\(images.count) drawn)")
 
         // Least-squares line glow = a + b * wave; the residuals are what the wave doesn't explain.
         let n = Double(samples.count)

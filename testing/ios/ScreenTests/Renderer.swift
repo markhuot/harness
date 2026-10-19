@@ -89,12 +89,13 @@ enum Renderer {
         window.overrideUserInterfaceStyle = style
         window.rootViewController = host
         window.isHidden = false
-        try checkSceneMatchesReferences(window: window, scene: scene, size: size)
         defer {
             window.isHidden = true
             window.rootViewController = nil
             docks(in: scene).forEach { $0.isHidden = true; $0.rootViewController = nil }
         }
+        // After the defer, so a mismatch hides the window again instead of leaving it over later renders.
+        try checkSceneMatchesReferences(window: window, scene: scene, size: size)
 
         var previous: Data?
         var stable = 0

@@ -163,19 +163,23 @@ export class Page {
     // A page that reloads while it's being waited on (the Mac app does once, soon after it opens) destroys
     // the context the wait runs in: the wait starts again in the new one; the deadline still bounds it.
     const lost = /Execution context was destroyed|Cannot find context|Inspected target navigated or closed/;
+    let abandoned = false;
     const run = (async () => {
-      for (;;) {
+      while (!abandoned) {
         try {
           return await this.evaluate<{ ok: boolean; v: T }>(script);
         } catch (e) {
           if (!(e instanceof Error && lost.test(e.message))) throw e;
+          await new Promise<void>((res) => setTimeout(res, 50));
         }
       }
+      return { ok: false, v: undefined as T };
     })();
     try {
       const r = await withDeadline(what, ms, run, () => undefined);
       return r.v;
     } catch (e) {
+      abandoned = true;
       const last = await this.evaluate<string>(`(window.${key}Stop && window.${key}Stop(), String(JSON.stringify(window.${key}Last) ?? 'false') + ' on ' + location.hash + ' / ' + (document.body?.innerText ?? '').slice(0, 200))`).catch(() => "(page not answering)");
       if (e instanceof Error && e.name === "DeadlineError") throw new Error(`${e.message.replace(/last seen: .*$/, "")}last seen: ${last.replace(/\s+/g, " ")}`);
       throw e;

@@ -256,7 +256,9 @@ export function phone(name: string, udid: string): Phone {
             return undefined;
           }
           found = `preferences ${r.out.slice(0, 300)}`;
-          return savedAfter(r.out, since) ? true : undefined;
+          if (savedAfter(r.out, since)) return true;
+          await new Promise<void>((res) => setTimeout(res, 250));
+          return undefined;
         });
       } catch (e) {
         throw new Error(`${(e as Error).message}: the app never wrote its restorable state after Home (pressed at ${since}; ${found}`);
