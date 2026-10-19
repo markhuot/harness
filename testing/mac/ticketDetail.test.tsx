@@ -127,6 +127,29 @@ describe("TicketDetail", () => {
     expect(all(m.container, "*").filter((e) => e.children.length === 0 && text(e) === "Read").length).toBeGreaterThan(0);
   });
 
+  test("a tool's screenshot opens in the lightbox, stepping through that result's images", async () => {
+    const png = (b: string) => ({ type: "image" as const, data: b, mimeType: "image/png" });
+    const m = await mount(detail("HARNESS-2", "transcript"), {
+      world: edited((w) => {
+        const call = w.transcript.find((e) => e.id === "tr-4")!;
+        w.transcript.push(
+          { ...call, id: "tr-20", seq: 20, content: { type: "tool_call", callId: "call-shot", name: "screenshot", input: {} } },
+          { ...call, id: "tr-21", seq: 21, content: { type: "tool_result", callId: "call-shot", name: "screenshot", output: [png("AAAA"), { type: "text", text: "two tabs" }, png("BBBB")], isError: false } },
+        );
+      }),
+    });
+    await m.until("transcript", () => text(m.container).includes("laptop sleeps"));
+    await click(m, all(m.container, ".t-tool-head").find((b) => text(b).startsWith("screenshot"))!);
+    await click(m, all(m.container, "button").find((b) => b.getAttribute("aria-label") === "Open screenshot output 2")!);
+    const shown = () => all(document.body, ".lightbox-stage img")[0]?.getAttribute("src");
+    expect(shown()).toBe("data:image/png;base64,BBBB");
+    expect(text(all(document.body, ".lightbox-bar")[0])).toContain("2 / 2");
+    await m.settle(() => void dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft" })));
+    expect(shown()).toBe("data:image/png;base64,AAAA");
+    expect(text(all(document.body, ".lightbox-name")[0])).toBe("screenshot output 1");
+    expect(m.client.unrouted).toEqual([]);
+  });
+
   test("a transcript entry pushed during a run is appended below the others", async () => {
     const m = await mount(detail("HARNESS-2", "transcript"));
     await m.until("transcript", () => text(m.container).includes("laptop sleeps"));

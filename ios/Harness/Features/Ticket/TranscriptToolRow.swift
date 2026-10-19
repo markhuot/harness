@@ -74,9 +74,9 @@ struct TranscriptToolRow: View {
                         TranscriptLabel("Input")
                         TranscriptCodeBox(text: TranscriptLogic.inputJSON(input))
                     }
-                    if case let .toolResult(_, _, output, isError)? = result?.content {
+                    if case let .toolResult(callId, _, output, isError)? = result?.content {
                         TranscriptLabel(isError ? "Error" : "Output")
-                        TranscriptToolOutput(output: output)
+                        TranscriptToolOutput(callId: callId, tool: name, output: output)
                     } else {
                         Text("Running…").font(.scaled(size: 15)).foregroundStyle(c.text3)
                     }
@@ -160,48 +160,84 @@ struct TranscriptCodeBox: View {
     }
 }
 
-/// A tool result's blocks: text (pretty printed when it's JSON, capped) and inline images.
+/// A tool result's blocks: text (pretty printed when it's JSON, capped) and inline images. A tap on
+/// an image opens the attachment viewer over the result's images.
 struct TranscriptToolOutput: View {
+    let callId: String
+    let tool: String
     let output: [ToolResultContent]
+    @State private var viewing: AttachmentViewerStart?
     @Environment(\.palette) private var c
 
     var body: some View {
         if output.isEmpty {
             Text("(no output)").font(.scaled(size: 15)).foregroundStyle(c.text3)
         } else {
-            ForEach(output.indices, id: \.self) { i in
-                switch output[i] {
-                case let .text(text): TranscriptCodeBox(text: Format.formatMaybeJson(text, max: TranscriptLogic.outputLimit))
-                case let .image(data, _): TranscriptOutputImage(base64: data)
-                case .unknown: EmptyView()
+            let media = Attachments.toolOutputMedia(callId: callId, tool: tool, output: output)
+            // One stack, so the cover below attaches once rather than to every block.
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(output.indices, id: \.self) { i in
+                    switch output[i] {
+                    case let .text(text): TranscriptCodeBox(text: Format.formatMaybeJson(text, max: TranscriptLogic.outputLimit))
+                    case let .image(data, _):
+                        if let n = media.firstIndex(where: { $0.at == i }) {
+                            TranscriptOutputImage(base64: data, url: media[n].url) {
+                                var t = Transaction()
+                                t.disablesAnimations = true
+                                withTransaction(t) { viewing = AttachmentViewerStart(index: n) }
+                            }
+                        }
+                    case .unknown: EmptyView()
+                    }
+                }
+            }
+            .fullScreenCover(item: $viewing) { start in
+                AttachmentViewer(attachments: media.map(\.attachment), start: start.index, url: { a in media.first { $0.attachment.id == a.id }?.url }) {
+                    var t = Transaction()
+                    t.disablesAnimations = true
+                    withTransaction(t) { viewing = nil }
                 }
             }
         }
     }
 }
 
-/// A base64 image from a tool result, decoded off the main thread once.
+/// A base64 image from a tool result, decoded off the main thread once. The decoded image goes in
+/// the attachment cache under its data: URL, so the viewer shows it without decoding it again.
 struct TranscriptOutputImage: View {
     let base64: String
+    /// Its data: URL, the viewer's key for it
+    let url: String
+    let onOpen: () -> Void
     @State private var image: UIImage?
     @Environment(\.palette) private var c
 
     var body: some View {
-        Group {
-            if let image {
-                Image(uiImage: image).resizable().scaledToFit()
-            } else {
-                c.bgSunken
+        Button(action: onOpen) {
+            Group {
+                if let image {
+                    Image(uiImage: image).resizable().scaledToFit()
+                } else {
+                    c.bgSunken
+                }
             }
+            .frame(maxWidth: .infinity)
+            .aspectRatio(16 / 10, contentMode: .fit)
+            .clipShape(.rect(cornerRadius: 6))
+            .contentShape(.rect)
         }
-        .frame(maxWidth: .infinity)
-        .aspectRatio(16 / 10, contentMode: .fit)
-        .clipShape(.rect(cornerRadius: 6))
-        .accessibilityElement()
+        .buttonStyle(.plain)
         .accessibilityLabel("Tool output image")
-        .task(id: base64) {
+        .accessibilityHint("Opens it full screen")
+        .task(id: url) {
+            if let hit = AttachmentMedia.shared.cached(url) {
+                image = hit
+                return
+            }
             let data = base64
-            image = await Task.detached { Data(base64Encoded: data, options: .ignoreUnknownCharacters).flatMap(UIImage.init(data:)) }.value
+            guard let decoded = await Task.detached(operation: { Data(base64Encoded: data, options: .ignoreUnknownCharacters).flatMap(UIImage.init(data:)) }).value else { return }
+            AttachmentMedia.shared.seed(decoded, url: url)
+            image = decoded
         }
     }
 }

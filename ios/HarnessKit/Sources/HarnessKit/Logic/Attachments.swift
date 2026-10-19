@@ -1,6 +1,6 @@
 import Foundation
 
-// A port of shared/src/state/attachments.ts (lightbox stepping), plus the iPhone's own layout:
+// A port of shared/src/state/attachments.ts (lightbox stepping, a tool result's media), plus the iPhone's own layout:
 // fitting, paging and swipe-to-close in the full-screen viewer. Pure layout math: points in,
 // points out.
 //
@@ -49,6 +49,34 @@ public enum Attachments {
     public static func stepAttachment(index: Int, delta: Int, count: Int) -> Int {
         if count <= 0 { return 0 }
         return (((index + delta) % count) + count) % count
+    }
+
+    /// One image (or video) a tool returned, ready for the viewer, and where it sits in the result.
+    public struct ToolOutputMedia: Equatable, Sendable {
+        /// Its block's index in the tool result's output
+        public var at: Int
+        /// A stand-in for the viewer: the service never stored these bytes, so the id is only local
+        public var attachment: Attachment
+        /// A data: URL of the block's own bytes
+        public var url: String
+    }
+
+    /// The media in a tool result (screenshots, mostly), in order, so a tap on one opens the viewer
+    /// over all of them. Each is named for the tool, numbered when there's more than one.
+    public static func toolOutputMedia(callId: String, tool: String, output: [ToolResultContent]) -> [ToolOutputMedia] {
+        let blocks: [(at: Int, data: String, mimeType: String)] = output.enumerated().compactMap { at, o in
+            if case let .image(data, mimeType) = o { (at, data, mimeType) } else { nil }
+        }
+        return blocks.enumerated().map { n, b in
+            ToolOutputMedia(
+                at: b.at,
+                attachment: Attachment(
+                    id: "\(callId):\(b.at)", path: "", name: blocks.count > 1 ? "\(tool) output \(n + 1)" : "\(tool) output",
+                    source: .upload, kind: b.mimeType.hasPrefix("video/") ? .video : .image, mimeType: b.mimeType
+                ),
+                url: "data:\(b.mimeType);base64,\(b.data)"
+            )
+        }
     }
 
     // MARK: - iPhone layout (frozen fixtures)
