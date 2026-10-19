@@ -231,6 +231,7 @@ export function phone(name: string, udid: string): Phone {
       // press it until the app's root element (labelled "Harness") has left the screen. The look
       // after a press is slow on a loaded Mac, so a press is judged by two looks, not a fixed pause.
       const since = Date.now() / 1000;
+      const before = (await labels()).slice(0, 12).join(" | ");
       let home = false;
       for (let press = 0; press < 5 && !home; press++) {
         await axe("button", "home");
@@ -243,6 +244,7 @@ export function phone(name: string, udid: string): Phone {
       // The app saves what it restores when its scene leaves the foreground, which can trail the Home
       // screen on a busy simulator. A save is the one with a time from after the press: waiting on
       // "a saved state exists" would pass on an older one.
+      let found = "no preferences file";
       try {
         await until(`${name}: the app's saved state`, 30_000, async () => {
           // The app's own preferences file: `defaults read` through simctl spawn reads the simulator's user domain, which the app's UserDefaults don't write to.
@@ -253,10 +255,11 @@ export function phone(name: string, udid: string): Phone {
             await new Promise<void>((res) => setTimeout(res, 250));
             return undefined;
           }
+          found = `preferences ${r.out.slice(0, 300)}`;
           return savedAfter(r.out, since) ? true : undefined;
         });
       } catch (e) {
-        throw new Error(`${(e as Error).message}: the app never wrote its restorable state after Home`);
+        throw new Error(`${(e as Error).message}: the app never wrote its restorable state after Home (pressed at ${since}; ${found}; on screen before Home: ${before})`);
       }
     },
     async screenshot(path) {
