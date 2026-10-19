@@ -345,9 +345,8 @@ feature needs something new here, add to it without changing what's there.
 ## iPad layout
 
 `MainTabs` branches on `horizontalSizeClass`, never on the device idiom. At compact width each section's root has `SidebarToolbarItem` (the Projects sheet); the board
-hides its navigation bar and draws its own glass bottom bar (`BoardBottomBar`, a `safeAreaInset`
-rather than toolbar items): Projects, the command palette field ("Search or run a command"; a
-button that presents the palette sheet, `SheetRoute.palette`), New session. The palette
+hides its navigation bar and uses the system's bottom bar (`.bottomBar` toolbar items, on every phone and the iPad): Projects, the command palette field (portrait phone: "Search or run a command", a
+button that presents the palette sheet, `SheetRoute.palette`; a magnifier elsewhere), New session. The palette
 (`Features/Palette/PaletteScreen`, rules in HarnessKit `Palette`/`PaletteRows`) is the Mac's ⌘K:
 plain text finds tickets (the board loader's search, so one request) and commands, `>` limits it
 to commands (and "Go to" rows, never tickets or files), `#` to tickets, `@` (⌘P, "Open file…") to
@@ -506,8 +505,10 @@ fades out (`DockCards.isShown`) while a keyboard is up, a picker, the palette or
 share sheet or photo or document picker presented from the main window's controllers, which a short
 poll in the dock window looks for. The container publishes where the top of the collapsed stack is
 (`DockedSheetInset.stackTop`): `DockClearance` gives the board's bottom clearance down to that
-measured top (`DockMetrics.clearance`, with or without a keyboard), and the bottom bar rides above
-the stack at its own inset. In the ticket sheet each screen keeps the same room at its bottom
+measured top (`DockMetrics.clearance`, with or without a keyboard). The board's system bottom bar
+can't be moved, so the board reports its height (`DockedSheetInset.barInset`) and the dock floats
+its cards above it (`DockMetrics.lift`); the board keeps its own room above the bar
+(`DockMetrics.boardClearance`, `DockClearance(board:)` skips it) and the ticket sheet leaves the bar and cards where they are. In the ticket sheet each screen keeps the same room at its bottom
 (`SheetDockRoom`, inside the stack's screens like the board's), and the composer sits
 `TicketDock.barGap` above it (`TicketDock.composerGap`); a keyboard drops both
 (`DockedSheetInset.keyboardUp`), as the dock is hidden then and the composer rides the keys. "N more…"
@@ -1138,7 +1139,7 @@ native-pattern difference, not a missing feature.
 | Scan QR (permission, Open Settings, recheck on return, dedupe, haptics) | screens/Scan | Features/Connect/ScanScreen | done |
 | Connection banner (re-pair on 401, reconnecting + load error) | screens/ConnectionBanner | UI/ConnectionBanner | done |
 | Board: columns as pages, status chips "Status, n", landing column, swipe haptic | screens/Board, lib/boardColumns | Features/Board/BoardScreen, BoardColumnView, HarnessKit BoardScreenRules | done (iPad at regular width: all five columns side by side, as on the Mac) |
-| Board (phone: no header); bottom bar: Projects, command palette field, + New session (iPad: palette button and New session top trailing; ⌘F, ⌘K, and ⌘N with the window shortcuts) | screens/Board, ui/header | BoardScreen | done (differs) |
+| Board (phone: no header); system bottom bar: Projects, command palette field, + New session (iPad: palette button and New session top trailing; ⌘F, ⌘K, and ⌘N with the window shortcuts) | screens/Board, ui/header | BoardScreen | done (differs) |
 | Done paging, autofill, "Couldn't load older tickets. Retry", empty states, pull to refresh | screens/Board, lib/boardLoader | BoardColumnView, State/BoardLoader | done |
 | Cards: badges, review marks, blocked/approval lines, rollups, dep chips, driver/model names, dimmed children, drafts | screens/TicketCard | BoardTicketCard, UI/Badges (ModelBadge) | done |
 | Card menu (titled "KEY · title"): the ticket's own actions (Start work, Approve submenu, Request changes, Re-open, the More items), open parent, copy key, discard draft; VoiceOver actions | screens/TicketCard | BoardTicketCard, BoardScreenRules | done |

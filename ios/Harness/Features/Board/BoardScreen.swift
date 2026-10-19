@@ -5,13 +5,12 @@ import SwiftUI
 /// on iPad at regular width and on a phone in landscape all five side by side like the Mac (each with its own header, no
 /// strip), the project filter behind the sidebar button, pull to refresh. Done is paged:
 /// it scrolls into older pages (footer spinner) and its count is the server's total. The
-/// the navigation bar is never shown: on the portrait phone our own bottom bar (BoardBottomBar)
-/// reads Projects, the command palette field (always on screen, its placeholder the project's or
-/// group's name or "All projects"; tapping it opens the palette, PaletteScreen, which finds tickets
-/// and runs commands, "Show child tickets" among them) and New session. On the iPad and the phone in
-/// landscape, and the iPhone Duo (`chromeless`) the system's bottom bar holds Projects (the sidebar's toggle on iPad),
-/// search (⌘K or ⌘F) and New session (⌘N), the columns run beneath it, and the last two hide while
-/// a ticket panel covers them. The board doesn't filter by a search: that's the Mac's.
+/// the navigation bar is never shown: the system's bottom bar holds Projects (the sidebar's toggle on
+/// iPad), search (⌘K or ⌘F) and New session (⌘N), the columns run beneath it, and the last two hide
+/// while a ticket panel covers them. On the portrait phone search is a wide field ("Search or run a
+/// command"); elsewhere a magnifier. Either opens the palette, PaletteScreen, which finds tickets
+/// and runs commands, "Show child tickets" among them. The docked cards float above the bar
+/// (DockedSheetInset.barInset). The board doesn't filter by a search: that's the Mac's.
 struct BoardScreen: View {
     @Environment(BoardStore.self) private var store
     @Environment(AppModel.self) private var app
@@ -21,6 +20,9 @@ struct BoardScreen: View {
     @Environment(\.desktopShell) private var desktop
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @Environment(\.concentricScreen) private var screen
+    /// Told how tall the bottom bar is, for the dock's cards to float above it.
+    @Environment(DockedSheetInset.self) private var dockInset: DockedSheetInset?
 
     /// The column on screen (the pager's scroll position).
     @State private var page: TicketStatus? = .planning
@@ -39,21 +41,16 @@ struct BoardScreen: View {
     @State private var barInset: CGFloat = 0
 
     /// The room the last card keeps for the bottom bar the columns run under.
-    private var belowBar: CGFloat { chromeless ? barInset : 0 }
+    /// On the phone, plus the room the docked cards floating over the bar take.
+    private var belowBar: CGFloat {
+        barInset + (desktop ? 0 : TicketDock.boardRoom(screen: screen, inset: dockInset, count: router.waitingSheets.count))
+    }
 
     private var layout: BoardScreenRules.Layout { BoardScreenRules.layout(regularWidth: sizeClass == .regular, compactHeight: verticalSizeClass == .compact) }
 
-    /// No title bar, and the buttons in the system's bottom bar (which the iPhone Duo moves into its
-    /// margins): the iPad, and the phone in landscape. The portrait phone keeps BoardBottomBar.
-    private var chromeless: Bool { BoardScreenRules.hidesChrome(desktop: desktop, compactHeight: verticalSizeClass == .compact, duo: Self.isDuo) }
-    /// The iPhone Duo (a device or its simulator): the system moves the bottom bar's buttons into its margin.
-    private static let isDuo = (ProcessInfo.processInfo.environment["SIMULATOR_MODEL_IDENTIFIER"] ?? machineIdentifier) == BoardScreenRules.duoModelIdentifier
-
-    private static var machineIdentifier: String {
-        var info = utsname()
-        uname(&info)
-        return withUnsafeBytes(of: &info.machine) { String(cString: $0.bindMemory(to: CChar.self).baseAddress!) }
-    }
+    /// The portrait phone's search is a wide field-styled button in the bar; elsewhere (the iPad,
+    /// the phone in landscape) it's a magnifier like the rest of the bar's buttons.
+    private var searchIsField: Bool { !desktop && verticalSizeClass != .compact }
 
     /// An open ticket panel covers the board's bottom-right corner, where the bar's search and New session sit.
     private var panelCoversBar: Bool { desktop && router.ticketSheet != nil }
@@ -71,9 +68,13 @@ struct BoardScreen: View {
             }
             if layout == .pager { pager(ctx) } else { columns(ctx) }
         }
-        // The columns scroll on under the bottom bar's glass (landscape phone, iPad), not stop above it.
-        .ignoresSafeArea(.container, edges: chromeless ? .bottom : [])
-        .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.bottom } action: { barInset = $0 }
+        // The columns scroll on under the bottom bar's glass, not stop above it.
+        .ignoresSafeArea(.container, edges: .bottom)
+        .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.bottom } action: {
+            barInset = $0
+            dockInset?.barInset = $0
+        }
+        .onDisappear { dockInset?.barInset = 0 }
         .background(c.bg)
         .environment(ticketActions)
         .modifier(TicketActionHost(runner: ticketActions))
@@ -91,10 +92,6 @@ struct BoardScreen: View {
         .navigationTitle(scopeName(ctx))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .navigationBar)
-        // The columns scroll on under the portrait phone's bar's glass.
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            if !chromeless { BoardBottomBar(placeholder: scopeName(ctx), newSession: newSessionButton(ctx)) }
-        }
         .toolbar { toolbar(ctx) }
         // Paging follows the board's filter (a project or a group); a refetch drops the paging (so
         // does a project changing group), so ask again when it's gone.
@@ -217,20 +214,46 @@ struct BoardScreen: View {
 
     // MARK: Toolbar
 
-    /// The system's bottom bar on the iPad and the landscape phone: Projects leading, search and
-    /// New session trailing (those two hide while a ticket panel covers them). The portrait phone
-    /// has no toolbar items: BoardBottomBar holds them.
+    /// The system's bottom bar everywhere: Projects leading, search and New session trailing (those
+    /// two hide while a ticket panel covers them). On the portrait phone search is a wide field.
     @ToolbarContentBuilder private func toolbar(_ ctx: BoardContext) -> some ToolbarContent {
-        if chromeless {
-            ToolbarItem(placement: .bottomBar) { ProjectsButton(action: toggleProjects) }
+        ToolbarItem(placement: .bottomBar) { ProjectsButton(action: toggleProjects) }
+        if searchIsField {
+            ToolbarItem(placement: .bottomBar) { searchField(ctx) }
+        } else {
             ToolbarSpacer(.flexible, placement: .bottomBar)
-            if !panelCoversBar {
+        }
+        if !panelCoversBar {
+            if !searchIsField {
                 ToolbarItem(placement: .bottomBar) {
                     Button("Command palette", systemImage: "magnifyingglass") { router.present(.palette(files: false)) }
                 }
-                ToolbarItem(placement: .bottomBar) { newSession(ctx) }
             }
+            ToolbarItem(placement: .bottomBar) { newSession(ctx) }
         }
+    }
+
+    /// The command palette's field as a button (the palette is a sheet with its own text field), so
+    /// the bar never changes shape and no keyboard fights the docked tickets.
+    private func searchField(_ ctx: BoardContext) -> some View {
+        Button { router.present(.palette(files: false)) } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundStyle(c.text2)
+                Text("Search or run a command")
+                    .font(.scaled(size: 17))
+                    .foregroundStyle(c.text3)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, minHeight: DockMetrics.barHeight - 12)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Command palette")
+        .accessibilityHint("Search tickets or run a command in \(scopeName(ctx))")
+        .accessibilityIdentifier("palette-field")
     }
 
     /// The iPad's sidebar is a column that toggles; on the phone Projects is a sheet.
@@ -243,23 +266,6 @@ struct BoardScreen: View {
     private func newSession(_ ctx: BoardContext) -> some View {
         Button("New session", systemImage: Self.newSessionSymbol) { router.present(.newSession(projectId: ctx.project?.id, key: nil)) }
             .primaryToolbarItem(c)
-    }
-
-    /// New session as a glass circle for the phone's bar: prominent accent glass when the glyph
-    /// reads in white on it, else plain glass with an accent glyph (as primaryToolbarItem decides).
-    @ViewBuilder private func newSessionButton(_ ctx: BoardContext) -> some View {
-        let button = Button { router.present(.newSession(projectId: ctx.project?.id, key: nil)) } label: {
-            Image(systemName: Self.newSessionSymbol)
-                .font(.system(size: 19, weight: .medium))
-                .frame(width: 34, height: 34)
-        }
-        .buttonBorderShape(.circle)
-        .accessibilityLabel("New session")
-        if c.tokens[.onAccent].lowercased() == "#ffffff" {
-            button.buttonStyle(.glassProminent).tint(c.accent)
-        } else {
-            button.buttonStyle(.glass).foregroundStyle(c.accent)
-        }
     }
 
     // MARK: Drafts
@@ -330,58 +336,5 @@ struct BoardContext {
 
     func count(_ s: TicketStatus) -> Int {
         BoardColumns.columnCount(state, filter, shown: shown, status: s, searching: false)
-    }
-}
-
-/// The phone board's bottom bar, Liquid Glass floating over the columns: Projects, the command
-/// palette's field and New session. The field is a button that opens the palette (a sheet with its
-/// own text field), so the bar never changes shape and no keyboard fights the docked tickets.
-private struct BoardBottomBar<NewSession: View>: View {
-    let placeholder: String
-    let newSession: NewSession
-
-    @Environment(\.palette) private var c
-    @Environment(Router.self) private var router
-    /// The field capsule's height, the bar's row
-    private let fieldHeight: CGFloat = DockMetrics.barHeight
-
-    var body: some View {
-        GlassEffectContainer(spacing: 10) {
-            HStack(spacing: 10) {
-                ProjectsButton(circle: true)
-                field
-                newSession
-            }
-        }
-        .padding(.top, 6)
-        // Concentric with the phone's corners, like Calendar's bar. Over the docked cards, which
-        // share its sides, the same gap above them on every phone.
-        .concentricBottomPadding(barHeight: fieldHeight, raised: false, horizontal: DockMetrics.fallbackSides, bottom: 4,
-                                 above: !router.waitingSheets.isEmpty ? TicketDock.barGap : nil)
-        .animation(.snappy, value: router.waitingSheets.isEmpty)
-    }
-
-    private var field: some View {
-        Button { router.present(.palette(files: false)) } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 17, weight: .medium))
-                    .foregroundStyle(c.text2)
-                Text("Search or run a command")
-                    .font(.scaled(size: 17))
-                    .foregroundStyle(c.text3)
-                    .lineLimit(1)
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 16)
-            .frame(maxWidth: .infinity, minHeight: fieldHeight)
-            .glassEffect(.regular.interactive(), in: .capsule)
-            // Tapping anywhere on the capsule (not just the text) opens the palette.
-            .contentShape(.capsule)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Command palette")
-        .accessibilityHint("Search tickets or run a command in \(placeholder)")
-        .accessibilityIdentifier("palette-field")
     }
 }

@@ -7,7 +7,7 @@ public enum DockMetrics {
     public static let height: CGFloat = 52
     /// The gap between stacked cards.
     public static let spacing: CGFloat = 8
-    /// How far the board's bottom bar sits above the docked cards, the same on every phone.
+    /// How far the ticket composer sits above the docked cards, the same on every phone.
     public static let barGap: CGFloat = 11
     /// The iPhone's docked cards float this far from the bottom safe area (the home indicator).
     public static let phoneBottomGap: CGFloat = 8
@@ -69,6 +69,23 @@ public enum DockMetrics {
         // at or below the screen's bottom) would otherwise leave the bar under the cards.
         let floor = stackHeight(rows: max(1, rows)) + phoneBottomGap - homeIndicator
         return max(0, floor, screenHeight - stackTop - homeIndicator)
+    }
+
+    /// How far the phone's docked cards lift above their usual place (8pt over the home indicator) to
+    /// clear the board's system bottom bar, which reaches `barInset` up from the screen's edge (the
+    /// home indicator's inset included). Nothing without a bar, or where it is no taller than the indicator.
+    public static func lift(barInset: CGFloat, homeIndicator: CGFloat) -> CGFloat {
+        max(0, barInset - homeIndicator)
+    }
+
+    /// What the board gives up above its system bottom bar so the whole card stack, which floats
+    /// `phoneBottomGap` over the bar, fits clear of the last card: the stack's measured top edge to the
+    /// bar's top (`barInset` from the screen's bottom edge). Before the stack is measured, `rows` cards
+    /// and the gap. Never less than `rows` cards need.
+    public static func boardClearance(screenHeight: CGFloat?, stackTop: CGFloat?, barInset: CGFloat, rows: Int) -> CGFloat {
+        let floor = stackHeight(rows: max(1, rows)) + phoneBottomGap
+        guard let screenHeight, let stackTop else { return floor }
+        return max(floor, screenHeight - stackTop - barInset)
     }
 
     /// The overflow card's label: "N more docked tickets" beside the shown cards, "N docked tickets"

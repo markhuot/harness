@@ -179,7 +179,8 @@ private struct PhoneDock: View {
     var body: some View {
         let shown = shown
         GeometryReader { geo in
-            DockedCardsContainer(sheets: router.waitingSheets, layout: .phone(screen: screen, region: geo.size),
+            DockedCardsContainer(sheets: router.waitingSheets, layout: .phone(screen: screen, region: geo.size,
+                                                        lift: DockMetrics.lift(barInset: inset.barInset, homeIndicator: screen?.homeIndicator ?? 0)),
                                  ghost: hold.armed ? router.ticketSheet?.title : nil,
                                  docked: router.ticketSheetState == .docked, shown: shown, onReport: report)
                 .frame(width: geo.size.width, height: geo.size.height, alignment: .bottom)

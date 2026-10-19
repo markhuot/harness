@@ -401,7 +401,7 @@ struct TabStack<Root: View>: View {
     var body: some View {
         NavigationStack(path: Binding(get: { router.path(tab) }, set: { router.setPath(tab, $0) })) {
             root
-                .dockClearance()
+                .dockClearance(board: tab == .board)
                 .navigationDestination(for: Route.self) { RouteScreen(route: $0).dockClearance() }
         }
     }

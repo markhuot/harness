@@ -165,6 +165,10 @@ extension EnvironmentValues {
     /// The top edge of the whole collapsed card stack in the window (the topmost card or "N more…"),
     /// which the sections' clearance and the board's bar sit above. Nil until measured.
     var stackTop: CGFloat?
+    /// How far the board's system bottom bar (the home indicator included) reaches up from the screen's
+    /// edge: the phone's dock floats its cards above it. 0 while the board isn't the screen showing.
+    /// The ticket sheet covers the board without changing it, so the cards stay put under it.
+    var barInset: CGFloat = 0
     /// A keyboard is up: the dock is faded out, so the ticket's composer keeps no room for it.
     var keyboardUp = false
     /// The iPad: how much of the board's bottom the docked card stack takes (DockedCardsContainer); 0
@@ -185,6 +189,8 @@ private struct DockClearance: ViewModifier {
     @Environment(\.concentricScreen) private var screen
     @Environment(\.desktopShell) private var desktop
     @Environment(DockedSheetInset.self) private var dockInset: DockedSheetInset?
+    /// The board makes room above its own system bottom bar (BoardScreen), not below it.
+    let board: Bool
 
     func body(content: Content) -> some View {
         content
@@ -192,7 +198,7 @@ private struct DockClearance: ViewModifier {
             // scroll content backs off, so the last items still scroll clear of them.
             .contentMargins(.bottom, desktop ? (dockInset?.cards ?? 0) : 0, for: .scrollContent)
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                if !desktop && !router.waitingSheets.isEmpty {
+                if !desktop && !board && !router.waitingSheets.isEmpty {
                     // The whole card stack, up to its measured top edge. Keyboard or not: the
                     // cards stay where they are, behind it.
                     Color.clear.frame(height: TicketDock.clearance(screen: screen, stackTop: dockInset?.stackTop, count: router.waitingSheets.count))
@@ -202,7 +208,8 @@ private struct DockClearance: ViewModifier {
 }
 
 extension View {
-    func dockClearance() -> some View { modifier(DockClearance()) }
+    /// `board`: the board's own screen, which keeps its room above its system bottom bar itself.
+    func dockClearance(board: Bool = false) -> some View { modifier(DockClearance(board: board)) }
 }
 
 /// What the ticket sheet's screens keep clear at the bottom while other tickets wait in the dock,
@@ -228,8 +235,16 @@ private struct SheetDockRoom: ViewModifier {
 @MainActor enum TicketDock {
     /// One card's height.
     static let height = DockedCardMetrics.height
-    /// How far a bottom bar (the board's, the composer) sits above the docked cards, the same on every phone.
+    /// How far the composer sits above the docked cards, the same on every phone.
     static let barGap = DockMetrics.barGap
+
+    /// What the board gives up above its system bottom bar while tickets are docked, so the last
+    /// cards scroll clear of the dock floating over the bar.
+    static func boardRoom(screen: ConcentricBar.Screen?, inset: DockedSheetInset?, count: Int) -> CGFloat {
+        guard count > 0 else { return 0 }
+        return DockMetrics.boardClearance(screenHeight: screen?.height, stackTop: inset?.stackTop, barInset: inset?.barInset ?? 0,
+                                          rows: DockCards.rows(count: count, maxVisible: DockCards.phoneVisible))
+    }
 
     /// What a section gives up at its bottom while tickets are docked, so the cards sit under the
     /// board's bottom bar rather than over it: everything below the bottom card's top edge, less
