@@ -9,6 +9,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- Images a tool returns in a transcript (browser screenshots and the like) open bigger when you click or tap them, in the same viewer as other attachments: the lightbox on Mac, the full-screen viewer on iPhone and iPad. When one result has several, ← and → (or a swipe) step through them.
+
 ### Fixed
 
 - An agent chatting on a ticket (for example one in review, asked to open a pull request) can now add that pull request to its own ticket with `update_ticket`'s `pull_request_urls`, as a work run already could, instead of being refused because the ticket is its own.

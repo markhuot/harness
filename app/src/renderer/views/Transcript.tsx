@@ -1,7 +1,8 @@
 import { memo, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Attachment, Subagent, ToolResultContent, TranscriptEntry } from "@harness/shared";
 import { useStore } from "../state/store";
-import { formatMaybeJson, groupTranscript, isTask, itemRun, liveDelta, runHeader, splitRunSections, shortToolName, SUBAGENT_STATUS_LABEL, subagentById, subagentOpenLabel, subagentsOf, subagentTitle, toolElapsed, toolIcon, toolLabel, transcriptKey } from "@harness/shared/state";
+import { formatMaybeJson, groupTranscript, isTask, itemRun, liveDelta, runHeader, splitRunSections, shortToolName, SUBAGENT_STATUS_LABEL, subagentById, subagentOpenLabel, subagentsOf, subagentTitle, toolElapsed, toolIcon, toolLabel, toolOutputMedia, transcriptKey } from "@harness/shared/state";
+import { Lightbox } from "../components/Attachments";
 import { Icon } from "../components/Icon";
 import { Markdown } from "../components/Markdown";
 import { PermissionStatusRow } from "../components/PermissionLog";
@@ -301,7 +302,7 @@ const ToolRow = memo(function ToolRow({
           {result && (
             <>
               <div className="t-label">{isError ? "Error" : "Output"}</div>
-              <ToolOutput output={result.content.output} />
+              <ToolOutput callId={result.content.callId} tool={name} output={result.content.output} />
             </>
           )}
           {!result && <div className="muted">Running…</div>}
@@ -311,16 +312,30 @@ const ToolRow = memo(function ToolRow({
   );
 });
 
-function ToolOutput({ output }: { output: ToolResultContent[] }) {
+/** A tool result's blocks; a click on an image opens it in the lightbox, stepping through the result's others. */
+function ToolOutput({ callId, tool, output }: { callId: string; tool: string; output: ToolResultContent[] }) {
+  const [open, setOpen] = useState<number | null>(null);
+  const media = useMemo(() => toolOutputMedia(callId, tool, output), [callId, tool, output]);
   if (!output.length) return <div className="muted">(no output)</div>;
   return (
     <>
-      {output.map((o, i) =>
-        o.type === "text" ? (
-          <pre key={i}>{formatMaybeJson(o.text)}</pre>
-        ) : (
-          <img key={i} className="t-image" src={`data:${o.mimeType};base64,${o.data}`} alt="Tool output" />
-        ),
+      {output.map((o, i) => {
+        if (o.type === "text") return <pre key={i}>{formatMaybeJson(o.text)}</pre>;
+        const n = media.findIndex((m) => m.at === i);
+        return (
+          <button key={i} type="button" className="t-image-open" aria-label={`Open ${media[n]!.attachment.name}`} onClick={() => setOpen(n)}>
+            <img className="t-image" src={media[n]!.url} alt="Tool output" />
+          </button>
+        );
+      })}
+      {open !== null && media.length > 0 && (
+        <Lightbox
+          list={media.map((m) => m.attachment)}
+          index={Math.min(open, media.length - 1)}
+          onIndex={setOpen}
+          onClose={() => setOpen(null)}
+          urlOf={(a) => media.find((m) => m.attachment.id === a.id)!.url}
+        />
       )}
     </>
   );
