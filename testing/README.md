@@ -37,6 +37,10 @@ socket (`WorldSocket`) replaced. A request the world has no route for fails the 
 - Images are compared in `testing/ios/references/{iphone,ipad,duo}/` with a per-pixel channel tolerance
   and a budget of differing pixels (`ReferenceImages.swift`). They are pinned to the iOS 27.0
   runtime (27.1 for the iPhone Duo).
+- The iPad references are recorded with the simulator in **Settings > Multitasking & Gestures >
+  Full Screen Apps** (a fresh iPad simulator starts in Windowed Apps). The renderer checks the iPad's
+  safe area (top 32, bottom 25 in portrait) before it draws and fails with the values it found
+  instead of drawing every screen at another offset. Put the simulator back; don't re-record.
 - `--record` writes references. Nothing else does, and a missing reference fails the test.
 - A failure writes `<name>.actual.png` and `<name>.diff.png` to a temp directory and prints the
   paths. `--out=dir` also writes every rendered image there.
