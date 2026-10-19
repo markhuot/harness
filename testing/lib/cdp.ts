@@ -160,7 +160,18 @@ export class Page {
       window.${key}Stop = () => done({ ok: false });
       tick();
     })`;
-    const run = this.evaluate<{ ok: boolean; v: T }>(script);
+    // A page that reloads while it's being waited on (the Mac app does once, soon after it opens) destroys
+    // the context the wait runs in: the wait starts again in the new one; the deadline still bounds it.
+    const lost = /Execution context was destroyed|Cannot find context|Inspected target navigated or closed/;
+    const run = (async () => {
+      for (;;) {
+        try {
+          return await this.evaluate<{ ok: boolean; v: T }>(script);
+        } catch (e) {
+          if (!(e instanceof Error && lost.test(e.message))) throw e;
+        }
+      }
+    })();
     try {
       const r = await withDeadline(what, ms, run, () => undefined);
       return r.v;

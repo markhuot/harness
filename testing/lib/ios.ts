@@ -3,7 +3,7 @@
 // Nothing here takes a lock: the caller already holds it (`bun run sim with-lock`), and the
 // simulator is left booted for the next run.
 
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 
 import { until } from "./wait";
@@ -16,7 +16,7 @@ export function parseLabels(describeUi: string): string[] {
   return [...describeUi.matchAll(/"AXLabel" : "([^"]*)"/g)].map((m) => m[1]!.replace(/\\\//g, "/"));
 }
 
-/** Whether the app's preferences (`defaults read`) hold a restorable state saved at or after `sinceSeconds` (Unix time): its JSON carries `savedAt` in seconds. */
+/** Whether the app's preferences file (as JSON, from `plutil -convert json`) holds a restorable state saved at or after `sinceSeconds` (Unix time): its JSON carries `savedAt` in seconds. */
 export function savedAfter(defaultsRead: string, sinceSeconds: number): boolean {
   return [...defaultsRead.matchAll(/savedAt\\*"\s*:\s*([0-9]+(?:\.[0-9]+)?)/g)].some((m) => Number(m[1]) >= sinceSeconds);
 }
@@ -245,8 +245,11 @@ export function phone(name: string, udid: string): Phone {
       // "a saved state exists" would pass on an older one.
       try {
         await until(`${name}: the app's saved state`, 30_000, async () => {
-          const r = await run(["xcrun", "simctl", "spawn", udid, "defaults", "read", BUNDLE_ID]);
-          if (r.code !== 0) {
+          // The app's own preferences file: `defaults read` through simctl spawn reads the simulator's user domain, which the app's UserDefaults don't write to.
+          const where = await run(["xcrun", "simctl", "get_app_container", udid, BUNDLE_ID, "data"]);
+          const plist = where.code === 0 ? join(where.out.trim(), "Library", "Preferences", `${BUNDLE_ID}.plist`) : null;
+          const r = plist && existsSync(plist) ? await run(["plutil", "-convert", "json", "-o", "-", plist]) : null;
+          if (!r || r.code !== 0) {
             await new Promise<void>((res) => setTimeout(res, 250));
             return undefined;
           }

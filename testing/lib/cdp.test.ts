@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { Cdp, TargetTracker, type TargetInfo } from "./cdp";
+import { Cdp, Page, TargetTracker, type TargetInfo } from "./cdp";
 
 const info = (targetId: string, url: string, type = "page"): TargetInfo => ({ targetId, type, url });
 const created = (t: TargetInfo) => ({ targetInfo: t }) as Record<string, unknown>;
@@ -46,6 +46,33 @@ test("a command the browser never answers fails at its deadline naming the metho
     cdp.sendDeadlineMs = 50;
     await cdp.opened();
     await expect(cdp.send("Browser.close")).rejects.toThrow(/timed out after 50ms waiting for the DevTools answer to Browser\.close/);
+    cdp.close();
+  } finally {
+    server.stop(true);
+  }
+});
+
+test("a wait on a page that reloads under it starts again in the new context, and any other failure still ends it", async () => {
+  let evaluations = 0;
+  const answers = [{ error: "Execution context was destroyed." }, { result: { result: { value: { ok: true, v: "ready" } } } }];
+  const server = Bun.serve({
+    port: 0,
+    fetch: (req, s) => (s.upgrade(req) ? undefined : new Response("no")),
+    websocket: {
+      message(ws, raw) {
+        const { id } = JSON.parse(String(raw)) as { id: number };
+        const a = answers[evaluations++] ?? { error: "Cannot access page" };
+        ws.send(JSON.stringify({ id, ...("error" in a ? { error: { message: a.error } } : a) }));
+      },
+    },
+  });
+  try {
+    const cdp = new Cdp(`ws://localhost:${server.port}`);
+    await cdp.opened();
+    const page = new Page(cdp, "s", { targetId: "t", type: "page", url: "file:///app" });
+    expect(await page.waitFor("the board", "true")).toBe("ready");
+    expect(evaluations).toBe(2);
+    await expect(page.waitFor("the board", "true")).rejects.toThrow("Cannot access page");
     cdp.close();
   } finally {
     server.stop(true);
