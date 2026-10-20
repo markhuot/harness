@@ -312,6 +312,14 @@ export interface Ticket {
    */
   pullRequestHead?: string | null;
   /**
+   * "complete" while the ticket is blocked by a completion run (the agent's block, or a merge that
+   * didn't land): unblocking resumes the completion with the approvals it already had. null for any
+   * other block. Optional so older payloads type-check.
+   */
+  blockedRunKind?: "complete" | null;
+  /** The branch tip when a completion run blocked the ticket; unblocking resumes completion only while it hasn't moved. */
+  blockedHead?: string | null;
+  /**
    * Whether the ticket's worktree has anything to land: uncommitted changes, or commits its base
    * branch doesn't have. The service checks with git when the ticket moves to review and when it's
    * opened. false drops "merge" and "pr" from its completion choices (`completionOptions`); null

@@ -110,3 +110,124 @@ test("the skip switches decide which reviews happen: skipping both lands the tic
   expect(h.driver.requests.map((r) => r.kind)).not.toContain("review");
   expect(h.ticket(t.key)).toMatchObject({ agentReview: "skipped" });
 });
+
+// ---- A completion run that blocks resumes the completion when unblocked (DESIGN.md "Completion") ----
+
+const ASK = "Delete the untracked shots/ directory?";
+
+/** A ticket whose human-approved completion run blocked with ASK; `after` scripts what runs next. */
+async function blockedCompletion(...after: Step[][]) {
+  const h = makeOrchestrator({ tools: undefined });
+  h.driver.script(submit(), toolCall("block", { question: ASK }), ...after);
+  const t = await h.orch.createTicket({ projectId: h.project.id, spec: "Add a button", skipAgentReview: true });
+  await h.settle();
+  h.orch.humanReview(t.key, { decision: "approve", notes: "Looks good", instructions: "merge it" });
+  await h.settle();
+  return { h, t };
+}
+const movesTo = (h: ReturnType<typeof makeOrchestrator>, t: Ticket, to: string) => h.store.activity.listBySession(t.sessionId).filter((a) => a.kind === "moved" && a.meta.to === to).length;
+
+test("a completion run's block keeps both approvals and records that a completion blocked", async () => {
+  const { h, t } = await blockedCompletion();
+  expect(h.ticket(t.key)).toMatchObject({ status: "blocked", blockedReason: ASK, blockedRunKind: "complete", agentReview: "skipped", humanReview: "approved" });
+});
+
+test("a work run's block still records no completion, and unblocking it goes back through work with both reviews pending", async () => {
+  const h = makeOrchestrator({ tools: undefined });
+  h.driver.script(toolCall("block", { question: "Which colour?" }), replyScript("blue it is"));
+  const t = await h.orch.createTicket({ projectId: h.project.id, spec: "Add a button", skipAgentReview: true });
+  await h.settle();
+  expect(h.ticket(t.key)).toMatchObject({ status: "blocked", blockedRunKind: null });
+  await h.orch.unblockTicket(t.key, { notes: "Blue" });
+  await h.settle();
+  expect(h.driver.requests.map((r) => r.kind)).toEqual(["work", "work"]);
+  expect(h.ticket(t.key)).toMatchObject({ blockedRunKind: null, humanReview: "pending" });
+});
+
+test("the human unblocking a completion's block starts a new completion run with the question and the answer, never passing through in progress", async () => {
+  const { h, t } = await blockedCompletion(replyScript("cleaned up and merged"));
+  const toProgress = movesTo(h, t, "in_progress");
+  const out = await h.orch.unblockTicket(t.key, { notes: "Yes, delete it" });
+  expect(out).toMatchObject({ status: "review", blockedReason: null, blockedRunKind: null, humanReview: "approved" });
+  await h.settle();
+  expect(h.driver.requests.map((r) => r.kind)).toEqual(["work", "complete", "complete"]);
+  const prompt = h.driver.requests[2]!.prompt;
+  expect(prompt).toContain(ASK);
+  expect(prompt).toContain("Yes, delete it");
+  expect(prompt).toContain("merge it"); // the stored completion instructions still apply
+  expect(h.driver.requests[2]!.state).toBeNull();
+  expect(h.ticket(t.key).status).toBe("done");
+  expect(movesTo(h, t, "in_progress")).toBe(toProgress);
+});
+
+test("a chat that answers a completion's question and unblocks resumes the completion when the chat ends", async () => {
+  const { h, t } = await blockedCompletion(toolCall("unblock", { note: "Told to delete" }), replyScript("merged"));
+  await h.orch.sendMessage(t.key, "Yes, delete shots/");
+  await h.settle();
+  expect(h.driver.requests.map((r) => r.kind)).toEqual(["work", "complete", "chat", "complete"]);
+  const prompt = h.driver.requests[3]!.prompt;
+  expect(prompt).toContain(ASK);
+  expect(prompt).toContain("Yes, delete shots/");
+  expect(h.ticket(t.key)).toMatchObject({ status: "done", humanReview: "approved" });
+});
+
+test("a chat that only answers leaves a completion's block open", async () => {
+  const { h, t } = await blockedCompletion(replyScript("it holds untracked screenshots"));
+  await h.orch.sendMessage(t.key, "What is in it?");
+  await h.settle();
+  expect(h.ticket(t.key)).toMatchObject({ status: "blocked", blockedRunKind: "complete", humanReview: "approved" });
+  expect(h.driver.requests.map((r) => r.kind)).toEqual(["work", "complete", "chat"]);
+});
+
+test("a branch that moved while blocked is not completed: unblocking goes back to work with both reviews pending", async () => {
+  const { h, t } = await blockedCompletion(replyScript("amended the work"));
+  h.store.tickets.update(t.id, { blockedHead: "0000000000000000000000000000000000000000" });
+  const out = await h.orch.unblockTicket(t.key, { notes: "Go ahead" });
+  expect(out).toMatchObject({ status: "in_progress", blockedRunKind: null, blockedHead: null, humanReview: "pending", agentReview: "pending" });
+  await h.settle();
+  expect(h.driver.requests.map((r) => r.kind)).toEqual(["work", "complete", "work"]);
+});
+
+test("the agent chatting after a completion's question can send the ticket back to in progress instead: approvals reset, no completion", async () => {
+  const { h, t } = await blockedCompletion(toolCall("resume_work", { note: "The answer changes the work" }), submit("Changed it"));
+  await h.orch.sendMessage(t.key, "No, move it into docs/ instead");
+  await h.settle();
+  expect(h.driver.requests.map((r) => r.kind)).toEqual(["work", "complete", "chat"]);
+  expect(h.ticket(t.key)).toMatchObject({ status: "review", blockedRunKind: null, humanReview: "pending" });
+});
+
+test("a resumed completion run can send the ticket back to in progress: a work run follows when it ends", async () => {
+  const { h, t } = await blockedCompletion(toolCall("resume_work", { note: "Needs another change" }), replyScript("changed"));
+  await h.orch.unblockTicket(t.key, { notes: "Actually move it to docs/" });
+  await h.settle();
+  expect(h.driver.requests.map((r) => r.kind)).toEqual(["work", "complete", "complete", "work"]);
+  expect(h.ticket(t.key)).toMatchObject({ status: "review", humanReview: "pending" });
+});
+
+test("leaving Blocked any other way clears the completion marker", async () => {
+  const { h, t } = await blockedCompletion();
+  const moved = await h.orch.completeTicket(t.key, { skipAgent: true });
+  expect(moved).toMatchObject({ status: "done", blockedRunKind: null, blockedHead: null });
+});
+
+test("a merge that didn't land blocks with the approvals kept, and answering resumes the completion", async () => {
+  const h = makeOrchestrator({ tools: undefined });
+  const git = (...args: string[]) => Bun.spawnSync(["git", "-c", "user.email=t@t", "-c", "user.name=t", ...args], { cwd: h.project.path });
+  git("init", "-b", "main");
+  git("commit", "--allow-empty", "-m", "base");
+  git("checkout", "-b", "harness/acme-1");
+  git("commit", "--allow-empty", "-m", "the work");
+  git("checkout", "main");
+  h.driver.script(submit(), replyScript("said it merged, but did not"), [{ run: () => void git("merge", "--no-edit", "harness/acme-1") }, ...replyScript("merged for real")]);
+  const t = await h.orch.createTicket({ projectId: h.project.id, spec: "Add a button", skipAgentReview: true });
+  await h.settle();
+  h.store.tickets.update(t.id, { branch: "harness/acme-1", hasChanges: true });
+  h.orch.humanReview(t.key, { decision: "approve", notes: "Looks good", action: "merge" });
+  await h.settle();
+  expect(h.ticket(t.key)).toMatchObject({ status: "blocked", blockedRunKind: "complete", humanReview: "approved" });
+  expect(h.ticket(t.key).blockedHead).toMatch(/^[0-9a-f]{40}$/);
+  await h.orch.unblockTicket(t.key, { notes: "merge it now" });
+  await h.settle();
+  expect(h.driver.requests.map((r) => r.kind)).toEqual(["work", "complete", "complete"]);
+  expect(h.ticket(t.key).status).toBe("done");
+});

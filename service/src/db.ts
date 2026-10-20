@@ -756,6 +756,13 @@ export const MIGRATIONS: string[] = [
   UPDATE tickets SET pull_requests = json_array(json_object('url', trim(pull_request_url), 'title', NULL, 'titleCheckedAt', NULL))
     WHERE pull_request_url IS NOT NULL AND trim(pull_request_url) <> '';
   `,
+  // 43: tickets.blocked_run_kind and blocked_head: a block raised by a completion run remembers
+  //     it ('complete') and the branch tip it blocked at, so unblocking resumes the completion
+  //     instead of going back through in progress and review. NULL for every other block.
+  `
+  ALTER TABLE tickets ADD COLUMN blocked_run_kind TEXT;
+  ALTER TABLE tickets ADD COLUMN blocked_head TEXT;
+  `,
 ];
 
 /** Where the files migrations look at live (HarnessPaths); by default next to the database file. */

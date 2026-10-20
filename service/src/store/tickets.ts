@@ -29,6 +29,8 @@ interface TicketRow {
   workdir: string | null;
   branch: string | null;
   blocked_reason: string | null;
+  blocked_run_kind?: string | null;
+  blocked_head?: string | null;
   permission_mode: string | null;
   position: number;
   created_at: number;
@@ -160,6 +162,8 @@ export type TicketPatch = Partial<{
   completionAction: CompletionAction | null;
   completionInstructions: string | null;
   pullRequestHead: string | null;
+  blockedRunKind: "complete" | null;
+  blockedHead: string | null;
   hasChanges: boolean | null;
   draft: boolean;
   kind: TicketKind;
@@ -193,6 +197,8 @@ const COLUMNS: Record<string, string> = {
   completionAction: "completion_action",
   completionInstructions: "completion_instructions",
   pullRequestHead: "pull_request_head",
+  blockedRunKind: "blocked_run_kind",
+  blockedHead: "blocked_head",
   hasChanges: "has_changes",
   draft: "draft",
   kind: "kind",
@@ -316,6 +322,8 @@ export class TicketRepo {
       pullRequests: stored.map(({ url, title }) => ({ url, title })),
       pullRequestUrl: stored.at(-1)?.url ?? null,
       pullRequestHead: r.pull_request_head ?? null,
+      blockedRunKind: r.blocked_run_kind === "complete" ? "complete" : null,
+      blockedHead: r.blocked_head ?? null,
       hasChanges: r.has_changes === null || r.has_changes === undefined ? null : bool(r.has_changes),
       draft: bool(r.draft ?? 0),
       promptAttachments: fromJson<Attachment[]>(r.prompt_attachments ?? null, []),

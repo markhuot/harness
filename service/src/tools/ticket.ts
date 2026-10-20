@@ -131,7 +131,8 @@ export const unblock = defineTool<{ note?: string }>({
     "Move your blocked ticket back to In progress, as soon as the human's message resolves what it was blocked on and before you continue the work. Then finish with submit_for_review, or block again. Don't call it for a message that doesn't resolve the block (a side question, say): answer it and leave the ticket blocked. Refused unless the ticket is blocked, and while a tool approval is waiting on the human.",
   inputSchema: schema({ note: { type: "string", description: "Optional: what resolved the block, shown on the ticket's timeline." } }, []),
   async run({ note }, ctx) {
-    await ctx.ops.unblock(ctx, note);
+    const resumes = await ctx.ops.unblock(ctx, note);
+    if (resumes) return resumes;
     return "Ticket moved to in progress. Carry on with the work, then call submit_for_review (or block with a new question).";
   },
 });
@@ -139,10 +140,11 @@ export const unblock = defineTool<{ note?: string }>({
 export const resumeWork = defineTool<{ note?: string }>({
   name: "resume_work",
   description:
-    "Move your ticket from Review or Done back to In progress, before you work on it again (editing code, fixing a bug, adding to what was submitted, or investigation whose results belong on the ticket). It stops a running agent review and both reviews start over; a done ticket is re-opened and its worktree recreated if it was removed. Then finish with submit_for_review (or block). Answering a question or explaining the work doesn't need it. Refused unless the ticket is in review or done, and while a tool approval is waiting on the human.",
+    "Move your ticket from Review or Done back to In progress, before you work on it again (editing code, fixing a bug, adding to what was submitted, or investigation whose results belong on the ticket). It stops a running agent review and both reviews start over; a done ticket is re-opened and its worktree recreated if it was removed. Then finish with submit_for_review (or block). Answering a question or explaining the work doesn't need it. In a completion run, or in a chat answering a question a completion run asked, call it when the answer means the work needs changes: the ticket goes back to In progress and the completion doesn't resume. Refused unless the ticket is in review or done (or blocked by a completion run), and while a tool approval is waiting on the human.",
   inputSchema: schema({ note: { type: "string", description: "Optional: why the work is picked back up, shown on the ticket's timeline." } }, []),
   async run({ note }, ctx) {
     const moved = await ctx.ops.resumeWork(ctx, note);
+    if (ctx.runKind === "complete") return "Ticket moved to in progress with both reviews pending. Stop the completion here (leave the branch as it is); a work run starts when this run ends.";
     const where = moved
       ? ` The ticket's working directory is now ${moved}, not the directory this run started in: do the work and commit there, with absolute paths or \`git -C ${moved}\`.`
       : "";

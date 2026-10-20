@@ -11,6 +11,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
+- Answering a question a completion run asked (a cleanup prompt, a merge that didn't land) now resumes the completion. Before, the ticket went back to In progress, then Review, and needed both approvals again. Now the approvals stand and a new completion run starts with the question and your answer. If the branch changed while it was blocked, the ticket goes back to In progress with reviews pending, as before, so nothing unreviewed lands. If your answer means the work needs changes, the agent can send it back to In progress with `resume_work`.
 - Agents' first request to the model is about 5% smaller (roughly 600 tokens on a work run): the spec, Activity and notes rules are no longer repeated in the tool descriptions and the run's instructions, and the browser tool list is no longer spelled out. Agents follow the same rules; runs cost slightly less to start. For people working on Harness, `bun test testing/service/orchestrator/prompt-budget.test.ts` holds each run kind's prompt and tool view under a size limit.
 - On iPhone and the iPhone Duo, Settings now opens as a sheet over whatever you were on, so you can swipe down to close it (or tap its ✕) instead of going back through the Projects sidebar. The iPad keeps Settings as a section in its sidebar.
 

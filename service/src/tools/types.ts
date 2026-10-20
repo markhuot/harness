@@ -288,8 +288,12 @@ export interface HarnessOps {
   // --- work, conductor and chat runs ---
   /** Move ticket to blocked with a question for the human. The run should end after this. */
   block(ctx: ToolContext, question: string): Promise<void>;
-  /** A human's message resolved the block: blocked → in progress, and the run carries on with the work. */
-  unblock(ctx: ToolContext, note?: string): Promise<void>;
+  /**
+   * A human's message resolved the block: blocked → in progress, and the run carries on with the
+   * work. After a completion run's block the completion resumes when the chat ends instead, and
+   * the result says so (otherwise empty).
+   */
+  unblock(ctx: ToolContext, note?: string): Promise<string>;
   /**
    * The agent is changing reviewed or landed work again: review or done → in progress, and both
    * reviews start over. Returns the ticket's workdir when re-opening moved it away from ctx.cwd

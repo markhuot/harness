@@ -19,6 +19,8 @@ let ignoredFields: [String: String] = [
     "Settings.claudeOauthToken": "A secret: clients decode PublicSettings (claudeOauthTokenSet), never the token",
     "Settings.copilotGithubToken": "A secret: clients decode PublicSettings (copilotGithubTokenSet), never the token",
     "Ticket.pullRequestHead": "Swift has no property for it, and no iPhone screen reads it",
+    "Ticket.blockedRunKind": "Swift has no property for it, and no iPhone screen reads it",
+    "Ticket.blockedHead": "Swift has no property for it, and no iPhone screen reads it",
     "Ticket.startAfterPlanBy": "Swift has no property for it, and no iPhone screen reads it",
 ]
 
