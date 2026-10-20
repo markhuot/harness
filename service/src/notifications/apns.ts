@@ -90,8 +90,10 @@ export class ApnsTokens {
     if (!this.opts.file) return;
     try {
       const stored = JSON.parse(readFileSync(this.opts.file, "utf8")) as Record<string, Partial<SignedToken>>;
+      const now = this.now();
       for (const [id, v] of Object.entries(stored)) {
-        if (typeof v?.jwt === "string" && typeof v.at === "number") this.cache.set(id, { jwt: v.jwt, at: v.at });
+        // A time in the future (a clock set back, an edited file) can't be aged, so it isn't trusted.
+        if (typeof v?.jwt === "string" && typeof v.at === "number" && Number.isFinite(v.at) && v.at <= now) this.cache.set(id, { jwt: v.jwt, at: v.at });
       }
     } catch {
       // Missing, unreadable or corrupt: sign afresh.
@@ -195,18 +197,19 @@ export class Http2Transport implements ApnsTransport {
     return s;
   }
 
-  private drop(origin: string) {
-    const s = this.sessions.get(origin);
-    if (!s) return;
-    this.sessions.delete(origin);
-    s.close();
+  /** Retire `s` if it is still the cached session, so the next request opens a new connection. */
+  private drop(origin: string, s: ClientHttp2Session) {
+    if (this.sessions.get(origin) === s) this.sessions.delete(origin);
+    if (!s.closed && !s.destroyed) s.close();
   }
 
   post(origin: string, path: string, headers: Record<string, string>, body: string): Promise<ApnsHttpResponse> {
     return new Promise((resolve, reject) => {
       let req;
+      let used: ClientHttp2Session;
       try {
-        req = this.session(origin).request({
+        used = this.session(origin);
+        req = used.request({
           [constants.HTTP2_HEADER_METHOD]: "POST",
           [constants.HTTP2_HEADER_PATH]: path,
           "content-type": "application/json",
@@ -218,7 +221,7 @@ export class Http2Transport implements ApnsTransport {
       req.setTimeout(REQUEST_TIMEOUT_MS, () => {
         req.close(constants.NGHTTP2_CANCEL);
         // No answer: the connection is suspect, so the retry gets a new one.
-        this.drop(origin);
+        this.drop(origin, used);
       });
       let status = 0;
       let responseHeaders: ApnsHttpResponse["headers"] = {};
@@ -228,12 +231,19 @@ export class Http2Transport implements ApnsTransport {
         responseHeaders = h as ApnsHttpResponse["headers"];
       });
       req.on("data", (c: Buffer) => chunks.push(c));
-      const unanswered = () => reject(new Error(`No answer from ${origin}`));
+      // A stream that ends without a status says the connection is suspect: the retry gets a new one.
+      const unanswered = () => {
+        this.drop(origin, used);
+        reject(new Error(`No answer from ${origin}`));
+      };
       req.on("end", () => (status ? resolve({ status, body: Buffer.concat(chunks).toString("utf8"), headers: responseHeaders }) : unanswered()));
       req.on("close", () => {
         if (!status) unanswered();
       });
-      req.on("error", reject);
+      req.on("error", (err) => {
+        this.drop(origin, used);
+        reject(err);
+      });
       req.end(body);
     });
   }
@@ -284,7 +294,7 @@ export class ApnsClient {
   }
 
   async send(key: ApnsKeyFile, teamId: string, n: ApnsSend): Promise<ApnsResult> {
-    const sleep = this.opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+    const sleep = this.opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms).unref()));
     const label = `notifications: apns ${n.environment}`;
     let jwt: string;
     try {
@@ -351,6 +361,7 @@ export class ApnsClient {
           await retry(reason, 0);
           continue;
         }
+        this.opts.log?.(`${label}: not signing a new token for ${key.keyId} (the current one is under ${JWT_MIN_REFRESH_MS / 60_000} minutes old), so a wrong team or revoked key is likelier`);
       }
       if ((res.status === 500 || res.status === 503) && transient < TRANSIENT_BACKOFF_MS.length) {
         await retry(`${res.status} ${reason ?? ""}`.trim(), TRANSIENT_BACKOFF_MS[transient++]!);

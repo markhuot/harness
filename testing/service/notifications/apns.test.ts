@@ -103,6 +103,26 @@ test("a token persisted by one process is reused by the next, 0600, until 40 min
   expect(reads).toBe(2);
 });
 
+test("a persisted token dated in the future is signed afresh", async () => {
+  const { pem } = await makeKey();
+  const file = join(tempDir(), "apns-tokens.json");
+  const clock = fakeClock(5_000_000);
+  const key: ApnsKeyFile = { environment: "sandbox", keyId: "KEYID12345", path: "/k.p8" };
+  const first = await new ApnsTokens(() => pem, clock, { file }).get(key, "TEAM123456");
+  // The clock moves back an hour: the stored token's age would be negative.
+  const back = fakeClock(5_000_000 - 60 * 60_000);
+  let reads = 0;
+  const next = await new ApnsTokens(() => (reads++, pem), back, { file }).get(key, "TEAM123456");
+  expect(reads).toBe(1);
+  expect(next).not.toBe(first);
+});
+
+test("a refused renewal is logged", async () => {
+  const { apns, key, log } = await client(res(403, '{"reason":"InvalidProviderToken"}'));
+  await apns.send(key, "TEAM123456", send);
+  expect(log.some((l) => l.includes("not signing a new token"))).toBe(true);
+});
+
 test("a corrupt token file means a fresh signing", async () => {
   const { pem } = await makeKey();
   const file = join(tempDir(), "apns-tokens.json");
@@ -325,6 +345,35 @@ test("Http2Transport opens a new connection after the server refuses a stream or
     const key: ApnsKeyFile = { environment: "sandbox", keyId: "KEYID12345", path: "/k.p8" };
     expect((await apns.send(key, "TEAM123456", send)).ok).toBe(true);
     expect(sessions.length).toBeGreaterThanOrEqual(2);
+  } finally {
+    transport.close();
+    for (const s of sessions) s.destroy();
+    server.close();
+  }
+});
+
+test("Http2Transport retries a reset stream on a new connection even though the session never errored", async () => {
+  const sessions: Http2Session[] = [];
+  const acts: ("reset" | "ok")[] = ["reset", "ok"];
+  const server = createServer();
+  server.on("session", (s) => sessions.push(s));
+  server.on("stream", (stream) => {
+    stream.on("error", () => {});
+    if (acts.shift() === "reset") stream.close(constants.NGHTTP2_CANCEL);
+    else {
+      stream.respond({ ":status": 200 });
+      stream.end("{}");
+    }
+  });
+  await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+  const origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+  const transport = new Http2Transport();
+  try {
+    const { pem } = await makeKey();
+    const apns = new ApnsClient({ transport, tokens: new ApnsTokens(() => pem, fakeClock()), origins: { sandbox: origin, production: origin }, sleep: async () => {} });
+    const key: ApnsKeyFile = { environment: "sandbox", keyId: "KEYID12345", path: "/k.p8" };
+    expect((await apns.send(key, "TEAM123456", send)).ok).toBe(true);
+    expect(sessions).toHaveLength(2);
   } finally {
     transport.close();
     for (const s of sessions) s.destroy();
