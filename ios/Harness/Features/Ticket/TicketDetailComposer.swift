@@ -40,16 +40,14 @@ struct TicketDetailComposer: View {
 
     @Environment(\.sheetFront) private var sheetFront
     @Environment(\.sheetResting) private var sheetResting
-    @State private var row: CGRect = .zero
 
     /// The phone's ticket sheet floats the docked cards above its composer; the iPad's panel doesn't.
-    private var reportsRow: Bool { inTicketSheet && !inTicketPanel }
+    private var keepsRoom: Bool { inTicketSheet && !inTicketPanel }
 
-    /// Tells the dock where this composer is while it's the front sheet's and at rest (a sheet in
-    /// motion swings the reading by the distance moved).
-    private func reportRow() {
-        guard reportsRow, sheetFront, sheetResting, row != .zero, dockInset?.composerRow != row else { return }
-        dockInset?.composerRow = row
+    /// Tells the sheet its screen has a composer while it's the front sheet's.
+    private func reportUp() {
+        guard keepsRoom, sheetFront, dockInset?.composerUp != true else { return }
+        dockInset?.composerUp = true
     }
 
     private var outgoing: MessageAttachments { draft.attachments }
@@ -99,22 +97,20 @@ struct TicketDetailComposer: View {
                 sendButton(active: writing && !compacting, disabled: !canSend, hint: sendHint(empty: empty, accepts: accepts)) { send() }
             }
         }
-        .onChange(of: sheetFront) { reportRow() }
-        .onChange(of: sheetResting) { reportRow() }
+        .onChange(of: sheetFront) { reportUp() }
+        .onAppear { reportUp() }
         .padding(.top, 6)
         // At rest, concentric with the phone's corners (the one-line field is 44 tall, its ends
         // round at 22); over the keyboard while writing. A multi-line draft makes it taller, but its
         // bottom row still sits where a one-line field would, so 44 holds.
-        .concentricBottomPadding(barHeight: 44, raised: focused, horizontal: 12, bottom: 8,
-                                 // Where the docked cards float above: the tray and the row, inside the sides' padding.
-                                 onFrame: { row = $0; reportRow() })
+        .concentricBottomPadding(barHeight: DockMetrics.barHeight, raised: focused, horizontal: 12, bottom: 8)
         .animation(.snappy, value: focused)
         // Another device's edit (or its send) shows here, unless this one is being typed in.
         .onChange(of: ticket.messageDraft.optional, initial: true) { _, saved in draft.sync(saved) }
         .onAppear { draft.onError = { _ in haptic(.error) } }
         // Leaving the ticket with the field focused sends no blur: the draft isn't being typed in anymore.
         .onDisappear {
-            if reportsRow, sheetFront { dockInset?.composerRow = nil }
+            if keepsRoom, sheetFront { dockInset?.composerUp = false }
             TicketViewMemory.shared.composerDisappeared(key: ticket.key, at: DockHold.now)
             draft.focus(false, stored: ticket.messageDraft.optional)
         }

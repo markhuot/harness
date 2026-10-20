@@ -509,9 +509,10 @@ can't be moved, so the board measures its buttons (`BarButtonsProbe`, into `Dock
 dock floats its cards above the bar at the bar's own edges (`DockBar`, `DockMetrics.phonePlacement`); a
 button the system lifted out of the row (the Duo stacks search above New session in its margin) shares
 the cards' row instead, and the cards end short of it. The board keeps its own room above the bar
-(`DockMetrics.boardClearance`, `DockClearance(board:)` skips it). With a ticket open the cards float above its
-composer (`DockedSheetInset.composerRow`, read by the composer) at its width, and the ticket's pages keep
-room for them above it (`TicketDock.stackRoom`); a ticket screen without a composer keeps the old room
+(`DockMetrics.boardClearance`, `DockClearance(board:)` skips it). With a ticket open the cards stay where they are, above the
+board's bar (the composer is the same height, `DockMetrics.barHeight`, so nothing moves on open; an empty
+probe reading keeps the last bar, `DockBar.holding`), and the ticket's pages keep
+room for them above the composer (`DockedSheetInset.composerUp`) (`TicketDock.stackRoom`); a ticket screen without a composer keeps the old room
 at its bottom (`SheetDockRoom`, inside the stack's screens like the board's). A keyboard drops the room
 (`DockedSheetInset.keyboardUp`), as the dock is hidden then and the composer rides the keys. "N more…"
 expands every waiting ticket into the `DockedCardList` over the screen on the backdrop; a tap on the

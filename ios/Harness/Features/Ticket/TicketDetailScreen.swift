@@ -212,9 +212,9 @@ private struct TicketDetailBody: View {
             guard let api = store.api, let detail = try? await api.getTicket(ticket.key), !Task.isCancelled else { return }
             specAttachments = detail.attachments
         }
-        // A safe-area bar, the system's way to float a custom bar: it insets the scroll content, rides
-        // the keyboard and gets the same scroll-edge blur as the board's system bottom bar.
-        .safeAreaBar(edge: .bottom, spacing: 0) {
+        // A plain safe-area inset: it insets the scroll content and rides the keyboard, with no
+        // scroll-edge blur or background behind the composer (safeAreaBar adds both).
+        .safeAreaInset(edge: .bottom, spacing: 0) {
             Group {
                 // Torn off into a window of its own: one line to bring it back instead.
                 if let window = tornOff.window(ticket.key, tab: TicketWindowValue.composer) {

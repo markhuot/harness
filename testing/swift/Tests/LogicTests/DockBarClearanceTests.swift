@@ -39,19 +39,26 @@ import HarnessKit
     @Test func beforeTheBarIsMeasuredTheScreensCornersDecideTheSides() {
         #expect(DockBar.bar(items: [], inset: 83) == nil)
         let p = DockMetrics.phonePlacement(bar: nil, screen: phone)
-        #expect(p.bottom == DockMetrics.phoneBottomGap)
+        // Above where the bar will be (3 padding + 50 tall on this phone), so a ticket opened over an
+        // unmeasured board doesn't put the cards on the composer.
+        #expect(p.bottom == DockMetrics.phoneBottomGap + 53)
+        #expect(DockMetrics.phonePlacement(bar: nil, screen: nil).bottom == DockMetrics.phoneBottomGap)
         #expect(p.leading == p.trailing)
         #expect(p.leading == DockMetrics.phoneSides(screen: phone))
     }
 
-    @Test func aComposerRowIsABarOverTheScreensBottom() {
-        // The row's top 120 up from the bottom of an 874pt screen, 12 in from each side.
-        let bar = DockBar.above(row: CGRect(x: 12, y: 754, width: 378, height: 44), screenHeight: 874)
-        #expect(bar.inset == 120)
-        let p = DockMetrics.phonePlacement(bar: bar, screen: phone)
-        #expect(p.leading == 12)
-        #expect(p.trailing == 12)
-        #expect(p.bottom == CGFloat(8 + (120 - 34)))
+    @Test func anEmptyReadingKeepsTheLastBarAndARealOneReplacesIt() {
+        let first = DockBar.bar(items: [button(20, 790), button(334, 790)], inset: 83)
+        #expect(DockBar.holding(first, items: [], inset: 83) == first)
+        #expect(DockBar.holding(nil, items: [], inset: 83) == nil)
+        let moved = DockBar.holding(first, items: [button(30, 790), button(324, 790)], inset: 60)
+        #expect(moved != first)
+        #expect(moved?.inset == 60)
+    }
+
+    @Test func theComposerAndTheBoardBarShareTheirSides() {
+        // The composer pads itself with the bar height the dock takes its sides from.
+        #expect(ConcentricBar.padding(phone, barHeight: DockMetrics.barHeight)?.horizontal == DockMetrics.phoneSides(screen: phone))
     }
 
     @Test func theBoardKeepsRoomFromTheStackTopToTheBar() {

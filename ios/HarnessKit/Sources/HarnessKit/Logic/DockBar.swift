@@ -36,10 +36,10 @@ public struct DockBar: Equatable, Sendable {
                        raised: raised)
     }
 
-    /// A bar that is the single row `row` (the composer's field row and its buttons, in the window),
-    /// on a screen `screenHeight` tall.
-    public static func above(row: CGRect, screenHeight: CGFloat) -> DockBar {
-        DockBar(inset: max(0, screenHeight - row.minY), leading: row.minX, trailing: row.maxX)
+    /// The bar after a new reading: an empty one (the bar's glass hidden or mid-fade) keeps `previous`,
+    /// so the cards don't drop to the screen's bottom for a beat; a real one replaces it.
+    public static func holding(_ previous: DockBar?, items: [CGRect], inset: CGFloat) -> DockBar? {
+        bar(items: items, inset: inset) ?? previous
     }
 }
 
@@ -54,15 +54,18 @@ extension DockMetrics {
     /// The gap between the cards and the bar's edge or a lifted button beside them.
     public static let barSideGap: CGFloat = 8
 
-    /// The stack's gaps for a `bar` (nil before it is measured: the screen's corners decide the sides
-    /// and nothing lifts the cards) on `screen`. Over a bar the cards span its width and float
+    /// The stack's gaps for a `bar` (nil before it is measured, or while a sheet has covered the board
+    /// since launch: the screen's corners decide the sides, nothing lifts the cards, and they float
+    /// above where the board's bar would be) on `screen`. Over a bar the cards span its width and float
     /// `phoneBottomGap` above it; beside a lifted button the bottom card is centered on it and ends
     /// `barSideGap` short of it.
     public static func phonePlacement(bar: DockBar?, screen: ConcentricBar.Screen?) -> DockPlacement {
         let home = screen?.homeIndicator ?? 0
         let sides = phoneSides(screen: screen)
         guard let bar, let screen else {
-            return DockPlacement(leading: sides, trailing: sides, bottom: phoneBottomGap)
+            // The bar's top reaches its bottom padding plus its height above the safe area's bottom.
+            let barTop = max(0, ConcentricBar.padding(screen, barHeight: barHeight)?.bottom ?? 0) + barHeight
+            return DockPlacement(leading: sides, trailing: sides, bottom: phoneBottomGap + (screen == nil ? 0 : barTop))
         }
         var leading = max(0, bar.leading)
         var trailing = max(0, screen.width - bar.trailing)

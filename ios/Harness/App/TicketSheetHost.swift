@@ -172,9 +172,8 @@ extension EnvironmentValues {
     /// The board's system bar as measured (its buttons' edges), which the cards take the width of. Nil
     /// while the board isn't the screen showing.
     var boardBar: DockBar?
-    /// The open ticket's composer row in the window: the cards float above it while a ticket is up.
-    /// Nil without a composer (a screen without one, a keyboard-less sheet that is gone).
-    var composerRow: CGRect?
+    /// The front ticket sheet's screen has a composer, which keeps its own room above it for the cards.
+    var composerUp = false
     /// A keyboard is up: the dock is faded out, so the ticket's composer keeps no room for it.
     var keyboardUp = false
     /// The iPad: how much of the board's bottom the docked card stack takes (DockedCardsContainer); 0
@@ -229,7 +228,7 @@ private struct SheetDockRoom: ViewModifier {
     @Environment(DockedSheetInset.self) private var dockInset: DockedSheetInset?
 
     func body(content: Content) -> some View {
-        let room = dockInset?.composerRow == nil ? TicketDock.sheetRoom(cards: router.waitingSheets.count, screen: screen, inset: dockInset) : 0
+        let room = dockInset?.composerUp != true ? TicketDock.sheetRoom(cards: router.waitingSheets.count, screen: screen, inset: dockInset) : 0
         content
             .safeAreaInset(edge: .bottom, spacing: 0) { Color.clear.frame(height: room) }
             .animation(.snappy, value: room)

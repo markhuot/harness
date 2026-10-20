@@ -95,7 +95,7 @@ struct BoardScreen: View {
         // The cards float over the bar at the bar's own width (and beside a button the system lifted).
         .background {
             BarButtonsProbe(trigger: barInset) { items in
-                dockInset?.boardBar = DockBar.bar(items: items, inset: barInset)
+                dockInset?.boardBar = DockBar.holding(dockInset?.boardBar, items: items, inset: barInset)
             }
         }
         .background(c.bg)
