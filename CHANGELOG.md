@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261020.2300](https://github.com/markhuot/harness/releases/tag/app-20261020.2300) - 2026-10-20
+
 ### Added
 
 - On the Mac, ⌥⌘= (or Cycle Pane Width in the palette and View menu) cycles the focused pane through 10%, 20%, 25%, 33% and 50% of the window and the widths of its left and right neighbours. The board gives up or takes the room, and widths that would squeeze a pane below its minimum are skipped.
