@@ -182,6 +182,19 @@ export function steps(start: Start, built: { app: string }): Step[] {
       },
     },
     {
+      name: "4c. ⌥⌘= steps the open ticket pane to the next preset width",
+      async run(ctx) {
+        const main = ctx.mac.main;
+        const ticketWidth = `Math.round(document.querySelector('.pane-ticket').getBoundingClientRect().width)`;
+        await main.click(".pane-ticket button.tab[data-tab=spec]");
+        const before = await main.evaluate<number>(ticketWidth);
+        await shot(ctx, "04c-mac-cycle-width-before");
+        await main.press("=", "Equal", MOD.meta | MOD.alt);
+        await main.waitFor("the ticket pane to change width", `${ticketWidth} !== ${before}`);
+        await shot(ctx, "04c-mac-cycle-width-after");
+      },
+    },
+    {
       name: "5. edit a file in the Mac app's editor",
       async run(ctx) {
         const main = ctx.mac.main;
