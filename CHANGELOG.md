@@ -9,6 +9,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Changed
+
+- On iPhone and the iPhone Duo, Settings now opens as a sheet over whatever you were on, so you can swipe down to close it (or tap its ✕) instead of going back through the Projects sidebar. The iPad keeps Settings as a section in its sidebar.
+
 ## [app-20261020.0909](https://github.com/markhuot/harness/releases/tag/app-20261020.0909) - 2026-10-20
 
 ### Added

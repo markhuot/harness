@@ -44,6 +44,8 @@ public enum SheetRoute: Hashable, Sendable, Identifiable {
     case pair(url: String?, token: String?)
     /// The command palette (the board's bottom-bar field, ⌘K); `files` opens it in file mode (⌘P).
     case palette(files: Bool)
+    /// Settings at compact width: a sheet that swipes away (regular width keeps it a section).
+    case settings
 
     public var id: Self { self }
 }

@@ -74,6 +74,7 @@ struct SheetHost: View {
         case .connect: ConnectScreen()
         case let .pair(url, token): PairScreen(url: url, token: token)
         case let .palette(files): RequireStore { PaletteScreen(startInFiles: files) }
+        case .settings: RequireStore { TabStack(tab: .settings) { SettingsScreen() }.environment(\.inSheet, true) }
         }
     }
 }

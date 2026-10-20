@@ -131,8 +131,13 @@ public final class Router {
         case let .tab(tab, themes):
             dismissModals()
             dockSheet()
-            selectedTab = tab
             paths[tab] = []
+            if tab == .settings && !sheetIsBesideBoard {
+                // Compact width: Settings is a sheet over the section, so a swipe down closes it.
+                sheet = .settings
+            } else {
+                selectedTab = tab
+            }
             return themes
         case let .push(route):
             dismissModals()
@@ -232,7 +237,9 @@ public final class Router {
         } else if scope == .main, case let .ticket(key, tab) = route {
             presentTicketSheet(.ticket(key: key, tab: tab))
         } else {
-            paths[selectedTab, default: []].append(route)
+            // The Settings sheet has its own stack, over the selected section's.
+            let tab = scope == .main && sheet == .settings ? AppTab.settings : selectedTab
+            paths[tab, default: []].append(route)
         }
     }
 

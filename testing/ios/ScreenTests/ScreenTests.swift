@@ -56,7 +56,10 @@ final class ScreenTests: ScreenTestCase {
     }
 
     func testSettings() async throws {
-        try await screen("settings", router: Router(selectedTab: .settings)) { RootView() }
+        // A sheet on the phone (Router.open decides by width), a section on the iPad.
+        let router = UIDevice.current.userInterfaceIdiom == .pad ? Router(selectedTab: .settings) : Router()
+        if router.selectedTab != .settings { router.present(.settings) }
+        try await screen("settings", router: router) { RootView() }
     }
 
     func testPalette() async throws {

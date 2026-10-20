@@ -329,6 +329,8 @@ extension EnvironmentValues {
     /// Inside the iPad's DesktopShell: the split view's toggle replaces the sidebar button, and the
     /// board's search, filter and New session sit in the top bar instead of a bottom bar.
     @Entry var desktopShell = false
+    /// Inside the Settings sheet: no Projects button, the sheet's own close button leads.
+    @Entry var inSheet = false
 }
 
 /// The header button that opens the Projects sidebar, on each section's root screen. Its amber
@@ -338,9 +340,10 @@ extension EnvironmentValues {
 /// board has no header and puts ProjectsButton in its own bottom bar (BoardBottomBar).
 struct SidebarToolbarItem: ToolbarContent {
     @Environment(\.desktopShell) private var desktop
+    @Environment(\.inSheet) private var inSheet
 
     var body: some ToolbarContent {
-        if !desktop {
+        if !desktop && !inSheet {
             ToolbarItem(placement: .topBarLeading) { ProjectsButton() }
         }
     }
