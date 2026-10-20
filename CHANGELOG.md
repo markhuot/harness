@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261020.0909](https://github.com/markhuot/harness/releases/tag/app-20261020.0909) - 2026-10-20
+
 ### Added
 
 - A planning ticket that will start by itself (its plan is approved, or it's queued behind an open dependency) now has **Cancel auto start** in its "…" menu, the ⌘K palette and the Mac card menu, on Mac, iPhone and iPad. It keeps the ticket in planning, clears the plan approval and the queue, and brings back the Start button; it won't start later when its dependencies finish.
