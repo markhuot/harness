@@ -135,6 +135,7 @@ describe("accelerator", () => {
   test("commandAccelerator takes the first ⌘ chord, skipping ones before it; none for a bare-key command", () => {
     expect(commandAccelerator("pane.left")).toBe("Cmd+Alt+Left");
     expect(commandAccelerator("shortcuts")).toBe("Cmd+/");
+    expect(commandAccelerator("pane.cycleWidth")).toBe("Cmd+Alt+=");
     expect(commandAccelerator("ticket.compose")).toBeUndefined();
     expect(commandAccelerator("nope")).toBeUndefined();
   });
@@ -144,6 +145,8 @@ describe("commandKeys", () => {
   test("lists ⌘ chords before the others", () => {
     expect(commandKeys("pane.left")).toEqual(["⌥⌘←", "⌃H"]);
     expect(commandKeys("shortcuts")).toEqual(["⌘/", "?"]);
+    expect(commandKeys("pane.cycleWidth")).toEqual(["⌥⌘="]);
+    expect(commandKeys("pane.equalize")).toEqual(["⌘="]);
   });
   test("an unknown or keyless command is empty", () => {
     expect(commandKeys("nope")).toEqual([]);

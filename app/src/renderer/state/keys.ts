@@ -72,6 +72,7 @@ export const COMMANDS: CommandSpec[] = [
   { id: "pane.zoom", label: "Maximize / Restore Pane", group: "Panes", scope: "global", keys: [cmd("Enter", { shift: true })], menu: true },
   { id: "pane.popout", label: "Pop Out Pane", group: "Panes", scope: "global", keys: [cmd("KeyO", { shift: true })], menu: true },
   { id: "pane.equalize", label: "Equalize Panes", group: "Panes", scope: "global", keys: [cmd("Equal")], menu: true },
+  { id: "pane.cycleWidth", label: "Cycle Pane Width", group: "Panes", scope: "global", keys: [cmd("Equal", { alt: true })], menu: true },
   { id: "pane.escape", label: "End zoom, or close the ticket pane", group: "Panes", scope: "global", keys: [k("Escape")], palette: false },
 
   // Ticket pane

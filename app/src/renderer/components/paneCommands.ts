@@ -2,7 +2,7 @@
 // zooming, equalizing, and Escape. Registered once by the shell for the board scope on screen (null off the
 // board, where only the sidebar and the window are left to act on).
 
-import { boardLeaf, equalizePanes, escapePanes, findLeaf, focusPane, layoutPanes, paneInDirection, toggleZoom, getPanes, updatePanes, type PaneDir } from "../state/panes";
+import { boardLeaf, cyclePaneWidth, equalizePanes, escapePanes, findLeaf, focusPane, layoutPanes, paneInDirection, toggleZoom, getPanes, updatePanes, type PaneDir } from "../state/panes";
 import { GLOBAL_OWNER, useCommands } from "./commands";
 import { hasDraftCloser, requestClosePane } from "./draftClose";
 import { focusPaneBy, focusSidebar } from "./paneFocus";
@@ -57,6 +57,14 @@ export function usePaneCommands(scope: string | null, sidebarOpen: boolean) {
     },
     "pane.zoom": !!scope && (() => focusPaneBy(scope!, (s) => toggleZoom(s))),
     "pane.equalize": !!scope && (() => updatePanes(scope!, equalizePanes)),
+    // The focused pane's width steps through the preset widths, the board taking the difference.
+    "pane.cycleWidth":
+      !!scope &&
+      (() => {
+        const el = document.querySelector<HTMLElement>(".pane-workspace");
+        const area = { width: el?.clientWidth || window.innerWidth, height: el?.clientHeight || window.innerHeight };
+        updatePanes(scope!, (s) => cyclePaneWidth(s, area, window.innerWidth));
+      }),
     // The focused pane (anything but the board) into a window of its own (in that window, ⇧⌘O puts it back:
     // components/PopoutWindow.tsx).
     "pane.popout":

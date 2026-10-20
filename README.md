@@ -226,6 +226,7 @@ lines. The ones you'll use most:
 | ⇧⌘↩ | Maximize or restore the focused pane (on the board, it opens the card instead) |
 | ⇧⌘O | Pop the focused ticket or terminal out into its own window (in that window, put it back on the board) |
 | ⌘= | Equalize panes: every pane but the board gets an even share beside its siblings |
+| ⌥⌘= | Cycle the focused pane's width through 10%, 20%, 25%, 33% and 50% of the window and its neighbours' widths; the board gives or takes the room |
 | Esc | Close a menu or dialog, end a zoom, or close the ticket pane |
 
 Single keys only ever move you around, so a stray keypress can't approve, start or delete

@@ -1265,6 +1265,122 @@ export function equalizePanes(state: PaneState): PaneState {
   return changed ? normalize({ ...state, root }) : state;
 }
 
+/** The widths Cycle Pane Width steps through, as fractions of the window. */
+export const CYCLE_WIDTH_FRACTIONS = [0.1, 0.2, 0.25, 1 / 3, 0.5] as const;
+/** Widths this close (px) count as the same one when cycling. */
+const WIDTH_TOLERANCE = 3;
+
+/**
+ * What it takes to give the focused pane a width: `width` is what it has on screen, `set(px)` the
+ * state with it `px` wide, or null when that can't be (it, or the board, would fall below its
+ * minimum). The board's room is what changes: the move happens in the nearest row split that
+ * separates the pane from the board, between the two children holding them, and every row split
+ * below that on either side keeps its other children's pixel widths, so only the pane and the board
+ * resize. (Column splits on the way can't hold: panes stacked with either one resize with it.)
+ * Everything starts from the clamped on-screen layout, as a divider drag does. Null overall when
+ * there's nothing to resize: the board is focused, a pane is zoomed, no board, or no row split
+ * separates them (the board is stacked above or below).
+ */
+function paneWidthPlan(state: PaneState, area: PaneArea): { width: number; set: (px: number) => PaneState | null } | null {
+  const focusedId = state.focusedId;
+  const board = boardLeaf(state.root);
+  if (!focusedId || !board || state.zoomedId || focusedId === board.id || !(area.width > 0)) return null;
+  const fPath = pathTo(state.root, focusedId);
+  const bPath = pathTo(state.root, board.id);
+  if (!fPath || !bPath) return null;
+  let lca = 0;
+  while (lca < fPath.length && lca < bPath.length && fPath[lca]!.split === bPath[lca]!.split && fPath[lca]!.index === bPath[lca]!.index) lca++;
+  const top = fPath[lca];
+  const topB = bPath[lca];
+  if (!top || !topB || top.split !== topB.split || top.split.dir !== "row") return null;
+  const layout = layoutPanes(state, area);
+  const info = new Map<string, { sizes: number[]; total: number }>();
+  for (const d of layout.dividers) info.set(d.split.id, { sizes: d.sizes, total: d.rect.w * area.width });
+  const box = layout.leaves.find((l) => l.leaf.id === focusedId);
+  if (!box || !info.has(top.split.id)) return null;
+  const widthOf = (step: PathStep) => {
+    const i = info.get(step.split.id);
+    // A column's children are as wide as it is.
+    return i ? (step.split.dir === "row" ? i.sizes[step.index]! * i.total : i.total) : null;
+  };
+  const fSteps = fPath.slice(lca);
+  const bSteps = bPath.slice(lca);
+  const fWidths = fSteps.map(widthOf);
+  const bWidths = bSteps.map(widthOf);
+  if (fWidths.includes(null) || bWidths.includes(null)) return null;
+  const width = box.rect.w * area.width;
+  const fits = (steps: PathStep[], widths: (number | null)[], delta: number) =>
+    steps.every((st, k) => widths[k]! + delta >= minSize(st.split.children[st.index]!, "row") - 1e-6);
+  return {
+    width,
+    set: (px) => {
+      const delta = px - width;
+      if (!fits(fSteps, fWidths, delta) || !fits(bSteps, bWidths, -delta)) return null;
+      if (Math.abs(delta) < 0.5) return state;
+      const sizes = new Map<string, number[]>();
+      const shift = (steps: PathStep[], d: number) => {
+        // Below the top split, each row split gives the change to the child on the path and keeps the rest.
+        steps.slice(1).forEach((st, k) => {
+          if (st.split.dir !== "row") return;
+          const i = info.get(st.split.id)!;
+          const before = widthOf(steps[k]!)!;
+          sizes.set(st.split.id, i.sizes.map((sz, j) => (sz * i.total + (j === st.index ? d : 0)) / (before + d)));
+        });
+      };
+      shift(fSteps, delta);
+      shift(bSteps, -delta);
+      const ti = info.get(top.split.id)!;
+      sizes.set(top.split.id, ti.sizes.map((sz, j) => (sz * ti.total + (j === top.index ? delta : j === topB.index ? -delta : 0)) / ti.total));
+      const walk = (node: PaneNode): PaneNode => {
+        if (node.type === "leaf") return node;
+        const next = sizes.get(node.id);
+        return { ...node, children: node.children.map(walk), ...(next ? { sizes: next } : {}) };
+      };
+      return { ...state, root: walk(state.root) };
+    },
+  };
+}
+
+/**
+ * Give the focused pane `px` of width, taking it from or handing it to the board (see
+ * paneWidthPlan). Returns `state` itself when that can't be shown or the pane already has it.
+ */
+export function setPaneWidth(state: PaneState, area: PaneArea, px: number): PaneState {
+  return paneWidthPlan(state, area)?.set(px) ?? state;
+}
+
+/**
+ * Cycle Pane Width: the focused pane takes the next of 10%, 20%, 25%, 33% and 50% of the window
+ * (`windowPx`) and its left and right neighbours' widths (a board neighbour counts as the width
+ * where the two come out equal), narrowest first. Widths that can't be shown are skipped. From a
+ * width that's one of those it moves to the next wider (the widest wraps to the narrowest); from any
+ * other it first snaps to the closest. Returns `state` itself when there's nothing to do.
+ */
+export function cyclePaneWidth(state: PaneState, area: PaneArea, windowPx: number): PaneState {
+  const plan = paneWidthPlan(state, area);
+  if (!plan) return state;
+  const layout = layoutPanes(state, area);
+  const widthOfLeaf = (id: string) => layout.leaves.find((l) => l.leaf.id === id)!.rect.w * area.width;
+  const candidates: number[] = CYCLE_WIDTH_FRACTIONS.map((f) => f * windowPx);
+  for (const dir of ["left", "right"] as const) {
+    const id = paneInDirection(layout, state.focusedId!, dir);
+    if (!id || id === "sidebar") continue;
+    const w = widthOfLeaf(id);
+    candidates.push(findLeaf(state.root, id)?.content.kind === "board" ? (plan.width + w) / 2 : w);
+  }
+  const widths: number[] = [];
+  for (const c of candidates.sort((a, b) => a - b)) {
+    if ((widths.length && c - widths[widths.length - 1]! < WIDTH_TOLERANCE) || !plan.set(c)) continue;
+    widths.push(c);
+  }
+  if (!widths.length) return state;
+  const at = widths.findIndex((w) => Math.abs(w - plan.width) < WIDTH_TOLERANCE);
+  let target: number;
+  if (at >= 0) target = widths[(at + 1) % widths.length]!;
+  else target = widths.reduce((best, w) => (Math.abs(w - plan.width) < Math.abs(best - plan.width) ? w : best));
+  return plan.set(target) ?? state;
+}
+
 // ---------------------------------------------------------------------------
 // Persistence
 // ---------------------------------------------------------------------------

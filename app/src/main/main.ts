@@ -539,6 +539,7 @@ function buildMenu() {
         commandItem("pane.popout", "Pop Out Pane"),
         // ⌘= used to be Zoom In; Zoom In/Out are gone, and Actual Size stays to undo an old zoom.
         commandItem("pane.equalize"),
+        commandItem("pane.cycleWidth"),
         { type: "separator" },
         { role: "reload" },
         { role: "forceReload" },

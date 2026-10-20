@@ -3267,7 +3267,13 @@ Settings, project settings, or on the board route the pane workspace.
   minimum stays there while the rest of its side keeps shrinking. Holding ⌥ (checked on every
   move, and on ⌥ down/up mid-drag) resizes only the two panes touching the divider. Equalize
   Panes (⌘=, `equalizePanes`) evens out every split's children, except that the child holding the
-  board keeps its share and the others split the rest. ⌘= was Electron's Zoom In; Zoom In/Out
+  board keeps its share and the others split the rest. Cycle Pane Width (⌥⌘=, `cyclePaneWidth`)
+  gives the focused pane the next of 10/20/25/33/50% of the window and its left and right
+  neighbours' widths, narrowest first (from any other width it snaps to the closest first, and
+  widths that would break a minimum are skipped). `paneWidthPlan` moves the pixels in the nearest
+  row split between the pane's branch and the board's and keeps every other row sibling's pixel
+  width, so only the pane and the board resize (panes stacked with either do too). It does
+  nothing for the board, a zoomed pane or a board stacked above the pane. ⌘= was Electron's Zoom In; Zoom In/Out
   are gone from the View menu, and Actual Size stays so an old zoom can be undone. While dragging, a full-window overlay
   (`useDragOverlay`, shared with the sidebar's handle) keeps iframes and the browser canvas from
   taking the pointer. Minimums: the board 320 px wide, a ticket or torn-off tab 360 px, a terminal 320 px, a file 360 px, any
@@ -3281,7 +3287,7 @@ Settings, project settings, or on the board route the pane workspace.
   blocked ticket's reply box) doesn't retarget the focused pane. ✕ (or ⌘W) closes a ticket,
   file or terminal pane, and its whole room goes to one pane so every other pane keeps its size: the
   board (or the pane holding it) when it shares the split, otherwise the neighbour on the board's
-  side. Pane sizes change only when you drag a divider or equalize. The board can't be closed, so ⌘W with the board
+  side. Pane sizes change only when you drag a divider, equalize or cycle a width. The board can't be closed, so ⌘W with the board
   focused closes the window. Maximize (⇧⌘↩) zooms a pane. Escape ends a zoom, or else closes the
   focused ticket or file pane (never while a text field, modal, menu, the palette or a terminal has the
   focus, and never a terminal pane: Escape belongs to the shell). Deleting a ticket closes its
