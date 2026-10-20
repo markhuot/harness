@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 import type { Ticket } from "@harness/shared";
-import { gate, replyScript, toolCall, type Step } from "../fake-driver";
+import { failScript, gate, replyScript, toolCall, type Step } from "../fake-driver";
 import { makeOrchestrator, stopAll } from "../orchestrator-harness";
 
 afterEach(stopAll);
@@ -230,4 +230,46 @@ test("a merge that didn't land blocks with the approvals kept, and answering res
   await h.settle();
   expect(h.driver.requests.map((r) => r.kind)).toEqual(["work", "complete", "complete"]);
   expect(h.ticket(t.key).status).toBe("done");
+});
+
+test("a completion run that calls resume_work and then block blocks like a work run: no completion block, approvals reset", async () => {
+  const { h, t } = await blockedCompletion([...toolCall("resume_work", { note: "Needs a change" }), ...toolCall("block", { question: "Which label?" })], submit("Labelled"));
+  await h.orch.unblockTicket(t.key, { notes: "Go ahead" }); // resumes the first completion; it asks again, as a work run
+  await h.settle();
+  expect(h.ticket(t.key)).toMatchObject({ status: "blocked", blockedReason: "Which label?", blockedRunKind: null, blockedHead: null, humanReview: "pending", agentReview: "pending" });
+  await h.orch.unblockTicket(t.key, { notes: "Save" });
+  await h.settle();
+  expect(h.driver.requests.map((r) => r.kind)).toEqual(["work", "complete", "complete", "work"]);
+  expect(h.ticket(t.key)).toMatchObject({ status: "review", humanReview: "pending" });
+});
+
+test("the work run a completion's resume_work queues starts even when the completion run then fails", async () => {
+  const { h, t } = await blockedCompletion([...toolCall("resume_work", { note: "Needs a change" }), ...failScript("boom")], submit("Changed"));
+  await h.orch.unblockTicket(t.key, { notes: "Move it to docs/" });
+  await h.settle();
+  expect(h.driver.requests.map((r) => r.kind)).toEqual(["work", "complete", "complete", "work"]);
+  expect(h.ticket(t.key)).toMatchObject({ status: "review", humanReview: "pending" });
+});
+
+test("pressing Unblock twice on a completion's block starts one completion", async () => {
+  const { h, t } = await blockedCompletion(replyScript("merged"));
+  const [a, b] = await Promise.allSettled([h.orch.unblockTicket(t.key, { notes: "Yes" }), h.orch.unblockTicket(t.key, { notes: "Yes" })]);
+  expect([a.status, b.status].sort()).toEqual(["fulfilled", "rejected"]);
+  await h.settle();
+  expect(h.driver.requests.map((r) => r.kind)).toEqual(["work", "complete", "complete"]);
+});
+
+test("a branch that moved while blocked tells the work run so", async () => {
+  const { h, t } = await blockedCompletion(replyScript("amended"));
+  h.store.tickets.update(t.id, { blockedHead: "0000000000000000000000000000000000000000" });
+  await h.orch.unblockTicket(t.key, { notes: "Go ahead" });
+  await h.settle();
+  expect(h.driver.requests[2]!.prompt).toContain("branch has moved");
+  expect(h.driver.requests[2]!.prompt).toContain(ASK);
+});
+
+test("a human dragging a completion-blocked ticket to review sends it to be reviewed again", async () => {
+  const { h, t } = await blockedCompletion();
+  await h.orch.updateTicket(t.key, { status: "review" });
+  expect(h.ticket(t.key)).toMatchObject({ status: "review", blockedRunKind: null, humanReview: "pending", agentReview: "pending" });
 });

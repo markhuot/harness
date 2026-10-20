@@ -128,7 +128,7 @@ export const block = defineTool<{ question: string }>({
 export const unblock = defineTool<{ note?: string }>({
   name: "unblock",
   description:
-    "Move your blocked ticket back to In progress, as soon as the human's message resolves what it was blocked on and before you continue the work. Then finish with submit_for_review, or block again. Don't call it for a message that doesn't resolve the block (a side question, say): answer it and leave the ticket blocked. Refused unless the ticket is blocked, and while a tool approval is waiting on the human.",
+    "Unblock your ticket (to In progress; a completion's block resumes the completion), as soon as the human's message resolves the block, before you continue. Then finish with submit_for_review, or block again. Don't call it for a message that doesn't resolve the block (a side question): answer it and leave it blocked. Refused unless blocked, and while a tool approval waits.",
   inputSchema: schema({ note: { type: "string", description: "Optional: what resolved the block, shown on the ticket's timeline." } }, []),
   async run({ note }, ctx) {
     const resumes = await ctx.ops.unblock(ctx, note);
@@ -144,7 +144,7 @@ export const resumeWork = defineTool<{ note?: string }>({
   inputSchema: schema({ note: { type: "string", description: "Optional: why the work is picked back up, shown on the ticket's timeline." } }, []),
   async run({ note }, ctx) {
     const moved = await ctx.ops.resumeWork(ctx, note);
-    if (ctx.runKind === "complete") return "Ticket moved to in progress with both reviews pending. Stop the completion here (leave the branch as it is); a work run starts when this run ends.";
+    if (ctx.runKind === "complete") return "Ticket moved to in progress with both reviews pending. Stop the completion here (leave the branch as it is); a work run is queued and starts when this run ends.";
     const where = moved
       ? ` The ticket's working directory is now ${moved}, not the directory this run started in: do the work and commit there, with absolute paths or \`git -C ${moved}\`.`
       : "";

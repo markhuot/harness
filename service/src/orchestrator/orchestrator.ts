@@ -258,8 +258,6 @@ interface ActiveRun {
    * completion resumes (afterRun), so the queue runs one job at a time
    */
   resumeCompletion: { note: string } | null;
-  /** A completion run called resume_work: when it ends, this work run starts (afterRun) */
-  workAfter: string | null;
   /**
    * Calls a permission system inside the driver denied without asking (permission_denied) and
    * the agent didn't then run successfully in the same run
@@ -2158,7 +2156,7 @@ export class Orchestrator {
     const notes = typeof body?.notes === "string" ? body.notes.trim() : "";
     this.autoRetries.delete(ticket.id);
     if (ticket.blockedRunKind === "complete") {
-      await this.resumeCompletion(ticket, notes, "human");
+      if (!(await this.resumeCompletion(ticket, notes, "human"))) throw conflict(`${ticket.key} is already being unblocked`);
       return this.store.tickets.get(ticket.id)!;
     }
     this.addActivityLine(ticket, "unblocked", "human", notes || "Unblocked by the human", { ...(notes ? { note: notes } : {}), ...this.moveMeta(ticket, "in_progress") });
@@ -2277,7 +2275,7 @@ export class Orchestrator {
       this.enqueueRun(t.sessionId, "chat", prompt);
       return this.store.tickets.get(t.id)!;
     }
-    const kind = asked === "complete" ? "complete" : this.workKind(ticket);
+    const kind = asked === "complete" && ticket.status !== "in_progress" ? "complete" : this.workKind(ticket);
     const t = this.transition(
       ticket,
       kind === "complete" ? "review" : "in_progress",
@@ -2907,13 +2905,21 @@ ${numberLines(r.body)}`;
     const patch: TicketPatch = { blockedReason: question.trim() };
     // A completion run's block keeps the approvals (unblocking resumes the completion) and
     // remembers the branch tip it blocked at; a chat re-asking a completion's question keeps both.
-    if (ctx.runKind === "complete") {
+    // Only a completion still in review: one that called resume_work is a work run now, and its block is any other.
+    if (ctx.runKind === "complete" && t.status === "review") {
       Object.assign(patch, { blockedRunKind: "complete", blockedHead: await this.mergeTip(t) });
     } else if (t.status === "blocked") {
       Object.assign(patch, { blockedRunKind: t.blockedRunKind, blockedHead: t.blockedHead });
     } else if (t.status === "review") {
       await this.cancelReviewRuns(t.sessionId);
       Object.assign(patch, { agentReview: "pending", humanReview: "pending" });
+    }
+    // A completion that already called resume_work queued its work run: the question comes first.
+    if (ctx.runKind === "complete" && t.status === "in_progress") {
+      for (const job of this.queue.pendingFor(t.sessionId)) {
+        if (job.kind !== "work" && job.kind !== "conductor") continue;
+        if (this.queue.remove(job.runId)) this.bus.emit({ kind: "run.upserted", run: this.store.runs.finish(job.runId, "cancelled", null) });
+      }
     }
     this.addActivity(t, "blocked", "agent", question.trim(), { question: question.trim(), ...this.moveMeta(t, "blocked") });
     this.transition(t, "blocked", patch, `Blocked: ${question.trim()}`, question.trim());
@@ -2924,7 +2930,7 @@ ${numberLines(r.body)}`;
     }
   }
 
-  /** Whether the branch is still at the commit a completion run blocked at: what the reviews approved. */
+  /** Whether the branch is still at the commit a completion run blocked at (the tip the approved work had, plus any commits the completion made). */
   private async headUnmoved(t: Ticket): Promise<boolean> {
     return (await this.mergeTip(t)) === (t.blockedHead ?? null);
   }
@@ -2935,18 +2941,34 @@ ${numberLines(r.body)}`;
    * answer, since complete runs start a fresh conversation. A branch that moved meanwhile would
    * land commits nobody reviewed: that goes back to in progress with both reviews pending.
    */
-  private async resumeCompletion(ticket: Ticket, answer: string, by: "human" | "agent"): Promise<void> {
-    const note = answer.trim();
-    if (!(await this.headUnmoved(ticket))) {
-      this.addActivityLine(ticket, "unblocked", by, note || "Unblocked", { ...(note ? { note } : {}), ...this.moveMeta(ticket, "in_progress") });
-      await this.begin(ticket, this.prompts().unblockPrompt(ticket, note), { agentReview: "pending", humanReview: "pending" }, `Unblocked by ${by}: the branch changed since it was approved`, [], by);
-      return;
+  private async resumeCompletion(ticket: Ticket, answer: string, by: "human" | "agent"): Promise<boolean> {
+    // Claimed before the first await, so a second unblock pressed meanwhile is refused (and
+    // enqueueComplete, which clears it, only runs once).
+    if (this.startingComplete.has(ticket.id)) return false;
+    this.startingComplete.add(ticket.id);
+    try {
+      const note = answer.trim();
+      const moved = !(await this.headUnmoved(ticket));
+      const current = this.store.tickets.get(ticket.id);
+      if (!current || current.status !== "blocked" || current.blockedRunKind !== "complete") return false;
+      const stands = current.humanReview === "approved" && (current.agentReview === "approved" || current.agentReview === "skipped");
+      if (moved || !stands) {
+        const why = moved ? "the branch changed since it was approved" : "its approvals no longer stand";
+        const asked = current.blockedReason?.trim();
+        const framed = `${asked ? `A completion run stopped to ask: ${asked}\n` : ""}${moved ? "The branch has moved since the work was approved, so both reviews start over and it has to be reviewed again before it lands.\n" : "The work's approvals no longer stand, so both reviews start over.\n"}${note}`.trim();
+        this.addActivityLine(current, "unblocked", by, note || "Unblocked", { ...(note ? { note } : {}), ...this.moveMeta(current, "in_progress") });
+        await this.begin(current, this.prompts().unblockPrompt(current, framed), { agentReview: "pending", humanReview: "pending" }, `Unblocked by ${by}: ${why}`, [], by);
+        return true;
+      }
+      const question = current.blockedReason?.trim() ?? "";
+      this.addActivityLine(current, "unblocked", by, note || "Unblocked: resuming the completion", { ...(note ? { note } : {}), ...this.moveMeta(current, "review") });
+      const t = this.transition(current, "review", { blockedReason: null }, `Unblocked by ${by}: resuming the completion`, undefined, { by, keepApprovals: true });
+      const asked = question ? `The completion stopped to ask: ${question}\n` : "";
+      await this.enqueueComplete(t, `\n\n[Harness note: an earlier completion run for this ticket stopped to ask the human. ${asked}${note ? `The human's answer: ${note}\n` : "The human unblocked it without further notes.\n"}Carry on with the completion with that in mind. If the answer means the work needs changes, call resume_work to send the ticket back to in progress instead.]`);
+      return true;
+    } finally {
+      this.startingComplete.delete(ticket.id);
     }
-    const question = ticket.blockedReason?.trim() ?? "";
-    this.addActivityLine(ticket, "unblocked", by, note || "Unblocked: resuming the completion", { ...(note ? { note } : {}), ...this.moveMeta(ticket, "review") });
-    const t = this.transition(ticket, "review", { blockedReason: null }, `Unblocked by ${by}: resuming the completion`, undefined, { by });
-    const asked = question ? `The completion stopped to ask: ${question}\n` : "";
-    await this.enqueueComplete(t, `\n\n[Harness note: an earlier completion run for this ticket stopped to ask the human. ${asked}${note ? `The human's answer: ${note}\n` : "The human unblocked it without further notes.\n"}Carry on with the completion with that in mind. If the answer means the work needs changes, call resume_work to send the ticket back to in progress instead.]`);
   }
 
   /**
@@ -2994,13 +3016,12 @@ ${numberLines(r.body)}`;
       return "";
     }
     if (t.status === "review" && ctx.runKind === "complete") {
-      // A resumed completion found the work needs changes: the work run starts when this run ends.
+      // A resumed completion found the work needs changes: the work run is queued now, behind this
+      // run (the queue serializes a session), so it starts however this run ends.
       await this.cancelReviewRuns(t.sessionId);
-      const a = this.ctxActive(ctx);
       const prompt = this.prompts().unblockPrompt(t, why);
       this.transition(t, "in_progress", { agentReview: "pending", humanReview: "pending", blockedReason: null }, `Moved back to in progress by the agent${why ? `: ${why}` : ""}`, undefined, { by: "agent", line: why || "Changing the work during completion" });
-      if (a) a.workAfter = prompt;
-      else this.enqueueRun(t.sessionId, this.workKind(t), prompt);
+      this.enqueueRun(t.sessionId, this.workKind(t), prompt);
       return "";
     }
     // The chat keeps running in its own conversation, which started fresh when the ticket entered
@@ -3016,6 +3037,8 @@ ${numberLines(r.body)}`;
     this.store.sessions.update(t.sessionId, { cwd: dir.workdir });
     this.addActivityLine(t, "reopened", "agent", why || "Re-opened to pick the work back up", this.moveMeta(t, "in_progress"));
     this.transition(t, "in_progress", { ...dir, agentReview: "pending", humanReview: "pending", blockedReason: null, reviewRejections: 0 }, `Re-opened by the agent${why ? `: ${why}` : ""}`, undefined, { keepSession: true });
+    // A completion run that found the ticket done: the work still has to be picked up once it ends.
+    if (ctx.runKind === "complete") this.enqueueRun(t.sessionId, this.workKind(t), this.prompts().unblockPrompt(t, why));
     return dir.workdir === ctx.cwd ? "" : dir.workdir;
   }
 
@@ -4034,6 +4057,8 @@ ${numberLines(r.body)}`;
     if (!denial || !APPROVABLE_RUNS.includes(run.kind)) return false;
     const t = this.store.tickets.get(ticket.id);
     if (!t || t.pendingApproval || this.permissionModeFor(t) === "read_only") return false;
+    // A completion that called resume_work left the ticket in progress with a work run queued behind it: its denied call is moot.
+    if (run.kind === "complete" && t.status === "in_progress") return false;
     if (active.submitted && t.status === "review") {
       // The agent found another way and submitted: the review goes ahead, and the denied calls
       // are on record for the reviewer and the human.
@@ -4406,7 +4431,7 @@ ${numberLines(r.body)}`;
    * the entry the caller just added for it (moveMeta) carries from/to, otherwise a `moved` entry
    * by `by` says why in one line (`line`, else the status text).
    */
-  private transition(ticket: Ticket, to: TicketStatus, patch: TicketPatch, status?: string, note?: string, move: { by?: ActivityAuthor; line?: string; keepSession?: boolean } = {}): Ticket {
+  private transition(ticket: Ticket, to: TicketStatus, patch: TicketPatch, status?: string, note?: string, move: { by?: ActivityAuthor; line?: string; keepSession?: boolean; keepApprovals?: boolean } = {}): Ticket {
     const from = ticket.status;
     const pending = this.movesRecorded.get(ticket.id);
     this.movesRecorded.delete(ticket.id);
@@ -4421,7 +4446,10 @@ ${numberLines(r.body)}`;
     const blockOwner: TicketPatch = patch.blockedRunKind === undefined && !(from === "blocked" && to === "blocked") ? { blockedRunKind: null, blockedHead: null } : {};
     // An approval to start after planning means nothing outside planning.
     const approval: TicketPatch = to !== "planning" && ticket.startAfterPlan ? { startAfterPlan: false, startAfterPlanBy: null } : {};
-    const t = this.store.tickets.update(ticket.id, { ...spent, ...approval, ...blockOwner, ...patch, ...resume, status: to })!;
+    // The approvals a completion's block kept were for that completion: any way out of the block
+    // other than resuming it (a drag to review, Start) sends the work to be reviewed again.
+    const reviewAgain: TicketPatch = from === "blocked" && ticket.blockedRunKind === "complete" && (to === "review" || to === "in_progress") && !move.keepApprovals ? { agentReview: "pending", humanReview: "pending" } : {};
+    const t = this.store.tickets.update(ticket.id, { ...spent, ...approval, ...blockOwner, ...reviewAgain, ...patch, ...resume, status: to })!;
     if (patch.resumeAt !== undefined || "resumeAt" in resume) this.armResume();
     this.touchSession(t.sessionId);
     if (status) this.appendStatus(t.sessionId, null, status);
@@ -4821,7 +4849,6 @@ ${numberLines(r.body)}`;
       blocked: false,
       replanned: null,
       resumeCompletion: null,
-      workAfter: null,
       denials: [],
       calls: new Map(),
       appliedGrants: new Set(),
@@ -5269,8 +5296,7 @@ ${numberLines(r.body)}`;
         break;
       case "complete":
         // done: the human marked it so meanwhile. blocked: the agent called block, which kept the
-        // approvals for the resumed completion. in_progress: the agent called resume_work.
-        if (ticket.status === "in_progress" && active.workAfter) this.enqueueRun(ticket.sessionId, this.workKind(ticket), active.workAfter);
+        // approvals for the resumed completion. in_progress: the agent called resume_work, which queued the work run.
         if (ticket.status === "done" || ticket.status === "blocked" || ticket.status === "in_progress") break;
         if ((ticket.completionAction ?? "merge") === "merge" && run.status === "succeeded") {
           const sha = this.mergeTips.get(ticket.id);
