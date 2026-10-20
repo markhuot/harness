@@ -287,3 +287,17 @@ test("deleting a ticket removes its dependencies and grants; getBySession finds 
   expect(store.tickets.dependents("AB-9")).toEqual([]);
   expect(store.tickets.reviewRejections(t.id)).toBe(0);
 });
+
+test("page and search narrow to a group by id, and a rename doesn't change what matches", () => {
+  const { store, project } = setup();
+  const work = store.groups.findOrCreate("Work");
+  const inGroup = store.projects.create({ name: "In", path: "/in", key: "IN", groupId: work.id });
+  const a = addTicketWith(store, inGroup, { spec: "gadget in the group" });
+  addTicketWith(store, project, { spec: "gadget outside it" });
+  const ids = (r: { tickets: { id: string }[] }) => r.tickets.map((t) => t.id);
+  expect(ids(store.tickets.page({ status: "planning", groupId: work.id }))).toEqual([a.id]);
+  expect(ids(store.tickets.search({ q: "gadget", groupId: work.id }))).toEqual([a.id]);
+  store.groups.rename(work.id, "Clients");
+  expect(ids(store.tickets.page({ status: "planning", groupId: work.id }))).toEqual([a.id]);
+  expect(store.tickets.page({ status: "planning", groupId: "no-such" }).tickets).toEqual([]);
+});

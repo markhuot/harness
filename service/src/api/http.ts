@@ -238,6 +238,10 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
   add("GET", "/projects", () => o.listProjects());
   add("POST", "/projects", async ({ body }) => o.createProject(await body()));
   add("PATCH", "/projects/:id", async ({ params, body }) => o.updateProject(params.id!, await body()));
+  // Project groups (DESIGN.md "Project groups")
+  add("GET", "/groups", () => o.listGroups());
+  add("POST", "/groups", async ({ body }) => o.createGroup(await body()));
+  add("PATCH", "/groups/:id", async ({ params, body }) => o.renameGroup(params.id!, await body()));
   add("DELETE", "/projects/:id", async ({ params }) => (await o.deleteProject(params.id!), ok));
   add("GET", "/projects/:id/files", ({ params, url }) => o.projectFiles(params.id!, url.searchParams.get("q") ?? "", url.searchParams.get("limit"), fileSearch(url)));
   add("GET", "/projects/:id/commands", ({ params, url }) =>
@@ -259,7 +263,7 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
     return o.ticketPage({
       status,
       projectId: sp.get("projectId") || undefined,
-      group: sp.get("group") || undefined,
+      groupId: o.groupIdParam(sp),
       q: sp.has("q") ? sp.get("q")! : undefined,
       limit: sp.get("limit"),
       cursor: sp.get("cursor") || null,
@@ -270,7 +274,7 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
     return o.searchTickets({
       q: sp.get("q") ?? "",
       projectId: sp.get("projectId") || undefined,
-      group: sp.get("group") || undefined,
+      groupId: o.groupIdParam(sp),
       limit: sp.get("limit"),
       cursor: sp.get("cursor") || null,
     });

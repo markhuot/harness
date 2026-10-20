@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { RESERVED_PROJECT_KEYS } from "@harness/shared";
-import { insideGitCheckout, normalizeProjectKey } from "../../../service/src/store/projects";
+import { GroupNameTaken, insideGitCheckout, normalizeProjectKey } from "../../../service/src/store/projects";
 import { fakeClock } from "../../builders/clock";
 import { addProject, makeStore } from "../../builders/store";
 import { addTicketWith } from "../../builders/ticket-input";
@@ -38,10 +38,11 @@ test("create stamps created_at from the injected clock and update moves updated_
 
 test("update leaves what the patch doesn't name, clears what it sets to null", () => {
   const store = makeStore();
-  const p = store.projects.create({ name: "P", path: "/p", key: "PP", color: "teal", group: "g", baseBranch: "dev" });
+  const g = store.groups.findOrCreate("g");
+  const p = store.projects.create({ name: "P", path: "/p", key: "PP", color: "teal", groupId: g.id, baseBranch: "dev" });
   const same = store.projects.update(p.id, { name: "Q" })!;
-  expect(same).toMatchObject({ color: "teal", group: "g", baseBranch: "dev", completionAction: "merge" });
-  expect(store.projects.update(p.id, { color: null, group: null, baseBranch: null })).toMatchObject({ color: null, group: null, baseBranch: null });
+  expect(same).toMatchObject({ color: "teal", group: "g", groupId: g.id, baseBranch: "dev", completionAction: "merge" });
+  expect(store.projects.update(p.id, { color: null, groupId: null, baseBranch: null })).toMatchObject({ color: null, group: null, groupId: null, baseBranch: null });
 });
 
 test("takeNextKey hands out increasing numbers and skips keys the caller says are taken", () => {
@@ -122,4 +123,38 @@ test("insideGitCheckout finds a .git in the path or any parent, and stops at the
   expect(insideGitCheckout(nested)).toBe(false);
   mkdirSync(join(root, ".git"));
   expect(insideGitCheckout(nested)).toBe(true);
+});
+
+test("a group is found by name without case, and findOrCreate reuses it", () => {
+  const store = makeStore();
+  const work = store.groups.findOrCreate("Work");
+  expect(store.groups.findOrCreate("work").id).toBe(work.id);
+  expect(store.groups.findByName("WORK")?.id).toBe(work.id);
+  expect(store.groups.findByName("Play")).toBeNull();
+  expect(store.groups.list()).toHaveLength(1);
+});
+
+test("renaming a group keeps its id, shows the new name on its projects, and mirrors group_name", () => {
+  const store = makeStore();
+  const work = store.groups.findOrCreate("Work");
+  const a = store.projects.create({ name: "A", path: "/a", groupId: work.id });
+  const b = store.projects.create({ name: "B", path: "/b" });
+  const renamed = store.groups.rename(work.id, "Clients")!;
+  expect(renamed.group).toMatchObject({ id: work.id, name: "Clients" });
+  expect(renamed.projectIds).toEqual([a.id]);
+  expect(store.projects.get(a.id)).toMatchObject({ groupId: work.id, group: "Clients" });
+  expect(store.projects.get(b.id)).toMatchObject({ groupId: null, group: null });
+  // An older build reads group_name.
+  expect(store.db.query("SELECT group_name FROM projects WHERE id = $id").get({ id: a.id })).toEqual({ group_name: "Clients" });
+  expect(store.groups.rename("missing", "X")).toBeNull();
+});
+
+test("a group can't take another group's name in any case, but may change its own case", () => {
+  const store = makeStore();
+  const work = store.groups.findOrCreate("Work");
+  const play = store.groups.findOrCreate("Play");
+  expect(() => store.groups.rename(play.id, "work")).toThrow(GroupNameTaken);
+  expect(() => store.groups.rename(play.id, "Work")).toThrow(GroupNameTaken);
+  expect(store.groups.get(play.id)!.name).toBe("Play");
+  expect(store.groups.rename(work.id, "WORK")!.group.name).toBe("WORK");
 });

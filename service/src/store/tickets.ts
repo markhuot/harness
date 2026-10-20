@@ -219,14 +219,14 @@ export interface StoredPullRequest extends PullRequestLink {
 }
 
 /** Narrow a page or search to one project, or to the projects in a group (a group's board). */
-function projectFilter(opts: { projectId?: string; group?: string }, where: string[], params: SqlParams) {
+function projectFilter(opts: { projectId?: string; groupId?: string }, where: string[], params: SqlParams) {
   if (opts.projectId) {
     where.push("t.project_id = $projectId");
     params.projectId = opts.projectId;
   }
-  if (opts.group) {
-    where.push("t.project_id IN (SELECT id FROM projects WHERE group_name = $group)");
-    params.group = opts.group;
+  if (opts.groupId) {
+    where.push("t.project_id IN (SELECT id FROM projects WHERE group_id = $groupId)");
+    params.groupId = opts.groupId;
   }
 }
 
@@ -424,7 +424,7 @@ export class TicketRepo {
    * statuses: position, then creation. `q` narrows to search hits (same matching as search).
    * Throws CursorError for a cursor that isn't from this ordering.
    */
-  page(opts: { status: TicketStatus; projectId?: string; group?: string; q?: string; limit?: number; cursor?: string | null }): TicketPage {
+  page(opts: { status: TicketStatus; projectId?: string; groupId?: string; q?: string; limit?: number; cursor?: string | null }): TicketPage {
     const limit = clampLimit(opts.limit, DEFAULT_PAGE_LIMIT);
     const params: SqlParams = { status: opts.status };
     const where = ["t.status = $status"];
@@ -468,7 +468,7 @@ export class TicketRepo {
    * Search every status (see hitsCte for matching and ranks): rank first, newest first within a
    * rank, keyset-paged. The caller rejects an empty `q`. Throws CursorError for a bad cursor.
    */
-  search(opts: { q: string; projectId?: string; group?: string; limit?: number; cursor?: string | null; drafts?: boolean }): TicketPage {
+  search(opts: { q: string; projectId?: string; groupId?: string; limit?: number; cursor?: string | null; drafts?: boolean }): TicketPage {
     const limit = clampLimit(opts.limit, DEFAULT_SEARCH_LIMIT);
     const params: SqlParams = {};
     const cte = this.hitsCte(opts.q, params);

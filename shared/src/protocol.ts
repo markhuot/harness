@@ -85,8 +85,17 @@ export interface Project {
    * own projects. null → in no group. Optional only so older payloads type-check.
    */
   group?: string | null;
+  /** The id of the project's group (see `group`): stable across renames. null → none. Optional only so older payloads type-check. */
+  groupId?: string | null;
   createdAt: number;
   updatedAt: number;
+}
+
+/** A project group (GET /groups). */
+export interface Group {
+  id: string;
+  name: string;
+  createdAt: number;
 }
 
 /**
@@ -1633,6 +1642,8 @@ export interface CreateProjectBody {
    * group without case takes that group's spelling.
    */
   group?: string | null;
+  /** The group by id; null → none. Wins over `group`. */
+  groupId?: string | null;
   /** null → settings.permissionMode */
   permissionMode?: PermissionMode | null;
   /** Per-phase driver + model; PATCH merges per phase, null clears one (it inherits settings') */

@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { basename, dirname, join } from "node:path";
 import { systemClock, type Clock } from "./clock";
 import type { Attachment, AttachmentKind, AttachmentSource } from "@harness/shared";
-import { builtinCompleteChoice, builtinPhaseModels, FALLBACK_DRIVER } from "@harness/shared";
+import { builtinCompleteChoice, builtinPhaseModels, canonicalGroup, FALLBACK_DRIVER, normalizeProjectGroup, PROJECT_GROUP_MAX } from "@harness/shared";
 import { attachmentPath, describeFile } from "./attachments";
 import { isUploadPath } from "./attachment-lists";
 
@@ -763,6 +763,21 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE tickets ADD COLUMN blocked_run_kind TEXT;
   ALTER TABLE tickets ADD COLUMN blocked_head TEXT;
   `,
+  // 44: groups, the project groups as rows (DESIGN.md "Project groups"), and projects.group_id, the
+  //     group a project is in (NULL: none). A group's name can change without its id changing, so
+  //     whatever keys on the id survives a rename. The code creates a group per distinct
+  //     projects.group_name and sets group_id. group_name stays, mirrored with the group's name on
+  //     every write, so an older build still reads current names.
+  `
+  CREATE TABLE groups (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  );
+  CREATE UNIQUE INDEX groups_name ON groups(name COLLATE NOCASE);
+  ALTER TABLE projects ADD COLUMN group_id TEXT;
+  CREATE INDEX projects_group ON projects(group_id);
+  `,
 ];
 
 /** Where the files migrations look at live (HarnessPaths); by default next to the database file. */
@@ -780,7 +795,40 @@ export interface MigrationPaths {
 export const MIGRATION_CODE: Record<number, (db: Database, paths: Required<MigrationPaths>) => void> = {
   30: backfillAttachments,
   38: convertPhaseModels,
+  44: backfillGroups,
 };
+
+/**
+ * Migration 44's code: a group per distinct project group name. Names that differ only in case or
+ * spacing are one group (the shared rules decide: SQLite's NOCASE folds ASCII only); the spelling
+ * most projects use wins, the first seen on a tie. Each project's group_name is rewritten to its
+ * group's name.
+ */
+function backfillGroups(db: Database, paths: Required<MigrationPaths>) {
+  const rows = db.query("SELECT id, group_name FROM projects WHERE group_name IS NOT NULL ORDER BY created_at, key").all() as { id: string; group_name: string }[];
+  const buckets: { spellings: Map<string, number>; projects: string[] }[] = [];
+  for (const r of rows) {
+    const name = normalizeProjectGroup(r.group_name) ?? r.group_name.trim().replace(/\s+/g, " ").slice(0, PROJECT_GROUP_MAX);
+    if (!name) continue;
+    const known = buckets.flatMap((b) => [...b.spellings.keys()]);
+    const spelling = canonicalGroup(name, known);
+    let bucket = buckets.find((b) => b.spellings.has(spelling));
+    if (!bucket) buckets.push((bucket = { spellings: new Map(), projects: [] }));
+    // Count under the spelling as typed, so the most common one can win.
+    bucket.spellings.set(name, (bucket.spellings.get(name) ?? 0) + 1);
+    bucket.projects.push(r.id);
+  }
+  const insert = db.query("INSERT INTO groups (id, name, created_at) VALUES ($id, $name, $t)");
+  const assign = db.query("UPDATE projects SET group_id = $group, group_name = $name WHERE id = $id");
+  const t = paths.now();
+  for (const b of buckets) {
+    // Map insertion order is first-seen order, and sort is stable, so ties keep the first seen.
+    const name = [...b.spellings].sort((x, y) => y[1] - x[1])[0]![0];
+    const id = randomUUID();
+    insert.run({ id, name, t });
+    for (const projectId of b.projects) assign.run({ id: projectId, group: id, name });
+  }
+}
 
 /**
  * Migration 38's code. Each level's old driver + model becomes its Planning, Work and Review

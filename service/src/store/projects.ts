@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
-import type { CompletionAction, PermissionMode, PhaseModels, Project } from "@harness/shared";
-import { legacyWork, isCompletionAction, offeredCompletionActions, projectKeyFromPath, RESERVED_PROJECT_KEYS } from "@harness/shared";
+import type { CompletionAction, Group, PermissionMode, PhaseModels, Project } from "@harness/shared";
+import { legacyWork, sameGroup, isCompletionAction, offeredCompletionActions, projectKeyFromPath, RESERVED_PROJECT_KEYS } from "@harness/shared";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { type PullRequestTarget, pullRequestTarget } from "./remotes";
@@ -20,6 +20,9 @@ interface ProjectRow {
   permission_mode?: string | null;
   color?: string | null;
   group_name?: string | null;
+  group_id?: string | null;
+  /** The joined groups.name (PROJECT_SELECT) */
+  group_label?: string | null;
   base_branch?: string | null;
   completion_action?: string | null;
   default_models: string;
@@ -49,6 +52,9 @@ export function clearPullRequestTargets() {
   prTargets.clear();
 }
 
+/** A project row with its group's current name (group_label), so a rename shows at once. */
+const PROJECT_SELECT = "SELECT p.*, g.name AS group_label FROM projects p LEFT JOIN groups g ON g.id = p.group_id";
+
 const toProject = (r: ProjectRow): Project => {
   const isGit = insideGitCheckout(r.path);
   const pullRequestHost = isGit ? (cachedPullRequestTarget(r.path)?.host ?? null) : null;
@@ -69,7 +75,8 @@ const toProject = (r: ProjectRow): Project => {
     requireHumanReview: !bool(r.skip_human_review),
     permissionMode: (r.permission_mode as PermissionMode | null | undefined) ?? null,
     color: r.color ?? null,
-    group: r.group_name ?? null,
+    group: r.group_label ?? null,
+    groupId: r.group_id ?? null,
     baseBranch: r.base_branch ?? null,
     completionAction: isCompletionAction(r.completion_action) ? r.completion_action : "merge",
     completionActions: offeredCompletionActions({ isGit, pullRequestHost }),
@@ -105,7 +112,8 @@ export interface NewProject {
   skipAgentReview?: boolean;
   skipHumanReview?: boolean;
   color?: string | null;
-  group?: string | null;
+  /** The id of an existing group (the orchestrator resolves names to ids); null → none */
+  groupId?: string | null;
   baseBranch?: string | null;
   completionAction?: CompletionAction;
   /** The project's own per-phase choices (the legacy default_driver / default_models columns follow its Work choice) */
@@ -116,21 +124,21 @@ export class ProjectRepo {
   constructor(private db: Database, private now: Clock = systemClock) {}
 
   list(): Project[] {
-    return (this.db.query("SELECT * FROM projects ORDER BY created_at, key").all() as ProjectRow[]).map(toProject);
+    return (this.db.query(`${PROJECT_SELECT} ORDER BY p.created_at, p.key`).all() as ProjectRow[]).map(toProject);
   }
 
   get(id: string): Project | null {
-    const r = this.db.query("SELECT * FROM projects WHERE id = $id").get({ id }) as ProjectRow | null;
+    const r = this.db.query(`${PROJECT_SELECT} WHERE p.id = $id`).get({ id }) as ProjectRow | null;
     return r ? toProject(r) : null;
   }
 
   getByKey(key: string): Project | null {
-    const r = this.db.query("SELECT * FROM projects WHERE key = $key").get({ key: key.toUpperCase() }) as ProjectRow | null;
+    const r = this.db.query(`${PROJECT_SELECT} WHERE p.key = $key`).get({ key: key.toUpperCase() }) as ProjectRow | null;
     return r ? toProject(r) : null;
   }
 
   getByPath(path: string): Project | null {
-    const r = this.db.query("SELECT * FROM projects WHERE path = $path ORDER BY created_at LIMIT 1").get({ path }) as ProjectRow | null;
+    const r = this.db.query(`${PROJECT_SELECT} WHERE p.path = $path ORDER BY p.created_at LIMIT 1`).get({ path }) as ProjectRow | null;
     return r ? toProject(r) : null;
   }
 
@@ -151,8 +159,8 @@ export class ProjectRepo {
       const key = this.uniqueKey(input.key ? normalizeProjectKey(input.key) : projectKeyFromPath(input.path));
       this.db
         .query(
-          `INSERT INTO projects (id, key, name, path, next_seq, default_driver, use_worktrees, skip_agent_review, skip_human_review, color, group_name, base_branch, completion_action, default_models, phase_models, created_at, updated_at)
-           VALUES ($id, $key, $name, $path, 1, $defaultDriver, $useWorktrees, $skipAgentReview, $skipHumanReview, $color, $group, $baseBranch, $completionAction, $defaultModels, $phaseModels, $t, $t)`,
+          `INSERT INTO projects (id, key, name, path, next_seq, default_driver, use_worktrees, skip_agent_review, skip_human_review, color, group_id, group_name, base_branch, completion_action, default_models, phase_models, created_at, updated_at)
+           VALUES ($id, $key, $name, $path, 1, $defaultDriver, $useWorktrees, $skipAgentReview, $skipHumanReview, $color, $groupId, (SELECT name FROM groups WHERE id = $groupId), $baseBranch, $completionAction, $defaultModels, $phaseModels, $t, $t)`,
         )
         .run({
           id,
@@ -164,7 +172,7 @@ export class ProjectRepo {
           skipAgentReview: int(input.skipAgentReview ?? false),
           skipHumanReview: int(input.skipHumanReview ?? false),
           color: input.color ?? null,
-          group: input.group ?? null,
+          groupId: input.groupId ?? null,
           baseBranch: input.baseBranch ?? null,
           completionAction: input.completionAction ?? "merge",
           defaultModels: toJson(legacyWork(input.phaseModels).models),
@@ -184,7 +192,7 @@ export class ProjectRepo {
     this.db
       .query(
         `UPDATE projects SET name = $name, path = $path, default_driver = $defaultDriver,
-           use_worktrees = $useWorktrees, skip_agent_review = $skipAgentReview, skip_human_review = $skipHumanReview, color = $color, group_name = $group, base_branch = $baseBranch, completion_action = $completionAction, default_models = $defaultModels, phase_models = $phaseModels,
+           use_worktrees = $useWorktrees, skip_agent_review = $skipAgentReview, skip_human_review = $skipHumanReview, color = $color, group_id = $groupId, group_name = (SELECT name FROM groups WHERE id = $groupId), base_branch = $baseBranch, completion_action = $completionAction, default_models = $defaultModels, phase_models = $phaseModels,
            updated_at = $t WHERE id = $id`,
       )
       .run({
@@ -196,7 +204,7 @@ export class ProjectRepo {
         skipAgentReview: int(patch.skipAgentReview ?? !!existing.skipAgentReview),
         skipHumanReview: int(patch.skipHumanReview ?? !!existing.skipHumanReview),
         color: patch.color !== undefined ? patch.color : existing.color,
-        group: patch.group !== undefined ? patch.group : (existing.group ?? null),
+        groupId: patch.groupId !== undefined ? patch.groupId : (existing.groupId ?? null),
         baseBranch: patch.baseBranch !== undefined ? patch.baseBranch : (existing.baseBranch ?? null),
         completionAction: patch.completionAction ?? existing.completionAction ?? "merge",
         defaultModels: toJson(legacy.models),
@@ -307,5 +315,69 @@ export class ProjectRepo {
     while (isTaken(`${p.key}-${seq}`)) seq++;
     this.db.query("UPDATE projects SET next_seq = $next, updated_at = $t WHERE id = $id").run({ id: projectId, next: seq + 1, t: this.now() });
     return `${p.key}-${seq}`;
+  }
+}
+
+/** Raised by GroupRepo.rename when another group already has the name. */
+export class GroupNameTaken extends Error {
+  constructor(readonly name: string) {
+    super(`A group named "${name}" already exists`);
+  }
+}
+
+interface GroupRow {
+  id: string;
+  name: string;
+  created_at: number;
+}
+
+const toGroup = (r: GroupRow): Group => ({ id: r.id, name: r.name, createdAt: r.created_at });
+
+/**
+ * Project groups (DESIGN.md "Project groups"). A group's id never changes; its name is unique
+ * without case. A row stays when its last project leaves, so what is keyed to the id survives.
+ * Callers normalize names first (normalizeProjectGroup).
+ */
+export class GroupRepo {
+  constructor(private db: Database, private now: Clock = systemClock) {}
+
+  list(): Group[] {
+    return (this.db.query("SELECT * FROM groups ORDER BY name COLLATE NOCASE, id").all() as GroupRow[]).map(toGroup);
+  }
+
+  get(id: string): Group | null {
+    const r = this.db.query("SELECT * FROM groups WHERE id = $id").get({ id }) as GroupRow | null;
+    return r ? toGroup(r) : null;
+  }
+
+  /** The group with this name, in any case ("work" finds "Work"). */
+  findByName(name: string): Group | null {
+    return this.list().find((g) => sameGroup(g.name, name)) ?? null;
+  }
+
+  /** The group named `name`, made if there is none. */
+  findOrCreate(name: string): Group {
+    const hit = this.findByName(name);
+    if (hit) return hit;
+    const id = newId();
+    this.db.query("INSERT INTO groups (id, name, created_at) VALUES ($id, $name, $t)").run({ id, name, t: this.now() });
+    return this.get(id)!;
+  }
+
+  /**
+   * Change a group's name, and mirror it into group_name of its projects, in one transaction.
+   * Throws GroupNameTaken when another group has the name (in any case); a case-only change of the
+   * group's own name is fine. Returns null for an unknown id.
+   */
+  rename(id: string, name: string): { group: Group; projectIds: string[] } | null {
+    return this.db.transaction(() => {
+      if (!this.get(id)) return null;
+      const clash = this.list().find((g) => g.id !== id && sameGroup(g.name, name));
+      if (clash) throw new GroupNameTaken(name);
+      this.db.query("UPDATE groups SET name = $name WHERE id = $id").run({ id, name });
+      const projectIds = (this.db.query("SELECT id FROM projects WHERE group_id = $id ORDER BY created_at, key").all({ id }) as { id: string }[]).map((r) => r.id);
+      this.db.query("UPDATE projects SET group_name = $name, updated_at = $t WHERE group_id = $id").run({ id, name, t: this.now() });
+      return { group: this.get(id)!, projectIds };
+    })();
   }
 }

@@ -59,10 +59,10 @@ import type {
   Watcher,
   WatcherBody,
   WatcherLive,
+  Group,
 } from "@harness/shared";
 import type { BaseBranchSource, BranchInfo, CompletionAction, MessageDraft, MessageDraftBody, PlanUsageReport, PromptEntry, SessionActionBody } from "@harness/shared";
 import {
-  canonicalGroup,
   checkProjectKey,
   COMPLETION_ACTIONS,
   completionOptions,
@@ -78,7 +78,6 @@ import {
   PERMISSION_MODES,
   PROJECT_COLORS,
   PROJECT_GROUP_MAX,
-  projectGroups,
   resolveBaseBranch,
   resolveCompletionAction,
   resolvePermissionMode,
@@ -96,7 +95,11 @@ import {
   ticketLegacyChoice,
   withLegacyChoice,
 } from "@harness/shared";
-import { SpecConflictError, type Store } from "../store";
+import { SpecConflictError, type GroupRepo, type Store } from "../store";
+import { GroupNameTaken } from "../store/projects";
+
+/** A group a request names, before it is resolved: an existing id, a name to find or make, or null for none. */
+type GroupRef = { id: string } | { name: string } | null;
 import { canonicalJson, grantKey, type TicketPatch } from "../store/tickets";
 import { cachedPullRequestTarget, insideGitCheckout } from "../store/projects";
 import { pushRemote } from "../store/remotes";
@@ -842,9 +845,12 @@ export class Orchestrator {
   }
 
   createProject(body: CreateProjectBody): Project {
-    const { input, mode } = this.prepareProject(body);
-    const project = this.store.projects.create(input);
-    if (mode) this.store.projects.setPermissionMode(project.id, mode);
+    const { input: { group, ...input }, mode } = this.prepareProject(body);
+    const project = this.store.transaction(() => {
+      const created = this.store.projects.create({ ...input, groupId: this.groupIdOf(group) });
+      if (mode) this.store.projects.setPermissionMode(created.id, mode);
+      return created;
+    });
     const created = this.store.projects.get(project.id)!;
     this.bus.emit({ kind: "project.upserted", project: created });
     return created;
@@ -867,7 +873,7 @@ export class Orchestrator {
       useWorktrees: body.useWorktrees,
       ...projectReviewDefaults(body),
       color: body.color !== undefined ? validProjectColor(body.color) : null,
-      group: body.group !== undefined ? this.projectGroup(body.group) : null,
+      group: this.groupRef(body) ?? null,
       baseBranch: validateBranchName("baseBranch", body.baseBranch),
       completionAction: this.validProjectCompletion(path, body.completionAction),
       phaseModels: this.projectPhaseModels({}, body),
@@ -918,14 +924,70 @@ export class Orchestrator {
   }
 
   /**
-   * A project's group from a request body, spelled like an existing group that matches it without
-   * case ("work" joins "Work"; `except`, the project being changed, doesn't count).
+   * The group a request body names: `groupId` (an existing group) or `group` (a name, which a
+   * group with that name in any case takes; made if there is none). null → no group, undefined →
+   * the body doesn't say. Writes nothing: groupIdOf resolves a name inside the write.
    */
-  private projectGroup(value: unknown, except?: string): string | null {
-    const group = validProjectGroup(value);
-    if (group === null) return null;
-    const others = this.store.projects.list().filter((p) => p.id !== except);
-    return canonicalGroup(group, projectGroups(others));
+  private groupRef(body: { group?: unknown; groupId?: unknown }): GroupRef | undefined {
+    if (body.groupId !== undefined) {
+      if (body.groupId === null || body.groupId === "") return null;
+      if (typeof body.groupId !== "string" || !this.store.groups.get(body.groupId)) throw badRequest(`Unknown group: ${String(body.groupId)}`);
+      return { id: body.groupId };
+    }
+    if (body.group === undefined) return undefined;
+    const name = validProjectGroup(body.group);
+    return name === null ? null : { name };
+  }
+
+  /** The id of a group a body named, making the group when only its name was given. */
+  private groupIdOf(ref: GroupRef | undefined): string | null | undefined {
+    if (ref === undefined || ref === null) return ref;
+    return "id" in ref ? ref.id : this.store.groups.findOrCreate(ref.name).id;
+  }
+
+  /**
+   * The group a tickets query names: `groupId`, or the legacy `group` (a name, as older apps sent
+   * it) resolved to the id. A name no group has matches nothing, as it always did.
+   */
+  groupIdParam(sp: URLSearchParams): string | undefined {
+    const id = sp.get("groupId");
+    if (id) return id;
+    const name = normalizeProjectGroup(sp.get("group"));
+    if (!name) return undefined;
+    return this.store.groups.findByName(name)?.id ?? "no-such-group";
+  }
+
+  listGroups(): Group[] {
+    return this.store.groups.list();
+  }
+
+  createGroup(body: { name?: unknown }): Group {
+    const name = validProjectGroup(body?.name);
+    if (name === null) throw badRequest("name is required");
+    return this.store.groups.findOrCreate(name);
+  }
+
+  /**
+   * Rename a group (PATCH /groups/:id). The name is unique without case: another group's name is a
+   * 409, not a merge. Its projects are announced after the rename commits, since a client learns a
+   * project's group from the project.
+   */
+  renameGroup(id: string, body: { name?: unknown }): Group {
+    const name = validProjectGroup(body?.name);
+    if (name === null) throw badRequest("name is required");
+    let renamed: ReturnType<GroupRepo["rename"]>;
+    try {
+      renamed = this.store.groups.rename(id, name);
+    } catch (err) {
+      if (err instanceof GroupNameTaken) throw conflict(err.message);
+      throw err;
+    }
+    if (!renamed) throw notFound(`Unknown group: ${id}`);
+    for (const projectId of renamed.projectIds) {
+      const project = this.store.projects.get(projectId);
+      if (project) this.bus.emit({ kind: "project.upserted", project });
+    }
+    return renamed.group;
   }
 
   /** A project's default completion action, which the project at `path` must offer. */
@@ -964,9 +1026,9 @@ export class Orchestrator {
   updateProject(id: string, body: Partial<CreateProjectBody>): Project {
     const existing = this.store.projects.get(id);
     if (!existing) throw notFound(`Unknown project: ${id}`);
-    const { newKey, permissionMode, rest, path, phaseModels } = this.prepareProjectUpdate(existing, body);
+    const { newKey, permissionMode, rest, group, path, phaseModels } = this.prepareProjectUpdate(existing, body);
     const renamed = this.store.transaction(() => {
-      this.store.projects.update(id, { ...rest, name: rest.name?.trim(), path, phaseModels });
+      this.store.projects.update(id, { ...rest, groupId: this.groupIdOf(group), name: rest.name?.trim(), path, phaseModels });
       if (permissionMode !== undefined) this.store.projects.setPermissionMode(id, permissionMode);
       return newKey ? this.store.projects.rekey(id, newKey) : null;
     });
@@ -1021,7 +1083,8 @@ export class Orchestrator {
       phaseModels: _phases,
       permissionMode: _mode,
       color: rawColor,
-      group: rawGroup,
+      group: _group,
+      groupId: _groupId,
       baseBranch: rawBase,
       completionAction: rawAction,
       skipAgentReview: _skipAgent,
@@ -1030,11 +1093,11 @@ export class Orchestrator {
       ...rest
     } = body;
     const color = rawColor !== undefined ? validProjectColor(rawColor) : undefined;
-    const group = rawGroup !== undefined ? this.projectGroup(rawGroup, existing.id) : undefined;
+    const group = this.groupRef(body);
     const baseBranch = rawBase !== undefined ? validateBranchName("baseBranch", rawBase) : undefined;
     const completionAction = this.validProjectCompletion(path ?? existing.path, rawAction);
     const phaseModels = this.projectPhaseModels(existing.phaseModels, body);
-    return { newKey, permissionMode, rest: { ...rest, ...projectReviewDefaults(body), color, group, baseBranch, completionAction }, path, phaseModels };
+    return { newKey, permissionMode, rest: { ...rest, ...projectReviewDefaults(body), color, baseBranch, completionAction }, group, path, phaseModels };
   }
 
   async deleteProject(id: string) {
@@ -1054,13 +1117,13 @@ export class Orchestrator {
   }
 
   /** One page of a column (GET /tickets/page). See TicketRepo.page. */
-  ticketPage(opts: { status: TicketStatus; projectId?: string; group?: string; q?: string; limit?: number | string | null; cursor?: string | null }): TicketPage {
+  ticketPage(opts: { status: TicketStatus; projectId?: string; groupId?: string; q?: string; limit?: number | string | null; cursor?: string | null }): TicketPage {
     if (opts.q !== undefined && !opts.q.trim()) throw badRequest("q must not be empty");
     return this.withCursor(() => this.store.tickets.page({ ...opts, limit: clampLimit(opts.limit, DEFAULT_PAGE_LIMIT) }));
   }
 
   /** Ticket search across every status (GET /tickets/search). See TicketRepo.search. */
-  searchTickets(opts: { q: string; projectId?: string; group?: string; limit?: number | string | null; cursor?: string | null; drafts?: boolean }): TicketPage {
+  searchTickets(opts: { q: string; projectId?: string; groupId?: string; limit?: number | string | null; cursor?: string | null; drafts?: boolean }): TicketPage {
     if (!opts.q?.trim()) throw badRequest("q is required");
     return this.withCursor(() => this.store.tickets.search({ ...opts, limit: clampLimit(opts.limit, DEFAULT_SEARCH_LIMIT) }));
   }
@@ -3819,6 +3882,7 @@ ${numberLines(r.body)}`;
       permissionMode: p.permissionMode,
       color: p.color,
       group: p.group ?? null,
+      groupId: p.groupId ?? null,
       baseBranch: p.baseBranch ?? null,
       completionAction: p.completionAction ?? "merge",
       completionActions: p.completionActions ?? offeredCompletionActions(p),

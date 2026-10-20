@@ -48,9 +48,57 @@ test("a project's name defaults to its folder, its key to one derived from it, a
 
 test("a project's group takes the spelling of an existing group that matches without case", () => {
   const h = makeOrchestrator();
-  h.orch.createProject({ path: dir(h, "a"), key: "AAA", group: "Client Work" });
+  const a = h.orch.createProject({ path: dir(h, "a"), key: "AAA", group: "Client Work" });
   const b = h.orch.createProject({ path: dir(h, "b"), key: "BBB", group: "client work" });
   expect(b.group).toBe("Client Work");
+  expect(b.groupId).toBe(a.groupId);
+  expect(h.orch.listGroups()).toHaveLength(1);
+});
+
+test("a group by id and the legacy group name reach the same group; null clears it; an unknown id is refused", async () => {
+  const h = makeOrchestrator();
+  const a = h.orch.createProject({ path: dir(h, "a"), key: "AAA", group: "Work" });
+  const b = h.orch.createProject({ path: dir(h, "b"), key: "BBB", groupId: a.groupId });
+  expect(b.group).toBe("Work");
+  expect(h.orch.updateProject(b.id, { group: "WORK" }).groupId).toBe(a.groupId);
+  expect(h.orch.updateProject(b.id, { groupId: null })).toMatchObject({ group: null, groupId: null });
+  await status(() => h.orch.updateProject(b.id, { groupId: "nope" }), 400, /Unknown group/);
+  // A group left without projects stays, so what is keyed to its id survives; naming it again revives it.
+  h.orch.updateProject(a.id, { groupId: null });
+  expect(h.orch.listGroups()).toHaveLength(1);
+  expect(h.orch.updateProject(a.id, { group: "work" }).groupId).toBe(a.groupId);
+});
+
+test("renaming a group announces each of its projects and keeps the board filter on the same id", () => {
+  const h = makeOrchestrator();
+  const a = h.orch.createProject({ path: dir(h, "a"), key: "AAA", group: "Work" });
+  const b = h.orch.createProject({ path: dir(h, "b"), key: "BBB", group: "Work" });
+  h.orch.createProject({ path: dir(h, "c"), key: "CCC" });
+  const before = h.events.length;
+  const renamed = h.orch.renameGroup(a.groupId!, { name: "  Clients " });
+  expect(renamed).toMatchObject({ id: a.groupId, name: "Clients" });
+  const announced = h.events.slice(before).filter((e) => e.kind === "project.upserted") as { project: { id: string; group: string; groupId: string } }[];
+  expect(announced.map((e) => e.project.id).sort()).toEqual([a.id, b.id].sort());
+  expect(announced.every((e) => e.project.group === "Clients" && e.project.groupId === a.groupId)).toBe(true);
+});
+
+test("renaming a group onto another group's name is a 409, in any case; an unknown id is a 404", async () => {
+  const h = makeOrchestrator();
+  const a = h.orch.createProject({ path: dir(h, "a"), key: "AAA", group: "Work" });
+  h.orch.createProject({ path: dir(h, "b"), key: "BBB", group: "Play" });
+  await status(() => h.orch.renameGroup(a.groupId!, { name: "play" }), 409, /already exists/);
+  await status(() => h.orch.renameGroup(a.groupId!, { name: "  " }), 400, /name is required/);
+  await status(() => h.orch.renameGroup("nope", { name: "X" }), 404, /Unknown group/);
+  expect(h.orch.listProjects().find((p) => p.id === a.id)!.group).toBe("Work");
+});
+
+test("the legacy group name on a tickets query resolves to the group's id, and an unknown name matches nothing", () => {
+  const h = makeOrchestrator();
+  const a = h.orch.createProject({ path: dir(h, "a"), key: "AAA", group: "Work" });
+  expect(h.orch.groupIdParam(new URLSearchParams({ group: "work" }))).toBe(a.groupId);
+  expect(h.orch.groupIdParam(new URLSearchParams({ groupId: "x", group: "work" }))).toBe("x");
+  expect(h.orch.groupIdParam(new URLSearchParams())).toBeUndefined();
+  expect(h.orch.ticketPage({ status: "planning", groupId: h.orch.groupIdParam(new URLSearchParams({ group: "Nope" })) }).total).toBe(0);
 });
 
 test("renaming a project's key renames its tickets and their sessions, and says so in each transcript", async () => {

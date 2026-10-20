@@ -43,7 +43,7 @@ test("a database from a newer service is refused rather than downgraded", () => 
 test("a failing migration rolls back whole and leaves the version where it was", () => {
   const db = dbAt(SCHEMA_VERSION - 1);
   // Break the last migration's target: it adds a column that already exists.
-  db.exec("ALTER TABLE tickets ADD COLUMN blocked_run_kind TEXT");
+  db.exec("ALTER TABLE projects ADD COLUMN group_id TEXT");
   expect(() => migrate(db, paths())).toThrow();
   expect(version(db)).toBe(SCHEMA_VERSION - 1);
 });
@@ -195,4 +195,43 @@ test("the search index is rebuilt from ticket_search whenever it's missing", () 
   expect(ensureSearchIndex(db)).toBe(true);
   expect(hasSearchIndex(db)).toBe(true);
   expect(ensureSearchIndex(db)).toBe(true);
+});
+
+test("migration 44 makes a group per distinct group name, merging case and spacing variants", () => {
+  const db = dbAt(43);
+  let at = 0;
+  const add = (key: string, group: string | null) =>
+    db
+      .query("INSERT INTO projects (id, key, name, path, group_name, created_at, updated_at) VALUES ($key, $key, $key, $key, $group, $t, $t)")
+      .run({ key, group, t: at++ });
+  add("A", "Work");
+  add("B", "  work ");
+  add("C", "work");
+  add("D", "work");
+  add("E", "Play  time");
+  add("F", "play time");
+  add("G", null);
+  migrate(db, paths());
+  const groups = db.query("SELECT id, name FROM groups ORDER BY name").all() as { id: string; name: string }[];
+  // "work" is on three of the four Work projects, so it wins. Play time
+  // ties one to one, so the first one seen wins.
+  expect(groups.map((g) => g.name)).toEqual(["Play time", "work"]);
+  const of = (key: string) => db.query("SELECT group_id, group_name FROM projects WHERE key = $key").get({ key }) as { group_id: string | null; group_name: string | null };
+  const work = groups.find((g) => g.name === "work")!.id;
+  const play = groups.find((g) => g.name === "Play time")!.id;
+  expect([of("A").group_id, of("B").group_id, of("C").group_id, of("D").group_id]).toEqual([work, work, work, work]);
+  expect([of("E").group_id, of("F").group_id]).toEqual([play, play]);
+  expect(of("G")).toEqual({ group_id: null, group_name: null });
+  expect(of("A").group_name).toBe("work");
+  // The names are unique without case.
+  expect(() => db.query("INSERT INTO groups (id, name, created_at) VALUES ('x', 'WORK', 0)").run()).toThrow();
+});
+
+test("migration 44 on a database with no groups makes none and a rerun changes nothing", () => {
+  const db = dbAt(43);
+  migrate(db, paths());
+  expect(db.query("SELECT count(*) AS n FROM groups").get()).toEqual({ n: 0 });
+  const before = JSON.stringify(db.query("SELECT * FROM projects").all());
+  migrate(db, paths());
+  expect(JSON.stringify(db.query("SELECT * FROM projects").all())).toBe(before);
 });

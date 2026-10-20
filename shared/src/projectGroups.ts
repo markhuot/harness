@@ -30,9 +30,29 @@ export function canonicalGroup(name: string, existing: Iterable<string>): string
   return name;
 }
 
-/** Every group the projects carry, once each, in alphabetical order (as the sidebar lists them). */
-export function projectGroups(projects: Iterable<{ group?: string | null }>): string[] {
-  const out: string[] = [];
-  for (const p of projects) if (p.group && !out.includes(p.group)) out.push(p.group);
-  return out.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }) || (a < b ? -1 : a > b ? 1 : 0));
+/** A project group: a stable id and the name it shows under. Renaming changes only the name. */
+export interface ProjectGroup {
+  id: string;
+  name: string;
+}
+
+/**
+ * Every group the projects carry, once each (by id), in alphabetical order (as the sidebar lists
+ * them). A group with no project isn't listed: the clients only learn groups from their projects.
+ */
+export function projectGroups(projects: Iterable<{ group?: string | null; groupId?: string | null }>): ProjectGroup[] {
+  const out = new Map<string, ProjectGroup>();
+  for (const p of projects) if (p.groupId && p.group && !out.has(p.groupId)) out.set(p.groupId, { id: p.groupId, name: p.group });
+  return [...out.values()].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }) || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0) || (a.id < b.id ? -1 : 1));
+}
+
+/**
+ * The id a saved group reference means: `key` itself when a group has that id, else the group
+ * named `key` (without case). Scopes, routes and settings saved before groups had ids hold the name.
+ * null when neither matches.
+ */
+export function resolveGroupKey(key: string, groups: readonly ProjectGroup[]): string | null {
+  const byId = groups.find((g) => g.id === key);
+  if (byId) return byId.id;
+  return groups.find((g) => sameGroup(g.name, key))?.id ?? null;
 }

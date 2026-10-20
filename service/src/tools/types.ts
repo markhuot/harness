@@ -506,6 +506,8 @@ export interface ProjectView {
   color: string | null;
   /** The project's group; null → in no group */
   group: string | null;
+  /** The id of the project's group; null → none */
+  groupId: string | null;
   /** Base branch override; null → settings.baseBranch */
   baseBranch: string | null;
   /** What approving a ticket does by default: merge, pr (a GitHub pull request) or custom */

@@ -328,6 +328,10 @@ const projectProps = {
     description:
       "Project group, e.g. \"Work\" or \"Personal\": each group has a board of its own projects in the apps. A name matching an existing group (any case) joins it. Empty for no group.",
   },
+  group_id: {
+    type: "string",
+    description: "Project group by id (a project's groupId in list_projects). Wins over group. Empty for no group.",
+  },
   base_branch: {
     type: "string",
     description: "Branch this project's tickets land on when they complete, and new ticket branches start from, e.g. \"develop\". Empty for the settings default.",
@@ -346,6 +350,7 @@ type ProjectToolInput = {
   phase_models?: Record<string, { driver: string; model?: string | null } | null>;
   color?: string;
   group?: string;
+  group_id?: string;
   base_branch?: string;
 };
 
@@ -364,6 +369,7 @@ function projectBody(i: ProjectToolInput & { path?: string; key?: string }) {
   if (i.phase_models !== undefined) body.phaseModels = i.phase_models;
   if (i.color !== undefined) body.color = i.color || null;
   if (i.group !== undefined) body.group = i.group || null;
+  if (i.group_id !== undefined) body.groupId = i.group_id || null;
   if (i.base_branch !== undefined) body.baseBranch = i.base_branch.trim() || null;
   return body;
 }
