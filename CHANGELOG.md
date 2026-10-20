@@ -9,6 +9,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- On a new ticket draft, the "Close this draft?" dialog now has to be answered: ⌘↩ no longer starts the session behind it (and ⌘W and the other shortcuts wait too). ⌘↩ now saves the draft, and the button shows it; ↩ still works.
+
 ### Changed
 
 - Answering a question a completion run asked (a cleanup prompt, a merge that didn't land) now resumes the completion. Before, the ticket went back to In progress, then Review, and needed both approvals again. Now the approvals stand and a new completion run starts with the question and your answer. If the branch changed while it was blocked, the ticket goes back to In progress with reviews pending, as before, so nothing unreviewed lands. If your answer means the work needs changes, the agent can send it back to In progress with `resume_work`. The work run that follows starts however the completion run ends, a double-pressed Unblock can't start two completions, and dragging such a ticket to Review or In progress resets the approvals.

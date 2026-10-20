@@ -98,8 +98,11 @@ function modalOpener(): HTMLElement | null {
  * A dialog over the app. It keeps the focus: Tab and ⇧Tab cycle inside it, it focuses its first
  * control unless something in it autofocused, and it gives the focus back to what had it (read at
  * its first render, before it takes the focus) when it closes.
+ *
+ * With `onSubmit` it is a question that must be answered: ⌘↩ (or Ctrl↩) answers it, and every other
+ * ⌘/Ctrl shortcut is swallowed, so nothing under it (a pane's ⌘↩, ⌘W) acts until it is answered.
  */
-export function Modal({ onClose, children, width, className }: { onClose: () => void; children: ReactNode; width?: number; className?: string }) {
+export function Modal({ onClose, onSubmit, children, width, className }: { onClose: () => void; onSubmit?: () => void; children: ReactNode; width?: number; className?: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const [opener] = useState(modalOpener);
   useEffect(() => {
@@ -135,7 +138,24 @@ export function Modal({ onClose, children, width, className }: { onClose: () => 
   }, [opener]);
   return (
     <div className={className ? `overlay ${className}` : "overlay"} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div ref={ref} className="modal" style={width ? { width: `min(${width}px, calc(100vw - 40px))` } : undefined} role="dialog">
+      <div
+        ref={ref}
+        className="modal"
+        style={width ? { width: `min(${width}px, calc(100vw - 40px))` } : undefined}
+        role="dialog"
+        onKeyDown={
+          onSubmit &&
+          ((e) => {
+            if (!e.metaKey && !e.ctrlKey) return;
+            // Copy, paste and the rest still work: only the app's own handlers are cut off.
+            if (e.key === "Enter" && !e.shiftKey && !e.altKey) {
+              e.preventDefault();
+              onSubmit();
+            }
+            e.stopPropagation();
+          })
+        }
+      >
         {children}
       </div>
     </div>

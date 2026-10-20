@@ -496,10 +496,10 @@ export function DraftEditor({ paneId, zoomed, compose, ticket }: { paneId: strin
   );
 }
 
-/** "Close this draft?": Save draft (↩), Discard draft, or Cancel (Esc). */
+/** "Close this draft?": Save draft (⌘↩ or ↩), Discard draft, or Cancel (Esc). */
 function CloseDraftModal({ draftKey, onSave, onDiscard, onCancel }: { draftKey: string | null; onSave: () => void; onDiscard: () => void; onCancel: () => void }) {
   return (
-    <Modal onClose={onCancel} width={420} className="close-draft">
+    <Modal onClose={onCancel} onSubmit={onSave} width={420} className="close-draft">
       <div className="modal-head">
         <strong>Close this draft?</strong>
         {draftKey && <span className="muted mono">{draftKey}</span>}
@@ -518,7 +518,7 @@ function CloseDraftModal({ draftKey, onSave, onDiscard, onCancel }: { draftKey: 
           Cancel
         </button>
         <button className="btn btn-primary" data-testid="close-draft-save" autoFocus onClick={onSave}>
-          Save draft <span className="kbd">↩</span>
+          Save draft <span className="kbd">{MOD}↩</span>
         </button>
       </div>
     </Modal>
