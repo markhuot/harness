@@ -1119,7 +1119,7 @@ runs never use. `advertisedTools(run.tools)` (`service/src/tools/dispatch.ts`) i
 advertised instead, in this order:
 
 - **Core tools**, with full descriptions and schemas, whichever of these the run kind has
-  (`CORE_TOOL_NAMES`): `post_note`, `read_spec`, `edit_spec`, `update_spec`, `submit_for_review`,
+  (`CORE_TOOL_NAMES`): `post_note`, `read_spec`, `edit_spec`, `update_spec`, `update_notes`, `submit_for_review`,
   `block`, `unblock`, `resume_work`, `review_decision`, `record_pull_request`,
   `permission_prompt`, plus triage's `dispatch_ticket` and `decline_work` (every triage ends with
   one of them, the way a work run ends with `submit_for_review`). Native tools (group `native`)
@@ -1758,6 +1758,15 @@ session are plan runs; work and chat runs on a ticket; and conductor and chat ru
 ticket. Chat gets its ticket's tool set, so the capability sections use the session's tool kind
 (work or conductor) and stay identical across them. Review and complete runs are always fresh.
 The github-copilot driver has no system-prompt flag and sends both parts in the user message.
+
+Moving the run-invariant rules (spec, notes, Activity) into the system prompt wouldn't make them
+cheaper: Claude Code appends the Harness section after its own environment block (working
+directory, memory path), which differs per worktree, so neither the section nor the run context is
+a cache read across tickets (a work run's first request measured 40k tokens written and 19.5k
+read; the read part is Claude Code's own prefix). What lowers the bill is less text, so a rule
+lives in one place (the tool description that carries it, or the run's instructions, not both), and
+`testing/service/orchestrator/prompt-budget.test.ts` holds the system section, run context and tool
+view of plan, work and review runs under a size limit.
 
 ### Prompt overrides
 

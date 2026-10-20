@@ -5,12 +5,15 @@ import type { ToolContext } from "./types";
 import { defineTool, schema } from "./util";
 
 /** What the spec tools say about images: the same files the attachments accept. */
-const IMAGES = `Images and videos: write them as markdown images pointing at local files, e.g. ![After](shots/after.png) (absolute, or relative to your working directory; ${ALLOWED_EXTENSIONS.join(", ")}, each up to ${MAX_ATTACHMENT_BYTES / 1024 / 1024} MB). The harness stores each file and rewrites its src to attachment:<id>; leave attachment: and https: srcs as they are. An image alone on its line shows full width, captioned with its alt text; the title "thumb" makes a small thumbnail that opens full size, and several on one line form a row: ![Before](shots/before.png "thumb") ![After](shots/after.png "thumb").`;
+const IMAGES = `Images and videos: write markdown images of local files, e.g. ![After](shots/after.png) (${ALLOWED_EXTENSIONS.join(", ")}, each up to ${MAX_ATTACHMENT_BYTES / 1024 / 1024} MB). The harness stores each file and rewrites its src to attachment:<id>; leave attachment: and https: srcs as they are. The title "thumb" makes a small thumbnail.`;
+
+/** The note parameter of the spec tools: the revision's Activity entry. */
+const REVISION_NOTE = (example: string) => `One line on what changed, 400 characters or less, shown as the revision's Activity entry (it must stand on its own, so don't repeat it with post_note), e.g. "${example}".`;
 
 export const postNote = defineTool<{ note: string }>({
   name: "post_note",
   description:
-    "Add a note to the ticket's Activity: what you changed and why (\"I changed X because Y\"), or where long work stands. Keep it to one short line, 400 characters or less, so it scans quickly. Activity shows only the first line; anything after it sits behind Show details, which the human may never open, so the first line MUST say what happened on its own. It MUST NOT explain, list options or repeat the spec or earlier activity; reasoning goes in the spec (keep it current with edit_spec) or stays in the transcript. Does not change the ticket status.",
+    "Add a note to the ticket's Activity: what you changed and why (\"I changed X because Y\"), or where long work stands. One short line, 400 characters or less: Activity shows only the first line (the rest sits behind Show details), so it MUST say what happened on its own. It MUST NOT explain, list options or repeat the spec or earlier activity; reasoning goes in the spec. Does not change the ticket status.",
   inputSchema: schema(
     { note: { type: "string", minLength: 1, description: 'Markdown, ideally one line of 400 characters or less; the first line is all Activity shows. E.g. "Fixed the retry backoff because runs hammered the API."' } },
     ["note"],
@@ -33,7 +36,7 @@ const withNotesReminder = (result: string, ctx: ToolContext) =>
 
 export const updateNotes = defineTool<{ notes: string }>({
   name: "update_notes",
-  description: `Replace this ticket's agent notes: a short markdown document you write for the agents who work on this ticket after you. Every later run on the ticket gets them in its prompt (and get_ticket returns them), and most runs start a fresh conversation, so the notes are how what you learned carries over. Put technical context there: where things live (files, functions, commands), gotchas, approaches tried and rejected and why, how to verify, and what's half done. Human-facing state (the plan, decisions, status, verification results) belongs in the spec, not here. Each call replaces the whole document, so rewrite it to stay current rather than appending a log, and drop what no longer applies. Keep it under about ${NOTES_GUIDELINE_CHARS} characters. Write them before you submit for review, block, or end a planning run.`,
+  description: `Replace this ticket's agent notes: a short markdown document for the agents who work on this ticket after you. Every later run gets them in its prompt (and get_ticket returns them), and most runs start a fresh conversation, so this is how what you learned carries over. Put in where things live (files, functions, commands), gotchas, approaches tried and rejected and why, how to verify, and what's half done; the plan, decisions and status belong in the spec. Each call replaces the whole document, so rewrite it to stay current rather than appending, and keep it under about ${NOTES_GUIDELINE_CHARS} characters. Write it before you submit for review, block, or end a planning run.`,
   inputSchema: schema(
     { notes: { type: "string", description: "The complete notes in markdown, replacing the current ones. An empty string clears them." } },
     ["notes"],
@@ -65,7 +68,7 @@ Change only what changed: the spec's history keeps the earlier revisions. ${IMAG
   inputSchema: schema(
     {
       base_revision: { type: "integer", minimum: 1, description: "The revision your edits are based on (from read_spec)." },
-      note: { type: "string", minLength: 1, description: 'One line on what changed, kept with the revision and shown as its entry in the ticket\'s Activity, so it must say what happened on its own (400 characters or less), e.g. "Status: retry fixed, tests pass". No need to repeat it with post_note.' },
+      note: { type: "string", minLength: 1, description: REVISION_NOTE("Status: retry fixed, tests pass") },
       edits: {
         type: "array",
         minItems: 1,
@@ -97,7 +100,7 @@ export const updateSpec = defineTool<{ spec: string; note: string; base_revision
   inputSchema: schema(
     {
       spec: { type: "string", minLength: 1, description: "The complete spec in markdown: Goal, Plan, Status, Open questions." },
-      note: { type: "string", minLength: 1, description: 'One line on what changed, kept with the revision and shown as its entry in the ticket\'s Activity, so it must say what happened on its own (400 characters or less), e.g. "Plan drafted: cache the feed per user". No need to repeat it with post_note.' },
+      note: { type: "string", minLength: 1, description: REVISION_NOTE("Plan drafted: cache the feed per user") },
       base_revision: { type: "integer", minimum: 1, description: "The revision you're replacing (from read_spec or the run's context)." },
       title: { type: "string", minLength: 1, description: "Optional new short ticket title (under ~80 characters)." },
     },
@@ -111,7 +114,7 @@ export const updateSpec = defineTool<{ spec: string; note: string; base_revision
 export const block = defineTool<{ question: string }>({
   name: "block",
   description:
-    "Stop and ask the human a question when you cannot continue without their input (missing requirements, credentials, a decision only they can make). Moves the ticket to the Blocked column with your question. The human's answer arrives as a new message in a later run; when it resolves the block, call unblock and carry on. Do not call this for things you can find out yourself.",
+    "Stop and ask the human a question when you cannot continue without their input (missing requirements, credentials, a decision only they can make). Moves the ticket to Blocked with your question; the answer arrives as a new message, and when it resolves the block you call unblock and carry on. Do not call this for things you can find out yourself.",
   inputSchema: schema(
     { question: { type: "string", minLength: 1, description: "One short, specific question for the human, naming the options you see. Background goes under Open questions in the spec." } },
     ["question"],
@@ -125,7 +128,7 @@ export const block = defineTool<{ question: string }>({
 export const unblock = defineTool<{ note?: string }>({
   name: "unblock",
   description:
-    "Move your blocked ticket back to In progress. Call it as soon as the human's message resolves what the ticket was blocked on, before you continue the work, so the board shows the ticket being worked on. Then finish with submit_for_review, or block again with a new question. Don't call it when their message doesn't resolve the block (a side question, say): answer it and leave the ticket blocked. Refused unless the ticket is blocked, and while a tool approval is waiting on the human.",
+    "Move your blocked ticket back to In progress, as soon as the human's message resolves what it was blocked on and before you continue the work. Then finish with submit_for_review, or block again. Don't call it for a message that doesn't resolve the block (a side question, say): answer it and leave the ticket blocked. Refused unless the ticket is blocked, and while a tool approval is waiting on the human.",
   inputSchema: schema({ note: { type: "string", description: "Optional: what resolved the block, shown on the ticket's timeline." } }, []),
   async run({ note }, ctx) {
     await ctx.ops.unblock(ctx, note);
@@ -136,7 +139,7 @@ export const unblock = defineTool<{ note?: string }>({
 export const resumeWork = defineTool<{ note?: string }>({
   name: "resume_work",
   description:
-    "Move your ticket from Review or Done back to In progress, because you're about to work on it again: editing code, fixing a bug, adding to what was submitted, or new investigation whose results belong on the ticket. Call it before you start, so the board shows the ticket being worked on; it stops a running agent review and both reviews start over. A done ticket is re-opened, its worktree recreated if it was removed. Then finish with submit_for_review (or block). It's your call: answering a question or explaining the work doesn't need it. Refused unless the ticket is in review or done, and while a tool approval is waiting on the human.",
+    "Move your ticket from Review or Done back to In progress, before you work on it again (editing code, fixing a bug, adding to what was submitted, or investigation whose results belong on the ticket). It stops a running agent review and both reviews start over; a done ticket is re-opened and its worktree recreated if it was removed. Then finish with submit_for_review (or block). Answering a question or explaining the work doesn't need it. Refused unless the ticket is in review or done, and while a tool approval is waiting on the human.",
   inputSchema: schema({ note: { type: "string", description: "Optional: why the work is picked back up, shown on the ticket's timeline." } }, []),
   async run({ note }, ctx) {
     const moved = await ctx.ops.resumeWork(ctx, note);
@@ -167,27 +170,27 @@ export const returnToPlanning = defineTool<{ reason: string; start_after_plan?: 
 const submitTool = defineTool<{ note: string; spec_is_up_to_date?: unknown; skip_agent_review?: boolean; skip_human_review?: boolean }>({
   name: "submit_for_review",
   description:
-    "Call this when the work is complete, after you brought the spec up to date in an earlier call (edit_spec or update_spec: Status, decisions, screenshots). Moves the ticket to Review with a note on this round only: one short line (400 characters or less) on what changed since the last submit and why, not a recap of the spec. Activity shows only its first line, so that line MUST stand on its own. Make no further changes after calling it.",
+    "Call this when the work is complete, after you brought the spec up to date in an earlier call (edit_spec or update_spec: Status, decisions, screenshots). Moves the ticket to Review with a note on this round only: one short line (400 characters or less) on what changed since the last submit and why, which MUST stand on its own. Make no further changes after calling it.",
   inputSchema: schema(
     {
       note: {
         type: "string",
         minLength: 1,
-        description: "This round only, ideally one line of 400 characters or less (Activity shows only the first line): what changed and why, e.g. \"Retried failed uploads because flaky networks dropped them; tests pass.\" Reasoning goes in the spec.",
+        description: "This round only, one line of 400 characters or less: what changed and why, e.g. \"Retried failed uploads because flaky networks dropped them; tests pass.\"",
       },
       spec_is_up_to_date: {
         type: "boolean",
-        description: "Required, and must be true: the spec already describes the finished work (its Status, decisions and screenshots). Bring it up to date with edit_spec or update_spec first.",
+        description: "Required, and must be true: the spec already describes the finished work. Bring it up to date with edit_spec or update_spec first.",
       },
       skip_agent_review: {
         type: "boolean",
         description:
-          "Skip the independent agent review, so the ticket waits only on the human. Pass true when the human asked for no agent review, or when the request was conversational and you changed no files (an answer in text leaves a reviewer nothing to check). When the ticket skips its human review too, the work lands as soon as you submit, so pass true then only when the human asked for that. Omit it to keep the ticket's setting.",
+          "Skip the agent review, so the ticket waits only on the human. Pass true when the human asked for no agent review, or the request was conversational and you changed no files. When the ticket skips its human review too, the work lands as soon as you submit, so then only when the human asked for that. Omit it to keep the ticket's setting.",
       },
       skip_human_review: {
         type: "boolean",
         description:
-          "Skip the human review, so the work lands as soon as the agent review approves it. Pass true only when the human asked for that (for example \"merge it once the review passes\" or \"no need for me to look\"). When the ticket skips its agent review too, the work lands as soon as you submit. Omit it to keep the ticket's setting.",
+          "Skip the human review, so the work lands as soon as the agent review approves it. Pass true only when the human asked for that (e.g. \"merge it once the review passes\"); with the agent review skipped too, it lands as soon as you submit. Omit it to keep the ticket's setting.",
       },
     },
     ["note"],
