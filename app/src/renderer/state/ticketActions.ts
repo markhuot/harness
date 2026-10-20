@@ -6,11 +6,11 @@
 // Disabled placeholders ("Working…", "Starts automatically", "Restarts at …") aren't actions and
 // aren't here: the pane draws those itself.
 
-import { conductorManagedReason, managingConductor, type Ticket } from "@harness/shared";
+import { conductorManagedReason, managingConductor, reviewPassed, type Ticket } from "@harness/shared";
 import { autoStartWaitingOn, startLabel, startState, type DepState } from "@harness/shared/state";
 import { landCommands, landMenu, type LandChoice, type LandMenu } from "./approveMenu";
 
-export type TicketActionId = "start" | "unblock" | "approve" | "requestChanges" | "reopen" | "rerunReview" | "markDone" | "cancelRun" | "delete";
+export type TicketActionId = "start" | "unblock" | "approve" | "requestChanges" | "reopen" | "rerunReview" | "markDone" | "cancelRun" | "cancelStart" | "withdrawApproval" | "delete";
 
 export interface TicketAction {
   id: TicketActionId;
@@ -74,6 +74,17 @@ export function ticketActions(ticket: Ticket, ctx: TicketActionContext): TicketA
   }
   // Not in review, where Approve and take no action does it (and records the approval).
   if (ticket.status !== "done" && ticket.status !== "review") more.push({ id: "markDone", label: "Move to done", enabled: !compacting });
+  // A planning ticket that will start by itself (approved plan, or queued behind a dependency).
+  // A conductor's child starts by its conductor's plan: it isn't the human's to stop.
+  if (ticket.status === "planning" && (ticket.autoStart || ticket.startAfterPlan) && !conductor) {
+    more.push({ id: "cancelStart", label: "Cancel auto start", enabled: !compacting });
+  }
+  // Until the complete run starts: both reviews passed means it is queued or running (the service's `completing`).
+  const completing = ticket.status === "review" && (!!ticket.completing || reviewPassed(ticket.agentReview));
+  const standing = ticket.status === "in_progress" && !!ticket.skipHumanReview;
+  if ((standing || (ticket.status === "review" && ticket.humanReview === "approved")) && !completing && !conductor) {
+    more.push({ id: "withdrawApproval", label: standing ? "Require human review" : "Withdraw approval", enabled: !compacting });
+  }
   if (ticket.busy) more.push({ id: "cancelRun", label: "Cancel run", enabled: true, destructive: true });
   more.push({ id: "delete", label: "Delete ticket", enabled: !compacting, destructive: true });
 

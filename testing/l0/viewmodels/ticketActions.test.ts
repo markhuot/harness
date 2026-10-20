@@ -25,6 +25,26 @@ describe("ticketActions", () => {
     expect(ids(ticketActions(makeTicket({ status: "in_progress" }), ctx()).more)).toEqual(["markDone", "delete"]);
     expect(ids(ticketActions(makeTicket({ status: "in_progress", busy: true }), ctx()).more)).toEqual(["markDone", "cancelRun", "delete"]);
   });
+  test("a planning ticket that starts by itself offers Cancel auto start: approved plan or queued behind a dependency, not a conductor's child", () => {
+    const more = (t: ReturnType<typeof makeTicket>, c = ctx()) => ids(ticketActions(t, c).more);
+    expect(more(makeTicket({ status: "planning" }))).not.toContain("cancelStart");
+    expect(more(makeTicket({ status: "planning", autoStart: true }))).toContain("cancelStart");
+    expect(more(makeTicket({ status: "planning", startAfterPlan: true, busy: true }))).toContain("cancelStart");
+    expect(more(makeTicket({ status: "in_progress", autoStart: true }))).not.toContain("cancelStart");
+    const parent = makeTicket({ status: "in_progress", key: "COND-1", kind: "conductor" });
+    expect(more(makeTicket({ status: "planning", autoStart: true, parentId: parent.id }), ctx({ parent }))).not.toContain("cancelStart");
+  });
+  test("Withdraw approval: an approved review until completion starts, or the standing skip while the agent works", () => {
+    const withdraw = (t: ReturnType<typeof makeTicket>) => ticketActions(t, ctx()).more.find((a) => a.id === "withdrawApproval");
+    expect(withdraw(review({ humanReview: "approved", agentReview: "pending", busy: true }))).toMatchObject({ label: "Withdraw approval", enabled: true });
+    // Both reviews passed, or the service says it is completing: the complete run has started.
+    expect(withdraw(review({ humanReview: "approved", agentReview: "approved" }))).toBeUndefined();
+    expect(withdraw(review({ humanReview: "approved", agentReview: "skipped" }))).toBeUndefined();
+    expect(withdraw(review({ humanReview: "approved", agentReview: "pending", busy: true, completing: true }))).toBeUndefined();
+    expect(withdraw(review({ humanReview: "pending" }))).toBeUndefined();
+    expect(withdraw(makeTicket({ status: "in_progress", skipHumanReview: true }))).toMatchObject({ label: "Require human review" });
+    expect(withdraw(makeTicket({ status: "in_progress" }))).toBeUndefined();
+  });
   test("review pending: Approve and Request changes, rerun review, no Move to done", () => {
     const s = ticketActions(review(), ctx());
     expect(ids(s.primary)).toEqual(["approve", "requestChanges"]);

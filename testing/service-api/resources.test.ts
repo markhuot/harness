@@ -100,6 +100,15 @@ test("a ticket that isn't in review can't be reviewed, completed or re-opened (4
   expect((await rig.ok<{ ticket: Ticket }>("GET", `/tickets/${t.key}`)).ticket.status).toBe("planning");
 });
 
+test("cancel-start and withdraw-approval answer 409 when there is nothing to cancel or withdraw", async () => {
+  const rig = await boot();
+  const project = await rig.project();
+  const t = await rig.ok<Ticket>("POST", "/tickets", { projectId: project.id, spec: "x", start: false });
+  expect(await rig.call("POST", `/tickets/${t.key}/cancel-start`)).toMatchObject({ status: 409, body: { error: `${t.key} is not set to start automatically` } });
+  expect(await rig.call("POST", `/tickets/${t.key}/withdraw-approval`)).toMatchObject({ status: 409 });
+  expect(await rig.call("POST", "/tickets/ACME-9/cancel-start")).toMatchObject({ status: 404 });
+});
+
 test("settings are patched and read back, an invalid value is 400 and leaves the stored one alone, and an unknown driver is refused", async () => {
   const rig = await boot();
   expect((await rig.ok<PublicSettings>("PATCH", "/settings", { maxConcurrentRuns: 3 })).maxConcurrentRuns).toBe(3);

@@ -9,6 +9,10 @@ private func ticket(_ status: TicketStatus, agent: ReviewState = .pending, human
            pendingApproval: pending, createdAt: 0, updatedAt: 0)
 }
 
+private func more(_ t: Ticket, parent: Ticket? = nil) -> [TicketAction] {
+    TicketActions.set(for: t, project: nil, parent: parent, deps: [], settingsBaseBranch: nil).more.map(\.action)
+}
+
 private func primary(_ t: Ticket) -> [TicketAction] {
     TicketActions.set(for: t, project: nil, parent: nil, deps: [], settingsBaseBranch: nil).primary.map(\.action)
 }
@@ -28,6 +32,40 @@ private func primary(_ t: Ticket) -> [TicketAction] {
     @Test func compactingTurnsUnblockOff() {
         let set = TicketActions.set(for: ticket(.blocked, compacting: true), project: nil, parent: nil, deps: [], settingsBaseBranch: nil)
         #expect(set.primary == [TicketActionItem(.unblock, enabled: false)])
+    }
+
+    @Test func aPlanningTicketThatStartsByItselfOffersCancelAutoStart() {
+        func planning(autoStart: Bool = false, startAfterPlan: Bool? = nil, parentId: String? = nil) -> Ticket {
+            var t = ticket(.planning)
+            t.autoStart = autoStart
+            t.startAfterPlan = startAfterPlan
+            t.parentId = parentId
+            return t
+        }
+        #expect(!more(planning()).contains(.cancelStart))
+        #expect(more(planning(autoStart: true)).contains(.cancelStart))
+        #expect(more(planning(startAfterPlan: true)).contains(.cancelStart))
+        var working = ticket(.inProgress)
+        working.autoStart = true
+        #expect(!more(working).contains(.cancelStart))
+        var conductor = ticket(.inProgress)
+        conductor.id = "c"
+        conductor.key = "COND-1"
+        conductor.kind = .conductor
+        #expect(!more(planning(autoStart: true, parentId: "c"), parent: conductor).contains(.cancelStart))
+    }
+
+    @Test func withdrawApprovalLastsUntilTheCompleteRunStarts() {
+        func withdraw(_ t: Ticket) -> TicketAction? { more(t).first { if case .withdrawApproval = $0 { true } else { false } } }
+        #expect(withdraw(ticket(.review, agent: .pending, human: .approved, busy: true)) == .withdrawApproval(title: "Withdraw approval"))
+        #expect(withdraw(ticket(.review, agent: .approved, human: .approved)) == nil)
+        #expect(withdraw(ticket(.review, agent: .skipped, human: .approved)) == nil)
+        #expect(withdraw(ticket(.review, agent: .pending, human: .approved, busy: true, completing: true)) == nil)
+        #expect(withdraw(ticket(.review, human: .pending)) == nil)
+        var skipping = ticket(.inProgress)
+        skipping.skipHumanReview = true
+        #expect(withdraw(skipping) == .withdrawApproval(title: "Require human review"))
+        #expect(withdraw(ticket(.inProgress)) == nil)
     }
 
     @Test func approvedStandInsFollowTheTable() {

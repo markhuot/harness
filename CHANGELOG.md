@@ -11,6 +11,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Added
 
+- A planning ticket that will start by itself (its plan is approved, or it's queued behind an open dependency) now has **Cancel auto start** in its "…" menu, the ⌘K palette and the Mac card menu, on Mac, iPhone and iPad. It keeps the ticket in planning, clears the plan approval and the queue, and brings back the Start button; it won't start later when its dependencies finish.
+- A ticket whose human review is approved has **Withdraw approval** in the "…" menu (and ⌘K and the Mac card menu) until the complete run starts: while the agent is still working or the agent review is running, the ticket goes back to waiting for a human. A ticket that auto-approves its human review shows **Require human review** while the agent is still working.
 - Images a tool returns in a transcript (browser screenshots and the like) open bigger when you click or tap them, in the same viewer as other attachments: the lightbox on Mac, the full-screen viewer on iPhone and iPad. When one result has several, ← and → (or a swipe) step through them.
 - On the iPhone Duo, the board's status tabs (Planning, In Progress, Blocked, Review, Done) now sit in one glass rail in the right margin, replacing the strip across the top. The focused column's icon is highlighted, each icon carries its count, and tapping one scrolls the board to that column. An ordinary iPhone keeps the top strip, and the open Duo and iPad show every column with no tabs.
 

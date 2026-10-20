@@ -205,6 +205,16 @@ public final class HarnessClient: Sendable {
         try await request("POST", "/tickets/\(key)/start")
     }
 
+    /// Cancel a planning ticket's automatic start (plan approval and dependency queue); 409 when it has none.
+    public func cancelStart(_ key: String) async throws -> Ticket {
+        try await request("POST", "/tickets/\(key)/cancel-start")
+    }
+
+    /// Take back the human review approval until the complete run starts; 409 once it has.
+    public func withdrawApproval(_ key: String) async throws -> Ticket {
+        try await request("POST", "/tickets/\(key)/withdraw-approval")
+    }
+
     /// Launch a draft (Ticket.draft): start work now, or plan first.
     public func submitTicket(_ key: String, _ body: SubmitTicketBody) async throws -> Ticket {
         try await request("POST", "/tickets/\(key)/submit", body: body)

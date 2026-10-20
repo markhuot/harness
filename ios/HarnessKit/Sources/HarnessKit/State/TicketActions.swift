@@ -23,6 +23,10 @@ public enum TicketAction: Equatable, Sendable {
     /// "Run agent review" / "Re-run agent review".
     case rerunAgentReview(title: String)
     case moveToDone
+    /// Stop a planning ticket from starting by itself (approved plan, or queued behind a dependency).
+    case cancelStart
+    /// Take back the human review approval; "Require human review" when only the standing skip is on.
+    case withdrawApproval(title: String)
     case cancelRun
     case delete
 
@@ -35,6 +39,8 @@ public enum TicketAction: Equatable, Sendable {
         case .reopen: "Re-open"
         case let .rerunAgentReview(title): title
         case .moveToDone: "Move to done"
+        case .cancelStart: "Cancel auto start"
+        case let .withdrawApproval(title): title
         case .cancelRun: "Cancel run"
         case .delete: "Delete ticket"
         }
@@ -119,6 +125,18 @@ public enum TicketActions {
         }
         if TicketDetailLogic.offersMarkDone(ticket) {
             more.append(TicketActionItem(.moveToDone, enabled: !compacting))
+        }
+        // A planning ticket that will start by itself. A conductor's child starts by its
+        // conductor's plan: it isn't the human's to stop.
+        let conducted = Completion.managingConductor(ticket: ticket, parent: parent) != nil
+        if ticket.status == .planning, ticket.autoStart || ticket.startAfterPlan == true, !conducted {
+            more.append(TicketActionItem(.cancelStart, enabled: !compacting))
+        }
+        // Until the complete run starts: both reviews passed means it is queued or running (the service's `completing`).
+        let completing = ticket.status == .review && (ticket.completing == true || ticket.agentReview.passed)
+        let standing = ticket.status == .inProgress && ticket.skipHumanReview == true
+        if standing || (ticket.status == .review && ticket.humanReview == .approved), !completing, !conducted {
+            more.append(TicketActionItem(.withdrawApproval(title: standing ? "Require human review" : "Withdraw approval"), enabled: !compacting))
         }
         if ticket.busy {
             more.append(TicketActionItem(.cancelRun))

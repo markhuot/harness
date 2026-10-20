@@ -101,6 +101,8 @@ public enum PaletteCommands {
             case .reopen: out.append(row("ticket.reopen", "Re-open…", a, keywords: ["Reopen ticket"]))
             case let .rerunAgentReview(title): out.append(row("ticket.rerunReview", title, a, keywords: ["Rerun agent review"]))
             case .moveToDone: out.append(row("ticket.markDone", "Move to done", a, keywords: ["Mark done", "Complete"]))
+            case .cancelStart: out.append(row("ticket.cancelStart", "Cancel auto start", a, keywords: ["Stop auto start"]))
+            case let .withdrawApproval(title): out.append(row("ticket.withdrawApproval", title, a, keywords: ["Require human review", "Rescind approval"]))
             case .cancelRun: out.append(row("ticket.cancelRun", "Cancel run", a, keywords: ["Stop run"]))
             case .delete: out.append(row("ticket.delete", "Delete ticket…", a))
             }
@@ -125,6 +127,8 @@ public enum PaletteCommands {
         case .reopen: "arrow.counterclockwise"
         case .rerunAgentReview: "arrow.clockwise"
         case .moveToDone: "checkmark.circle"
+        case .cancelStart: "stop.circle"
+        case .withdrawApproval: "arrow.uturn.backward"
         case .cancelRun: "stop.circle"
         case .delete: "trash"
         }

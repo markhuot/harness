@@ -40,6 +40,10 @@ final class TicketActionRunner {
             perform(api, ticket, actions) { try await $0.rerunAgentReview($1) }
         case .moveToDone:
             perform(api, ticket, actions) { try await $0.completeTicket($1, CompleteBody(skipAgent: true)) }
+        case .cancelStart:
+            perform(api, ticket, actions) { try await $0.cancelStart($1) }
+        case .withdrawApproval:
+            perform(api, ticket, actions) { try await $0.withdrawApproval($1) }
         case .cancelRun:
             perform(api, ticket, actions) { try await $0.cancelTicket($1) }
         case .delete:
@@ -107,6 +111,8 @@ extension TicketAction {
         case .reopen: "arrow.counterclockwise"
         case .rerunAgentReview: "arrow.clockwise"
         case .moveToDone: "checkmark.circle"
+        case .cancelStart: "stop.circle"
+        case .withdrawApproval: "arrow.uturn.backward"
         case .cancelRun: "stop.circle"
         case .delete: "trash"
         }

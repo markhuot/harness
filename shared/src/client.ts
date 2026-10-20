@@ -233,6 +233,14 @@ export class HarnessClient {
   startTicket(key: string) {
     return this.request<Ticket>("POST", `/tickets/${key}/start`);
   }
+  /** Cancel a planning ticket's automatic start (plan approval and dependency queue). */
+  cancelStart(key: string) {
+    return this.request<Ticket>("POST", `/tickets/${key}/cancel-start`);
+  }
+  /** Take back the human review approval until the complete run starts. */
+  withdrawApproval(key: string) {
+    return this.request<Ticket>("POST", `/tickets/${key}/withdraw-approval`);
+  }
   /** Launch a draft (Ticket.draft): start work now, or plan first. */
   submitTicket(key: string, body: SubmitTicketBody) {
     return this.request<Ticket>("POST", `/tickets/${key}/submit`, body);

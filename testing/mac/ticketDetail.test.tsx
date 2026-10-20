@@ -68,6 +68,39 @@ describe("TicketDetail", () => {
     expect(await standIn({ agentReview: "changes_requested" })).toBe("Agent review needed");
   });
 
+  test("the More menu offers Cancel auto start on a queued planning ticket and Withdraw approval on an approved review, each calling its endpoint", async () => {
+    const { FakeClient } = await import("./fakeClient");
+    const moreItems = async (m: Awaited<ReturnType<typeof mount>>) => {
+      await click(m, m.container.querySelector("[data-testid=ticket-more]")!);
+      return all(document.body, "[role=menuitem]");
+    };
+
+    const queued = new FakeClient(edited((w) => void Object.assign(w.tickets.find((t) => t.key === "HARNESS-1")!, { autoStart: true })));
+    queued.overrides.set("POST /tickets/HARNESS-1/cancel-start", () => queued.world.tickets.find((t) => t.key === "HARNESS-1"));
+    const planning = await mount(detail("HARNESS-1"), { client: queued });
+    await planning.until("loads", () => text(planning.container).includes("Draft the release notes"));
+    const cancel = (await moreItems(planning)).find((i) => text(i) === "Cancel auto start")!;
+    expect(cancel).toBeDefined();
+    await click(planning, cancel);
+    expect(queued.requests).toContain("POST /tickets/HARNESS-1/cancel-start");
+    planning.unmount();
+
+    const approved = new FakeClient(edited((w) => void Object.assign(w.tickets.find((t) => t.key === "HARNESS-5")!, { humanReview: "approved", agentReview: "pending", busy: true })));
+    approved.overrides.set("POST /tickets/HARNESS-5/withdraw-approval", () => approved.world.tickets.find((t) => t.key === "HARNESS-5"));
+    const review = await mount(detail("HARNESS-5"), { client: approved });
+    await review.until("loads", () => text(review.container).includes("Speed up the board"));
+    const withdraw = (await moreItems(review)).find((i) => text(i) === "Withdraw approval")!;
+    expect(withdraw).toBeDefined();
+    await click(review, withdraw);
+    expect(approved.requests).toContain("POST /tickets/HARNESS-5/withdraw-approval");
+    review.unmount();
+
+    // Once the complete run has started the item is gone.
+    const completing = await mount(detail("HARNESS-5"), { world: edited((w) => void Object.assign(w.tickets.find((t) => t.key === "HARNESS-5")!, { humanReview: "approved", agentReview: "approved" })) });
+    await completing.until("loads", () => text(completing.container).includes("Speed up the board"));
+    expect((await moreItems(completing)).map((i) => text(i))).not.toContain("Withdraw approval");
+  });
+
   test("a pending tool approval shows what the agent wants to run and the ways to answer", async () => {
     const m = await mount(detail("WEB-2"));
     await m.until("the approval", () => text(m.container).includes("The agent wants to use Bash"));

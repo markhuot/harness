@@ -280,6 +280,8 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
   add("POST", "/tickets/:key/pull-requests/refresh", ({ params }) => o.refreshPullRequestTitles(params.key!));
   add("DELETE", "/tickets/:key", async ({ params }) => (await o.deleteTicket(params.key!), ok));
   add("POST", "/tickets/:key/start", ({ params }) => o.startTicket(params.key!));
+  add("POST", "/tickets/:key/cancel-start", ({ params }) => o.cancelStart(params.key!));
+  add("POST", "/tickets/:key/withdraw-approval", ({ params }) => o.withdrawApproval(params.key!));
   add("POST", "/tickets/:key/submit", async ({ params, body }) => o.submitTicket(params.key!, (await body()) ?? {}));
   add("POST", "/tickets/:key/messages", async ({ params, body }) => {
     // Older apps still send `log`; messages go to the transcript only, so it's ignored. They may

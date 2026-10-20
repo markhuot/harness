@@ -1877,6 +1877,51 @@ export class Orchestrator {
     return approved;
   }
 
+  /**
+   * Cancel a planning ticket's automatic start: the plan approval and the dependency queue. It
+   * stays in planning (a running plan run is left alone), and Start / Approve plan offer again.
+   */
+  cancelStart(key: string): Ticket {
+    const ticket = this.requireTicket(key);
+    this.notDraft(ticket, "cancelled (it doesn't start by itself)");
+    if (ticket.status !== "planning") throw conflict(`${ticket.key} is in ${ticket.status}; only a planning ticket has an automatic start to cancel`);
+    if (this.starting.has(ticket.id)) throw conflict(`${ticket.key} is already starting`);
+    if (!ticket.autoStart && !ticket.startAfterPlan) throw conflict(`${ticket.key} is not set to start automatically`);
+    const queued = ticket.autoStart && !this.depsDone(ticket);
+    this.dropPlanApproval(ticket.id, "Plan approval cleared: automatic start cancelled");
+    let t = this.store.tickets.get(ticket.id)!;
+    if (t.autoStart) {
+      t = this.store.tickets.update(t.id, { autoStart: false })!;
+      this.touchTicket(t.id);
+      this.addActivityLine(t, "system", "human", "Automatic start cancelled");
+    }
+    if (queued) this.appendStatus(t.sessionId, null, "Automatic start cancelled");
+    return this.store.tickets.get(ticket.id)!;
+  }
+
+  /**
+   * Take back a human review approval (or the standing auto-approval of skipHumanReview) while the
+   * complete run hasn't started: the ticket waits for a human again.
+   */
+  withdrawApproval(key: string): Ticket {
+    const ticket = this.requireTicket(key);
+    this.notDraft(ticket, "changed");
+    this.notCompleting(ticket, "taken back to human review");
+    const standing = ticket.status === "in_progress" && ticket.skipHumanReview;
+    const approved = ticket.status === "review" && ticket.humanReview === "approved";
+    if (!standing && !approved) throw conflict(`${ticket.key} has no human review approval to withdraw`);
+    // The approval was the flag's: leave it on and the next submit would approve again.
+    const patch: TicketPatch = {};
+    if (ticket.skipHumanReview) patch.skipHumanReview = false;
+    // The approver's completion choice goes with the approval, so the next one doesn't reuse it.
+    if (approved) Object.assign(patch, { humanReview: "pending", completionAction: null, completionInstructions: null });
+    const t = this.store.tickets.update(ticket.id, patch)!;
+    this.touchSession(t.sessionId);
+    this.appendStatus(t.sessionId, null, "Human review: waiting on a human again");
+    this.addActivityLine(t, "system", "human", "Human review approval withdrawn");
+    return this.store.tickets.get(ticket.id)!;
+  }
+
   /** Withdraw a plan approval (the run was cancelled, failed or is answering a message), saying why. */
   private dropPlanApproval(ticketId: string, why: string) {
     const t = this.store.tickets.get(ticketId);

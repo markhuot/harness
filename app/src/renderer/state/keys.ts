@@ -123,6 +123,8 @@ export const COMMANDS: CommandSpec[] = [
       ["ticket.rerunReview", "Re-run agent review", ["Rerun agent review", "Run agent review"]],
       ["ticket.cancelRun", "Cancel run", ["Stop run", "Stop agent"]],
       ["ticket.markDone", "Move to done", ["Close ticket"]],
+      ["ticket.cancelStart", "Cancel auto start", ["Stop auto start", "Don't start automatically"]],
+      ["ticket.withdrawApproval", "Withdraw approval", ["Require human review", "Rescind approval"]],
       ["ticket.unblock", "Unblock…", ["Resume ticket", "Answer block"]],
       ["ticket.reopen", "Re-open…", ["Reopen ticket", "Re-open ticket"]],
       ["ticket.copyKey", "Copy ticket key"],

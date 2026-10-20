@@ -700,6 +700,8 @@ const MORE_ICONS: Record<TicketActionId, IconName> = {
   reopen: "refresh",
   rerunReview: "refresh",
   markDone: "check",
+  cancelStart: "stop",
+  withdrawApproval: "refresh",
   cancelRun: "stop",
   delete: "trash",
 };
@@ -755,6 +757,8 @@ export function useTicketActions(owner: string, ticket: Ticket, onDeleted: () =>
     "ticket.approveNoAction": fromPalette("ticket.approveNoAction"),
     "ticket.rerunReview": fromPalette("ticket.rerunReview"),
     "ticket.cancelRun": fromPalette("ticket.cancelRun"),
+    "ticket.cancelStart": fromPalette("ticket.cancelStart"),
+    "ticket.withdrawApproval": fromPalette("ticket.withdrawApproval"),
     "ticket.markDone": fromPalette("ticket.markDone"),
     "ticket.unblock": fromPalette("ticket.unblock"),
     "ticket.reopen": fromPalette("ticket.reopen"),

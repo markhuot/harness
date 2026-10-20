@@ -55,6 +55,10 @@ export function useTicketActionRunner(): TicketActionRunner {
         return void act(() => client.rerunAgentReview(k), "Agent review queued");
       case "markDone":
         return void act(() => client.completeTicket(k, { skipAgent: true }), `${label} marked done`);
+      case "cancelStart":
+        return void act(() => client.cancelStart(k), "Automatic start cancelled");
+      case "withdrawApproval":
+        return void act(() => client.withdrawApproval(k), "Waiting on a human review");
       case "cancelRun":
         return void act(() => client.cancelTicket(k), "Run cancelled");
       case "delete": {
