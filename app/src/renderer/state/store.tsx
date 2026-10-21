@@ -1,7 +1,7 @@
 // React wiring for the store: connection → HarnessClient + HarnessSocket → reducer.
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
-import { HarnessClient, projectGroups, type FileLink, type HarnessEvent, type HarnessSocket, type ServerMessage, type TerminalInfo } from "@harness/shared";
+import { HarnessClient, projectGroups, resolveGroupKey, type FileLink, type HarnessEvent, type HarnessSocket, type ServerMessage, type TerminalInfo } from "@harness/shared";
 import {
   canLoadMoreDone,
   canLoadMoreSearch,
@@ -12,6 +12,7 @@ import {
   needsFirstDonePage,
   reducer,
   ALL_SCOPE,
+  currentGroupScope,
   groupScope,
   scopeOf,
   scopeQuery,
@@ -40,6 +41,7 @@ import {
   openTerminal as openTerminalPane,
   openTicket,
   pruneTickets,
+  rekeyPaneScopes,
   retainPaneScopes,
   updateAllPanes,
   updatePanes,
@@ -270,7 +272,17 @@ export function StoreProvider({
       // one on screen: a link to a missing project still shows a board. Pop-outs follow their
       // windows instead (App.tsx).
       // A group's board goes once no project carries the group.
-      const known = new Set([...snapshot.projects.map((p) => p.id), ...projectGroups(snapshot.projects).map(groupScope)]);
+      const known = new Set([...snapshot.projects.map((p) => p.id), ...projectGroups(snapshot.projects).map((g) => groupScope(g.id))]);
+      // Boards saved under a group's name (before groups had ids) move to its id first.
+      const groups = projectGroups(snapshot.projects);
+      rekeyPaneScopes((scope) => currentGroupScope(scope, groups));
+      // The same for a link or restored route that names the group.
+      const saved = parseRoute(location.hash);
+      const savedGroup = saved.view === "board" && saved.group ? resolveGroupKey(saved.group, groups) : null;
+      if (saved.view === "board" && savedGroup && savedGroup !== saved.group) {
+        history.replaceState(history.state, "", formatRoute({ ...saved, group: savedGroup }));
+        dispatchEvent(new HashChangeEvent("hashchange"));
+      }
       const shown = paneScopeOf(parseRoute(location.hash));
       retainPaneScopes((scope) => scope === ALL_SCOPE || scope === shown || known.has(scope) || isPopoutScope(scope));
       // Board cards show the latest Activity entry; backfill for tickets that are still moving

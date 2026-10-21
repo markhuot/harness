@@ -2,6 +2,7 @@
 // Works in Bun, Node 22+, Electron renderers and browsers (fetch + WebSocket globals).
 
 import type {
+  Group,
   SubmitTicketBody,
   ClientMessage,
   CompleteBody,
@@ -149,6 +150,13 @@ export class HarnessClient {
   updateProject(id: string, body: Partial<CreateProjectBody>) {
     return this.request<Project>("PATCH", `/projects/${id}`, body);
   }
+  listGroups() {
+    return this.request<Group[]>("GET", "/groups");
+  }
+  /** Rename a group; a name another group has is a 409 (HarnessError). */
+  renameGroup(id: string, name: string) {
+    return this.request<Group>("PATCH", `/groups/${encodeURIComponent(id)}`, { name });
+  }
   deleteProject(id: string) {
     return this.request<{ ok: true }>("DELETE", `/projects/${id}`);
   }
@@ -193,10 +201,10 @@ export class HarnessClient {
    * `q` narrows to tickets matching the search, `projectId` to one project and `group` to the
    * projects in that group. Pass the previous page's nextCursor as `cursor`.
    */
-  ticketPage(opts: { status: TicketStatus; projectId?: string; group?: string; q?: string; limit?: number; cursor?: string | null }) {
+  ticketPage(opts: { status: TicketStatus; projectId?: string; groupId?: string; q?: string; limit?: number; cursor?: string | null }) {
     return this.request<TicketPage>(
       "GET",
-      `/tickets/page${query({ status: opts.status, projectId: opts.projectId, group: opts.group, q: opts.q, limit: opts.limit, cursor: opts.cursor })}`,
+      `/tickets/page${query({ status: opts.status, projectId: opts.projectId, groupId: opts.groupId, q: opts.q, limit: opts.limit, cursor: opts.cursor })}`,
     );
   }
   /**
@@ -204,10 +212,10 @@ export class HarnessClient {
    * latest Activity note. Key matches rank first, then title, then the rest; newest first within a rank.
    * An empty/whitespace `q` is a 400.
    */
-  searchTickets(opts: { q: string; projectId?: string; group?: string; limit?: number; cursor?: string | null }) {
+  searchTickets(opts: { q: string; projectId?: string; groupId?: string; limit?: number; cursor?: string | null }) {
     return this.request<TicketPage>(
       "GET",
-      `/tickets/search${query({ q: opts.q, projectId: opts.projectId, group: opts.group, limit: opts.limit, cursor: opts.cursor })}`,
+      `/tickets/search${query({ q: opts.q, projectId: opts.projectId, groupId: opts.groupId, limit: opts.limit, cursor: opts.cursor })}`,
     );
   }
   createTicket(body: CreateTicketBody) {

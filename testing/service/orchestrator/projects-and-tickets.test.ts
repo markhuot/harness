@@ -51,7 +51,7 @@ test("a project's group takes the spelling of an existing group that matches wit
   const a = h.orch.createProject({ path: dir(h, "a"), key: "AAA", group: "Client Work" });
   const b = h.orch.createProject({ path: dir(h, "b"), key: "BBB", group: "client work" });
   expect(b.group).toBe("Client Work");
-  expect(b.groupId).toBe(a.groupId);
+  expect(b.groupId).toBe(a.groupId!);
   expect(h.orch.listGroups()).toHaveLength(1);
 });
 
@@ -60,13 +60,13 @@ test("a group by id and the legacy group name reach the same group; null clears 
   const a = h.orch.createProject({ path: dir(h, "a"), key: "AAA", group: "Work" });
   const b = h.orch.createProject({ path: dir(h, "b"), key: "BBB", groupId: a.groupId });
   expect(b.group).toBe("Work");
-  expect(h.orch.updateProject(b.id, { group: "WORK" }).groupId).toBe(a.groupId);
+  expect(h.orch.updateProject(b.id, { group: "WORK" }).groupId).toBe(a.groupId!);
   expect(h.orch.updateProject(b.id, { groupId: null })).toMatchObject({ group: null, groupId: null });
   await status(() => h.orch.updateProject(b.id, { groupId: "nope" }), 400, /Unknown group/);
   // A group left without projects stays, so what is keyed to its id survives; naming it again revives it.
   h.orch.updateProject(a.id, { groupId: null });
   expect(h.orch.listGroups()).toHaveLength(1);
-  expect(h.orch.updateProject(a.id, { group: "work" }).groupId).toBe(a.groupId);
+  expect(h.orch.updateProject(a.id, { group: "work" }).groupId).toBe(a.groupId!);
 });
 
 test("renaming a group announces each of its projects and keeps the board filter on the same id", () => {
@@ -95,7 +95,7 @@ test("renaming a group onto another group's name is a 409, in any case; an unkno
 test("the legacy group name on a tickets query resolves to the group's id, and an unknown name matches nothing", () => {
   const h = makeOrchestrator();
   const a = h.orch.createProject({ path: dir(h, "a"), key: "AAA", group: "Work" });
-  expect(h.orch.groupIdParam(new URLSearchParams({ group: "work" }))).toBe(a.groupId);
+  expect(h.orch.groupIdParam(new URLSearchParams({ group: "work" }))).toBe(a.groupId!);
   expect(h.orch.groupIdParam(new URLSearchParams({ groupId: "x", group: "work" }))).toBe("x");
   expect(h.orch.groupIdParam(new URLSearchParams())).toBeUndefined();
   expect(h.orch.ticketPage({ status: "planning", groupId: h.orch.groupIdParam(new URLSearchParams({ group: "Nope" })) }).total).toBe(0);

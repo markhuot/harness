@@ -56,3 +56,9 @@ export function resolveGroupKey(key: string, groups: readonly ProjectGroup[]): s
   if (byId) return byId.id;
   return groups.find((g) => sameGroup(g.name, key))?.id ?? null;
 }
+
+/** The name of the group with this id among the projects', or null when no project is in it. */
+export function groupNameOf(projects: Iterable<{ group?: string | null; groupId?: string | null }>, id: string): string | null {
+  for (const p of projects) if (p.groupId === id && p.group) return p.group;
+  return null;
+}

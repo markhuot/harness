@@ -1734,6 +1734,19 @@ export function retainPopouts(store: PaneStore, keep: (id: string) => boolean): 
 }
 
 /** `store` without the scopes `keep` rejects; the same object when none go. */
+/** Panes under new scope keys (a group board saved under its name moves to its id); an existing scope isn't overwritten. */
+export function rekeyScopes(store: PaneStore, rekey: (scope: string) => string): PaneStore {
+  let changed = false;
+  const scopes: Record<string, PaneState> = {};
+  for (const [scope, s] of Object.entries(store.scopes)) {
+    const to = rekey(scope);
+    if (to !== scope) changed = true;
+    // A scope that already exists under the new key keeps its own panes.
+    if (to === scope || !(to in store.scopes)) scopes[to] = s;
+  }
+  return changed ? { scopes } : store;
+}
+
 export function retainScopes(store: PaneStore, keep: (scope: string) => boolean): PaneStore {
   const scopes = Object.fromEntries(Object.entries(store.scopes).filter(([scope]) => keep(scope)));
   return Object.keys(scopes).length === Object.keys(store.scopes).length ? store : { scopes };

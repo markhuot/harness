@@ -102,8 +102,20 @@ function ProjectSettings({ project }: { project: Project }) {
                 <ProjectColorPicker value={project.color} onChange={(color) => void save({ color })} onPreview={setPreviewColor} />
               </Row>
               <Row title="Group" sub="Projects in the same group share a board, listed under All projects in the sidebar. Type a name to start a new group.">
-                <GroupSelect value={project.group ?? null} groups={groups} onChange={(group) => void save({ group }, group ? `Added to ${group}` : "Removed from its group")} />
+                <GroupSelect
+                  value={project.groupId && project.group ? { id: project.groupId, name: project.group } : null}
+                  groups={groups}
+                  onChange={(pick) => void save(pick, "group" in pick ? `Added to ${pick.group}` : pick.groupId ? `Added to ${groups.find((g) => g.id === pick.groupId)?.name ?? "the group"}` : "Removed from its group")}
+                />
               </Row>
+              {project.groupId && project.group && (
+                <Row title="Group name" sub="Renames the group for every project in it. Its board and everything kept for it stay as they are.">
+                  <DraftInput
+                    value={project.group}
+                    onCommit={(v) => v.trim() && v.trim() !== project.group && void act(() => client.renameGroup(project.groupId!, v.trim()), "Group renamed")}
+                  />
+                </Row>
+              )}
               <div className="settings-row">
                 <div className="settings-row-main">
                   <div className="settings-row-title">Folder</div>

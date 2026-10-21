@@ -6,6 +6,7 @@ import { Icon } from "../components/Icon";
 import { MenuButton, MOD } from "../components/bits";
 import { ProjectKey } from "../components/ProjectKey";
 import { forgetProjectPanes } from "../state/panes";
+import { routeGroupId } from "../state/boardScope";
 import { keysArea, runCommand, useCommands } from "../components/commands";
 import { useRovingList } from "../components/useRovingList";
 import { PlanUsage } from "./PlanUsage";
@@ -42,7 +43,7 @@ export function Sidebar({
   useRovingList(local, { owner: "sidebar" });
   useCommands("sidebar", { "sidebar.exit": () => runCommand("pane.right") });
 
-  const counts = useMemo(() => sidebarCounts(Object.values(state.tickets), (id) => state.projects[id]?.group), [state.tickets, state.projects]);
+  const counts = useMemo(() => sidebarCounts(Object.values(state.tickets), (id) => state.projects[id]?.groupId), [state.tickets, state.projects]);
   const triaging = triageSessions(state).filter((s) => s.triageStatus === "triaging" || s.busy).length;
 
   const addProject = async () => {
@@ -151,13 +152,13 @@ export function Sidebar({
             {/* Project groups (set in each project's settings), each a board of its projects. */}
             {groups.map((g) => (
               <NavItem
-                key={g}
+                key={g.id}
                 icon="folder"
-                label={g}
+                label={g.name}
                 testId="nav-group"
-                active={onBoard && route.group === g}
-                onClick={() => navigate({ view: "board", projectId: null, group: g, ticketKey: null, tab: "spec" })}
-                counts={counts.byGroup[g]}
+                active={onBoard && !!route.group && routeGroupId(state, route.group) === g.id}
+                onClick={() => navigate({ view: "board", projectId: null, group: g.id, ticketKey: null, tab: "spec" })}
+                counts={counts.byGroup[g.id]}
               />
             ))}
           </nav>

@@ -6,7 +6,7 @@
 // - The snapshot loads every non-done ticket, plus the first page of done for the current board
 //   scope. Other done tickets arrive by paging, search, ticket details (children, deps) and live
 //   events, so `state.tickets` holds an arbitrary subset of done.
-// - Paging is per scope (a project id, groupScope(name) for a project group's board, or ALL_SCOPE
+// - Paging is per scope (a project id, groupScope(id) for a project group's board, or ALL_SCOPE
 //   for "All projects"). The Done column shows a contiguous prefix of the server's ordering
 //   (completedAt desc): done tickets at or after the scope's `frontier` (the oldest completedAt
 //   paged in so far). Older done tickets that happen to be loaded (a dependency, a search hit)
@@ -17,6 +17,7 @@
 //   reducer drops the paging of both groups and the board pages them afresh.
 
 import type { Ticket, TicketPage, TicketStatus } from "../index";
+import { resolveGroupKey, type ProjectGroup } from "../projectGroups";
 import type { State } from "./reducer";
 
 export const DONE_PAGE_SIZE = 50;
@@ -27,28 +28,38 @@ export const SEARCH_DEBOUNCE_MS = 200;
 /** Paging scope key for "All projects". */
 export const ALL_SCOPE = "*";
 const GROUP_PREFIX = "group:";
-/** The scope of a project group's board (projectGroups.ts). Project ids never contain a colon. */
-export const groupScope = (group: string): string => GROUP_PREFIX + group;
-/** The group a scope is the board of, or null for All projects and project scopes. */
+/** The scope of a project group's board (projectGroups.ts), by the group's id. Project ids never contain a colon. */
+export const groupScope = (groupId: string): string => GROUP_PREFIX + groupId;
+/** The group id a scope is the board of, or null for All projects and project scopes. */
 export const scopeGroup = (scope: string): string | null => (scope.startsWith(GROUP_PREFIX) ? scope.slice(GROUP_PREFIX.length) : null);
 /**
+ * A group board's scope with the id a saved name stands for: `group:Work` (saved before groups had
+ * ids) becomes `group:<id of Work>`. Scopes that aren't a group's, and names no group has, are as given.
+ */
+export function currentGroupScope(scope: string, groups: readonly ProjectGroup[]): string {
+  const key = scopeGroup(scope);
+  if (key === null) return scope;
+  const id = resolveGroupKey(key, groups);
+  return id === null ? scope : groupScope(id);
+}
+/**
  * A board's scope. Selectors that take a board (`board: string | null`) take a project id, a
- * scope (ALL_SCOPE, groupScope(name)) or null for All projects, so this is the identity on scopes.
+ * scope (ALL_SCOPE, groupScope(id)) or null for All projects, so this is the identity on scopes.
  */
 export const scopeOf = (board: string | null | undefined): string => board || ALL_SCOPE;
 /** The projectId to send for a scope (undefined = all projects, or a group: see scopeQuery). */
 export const scopeProject = (scope: string): string | undefined => (scope === ALL_SCOPE || scopeGroup(scope) !== null ? undefined : scope);
 /** The ticket page and search filter for a scope: one project, one group's projects, or none. */
-export function scopeQuery(scope: string): { projectId?: string; group?: string } {
-  const group = scopeGroup(scope);
-  if (group !== null) return { group };
+export function scopeQuery(scope: string): { projectId?: string; groupId?: string } {
+  const groupId = scopeGroup(scope);
+  if (groupId !== null) return { groupId };
   return scope === ALL_SCOPE ? {} : { projectId: scope };
 }
 /** Whether a ticket shows on a scope's board: every ticket on All projects, its group's, or its project's. */
 export function inScope(state: Pick<State, "projects">, t: Ticket, scope: string): boolean {
   if (scope === ALL_SCOPE) return true;
-  const group = scopeGroup(scope);
-  if (group !== null) return state.projects[t.projectId]?.group === group;
+  const groupId = scopeGroup(scope);
+  if (groupId !== null) return state.projects[t.projectId]?.groupId === groupId;
   return t.projectId === scope;
 }
 

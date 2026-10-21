@@ -8,6 +8,7 @@ import {
   completedAtOf,
   doneColumn,
   doneCount,
+  currentGroupScope,
   groupScope,
   inScope,
   matchesQuery,
@@ -33,7 +34,7 @@ const live = (id: string, extra: Partial<Ticket> = {}): Ticket => makeTicket({ s
 const withTickets = (tickets: Ticket[], over: Partial<State> = {}): State => ({ ...initialState, tickets: Object.fromEntries(tickets.map((t) => [t.id, t])), ...over });
 const paging = (over: Partial<DonePaging> = {}): DonePaging => ({ total: 10, nextCursor: "c", loading: false, frontier: null, newest: null, error: null, ...over });
 const page = (tickets: Ticket[], nextCursor: string | null, total = 99): TicketPage => ({ tickets, nextCursor, total });
-const proj = (id: string, group: string | null): Project => ({ id, group }) as Project;
+const proj = (id: string, groupId: string | null): Project => ({ id, groupId }) as Project;
 
 describe("scopes", () => {
   test("group scopes round-trip and are told apart from All and project scopes", () => {
@@ -41,6 +42,14 @@ describe("scopes", () => {
     expect(scopeGroup(ALL_SCOPE)).toBeNull();
     expect(scopeGroup("p1")).toBeNull();
     expect(scopeGroup(groupScope(""))).toBe("");
+  });
+  test("currentGroupScope swaps a saved group name for its id and leaves other scopes alone", () => {
+    const groups = [{ id: "g-1", name: "Work" }];
+    expect(currentGroupScope(groupScope("work"), groups)).toBe(groupScope("g-1"));
+    expect(currentGroupScope(groupScope("g-1"), groups)).toBe(groupScope("g-1"));
+    expect(currentGroupScope(groupScope("Gone"), groups)).toBe(groupScope("Gone"));
+    expect(currentGroupScope("p1", groups)).toBe("p1");
+    expect(currentGroupScope(ALL_SCOPE, groups)).toBe(ALL_SCOPE);
   });
   test("a null, undefined or empty board is All projects", () => {
     expect(scopeOf(null)).toBe(ALL_SCOPE);
@@ -53,7 +62,7 @@ describe("scopes", () => {
     expect(scopeProject(groupScope("Work"))).toBeUndefined();
     expect(scopeProject("p1")).toBe("p1");
     expect(scopeQuery(ALL_SCOPE)).toEqual({});
-    expect(scopeQuery(groupScope("Work"))).toEqual({ group: "Work" });
+    expect(scopeQuery(groupScope("Work"))).toEqual({ groupId: "Work" });
     expect(scopeQuery("p1")).toEqual({ projectId: "p1" });
   });
   test("inScope: All takes everything, a group its projects' tickets, a project its own", () => {

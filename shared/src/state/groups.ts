@@ -1,13 +1,14 @@
 // The project group field in project settings: the rows its picker shows for what's typed. The
 // group rules themselves (names, matching, the list) live in ../projectGroups.
 
-import { normalizeProjectGroup, PROJECT_GROUP_MAX, sameGroup } from "../projectGroups";
+import { normalizeProjectGroup, PROJECT_GROUP_MAX, sameGroup, type ProjectGroup } from "../projectGroups";
 
 export type GroupRow =
   /** Leave the project out of every group */
   | { kind: "none"; value: null; label: string }
+  /** An existing group: value is its id */
   | { kind: "group"; value: string; label: string }
-  /** The typed name, which no group has yet */
+  /** The typed name (value), which no group has yet */
   | { kind: "new"; value: string; label: string }
   /** A typed name the service would refuse (not pickable) */
   | { kind: "invalid"; value: null; label: string };
@@ -34,28 +35,46 @@ export function groupMatchRank(group: string, typed: string): number {
  * when no group has it in any case (typing "work" picks "Work" instead). The first row is the best
  * pick, so Enter on a typed name joins the group it completes to, or starts a new one.
  */
-export function groupRows(groups: readonly string[], query: string): GroupRow[] {
+export function groupRows(groups: readonly ProjectGroup[], query: string): GroupRow[] {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
   const typed = words.join(" ");
   const none: GroupRow = { kind: "none", value: null, label: NO_GROUP_LABEL };
   const matches = groups
-    .filter((g) => words.every((w) => g.toLowerCase().includes(w)))
-    .map((g, i) => ({ g, i, rank: groupMatchRank(g, typed) }))
+    .filter((g) => words.every((w) => g.name.toLowerCase().includes(w)))
+    .map((g, i) => ({ g, i, rank: groupMatchRank(g.name, typed) }))
     .sort((a, b) => a.rank - b.rank || a.i - b.i)
-    .map(({ g }): GroupRow => ({ kind: "group", value: g, label: g }));
+    .map(({ g }): GroupRow => ({ kind: "group", value: g.id, label: g.name }));
   if (!typed) return [none, ...matches];
   const rows = [...matches];
   if (words.every((w) => NO_GROUP_LABEL.toLowerCase().includes(w))) rows.push(none);
   const name = normalizeProjectGroup(query);
   if (name === undefined) rows.push({ kind: "invalid", value: null, label: `Group names are at most ${PROJECT_GROUP_MAX} characters` });
-  else if (name !== null && !groups.some((g) => sameGroup(g, name))) rows.push({ kind: "new", value: name, label: `New group "${name}"` });
+  else if (name !== null && !groups.some((g) => sameGroup(g.name, name))) rows.push({ kind: "new", value: name, label: `New group "${name}"` });
   return rows;
 }
 
 /**
- * The rows' ids for keyboard focus, in order: No group is "", a group (or new name) its name.
- * Invalid rows have none.
+ * A row's id for keyboard focus and option ids: No group is "", a group its id, a new name
+ * "new:<name>" (so a name can't be taken for an id). Invalid rows have none.
  */
+export function groupRowId(row: GroupRow): string | null {
+  if (row.kind === "invalid") return null;
+  return row.kind === "new" ? `new:${row.value}` : (row.value ?? "");
+}
+
+/** The rows' ids for keyboard focus, in order (groupRowId). */
 export function groupRowIds(rows: readonly GroupRow[]): string[] {
-  return rows.flatMap((r) => (r.kind === "invalid" ? [] : [r.value ?? ""]));
+  return rows.flatMap((r) => {
+    const id = groupRowId(r);
+    return id === null ? [] : [id];
+  });
+}
+
+/**
+ * What picking a row changes on the project: an existing group (or none) by id, a new name by
+ * name (the service makes the group). undefined for an invalid row.
+ */
+export function groupRowPick(row: GroupRow): { groupId: string | null } | { group: string } | undefined {
+  if (row.kind === "invalid") return undefined;
+  return row.kind === "new" ? { group: row.value } : { groupId: row.value };
 }

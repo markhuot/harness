@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { isConductor, keyLabel, resolveBaseBranch, TICKET_STATUSES, type Ticket } from "@harness/shared";
+import { groupNameOf, isConductor, keyLabel, resolveBaseBranch, TICKET_STATUSES, type Ticket } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import { cardPropsEqual, type CardSelection } from "../state/boardCard";
 import {
@@ -183,7 +183,7 @@ export function BoardPane() {
           ) : group !== null ? (
             <>
               <Icon name="folder" />
-              {group}
+              {groupNameOf(Object.values(state.projects), group) ?? "Group"}
             </>
           ) : (
             <>

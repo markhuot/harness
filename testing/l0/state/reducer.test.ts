@@ -157,26 +157,26 @@ describe("keys", () => {
 
 describe("applyEvent: projects", () => {
   test("upserting a project adds it without touching paging when its group is unchanged", () => {
-    const st = withState({ projects: { p: project("p", { group: "g" }) }, donePaging: { "group:g": { total: 1 } as never } });
-    const next = event(st, { kind: "project.upserted", project: project("p", { group: "g", name: "renamed" }) });
+    const st = withState({ projects: { p: project("p", { groupId: "g" }) }, donePaging: { "group:g": { total: 1 } as never } });
+    const next = event(st, { kind: "project.upserted", project: project("p", { groupId: "g", name: "renamed" }) });
     expect(next.projects.p!.name).toBe("renamed");
     expect(next.donePaging).toBe(st.donePaging);
   });
 
   test("moving between groups drops the paging of both groups and keeps the rest", () => {
     const st = withState({
-      projects: { p: project("p", { group: "a" }) },
+      projects: { p: project("p", { groupId: "a" }) },
       donePaging: { "group:a": { total: 1 } as never, "group:b": { total: 2 } as never, "group:c": { total: 3 } as never, "*": { total: 4 } as never },
     });
-    const next = event(st, { kind: "project.upserted", project: project("p", { group: "b" }) });
+    const next = event(st, { kind: "project.upserted", project: project("p", { groupId: "b" }) });
     expect(Object.keys(next.donePaging).sort()).toEqual(["*", "group:c"]);
   });
 
   test("joining a group from none, and leaving one to none, drop only the group's paging", () => {
     const st = withState({ projects: { p: project("p") }, donePaging: { "group:a": {} as never, "*": {} as never } });
-    expect(Object.keys(event(st, { kind: "project.upserted", project: project("p", { group: "a" }) }).donePaging)).toEqual(["*"]);
-    const st2 = withState({ projects: { p: project("p", { group: "a" }) }, donePaging: { "group:a": {} as never, "*": {} as never } });
-    expect(Object.keys(event(st2, { kind: "project.upserted", project: project("p", { group: null }) }).donePaging)).toEqual(["*"]);
+    expect(Object.keys(event(st, { kind: "project.upserted", project: project("p", { groupId: "a" }) }).donePaging)).toEqual(["*"]);
+    const st2 = withState({ projects: { p: project("p", { groupId: "a" }) }, donePaging: { "group:a": {} as never, "*": {} as never } });
+    expect(Object.keys(event(st2, { kind: "project.upserted", project: project("p", { groupId: null }) }).donePaging)).toEqual(["*"]);
   });
 
   test("a brand-new ungrouped project changes no paging (undefined group equals null)", () => {
@@ -657,7 +657,7 @@ describe("ticketsForProject / boardColumns", () => {
   const q = ticket("Q-1", { projectId: "q", status: "review" });
   const d1 = ticket("A-4", { projectId: "p", status: "done", completedAt: 10 });
   const d2 = ticket("A-5", { projectId: "p", status: "done", completedAt: 20 });
-  const st = withState({ tickets: tickets(a, b, c, q, d1, d2), projects: { p: project("p", { group: "g" }), q: project("q") } });
+  const st = withState({ tickets: tickets(a, b, c, q, d1, d2), projects: { p: project("p", { groupId: "g" }), q: project("q") } });
 
   test("null board is all projects; a project id filters; a group scope filters by the project's group", () => {
     expect(ticketsForProject(st, null)).toHaveLength(6);
@@ -860,8 +860,8 @@ describe("isReady", () => {
 describe("projects and the composer", () => {
   const st = withState({
     projects: {
-      b: project("b", { name: "Beta", group: "g" }),
-      a: project("a", { name: "alpha", group: "g" }),
+      b: project("b", { name: "Beta", groupId: "g" }),
+      a: project("a", { name: "alpha", groupId: "g" }),
       c: project("c", { name: "Charlie" }),
     },
   });

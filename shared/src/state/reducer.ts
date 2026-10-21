@@ -300,8 +300,8 @@ export function applyEvent(state: State, event: HarnessEvent): State {
     case "project.upserted": {
       const projects = { ...state.projects, [event.project.id]: event.project };
       // Joining or leaving a group changes what that group's board counts: page it afresh.
-      const before = state.projects[event.project.id]?.group ?? null;
-      const after = event.project.group ?? null;
+      const before = state.projects[event.project.id]?.groupId ?? null;
+      const after = event.project.groupId ?? null;
       if (before === after) return { ...state, projects };
       const stale = [before, after].flatMap((g) => (g === null ? [] : [groupScope(g)]));
       const donePaging = Object.fromEntries(Object.entries(state.donePaging).filter(([scope]) => !stale.includes(scope)));
@@ -694,7 +694,7 @@ export function sortedProjects(state: State): Project[] {
 export function composerCandidates(state: State, board: string | null, last: string | null): (string | null)[] {
   const group = board ? scopeGroup(board) : null;
   if (group === null) return [board === ALL_SCOPE ? null : board, last];
-  const members = sortedProjects(state).filter((p) => p.group === group);
+  const members = sortedProjects(state).filter((p) => p.groupId === group);
   const lastInGroup = members.find((p) => p.id === last)?.id ?? null;
   return [lastInGroup, members[0]?.id ?? null, last];
 }

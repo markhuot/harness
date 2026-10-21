@@ -4,7 +4,7 @@
 // state/panes.ts ("Pop-out windows"); main.ts owns the windows.
 
 import { projectGroups, type Project } from "@harness/shared";
-import { ALL_SCOPE, scopeGroup } from "@harness/shared/state";
+import { ALL_SCOPE, currentGroupScope, scopeGroup } from "@harness/shared/state";
 import {
   canPopOut,
   findLeaf,
@@ -87,9 +87,11 @@ export function popOutContentToWindow(boardScope: string, content: PaneContent, 
  * bring the main window forward on that board. The pop-out window closes once its pane is gone.
  */
 export function popBackIn({ id, fromScope }: PopoutInfo, projects: Readonly<Record<string, Project>>) {
-  const group = scopeGroup(fromScope);
-  const exists = group !== null ? projectGroups(Object.values(projects)).includes(group) : fromScope === ALL_SCOPE || !!projects[fromScope];
-  const to = exists ? fromScope : ALL_SCOPE;
+  // A pop-out saved before groups had ids holds the group's name: currentGroupScope swaps in the id.
+  const scope = currentGroupScope(fromScope, projectGroups(Object.values(projects)));
+  const group = scopeGroup(scope);
+  const exists = group !== null ? projectGroups(Object.values(projects)).some((g) => g.id === group) : scope === ALL_SCOPE || !!projects[scope];
+  const to = exists ? scope : ALL_SCOPE;
   if (!confirmLeave(leavesOf(getPanes(popoutScope(id))))) return;
   popInPane(id, to);
   void window.harness?.popout.showMain(formatRoute(boardRoute(to)));

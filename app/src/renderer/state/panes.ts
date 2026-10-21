@@ -2,7 +2,7 @@
 // operations (docking, closing, resizing, parsing) live in paneModel.ts and are re-exported here.
 
 import { useMemo, useSyncExternalStore } from "react";
-import { parsePaneStore, isPopoutScope, defaultPanes, bareBoardId, serializePaneStore, withScope, popoutPanes, popOut, dropInStore, popOutContent, returnTab, tornOffTabs, popIn, retainPopouts, mapScopes, retainScopes, forgetProject, popoutScope, type DragSource, type DropZone, type PaneContent, type PaneState, type PaneStore, type TornOff } from "./paneModel";
+import { parsePaneStore, isPopoutScope, defaultPanes, bareBoardId, serializePaneStore, withScope, popoutPanes, popOut, dropInStore, popOutContent, returnTab, tornOffTabs, popIn, retainPopouts, mapScopes, rekeyScopes, retainScopes, forgetProject, popoutScope, type DragSource, type DropZone, type PaneContent, type PaneState, type PaneStore, type TornOff } from "./paneModel";
 
 export * from "./paneModel";
 
@@ -119,6 +119,11 @@ export function updateAllPanes(fn: (s: PaneState) => PaneState) {
 /** Drop the scopes `keep` rejects (projects that no longer exist). */
 export function retainPaneScopes(keep: (scope: string) => boolean) {
   commit(retainScopes(getStore(), keep));
+}
+
+/** Move scopes to new keys (see rekeyScopes). */
+export function rekeyPaneScopes(rekey: (scope: string) => string) {
+  commit(rekeyScopes(getStore(), rekey));
 }
 
 /** A project was removed (see forgetProject). */

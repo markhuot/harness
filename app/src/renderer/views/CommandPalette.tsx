@@ -231,7 +231,7 @@ export function CommandPalette({ origin, initial = "", onClose, onShortcuts }: {
       if (!have.has("board")) nav("board", "Board: All Projects", () => navigate({ view: "board", projectId: null, ticketKey: null, tab: "spec" }));
       // Project groups next, as in the sidebar; "group" finds them all.
       for (const g of projectGroups(Object.values(state.projects))) {
-        nav(`group:${g}`, `Board: ${g}`, () => navigate({ view: "board", projectId: null, group: g, ticketKey: null, tab: "spec" }), ["group"]);
+        nav(`group:${g.id}`, `Board: ${g.name}`, () => navigate({ view: "board", projectId: null, group: g.id, ticketKey: null, tab: "spec" }), ["group"]);
       }
       for (const p of sortedProjects(state)) nav(`project:${p.id}`, `Board: ${p.name}`, () => navigate({ view: "board", projectId: p.id, ticketKey: null, tab: "spec" }), [p.key]);
       if (!have.has("inbox")) nav("inbox", "Inbox", () => navigate({ view: "inbox", sessionId: null }));

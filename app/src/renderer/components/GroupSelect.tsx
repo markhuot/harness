@@ -5,7 +5,8 @@
 
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { groupRowIds, groupRows, NO_GROUP_LABEL, type GroupRow } from "@harness/shared/state";
+import type { ProjectGroup } from "@harness/shared";
+import { groupRowId, groupRowIds, groupRowPick, groupRows, NO_GROUP_LABEL, type GroupRow } from "@harness/shared/state";
 import { Icon } from "./Icon";
 import { placeMenu, type MenuPlacement } from "./menuPlacement";
 import { isTypeaheadKey, moveActive, settleActive } from "./modelCombobox";
@@ -17,10 +18,11 @@ export function GroupSelect({
   onChange,
   disabled,
 }: {
-  value: string | null;
+  value: ProjectGroup | null;
   /** Every group in use, alphabetically (projectGroups) */
-  groups: readonly string[];
-  onChange: (value: string | null) => void;
+  groups: readonly ProjectGroup[];
+  /** An existing group (or none) by id; a name typed for a group that doesn't exist yet */
+  onChange: (pick: { groupId: string | null } | { group: string }) => void;
   disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -38,7 +40,7 @@ export function GroupSelect({
   const ids = groupRowIds(rows);
   // While something's typed the highlight starts on the best match (the first row), not on the
   // project's current group, so Enter joins what was typed.
-  const current = settleActive(ids, active, query.trim() ? (ids[0] ?? "") : (value ?? ""));
+  const current = settleActive(ids, active, query.trim() ? (ids[0] ?? "") : (value?.id ?? ""));
 
   const show = (q = "") => {
     if (disabled) return;
@@ -51,12 +53,13 @@ export function GroupSelect({
     if (refocus) triggerRef.current?.focus();
   };
   const pick = (row: GroupRow) => {
-    if (row.kind === "invalid") return;
+    const picked = groupRowPick(row);
+    if (!picked) return;
     close(true);
-    if (row.value !== value) onChange(row.value);
+    if (!("groupId" in picked) || picked.groupId !== (value?.id ?? null)) onChange(picked);
   };
   const pickId = (id: string) => {
-    const row = rows.find((r) => r.kind !== "invalid" && (r.value ?? "") === id);
+    const row = rows.find((r) => groupRowId(r) === id);
     if (row) pick(row);
   };
 
@@ -158,7 +161,7 @@ export function GroupSelect({
         }}
       >
         <Icon name="folder" size={12} />
-        <span className="truncate">{value ?? NO_GROUP_LABEL}</span>
+        <span className="truncate">{value?.name ?? NO_GROUP_LABEL}</span>
       </button>
       {open &&
         createPortal(
@@ -203,13 +206,14 @@ export function GroupSelect({
                     </div>
                   );
                 }
-                const id = r.value ?? "";
+                const id = groupRowId(r)!;
+                const selected = r.kind === "none" ? value === null : r.kind === "group" && r.value === value?.id;
                 return (
                   <div
                     key={`${r.kind}:${id}`}
                     id={optionId(id)}
                     role="option"
-                    aria-selected={r.value === value}
+                    aria-selected={selected}
                     className={`model-combo-option ${id === current ? "active" : ""}`}
                     onMouseMove={() => id !== current && setActive(id)}
                     // Keep the focus in the search field.
@@ -217,7 +221,7 @@ export function GroupSelect({
                     onClick={() => pick(r)}
                   >
                     <span className={`truncate ${r.kind === "none" ? "muted" : ""}`}>{r.label}</span>
-                    {r.value === value && <Icon name="check" size={12} strokeWidth={2.25} />}
+                    {selected && <Icon name="check" size={12} strokeWidth={2.25} />}
                   </div>
                 );
               })}

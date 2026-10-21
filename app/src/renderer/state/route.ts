@@ -1,5 +1,5 @@
 // Hash routing: the UI state that's worth linking to (and screenshotting) lives in the URL.
-//   #/board[/<projectId>|/group/<name>][/ticket/<KEY>[/<tab>]]
+//   #/board[/<projectId>|/group/<groupId>][/ticket/<KEY>[/<tab>]]
 // On the board, the ticket part is an entry point into the pane workspace (state/panes.ts):
 // arriving at it opens the ticket in a pane, and afterwards the hash mirrors the focused ticket
 // pane (see mirrorRoute) without adding history entries.
@@ -15,7 +15,7 @@ import { ALL_SCOPE, groupScope, scopeGroup, scopeOf, scopeProject, ticketTabWith
 export { parsePluginTab, pluginTabRoute, TICKET_TABS, type BuiltinTicketTab, type TicketTab } from "@harness/shared/state";
 
 export type Route =
-  /** `group` set: a project group's board (projectId is null then); else a project's, or All projects */
+  /** `group` set: a project group's board, by id (projectId is null then); else a project's, or All projects */
   | { view: "board"; projectId: string | null; group?: string | null; ticketKey: string | null; tab: TicketTab }
   | { view: "inbox"; sessionId: string | null }
   | { view: "settings"; section: string | null }

@@ -29,6 +29,11 @@ describe("boardScopeOf", () => {
   test("a group's scope, even with no project in it", () => {
     expect(boardScopeOf(state, board({ group: "Ghosts" }))).toBe(groupScope("Ghosts"));
   });
+  test("a route that names the group (saved before groups had ids) scopes to its id", () => {
+    const grouped = { ...state, projects: { p1: { ...state.projects.p1!, groupId: "g-1", group: "Work" } } } as State;
+    expect(boardScopeOf(grouped, board({ group: "work" }))).toBe(groupScope("g-1"));
+    expect(boardScopeOf(grouped, board({ group: "g-1" }))).toBe(groupScope("g-1"));
+  });
   test("a valid project's id", () => {
     expect(boardScopeOf(state, board({ projectId: "p1" }))).toBe("p1");
   });
