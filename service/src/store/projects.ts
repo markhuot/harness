@@ -176,6 +176,12 @@ export class ProjectRepo {
     return r ? toProject(r) : null;
   }
 
+  /** The project holding `key`, the hidden internal one included: a key that is taken is taken, listed or not. */
+  keyHolder(key: string): Project | null {
+    const r = this.db.query(`${PROJECT_SELECT} WHERE p.key = $key`).get({ key: key.toUpperCase() }) as ProjectRow | null;
+    return r ? toProject(r) : null;
+  }
+
   getByPath(path: string): Project | null {
     const r = this.db.query(`${PROJECT_SELECT} WHERE p.path = $path AND p.internal = 0 ORDER BY p.created_at LIMIT 1`).get({ path }) as ProjectRow | null;
     return r ? toProject(r) : null;
@@ -259,16 +265,25 @@ export class ProjectRepo {
   }
 
   /**
-   * Drop the groups no project is in, so a name an emptied group had is free again, and with each
-   * the group's chief of staff: its row and its ticket (the session's rows go with the ticket).
+   * Drop the groups no project is in, so a name an emptied group had is free again. A group whose
+   * chief of staff is still around stays until the orchestrator has torn that chief down (a live
+   * run, events and files need more than the store can do): see orphanedCosTickets.
    */
-  private pruneGroups() {
-    const gone = "SELECT id FROM groups WHERE id NOT IN (SELECT group_id FROM projects WHERE group_id IS NOT NULL)";
-    const tickets = `SELECT ticket_id FROM cos WHERE group_id IN (${gone})`;
-    const sessions = this.db.query(`SELECT session_id AS id FROM tickets WHERE id IN (${tickets})`).all() as { id: string }[];
-    this.db.query(`DELETE FROM tickets WHERE id IN (${tickets})`).run(); // the cos row cascades
-    for (const s of sessions) this.db.query("DELETE FROM sessions WHERE id = $id").run({ id: s.id });
-    this.db.query(`DELETE FROM groups WHERE id IN (${gone})`).run();
+  pruneGroups() {
+    this.db
+      .query(
+        `DELETE FROM groups WHERE id NOT IN (SELECT group_id FROM projects WHERE group_id IS NOT NULL)
+           AND id NOT IN (SELECT group_id FROM cos WHERE group_id IS NOT NULL)`,
+      )
+      .run();
+  }
+
+  /** The tickets of the chiefs of staff whose group has no project left. */
+  orphanedCosTickets(): string[] {
+    const rows = this.db
+      .query("SELECT ticket_id AS id FROM cos WHERE group_id IS NOT NULL AND group_id NOT IN (SELECT group_id FROM projects WHERE group_id IS NOT NULL)")
+      .all() as { id: string }[];
+    return rows.map((r) => r.id);
   }
 
   /**

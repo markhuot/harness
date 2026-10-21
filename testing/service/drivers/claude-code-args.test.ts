@@ -21,3 +21,9 @@ test("only planning and review runs are allowed to launch the adviser sub-agent"
   for (const kind of ["plan", "review"] as const) expect(listAfter(args(kind), "--allowedTools")).toEqual(expect.arrayContaining(["Agent", "Task"]));
   for (const kind of ["work", "conductor", "cos"] as const) expect(listAfter(args(kind), "--allowedTools")).not.toContain("Agent");
 });
+
+test("a chief of staff run has no built-in tool at all, so only the harness server is left; no other run is narrowed", () => {
+  const a = args("cos");
+  expect(a[a.indexOf("--tools") + 1]).toBe("");
+  for (const kind of ["plan", "work", "review", "complete", "conductor", "triage", "chat"] as const) expect(args(kind)).not.toContain("--tools");
+});

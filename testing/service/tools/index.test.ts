@@ -85,6 +85,14 @@ test("a chief of staff reads and changes the board and keeps notes, with no sub-
   expect(names("cos", { hasBuiltinTools: true, usesPermissionPromptTool: true })).toContain("permission_prompt");
 });
 
+test("a chief of staff's ticket gets the chief's tools in a chat run too, whatever the driver", () => {
+  const chief = { kind: "cos" } as const;
+  for (const driver of [{ hasBuiltinTools: true, usesPermissionPromptTool: false }, { hasBuiltinTools: false, usesPermissionPromptTool: false }]) {
+    expect(names("chat", driver, chief)).toEqual(names("cos", driver));
+    for (const absent of ["bash", "edit_spec", "update_settings", "submit_for_review"]) expect(names("chat", driver, chief)).not.toContain(absent);
+  }
+});
+
 test("an unknown run kind still throws", () => {
   expect(() => toolsForRun("nope" as RunKind, { hasBuiltinTools: true, usesPermissionPromptTool: false })).toThrow(/Unknown run kind/);
 });

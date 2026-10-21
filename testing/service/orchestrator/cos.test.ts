@@ -237,7 +237,13 @@ test("a chief of staff is made when first asked for, once per scope, outside eve
   // A project asked for the key COS later still works.
   const dir = join(h.home, "proj", "cos");
   mkdirSync(dir, { recursive: true });
-  expect(h.orch.createProject({ path: dir, key: "COS", useWorktrees: false }).key).toBe("COS2");
+  // The hidden project's key is taken, listed or not: asking for it is refused, not silently COS2.
+  expect(() => h.orch.createProject({ path: dir, key: "COS", useWorktrees: false })).toThrow(/already used/);
+  const other = h.orch.createProject({ path: dir, key: "OTHER", useWorktrees: false });
+  expect(() => h.orch.updateProject(other.id, { key: "COS" })).toThrow(/already used/);
+  // The hidden project can't be edited or get tickets.
+  expect(() => h.orch.updateProject(ticket.projectId, { path: dir })).toThrow(/Unknown project/);
+  await expect(h.orch.createTicket({ projectId: ticket.projectId, spec: "sneaky", start: false })).rejects.toThrow(/Unknown project/);
 });
 
 test("the on/off switch is the chief's own, persists, and a chief that's off takes no new messages", async () => {
@@ -261,7 +267,11 @@ test("a group's chief goes with the group when its last project leaves", async (
   const { h, groupOf, work, w } = await board();
   const cos = h.orch.openCos({ group: groupOf("Work") });
   const sessionId = h.ticket(cos.key).sessionId;
+  const events: string[] = [];
+  h.bus.on((e: { kind: string }) => events.push(e.kind));
   h.orch.updateProject(work.id, { group: null });
+  await h.orch.pruneCos();
+  expect(events).toEqual(expect.arrayContaining(["ticket.deleted", "session.deleted"]));
   expect(h.store.groups.findByName("Work")).toBeNull();
   expect(h.orch.listCos()).toEqual([]);
   expect(h.store.tickets.get(cos.ticketId)).toBeNull();
@@ -315,4 +325,44 @@ test("every operation that takes a key answers an out-of-scope key like a missin
     expect(forOut, name).toBe(forMissing);
   }
   expect(h.ticket(o.key).title).toBe("Home ticket about otters");
+});
+
+test("a chief of staff's ticket is scoped and tooled by its kind, whatever kind of run it is in", async () => {
+  const { h, groupOf, a } = await board();
+  const cos = h.orch.openCos({ group: groupOf("Work") });
+  const ticket = h.ticket(cos.key);
+  const ctx = (runKind: string) => ({ runId: "r", runKind, session: null, ticket, cwd: h.home, ops: {}, signal: new AbortController().signal }) as never;
+  // Even a chat run (a human's message to a blocked chief would start one) sees only the group.
+  for (const kind of ["chat", "work", "cos"]) {
+    const sc = (h.orch as unknown as { scopeOf(c: unknown): { scope: unknown; tickets: { getByKey(k: string): unknown } } }).scopeOf(ctx(kind));
+    expect(sc.scope).toEqual({ group: groupOf("Work") });
+    expect(sc.tickets.getByKey(a.key)).toBeNull();
+  }
+  // A message to it is a chief of staff run, and a tool approval never moves it off in progress.
+  await h.orch.sendMessage(cos.key, "hi");
+  await h.settle();
+  expect(h.store.runs.listBySession(ticket.sessionId).map((r) => r.kind)).toEqual(["cos"]);
+  // Board lifecycle and PATCH routes refuse it.
+  await expect(h.orch.updateTicket(cos.key, { status: "done" })).rejects.toThrow(/chief of staff/);
+  await expect(h.orch.submitTicket(cos.key, { start: true })).rejects.toThrow(/chief of staff/);
+  await expect(h.orch.startTicket(cos.key)).rejects.toThrow(/chief of staff/);
+  await expect(h.orch.reopenTicket(cos.key, { notes: "x" })).rejects.toThrow(/chief of staff/);
+  await expect(h.orch.completeTicket(cos.key)).rejects.toThrow(/chief of staff/);
+  expect(h.ticket(cos.key).status).toBe("in_progress");
+});
+
+test("a chief's sessions stay off the session list, its attachments and app-wide settings are refused", async () => {
+  const { h, groupOf } = await board();
+  const cos = h.orch.openCos({ group: groupOf("Work") });
+  expect(h.orch.listSessions().map((s) => s.ticketId)).not.toContain(cos.ticketId);
+  expect(h.orch.listSessions("ticket").length).toBeGreaterThan(0);
+  const results = await (async () => {
+    const { steps, results } = callTools([["create_ticket", { project_key: "WORK1", title: "t", spec: "s", attachments: ["/etc/hosts"] }], ["get_settings", {}]]);
+    h.driver.script(steps);
+    await h.orch.sendMessage(cos.key, "go");
+    await h.settle();
+    return results;
+  })();
+  expect(results[0]!.text).toMatch(/can't attach files/);
+  expect(results[1]!.text).toMatch(/only the All chief of staff/);
 });

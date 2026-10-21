@@ -879,7 +879,7 @@ export class Orchestrator {
     // An explicit key is taken as given (or refused); a derived one de-duplicates to KEY2, KEY3…
     const key = body.key !== undefined && body.key !== null && String(body.key).trim() !== "" ? this.validProjectKey(String(body.key)) : undefined;
     if (key) {
-      if (this.store.projects.getByKey(key)) throw conflict(`Project key ${key} is already used by another project`);
+      if (this.store.projects.keyHolder(key)) throw conflict(`Project key ${key} is already used by another project`);
     }
     const input = {
       path,
@@ -1041,7 +1041,7 @@ export class Orchestrator {
    */
   updateProject(id: string, body: Partial<CreateProjectBody>): Project {
     const existing = this.store.projects.get(id);
-    if (!existing) throw notFound(`Unknown project: ${id}`);
+    if (!existing || this.store.projects.isInternal(id)) throw notFound(`Unknown project: ${id}`);
     const { newKey, permissionMode, rest, group, path, phaseModels } = this.prepareProjectUpdate(existing, body);
     const renamed = this.store.transaction(() => {
       this.store.projects.update(id, { ...rest, groupId: this.groupIdOf(group), name: rest.name?.trim(), path, phaseModels });
@@ -1050,6 +1050,7 @@ export class Orchestrator {
     });
     const project = this.store.projects.get(id)!;
     this.bus.emit({ kind: "project.upserted", project });
+    if (this.store.projects.orphanedCosTickets().length) void this.pruneCos();
     if (renamed && renamed.renames.size) {
       const ticketIds = new Set(renamed.depTicketIds);
       for (const [from, to] of renamed.renames) {
@@ -1081,8 +1082,8 @@ export class Orchestrator {
     if (body.key !== undefined) {
       const key = this.validProjectKey(String(body.key));
       if (key !== existing.key) {
-        const other = this.store.projects.getByKey(key);
-        if (other && other.id !== existing.id) throw conflict(`Project key ${key} is already used by ${other.name}`);
+        const other = this.store.projects.keyHolder(key);
+        if (other && other.id !== existing.id) throw conflict(`Project key ${key} is already used by ${this.store.projects.isInternal(other.id) ? "the app" : other.name}`);
         const collisions = this.store.projects.rekeyConflicts(existing.id, key);
         if (collisions.length) {
           const list = collisions.slice(0, 3).join(", ") + (collisions.length > 3 ? ` and ${collisions.length - 3} more` : "");
@@ -1123,6 +1124,7 @@ export class Orchestrator {
     for (const t of this.store.tickets.list({ projectId: id })) await this.deleteTicket(t.key);
     this.store.projects.delete(id);
     this.bus.emit({ kind: "project.deleted", id });
+    await this.pruneCos();
   }
 
   // =========================================================================
@@ -1230,6 +1232,15 @@ export class Orchestrator {
     return t;
   }
 
+  /**
+   * A chief of staff isn't a board ticket: it never moves through planning, review or done, so every
+   * status, lifecycle and PATCH route refuses it (409). PATCH /cos/:id switches it on and off. Its
+   * scope and tools follow its kind, so no run of another kind can ever act for it.
+   */
+  private notCos(t: Ticket, what: string) {
+    if (t.kind === "cos") throw conflict(`${t.key} is a chief of staff, not a board ticket: it can't be ${what} (PATCH /cos/${t.id} switches it on or off)`);
+  }
+
   /** Drafts have no agent and never run: anything that would act on one is refused (409). */
   private notDraft(t: Ticket, what: string) {
     if (t.draft) throw conflict(`${t.key} is a draft: it can't be ${what} until it's submitted (POST /tickets/${t.key}/submit)`);
@@ -1247,7 +1258,7 @@ export class Orchestrator {
    * ticket outlived its group): it sees nothing rather than everything.
    */
   private scopeOf(ctx: ToolContext): ScopedStore {
-    if (ctx.runKind !== "cos") return this.everything;
+    if (ctx.runKind !== "cos" && ctx.ticket?.kind !== "cos") return this.everything;
     const row = ctx.ticket ? this.store.cos.get(ctx.ticket.id) : null;
     const scope = row ? parseCosScopeKey(row.scope) : null;
     if (!scope) throw new Error("This chief of staff no longer covers anything: its group is gone.");
@@ -1539,7 +1550,7 @@ export class Orchestrator {
       if (a.id) ids.add(a.id);
       paths.add(a.path);
     };
-    for (const t of this.store.tickets.list({})) {
+    for (const t of this.store.tickets.list({ includeCos: true })) {
       if (t.id === except?.id) continue;
       for (const a of t.promptAttachments ?? []) add(a);
       // Files waiting in a message draft.
@@ -1565,7 +1576,7 @@ export class Orchestrator {
   async createTicket(body: CreateTicketBody, by: ActivityAuthor = "human"): Promise<Ticket> {
     if (!body || typeof body !== "object") throw badRequest("body is required");
     const project = this.store.projects.get(body.projectId);
-    if (!project) throw notFound(`Unknown project: ${body.projectId}`);
+    if (!project || this.store.projects.isInternal(project.id)) throw notFound(`Unknown project: ${body.projectId}`);
     const prompt = typeof body.spec === "string" ? body.spec : "";
     const draft = validBoolean("draft", body.draft) ?? false;
     if (!draft && !prompt.trim() && !body.title?.trim()) throw badRequest("spec is required");
@@ -1673,6 +1684,7 @@ export class Orchestrator {
     const start = validBoolean("start", body.start);
     if (start === undefined) throw badRequest("start must be true or false");
     const ticket = this.requireTicket(key);
+    this.notCos(ticket, "submitted");
     if (!ticket.draft) throw conflict(`${ticket.key} isn't a draft; it was already submitted`);
     const prompt = ticket.spec;
     if (!prompt.trim()) throw badRequest("spec is required");
@@ -1705,6 +1717,7 @@ export class Orchestrator {
   async updateTicket(key: string, body: UpdateTicketBody, as: SpecAuthorship = { author: "human" }): Promise<Ticket> {
     if (!body || typeof body !== "object") throw badRequest("body is required");
     let ticket = this.requireTicket(key);
+    this.notCos(ticket, "changed here");
     for (const field of ["kind", "useWorktree", "projectId", "promptAttachments"] as const) {
       if (body[field] !== undefined && !ticket.draft) throw conflict(`${ticket.key} isn't a draft: its ${field} is fixed once it has launched`);
     }
@@ -1987,6 +2000,29 @@ export class Orchestrator {
   async deleteTicket(key: string) {
     const ticket = this.requireTicket(key);
     if (ticket.kind === "cos") throw conflict(`${ticket.key} is a chief of staff, not a board ticket: switch it off (PATCH /cos/${ticket.id}) instead of deleting it`);
+    await this.removeTicket(ticket);
+  }
+
+  private pruning: Promise<void> = Promise.resolve();
+
+  /**
+   * Tear down the chiefs of staff whose group lost its last project, then the emptied groups. Runs
+   * one at a time; a project PATCH starts it without waiting, and awaiting it waits for that too.
+   */
+  pruneCos(): Promise<void> {
+    this.pruning = this.pruning.then(async () => {
+      for (const id of this.store.projects.orphanedCosTickets()) {
+        const ticket = this.store.tickets.get(id);
+        if (ticket) await this.removeTicket(ticket);
+      }
+      this.store.projects.pruneGroups();
+    });
+    this.pruning = this.pruning.catch((err) => this.log(`pruning chiefs of staff failed: ${errMsg(err)}`));
+    return this.pruning;
+  }
+
+  /** Cancel the ticket's run and remove it with its session, files and uploads (the guard against deleting a chief of staff is in deleteTicket). */
+  private async removeTicket(ticket: Ticket) {
     await this.cancelSession(ticket.sessionId, true);
     for (const child of this.store.tickets.list({ parentId: ticket.id })) {
       this.store.db.query("UPDATE tickets SET parent_id = NULL WHERE id = $id").run({ id: child.id });
@@ -2021,6 +2057,7 @@ export class Orchestrator {
 
   async startTicket(key: string, by: ActivityAuthor = "human"): Promise<Ticket> {
     const ticket = this.requireTicket(key);
+    this.notCos(ticket, "started");
     this.notDraft(ticket, "started");
     this.notCompacting(ticket, "started");
     if (ticket.status === "in_progress") throw conflict(`${ticket.key} is already in progress`);
@@ -2058,6 +2095,7 @@ export class Orchestrator {
    */
   cancelStart(key: string): Ticket {
     const ticket = this.requireTicket(key);
+    this.notCos(ticket, "cancelled");
     this.notDraft(ticket, "cancelled (it doesn't start by itself)");
     if (ticket.status !== "planning") throw conflict(`${ticket.key} is in ${ticket.status}; only a planning ticket has an automatic start to cancel`);
     if (this.starting.has(ticket.id)) throw conflict(`${ticket.key} is already starting`);
@@ -2080,6 +2118,7 @@ export class Orchestrator {
    */
   withdrawApproval(key: string): Ticket {
     const ticket = this.requireTicket(key);
+    this.notCos(ticket, "changed");
     this.notDraft(ticket, "changed");
     this.notCompleting(ticket, "taken back to human review");
     const standing = ticket.status === "in_progress" && ticket.skipHumanReview;
@@ -2225,7 +2264,8 @@ export class Orchestrator {
         return;
       }
     }
-    await this.steerOrEnqueue(ticket.sessionId, "chat", message);
+    // A chief of staff has one kind of run: a chat run would get the work tools.
+    await this.steerOrEnqueue(ticket.sessionId, ticket.kind === "cos" ? "cos" : "chat", message);
   }
 
   /**
@@ -2319,6 +2359,7 @@ export class Orchestrator {
    */
   async unblockTicket(key: string, body: UnblockBody): Promise<Ticket> {
     const ticket = this.requireTicket(key);
+    this.notCos(ticket, "unblocked");
     this.notDraft(ticket, "unblocked");
     this.notCompacting(ticket, "unblocked");
     if (ticket.status !== "blocked") throw conflict(`${ticket.key} is ${ticket.status}, not blocked: there's nothing to unblock`);
@@ -2338,6 +2379,7 @@ export class Orchestrator {
   /** Send a done ticket back to in progress with the human's notes (the done-column "request changes"). */
   async reopenTicket(key: string, body: ReopenBody): Promise<Ticket> {
     const ticket = this.requireTicket(key);
+    this.notCos(ticket, "re-opened");
     this.notDraft(ticket, "re-opened");
     this.notCompacting(ticket, "re-opened");
     if (ticket.status !== "done") throw conflict(`${ticket.key} is not done; only done tickets can be re-opened`);
@@ -2359,6 +2401,7 @@ export class Orchestrator {
 
   humanReview(key: string, body: HumanReviewBody): Ticket {
     const ticket = this.requireTicket(key);
+    this.notCos(ticket, "reviewed");
     this.notDraft(ticket, "reviewed");
     this.notCompacting(ticket, "reviewed");
     return this.applyReview(ticket, body.decision, body.notes ?? "", "human", body);
@@ -2486,6 +2529,7 @@ export class Orchestrator {
 
   async completeTicket(key: string, body: CompleteBody = {}): Promise<Ticket> {
     let ticket = this.requireTicket(key);
+    this.notCos(ticket, "completed");
     this.notDraft(ticket, "completed");
     this.notCompacting(ticket, "completed");
     if (ticket.status === "done") throw conflict(`${ticket.key} is already done`);
@@ -2649,6 +2693,7 @@ export class Orchestrator {
 
   rerunAgentReview(key: string): Ticket {
     const ticket = this.requireTicket(key);
+    this.notCos(ticket, "reviewed");
     this.notDraft(ticket, "reviewed");
     this.notCompacting(ticket, "reviewed");
     if (ticket.status !== "review") throw conflict(`${ticket.key} is not in review`);
@@ -2659,6 +2704,7 @@ export class Orchestrator {
 
   async cancelTicket(key: string): Promise<Ticket> {
     const ticket = this.requireTicket(key);
+    this.notCos(ticket, "cancelled");
     this.notDraft(ticket, "cancelled (nothing runs on a draft)");
     // Before the run ends: the scheduler runs as soon as it does.
     this.dropPlanApproval(ticket.id, "Plan approval cleared: run cancelled; work not started");
@@ -2693,7 +2739,9 @@ export class Orchestrator {
   // =========================================================================
 
   listSessions(kind?: "ticket" | "triage"): Session[] {
-    return this.store.sessions.list(kind);
+    // A chief of staff's conversation isn't on the board: it is read through /cos.
+    const chiefs = new Set(this.store.cos.list().map((c) => c.ticketId));
+    return this.store.sessions.list(kind).filter((s) => !(s.ticketId && chiefs.has(s.ticketId)));
   }
 
   getSession(id: string): Session {
@@ -3625,6 +3673,8 @@ ${numberLines(r.body)}`;
     }
     if (input.remoteUrl && !input.remoteId) throw new Error("remote_url needs remote_id: the external item's key, e.g. FOO-123");
     const externalRef = input.remoteId ? this.asToolSync(() => this.manualExternalRef(null, { key: input.remoteId!, url: input.remoteUrl })) : null;
+    // A chief of staff has no checkout: it can attach nothing from the host's disk.
+    if (own.kind === "cos" && input.attachments?.length) throw new Error("A chief of staff can't attach files: it has no files of its own. Put what the ticket needs in its spec.");
     const promptAttachments = input.attachments?.length ? input.attachments.map((p) => ({ path: resolve(ctx.cwd, String(p)) })) : undefined;
     if (own.kind !== "cos" && (input.child ?? own.kind === "conductor")) {
       // Children run on the parent's driver/model unless it picks another. Any ticket can take
@@ -4087,7 +4137,13 @@ ${numberLines(r.body)}`;
     return this.listWatchers().filter((w) => visible.has(w.id));
   }
 
-  async getSettings_(_ctx: ToolContext): Promise<PublicSettings> {
+  /** App-wide configuration (settings, prompts) is for the All chief of staff; a group's chief sees only its group. */
+  private appWide(ctx: ToolContext, what: string) {
+    if (this.scopeOf(ctx).scope !== "all") throw new Error(`${what} shows app-wide configuration: only the All chief of staff may read it.`);
+  }
+
+  async getSettings_(ctx: ToolContext): Promise<PublicSettings> {
+    this.appWide(ctx, "get_settings");
     return this.publicSettings();
   }
 
@@ -4244,7 +4300,7 @@ ${numberLines(r.body)}`;
     if (meta.onceOnly) pending.onceOnly = true;
     const reason = `Permission needed: ${toolName} — ${meta.summary ?? summarizeToolInput(input)}`;
     // The approval card shows the classifier's or policy's reason; Activity gets the one line.
-    const stays = t.status === "blocked" || this.store.runs.get(runId)?.kind === "chat";
+    const stays = t.status === "blocked" || t.kind === "cos" || this.store.runs.get(runId)?.kind === "chat";
     this.addActivityLine(t, "permission", "system", reason, {
       ...(meta.reason ? { detail: `${reason}\n\n${meta.source === "classifier" ? "Classifier" : "Policy"}: ${meta.reason}` } : {}),
       ...(stays ? {} : this.moveMeta(t, "blocked")),
@@ -5641,7 +5697,7 @@ ${numberLines(r.body)}`;
       fileOutputScope: (c) => this.fileOutputScope(c),
       listWatchers: (c) => this.listWatchers_(c),
       getSettings: (c) => this.getSettings_(c),
-      listPrompts: async () => this.promptCatalog(),
+      listPrompts: async (c) => (this.appWide(c, "include_prompts"), this.promptCatalog()),
       listDrivers: (c) => this.listDrivers_(c),
       createWatcher: (c, i, d) => this.createWatcher_(c, i, d),
       updateWatcher: (c, r, i, d) => this.updateWatcher_(c, r, i, d),

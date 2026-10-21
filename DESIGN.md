@@ -816,8 +816,8 @@ Each project group has one CoS, and an **All projects** CoS covers the rest. Tab
 45): `ticket_id`, `scope` (`all` or `group:<group id>`, UNIQUE, since SQLite lets a nullable unique
 column repeat), `group_id`, `enabled` (the CoS's own switch, how All is turned off). `openCos(scope)`
 makes the row and ticket the first time it is asked for (opening its view, or an event arriving) and
-returns the same one after; GET never creates. Deleting a group deletes its CoS, ticket and session
-(`ProjectRepo.pruneGroups`). HTTP: `GET /cos`, `POST /cos { scope }` (opens; idempotent),
+returns the same one after; GET never creates. When a group's last project leaves, the orchestrator tears its CoS down like any ticket (run cancelled,
+`ticket.deleted` and `session.deleted` sent, files removed; `pruneCos`), and only then the store drops the group. HTTP: `GET /cos`, `POST /cos { scope }` (opens; idempotent),
 `PATCH /cos/:ticketId { enabled }`. A switched-off CoS refuses new messages (409); a run under way ends.
 
 **Settings.** `settings.cosEnabled` (default true) and `settings.cosCanUnblock` (default false) are
@@ -828,7 +828,7 @@ project-else-app-else-default.
 **Scope is enforced once, in the store.** A scope is `"all"` or `{ group }` (`store/scope.ts`). The
 service resolves it from the CoS ticket's `cos` row on every operation (`scopeOf(ctx)`: never a tool
 argument, never kept from when the run started, so moving a project between groups applies at once;
-every non-CoS run resolves to all). `ScopedStore` is the only way a run's board tools reach tickets,
+it follows the ticket's kind, not the run's, so a chat run on a CoS ticket is scoped too, and every other ticket resolves to all). A CoS ticket has only `cos` runs (a message is always one; a tool approval never moves it), its PATCH and lifecycle routes answer 409, and on Claude Code its run is started with `--tools ""` so the harness MCP server is all it has: no shell, files or web that could get around the store. `ScopedStore` is the only way a run's board tools reach tickets,
 projects, groups, watchers and Activity: an out-of-scope id is `null` (not found, with the message a
 missing ticket gets, so existence isn't revealed), lists and pages are filtered in SQL so totals are
 the group's, and parent, dependency and dependent edges that leave the scope are dropped from a

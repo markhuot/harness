@@ -350,6 +350,9 @@ export function buildClaudeArgs(
     ...rules,
     // A chief of staff creates tickets for anything deeper than a lookup: no sub-agents of its own.
     ...(req.kind === "cos" ? ["--disallowedTools", ...ADVISER_TOOLS] : []),
+    // And no built-in tools at all (Bash, Read, Write, WebFetch...): it could read the service's
+    // database or token and walk around the scoped store. Only the harness MCP server is left.
+    ...(req.kind === "cos" ? ["--tools", ""] : []),
     "--permission-mode",
     permissionMode,
   ];

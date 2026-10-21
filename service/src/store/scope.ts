@@ -27,7 +27,9 @@ export class ScopedStore {
     return this.scope === "all" ? null : this.scope.group;
   }
 
+  /** The hidden internal project that hosts the chiefs of staff is in no scope, not even all. */
   projectInScope(projectId: string): boolean {
+    if (this.store.projects.isInternal(projectId)) return false;
     if (this.scope === "all") return true;
     return this.store.projects.get(projectId)?.groupId === this.group;
   }

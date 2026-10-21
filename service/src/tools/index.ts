@@ -150,7 +150,12 @@ export function toolsForRun(
 ): ToolDefinition[] {
   // A compact run only summarizes the session: no tools.
   if (kind === "compact") return [];
-  const entry = kind === "chat" ? RUN_TOOLS[ticket?.kind === "conductor" ? "conductor" : "work"] : RUN_TOOLS[kind as Exclude<RunKind, "chat" | "compact">];
+  // A chief of staff's ticket gets the chief of staff's tools whatever kind of run it is in (a human's
+  // message to one that was blocked, say, starts a chat run): its scope never depends on the run kind.
+  const entry =
+    ticket?.kind === "cos" ? RUN_TOOLS.cos
+    : kind === "chat" ? RUN_TOOLS[ticket?.kind === "conductor" ? "conductor" : "work"]
+    : RUN_TOOLS[kind as Exclude<RunKind, "chat" | "compact">];
   if (!entry) throw new Error(`Unknown run kind: ${kind}`);
   const tools = [...entry.harness];
   if (driver.usesPermissionPromptTool) tools.push(permissionPrompt);
