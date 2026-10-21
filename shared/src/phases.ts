@@ -72,7 +72,7 @@ export function runPhase(kind: RunKind): Phase | null {
     case "triage":
       return null;
     default:
-      return "work"; // work, conductor, chat
+      return "work"; // work, conductor, chat, cos
   }
 }
 

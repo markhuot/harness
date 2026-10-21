@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Project, PublicSettings, Ticket } from "@harness/shared";
+import type { Cos, Group, Project, PublicSettings, Ticket } from "@harness/shared";
 import { boot, stopRigs } from "./boot";
 
 afterEach(stopRigs);
@@ -137,4 +137,36 @@ test("restarting is refused when nothing supervises the service (409) and the se
   const rig = await boot();
   expect(await rig.call("POST", "/service/restart")).toMatchObject({ status: 409 });
   expect((await rig.call("GET", "/projects")).status).toBe(200);
+});
+
+test("a chief of staff is listed only once opened, POST /cos is idempotent, and PATCH switches it off", async () => {
+  const rig = await boot();
+  const project = await rig.project("ACME");
+  const group = (await rig.ok<Project>("PATCH", `/projects/${project.id}`, { group: "Work" })).groupId!;
+  expect(await rig.ok<Cos[]>("GET", "/cos")).toEqual([]);
+  const all = await rig.ok<Cos>("POST", "/cos", { scope: "all" });
+  expect(await rig.ok<Cos>("POST", "/cos", { scope: "all" })).toEqual(all);
+  const work = await rig.ok<Cos>("POST", "/cos", { scope: `group:${group}` });
+  expect(work).toMatchObject({ scope: `group:${group}`, groupId: group, enabled: true });
+  expect((await rig.ok<Cos[]>("GET", "/cos")).map((c) => c.scope)).toEqual(["all", `group:${group}`]);
+  expect(await rig.ok<Cos>("PATCH", `/cos/${all.ticketId}`, { enabled: false })).toMatchObject({ ticketId: all.ticketId, enabled: false });
+  expect((await rig.ok<Cos[]>("GET", "/cos"))[0]!.enabled).toBe(false);
+  expect(await rig.call("POST", "/cos", { scope: "everything" })).toMatchObject({ status: 400 });
+  expect(await rig.call("POST", "/cos", { scope: "group:nope" })).toMatchObject({ status: 404 });
+  expect(await rig.call("PATCH", `/cos/${all.ticketId}`, { enabled: "off" })).toMatchObject({ status: 400 });
+  expect(await rig.call("PATCH", "/cos/missing", { enabled: true })).toMatchObject({ status: 404 });
+  // Nothing about it shows on the board's lists.
+  expect((await rig.ok<Project[]>("GET", "/projects")).map((p) => p.key)).toEqual(["ACME"]);
+  expect((await rig.ok<Group[]>("GET", "/groups")).map((g) => g.id)).toEqual([group]);
+  expect(await rig.call("DELETE", `/tickets/${all.key}`)).toMatchObject({ status: 409 });
+});
+
+test("a project's CoS overrides come back from the API and clear with null", async () => {
+  const rig = await boot();
+  const project = await rig.project("ACME");
+  expect(project).toMatchObject({ cosEnabled: null, cosCanUnblock: null });
+  expect(await rig.ok<Project>("PATCH", `/projects/${project.id}`, { cosCanUnblock: true })).toMatchObject({ cosEnabled: null, cosCanUnblock: true });
+  expect(await rig.ok<Project>("PATCH", `/projects/${project.id}`, { cosCanUnblock: null })).toMatchObject({ cosCanUnblock: null });
+  expect(await rig.call("PATCH", `/projects/${project.id}`, { cosEnabled: "yes" })).toMatchObject({ status: 400 });
+  expect(await rig.ok<PublicSettings>("PATCH", "/settings", { cosEnabled: false })).toMatchObject({ cosEnabled: false, cosCanUnblock: false });
 });

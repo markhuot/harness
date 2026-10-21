@@ -2,8 +2,8 @@ import { expect, test } from "bun:test";
 import type { RunKind } from "@harness/shared";
 import { toolsForRun } from "../../../service/src/tools/index";
 
-const RUN_KINDS: RunKind[] = ["plan", "work", "review", "complete", "conductor", "triage", "chat", "compact"];
-const names = (kind: RunKind, driver = { hasBuiltinTools: true, usesPermissionPromptTool: false }, ticket: { kind: "task" | "conductor" } | null = null) => toolsForRun(kind, driver, ticket).map((t) => t.name);
+const RUN_KINDS: RunKind[] = ["plan", "work", "review", "complete", "conductor", "triage", "chat", "compact", "cos"];
+const names = (kind: RunKind, driver = { hasBuiltinTools: true, usesPermissionPromptTool: false }, ticket: { kind: "task" | "conductor" | "cos" } | null = null) => toolsForRun(kind, driver, ticket).map((t) => t.name);
 
 test("a compact run has no tools", () => {
   expect(names("compact")).toEqual([]);
@@ -71,4 +71,20 @@ test("a driver with no built-in tools gets native file and shell tools, read-onl
   }
   expect(names("triage", driver)).not.toContain("bash");
   expect(names("work")).not.toContain("bash");
+});
+
+test("a chief of staff reads and changes the board and keeps notes, with no sub-agent, spec, lifecycle, config-write, file or shell tool", () => {
+  for (const driver of [{ hasBuiltinTools: true, usesPermissionPromptTool: false }, { hasBuiltinTools: false, usesPermissionPromptTool: false }]) {
+    const tools = names("cos", driver);
+    expect(tools).toEqual(expect.arrayContaining(["list_tickets", "get_ticket", "search_tickets", "list_projects", "create_ticket", "update_ticket", "move_ticket", "start_ticket", "message_ticket", "cancel_ticket", "reopen_ticket", "post_note", "update_notes"]));
+    expect(tools.filter((t) => ["Agent", "Task", "bash", "read_file", "write_file", "edit_file", "list_files"].includes(t))).toEqual([]);
+    for (const absent of ["read_spec", "edit_spec", "update_spec", "block", "unblock", "submit_for_review", "resume_work", "return_to_planning", "update_branch", "review_ticket", "complete_ticket", "dispatch_ticket", "update_settings", "create_project", "create_watcher", "delete_ticket", "browser_open"]) {
+      expect(tools, absent).not.toContain(absent);
+    }
+  }
+  expect(names("cos", { hasBuiltinTools: true, usesPermissionPromptTool: true })).toContain("permission_prompt");
+});
+
+test("an unknown run kind still throws", () => {
+  expect(() => toolsForRun("nope" as RunKind, { hasBuiltinTools: true, usesPermissionPromptTool: false })).toThrow(/Unknown run kind/);
 });

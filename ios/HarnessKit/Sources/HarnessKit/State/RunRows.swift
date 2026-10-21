@@ -33,7 +33,7 @@ public enum RunRows {
         case .review: .review
         case .complete: .complete
         case .triage: nil
-        default: .work // work, conductor, chat
+        default: .work // work, conductor, chat, cos
         }
     }
 
