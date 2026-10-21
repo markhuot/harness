@@ -24,7 +24,7 @@ const REPO = (file: string): Exclusion => ({
 
 export const EXCLUSIONS: Exclusion[] = [
   // -- HTTP and WebSocket: the service's API surface --
-  ...["http", "ws", "mcp", "network"].map((f) => ({
+  ...["http", "ws", "network"].map((f) => ({
     file: `service/src/api/${f}.ts`,
     reason: "Request handling over a real socket: auth, routing, status codes and payload shapes",
     layer: "L2 (service over HTTP/WS on port 0)",
