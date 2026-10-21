@@ -135,6 +135,11 @@ describe("describeApprovalInput", () => {
     expect(describeApprovalInput("Edit", { file_path: "/a/b" }).primary).toEqual({ label: "File", value: "/a/b", code: true });
     expect(describeApprovalInput("NotebookEdit", { notebook_path: "/n.ipynb" }).primary?.value).toBe("/n.ipynb");
   });
+  test("write_terminal shows every keystroke with control bytes escaped, and keeps the rest (folder, program) in rest", () => {
+    const r = describeApprovalInput("write_terminal", { id: "t1", data: "rm -rf build\r\u0003", process: "zsh", cwd: "/w" });
+    expect(r.primary).toEqual({ label: "Keys", value: "rm -rf build\\r\\x03", code: true });
+    expect(r.rest).toEqual({ id: "t1", process: "zsh", cwd: "/w" });
+  });
   test("web tools prefer url over query, falling back to query", () => {
     expect(describeApprovalInput("WebFetch", { url: "https://x", query: "q" }).primary).toEqual({ label: "URL", value: "https://x", code: false });
     expect(describeApprovalInput("WebSearch", { query: "q" }).primary).toEqual({ label: "Query", value: "q", code: false });

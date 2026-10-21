@@ -71,6 +71,9 @@ interface TicketRow {
  */
 const BASH_EXECUTION_KEYS = ["description", "timeout", "run_in_background"];
 
+/** How long an approved write_terminal waits for its retry. */
+export const TERMINAL_GRANT_TTL_MS = 10 * 60_000;
+
 export function grantKey(toolName: string, input: unknown): string {
   let i = input;
   if (toolName === "Bash" && i && typeof i === "object" && !Array.isArray(i)) {
@@ -755,6 +758,11 @@ export class TicketRepo {
    * `description` doesn't count). Returns true if one existed.
    */
   consumeGrant(ticketId: string, toolName: string, input: unknown): boolean {
+    // A grant for keystrokes into a live shell is for the retry that follows the approval: one
+    // never retried must not pass an identical call much later (a chief of staff's ticket lives on).
+    this.db
+      .query("DELETE FROM approval_grants WHERE ticket_id = $ticketId AND tool_name = 'write_terminal' AND created_at < $before")
+      .run({ ticketId, before: this.now() - TERMINAL_GRANT_TTL_MS });
     const key = grantKey(toolName, input);
     const row = this.listGrants(ticketId).find((g) => grantKey(g.toolName, g.input) === key);
     if (!row) return false;

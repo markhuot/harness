@@ -104,6 +104,21 @@ export const shortToolName = (name: string) => name.replace(/^mcp__[^_]+__/, "")
 
 export type ShownInput = { label: string; value: string; code: boolean };
 
+/** Typed data with every control byte visible (`\r`, `\x03`, `\x1b[A`). */
+export function escapeKeys(data: string): string {
+  let out = "";
+  for (const ch of data) {
+    const c = ch.codePointAt(0)!;
+    if (ch === "\r") out += "\\r";
+    else if (ch === "\n") out += "\\n";
+    else if (ch === "\t") out += "\\t";
+    else if (ch === "\\") out += "\\\\";
+    else if (c < 0x20 || c === 0x7f) out += `\\x${c.toString(16).padStart(2, "0")}`;
+    else out += ch;
+  }
+  return out;
+}
+
 /** Pick the part of a tool input a human needs to judge an approval request. */
 export function describeApprovalInput(toolName: string, input: unknown): { primary: ShownInput | null; description: string | null; rest: Record<string, unknown> | null } {
   const o = input && typeof input === "object" && !Array.isArray(input) ? { ...(input as Record<string, unknown>) } : null;
@@ -142,6 +157,11 @@ export function describeApprovalInput(toolName: string, input: unknown): { prima
     pick("project_key", "Project", false);
   }
   if (tool === "delete_ticket") pick("key", "Ticket", false);
+  // Keystrokes into a live shell: the whole text, control bytes visible, is what the human approves.
+  if (tool === "write_terminal" && typeof o.data === "string") {
+    primary = { label: "Keys", value: escapeKeys(o.data), code: true };
+    delete o.data;
+  }
   pick("command", "Command", true);
   pick("url", "URL", false);
   pick("file_path", "File", true);

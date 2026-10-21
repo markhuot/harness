@@ -165,6 +165,7 @@ import {
   isAncestor,
   isGitRepo,
   isInside,
+  realPath,
   listBranches,
   switchBranch,
 } from "./worktree";
@@ -280,6 +281,10 @@ export interface TerminalAccess {
   get(id: string): TerminalInfo | null;
   text(id: string, lines?: number): Promise<{ text: string; lines: number; truncated: boolean }>;
   writeAgent(id: string, data: string): void;
+  /** Where the kernel says the shell is as of the last poll (null: unknown); output can't set it. */
+  kernelCwd(id: string): string | null;
+  /** Poll every running terminal's cwd and foreground process now. */
+  refresh(): Promise<void>;
 }
 
 interface ActiveRun {
@@ -1520,59 +1525,86 @@ export class Orchestrator {
    * at once; every other run sees the whole board. Throws when a chief of staff has no row (its
    * ticket outlived its group): it sees nothing rather than everything.
    */
-  // --- terminals (chief of staff) ---
-
-  /**
-   * The terminals a chief of staff may see: those whose cwd is inside the worktree (or folder) of a
-   * ticket it covers. A terminal under no ticket is in no scope, not even all's: it may be a home
-   * directory shell with tokens in its environment. Because the cwd follows `cd`, a terminal that
-   * leaves its worktree leaves the scope.
-   */
-  private terminalsInScope(ctx: ToolContext): { info: TerminalInfo; ticket: Ticket }[] {
-    const sc = this.scopeOf(ctx);
-    const owners = sc.tickets.list().filter((t) => t.workdir);
-    const out: { info: TerminalInfo; ticket: Ticket }[] = [];
-    for (const info of this.terminalAccess?.list() ?? []) {
-      // The deepest workdir wins, so a ticket's worktree beats the project folder it sits in.
-      const owner = owners.filter((t) => isInside(info.cwd, t.workdir!)).sort((a, b) => b.workdir!.length - a.workdir!.length)[0];
-      if (owner) out.push({ info, ticket: owner });
-    }
-    return out;
-  }
-
-  /** The terminal as the caller may see it; a missing and an out-of-scope id read the same. */
-  private scopedTerminal(ctx: ToolContext, id: string): { info: TerminalInfo; ticket: Ticket } {
-    const found = this.terminalsInScope(ctx).find((t) => t.info.id === id);
-    if (!found) throw new Error(`Unknown terminal: ${id}. Use list_terminals for the valid ids.`);
-    return found;
-  }
-
-  private terminalView({ info, ticket }: { info: TerminalInfo; ticket: Ticket }): TerminalView {
-    return { id: info.id, cwd: info.cwd, title: info.title, process: info.process, state: info.state, exitCode: info.exitCode, ticketKey: ticket.key };
-  }
-
-  private listTerminals_(ctx: ToolContext): TerminalView[] {
-    return this.terminalsInScope(ctx).map((t) => this.terminalView(t));
-  }
-
-  private async readTerminal_(ctx: ToolContext, id: string, lines?: number) {
-    const found = this.scopedTerminal(ctx, id);
-    return { terminal: this.terminalView(found), ...(await this.terminalAccess!.text(id, lines)) };
-  }
-
-  private writeTerminal_(ctx: ToolContext, id: string, data: string): void {
-    const found = this.scopedTerminal(ctx, id);
-    if (found.info.state !== "running") throw new Error(`Terminal ${id} has exited`);
-    this.terminalAccess!.writeAgent(id, data);
-    if (ctx.ticket) this.addActivityLine(ctx.ticket, "system", "agent", `Typed into terminal ${id} (${found.ticket.key}): ${JSON.stringify(data).slice(0, 200)}`);
-  }
-
   private scopeOf(ctx: ToolContext): ScopedStore {
     if (ctx.runKind !== "cos" && ctx.ticket?.kind !== "cos") return this.everything;
     const row = ctx.ticket ? this.store.cos.get(ctx.ticket.id) : null;
     const scope = row ? parseCosScopeKey(row.scope) : null;
     if (!scope) throw new Error("This chief of staff no longer covers anything: its group is gone.");
     return new ScopedStore(this.store, scope);
+  }
+
+  // --- terminals (chief of staff) ---
+
+  /**
+   * The terminals a chief of staff may see: those the kernel says are inside the worktree (or folder)
+   * of a ticket it covers, after a fresh poll. Only the polled cwd counts: the cwd a shell's own
+   * output sets (OSC 7) is whatever a program printed. The deepest folder over every ticket and
+   * project owns a terminal, and the chief sees it only when that owner is a ticket it covers, so a
+   * covered project folder that holds another group's project doesn't leak that one's shells. A
+   * terminal under no owner is in no scope, not even all's: it may be a home directory shell with
+   * tokens in its environment, and one that `cd`s out of its worktree leaves the scope.
+   */
+  private async terminalsInScope(ctx: ToolContext): Promise<{ info: TerminalInfo; cwd: string; ticket: Ticket }[]> {
+    if (ctx.runKind !== "cos" && ctx.ticket?.kind !== "cos") throw new Error("Terminals are for a chief of staff.");
+    const access = this.terminalAccess;
+    if (!access) return [];
+    const sc = this.scopeOf(ctx);
+    await access.refresh();
+    const resolved = new Map<string, string>();
+    const real = (p: string) => {
+      let r = resolved.get(p);
+      if (r === undefined) resolved.set(p, (r = realPath(p).replace(/\/+$/, "")));
+      return r;
+    };
+    const covered = new Set(sc.tickets.list().map((t) => t.id));
+    const owners: { dir: string; ticket: Ticket | null }[] = [];
+    for (const t of this.everything.tickets.list()) if (t.workdir && t.kind !== "cos") owners.push({ dir: real(t.workdir), ticket: covered.has(t.id) ? t : null });
+    for (const p of this.store.projects.list()) owners.push({ dir: real(p.path), ticket: null });
+    // Deepest first; at the same folder a ticket the chief covers wins over a project or another ticket.
+    owners.sort((a, b) => b.dir.length - a.dir.length || Number(!!b.ticket) - Number(!!a.ticket));
+    const out: { info: TerminalInfo; cwd: string; ticket: Ticket }[] = [];
+    for (const info of access.list()) {
+      const cwd = access.kernelCwd(info.id);
+      if (!cwd) continue;
+      const at = real(cwd);
+      const owner = owners.find((o) => at === o.dir || at.startsWith(`${o.dir}/`));
+      if (owner?.ticket) out.push({ info, cwd, ticket: owner.ticket });
+    }
+    return out;
+  }
+
+  /** The terminal as the caller may see it; a missing and an out-of-scope id read the same. */
+  private async scopedTerminal(ctx: ToolContext, id: string) {
+    const found = (await this.terminalsInScope(ctx)).find((t) => t.info.id === id);
+    if (!found) throw new Error(`Unknown terminal: ${id}. Use list_terminals for the valid ids.`);
+    return found;
+  }
+
+  /** Terminal-controlled text (a title, a program name) with control bytes and angle brackets replaced, so it can't pass for markup or break a line. */
+  private plainTerminalText(text: string): string {
+    return text.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029<>]/g, "?").slice(0, 200);
+  }
+
+  private terminalView({ info, cwd, ticket }: { info: TerminalInfo; cwd: string; ticket: Ticket }): TerminalView {
+    const plain = (s: string) => this.plainTerminalText(s);
+    return { id: info.id, cwd: plain(cwd), title: plain(info.title), process: plain(info.process), state: info.state, exitCode: info.exitCode, ticketKey: ticket.key };
+  }
+
+  private async listTerminals_(ctx: ToolContext): Promise<TerminalView[]> {
+    return (await this.terminalsInScope(ctx)).map((t) => this.terminalView(t));
+  }
+
+  private async readTerminal_(ctx: ToolContext, id: string, lines?: number) {
+    const found = await this.scopedTerminal(ctx, id);
+    return { terminal: this.terminalView(found), ...(await this.terminalAccess!.text(id, lines)) };
+  }
+
+  private async writeTerminal_(ctx: ToolContext, id: string, data: string): Promise<void> {
+    const found = await this.scopedTerminal(ctx, id);
+    if (found.info.state !== "running") throw new Error(`Terminal ${id} has exited`);
+    this.terminalAccess!.writeAgent(id, data);
+    // What was typed stays out of Activity: it may be a password.
+    if (ctx.ticket) this.addActivityLine(ctx.ticket, "system", "agent", `Typed ${data.length} character${data.length === 1 ? "" : "s"} into terminal ${id} (${found.ticket.key})`);
   }
 
   /** The ticket an agent (tool) names, or null. Drafts are left out unless `drafts: true` (agents can read them, never act on them). */
@@ -6026,9 +6058,9 @@ ${numberLines(r.body)}`;
       // --- memory and activity (chief of staff) ---
       queryActivity: async (c, q) => this.scopeOf(c).queryActivity(q),
       // --- terminals (chief of staff) ---
-      listTerminals: async (c) => this.listTerminals_(c),
+      listTerminals: (c) => this.listTerminals_(c),
       readTerminal: (c, id, n) => this.readTerminal_(c, id, n),
-      writeTerminal: async (c, id, d) => this.writeTerminal_(c, id, d),
+      writeTerminal: (c, id, d) => this.writeTerminal_(c, id, d),
       readMemory: async (c) => this.readMemory_(c),
       updateMemorySection: async (c, s, b) => this.updateMemorySection_(c, s, b),
       // --- schedules ---

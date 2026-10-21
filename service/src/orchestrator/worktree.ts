@@ -79,17 +79,19 @@ export function samePath(a: string, b: string): boolean {
   return real(a) === real(b);
 }
 
+/** A path by its real location, or resolved as written when it doesn't exist. */
+export function realPath(p: string): string {
+  try {
+    return realpathSync(p);
+  } catch {
+    return resolve(p);
+  }
+}
+
 /** Whether `path` is `dir` or inside it. */
 export function isInside(path: string, dir: string): boolean {
-  const real = (p: string) => {
-    try {
-      return realpathSync(p);
-    } catch {
-      return resolve(p);
-    }
-  };
-  const p = real(path);
-  const d = real(dir).replace(/\/+$/, "");
+  const p = realPath(path);
+  const d = realPath(dir).replace(/\/+$/, "");
   return p === d || p.startsWith(`${d}/`);
 }
 

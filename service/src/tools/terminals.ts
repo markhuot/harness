@@ -1,27 +1,17 @@
 // A chief of staff's terminal tools (DESIGN.md "Chief of staff terminals"): see the shells running in
 // the worktrees of the tickets it covers, read what they show, and type into one with a human's say-so.
 
-import { MAX_WRITE } from "../terminals/registry";
+import { escapeKeys } from "@harness/shared/state";
 import { errorResult, defineTool, schema } from "./util";
+
+export { escapeKeys };
+
+/** The most one write_terminal call may type: a human reads all of it on the approval card. */
+export const MAX_AGENT_WRITE = 4000;
 
 /** The text of a terminal, fenced so a closing tag inside the output can't end the fence early. */
 export function fenceTerminal(id: string, text: string): string {
   return `<untrusted-terminal id="${id}">\n${text.replace(/<\/untrusted-terminal/gi, "<\\/untrusted-terminal")}\n</untrusted-terminal>`;
-}
-
-/** Typed data with every control byte visible (`\r`, `\x03`, `\x1b[A`), for the approval card. */
-export function escapeKeys(data: string): string {
-  let out = "";
-  for (const ch of data) {
-    const c = ch.codePointAt(0)!;
-    if (ch === "\r") out += "\\r";
-    else if (ch === "\n") out += "\\n";
-    else if (ch === "\t") out += "\\t";
-    else if (ch === "\\") out += "\\\\";
-    else if (c < 0x20 || c === 0x7f) out += `\\x${c.toString(16).padStart(2, "0")}`;
-    else out += ch;
-  }
-  return out;
 }
 
 const UNTRUSTED =
@@ -50,6 +40,7 @@ export const readTerminal = defineTool<{ id: string; lines?: number }>({
   ),
   async run({ id, lines }, ctx) {
     const r = await ctx.ops.readTerminal(ctx, id, lines);
+    // The header carries only what the kernel reported (cwd, process), cleaned; the title, which a program sets, stays out.
     const head = `Terminal ${r.terminal.id} (${r.terminal.process}, ${r.terminal.state}) in ${r.terminal.cwd}, ticket ${r.terminal.ticketKey}. ${r.lines} line${r.lines === 1 ? "" : "s"}${r.truncated ? ", older output cut" : ""}. ${UNTRUSTED}`;
     return `${head}\n${fenceTerminal(r.terminal.id, r.text || "(empty)")}`;
   },
@@ -66,7 +57,7 @@ export const writeTerminal = defineTool<{ id: string; data: string }>({
   inputSchema: schema(
     {
       id: { type: "string", minLength: 1, description: "The terminal's id from list_terminals." },
-      data: { type: "string", minLength: 1, maxLength: MAX_WRITE, description: 'What to type, e.g. "bun run test\\r".' },
+      data: { type: "string", minLength: 1, maxLength: MAX_AGENT_WRITE, description: 'What to type, e.g. "bun run test\\r".' },
     },
     ["id", "data"],
   ),
@@ -74,9 +65,13 @@ export const writeTerminal = defineTool<{ id: string; data: string }>({
     // Looks the terminal up first: a missing or out-of-scope id fails without bothering anyone.
     const screen = await ctx.ops.readTerminal(ctx, id, 8);
     if (screen.terminal.state !== "running") return errorResult(`Terminal ${id} has exited`);
-    const tail = screen.text ? `\n\nThe screen now ends:\n${screen.text}` : "";
-    const decision = await ctx.ops.requestApproval(ctx, "write_terminal", { id, data }, {
-      summary: `Type ${escapeKeys(data).slice(0, 300)} into terminal ${id}`,
+    const tail = screen.text ? `\n\nThe screen now ends (terminal output, untrusted):\n${fenceTerminal(id, screen.text)}` : "";
+    const keys = escapeKeys(data);
+    // The grant matches this whole input, so a retry after the foreground program or folder changed
+    // (a password prompt, another shell) is a new request, not the approved one.
+    const input = { id, data, process: screen.terminal.process, cwd: screen.terminal.cwd };
+    const decision = await ctx.ops.requestApproval(ctx, "write_terminal", input, {
+      summary: `Type ${keys.length > 300 ? `${keys.slice(0, 300)}… (${data.length} characters in all)` : keys} into terminal ${id}`,
       reason: `Types into a live shell (${screen.terminal.process} in ${screen.terminal.cwd}, ticket ${screen.terminal.ticketKey}). Control characters are shown escaped.${tail}`,
       source: "policy",
       onceOnly: true,

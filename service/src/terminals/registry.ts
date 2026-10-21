@@ -143,6 +143,8 @@ interface Term {
   lastActive: number;
   exitedAt: number | null;
   oscCwd: boolean;
+  /** Where the kernel says the shell is (lsof), never what its output claims; null until polled or when unknown. */
+  polledCwd: string | null;
   lastEmit: number;
   lastEmitted: string;
   emitTimer: unknown;
@@ -164,7 +166,7 @@ export class TerminalRegistry {
   private readonly isDirectory: (p: string) => boolean;
   private readonly makeEmulator: CreateEmulator;
   private tickTimer: ReturnType<typeof setInterval> | null = null;
-  private polling = false;
+  private polling: Promise<void> | null = null;
 
   constructor(private readonly opts: TerminalRegistryOptions) {
     this.env = opts.env ?? process.env;
@@ -190,6 +192,16 @@ export class TerminalRegistry {
 
   list(): TerminalInfo[] {
     return [...this.terms.values()].map((t) => ({ ...t.info }));
+  }
+
+  /** Where the kernel says the shell is, as of the last poll: unlike `info.cwd` its output can't set it. */
+  kernelCwd(id: string): string | null {
+    return this.terms.get(id)?.polledCwd ?? null;
+  }
+
+  /** Poll every running terminal's cwd and foreground process now. */
+  refresh(): Promise<void> {
+    return this.poll(true);
   }
 
   get(id: string): TerminalInfo | null {
@@ -242,6 +254,7 @@ export class TerminalRegistry {
       lastActive: now,
       exitedAt: null,
       oscCwd: false,
+      polledCwd: null,
       lastEmit: now,
       lastEmitted: JSON.stringify(info),
       emitTimer: null,
@@ -302,6 +315,7 @@ export class TerminalRegistry {
     term.decoder = new TextDecoder("utf-8");
     term.snapshot = null;
     term.oscCwd = false;
+    term.polledCwd = null;
     this.changed(term, true);
     // Clients attached to the dead shell get the screen again, and read the terminal as live.
     for (const st of term.clients.values()) this.resync(term, st);
@@ -484,21 +498,31 @@ export class TerminalRegistry {
 
   /** Look up cwd and foreground process now: for attached terminals, or for all of them. */
   async poll(all: boolean): Promise<void> {
+    // A caller that needs fresh values (all) waits out a poll already under way, which may have
+    // started before the change it is looking for.
+    while (this.polling && all) await this.polling;
     if (this.polling) return;
     const targets = [...this.terms.values()].filter((t) => t.info.state === "running" && (all || t.clients.size > 0));
     if (targets.length === 0) return;
-    this.polling = true;
+    let done!: () => void;
+    this.polling = new Promise<void>((resolve) => (done = resolve));
     try {
       const result = await pollTerminals(targets.map((t) => ({ id: t.info.id, pid: t.pty.pid })), this.opts.poll);
       for (const term of targets) {
         const r = result.get(term.info.id);
-        if (!r || term.closed) continue;
+        if (term.closed) continue;
+        if (!r) {
+          term.polledCwd = null;
+          continue;
+        }
         if (r.process) term.info.process = r.process;
+        term.polledCwd = r.cwd;
         if (r.cwd && !term.oscCwd) term.info.cwd = r.cwd;
         this.changed(term);
       }
     } finally {
-      this.polling = false;
+      this.polling = null;
+      done();
     }
   }
 
