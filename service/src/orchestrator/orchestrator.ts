@@ -195,7 +195,7 @@ import { AnthropicApiClassifier, ClaudeCliClassifier, type Classifier } from "..
 import { AutoModeRulesProvider } from "../permissions/rules";
 import { anthropicStructured, claudeCliStructured } from "../permissions/structured";
 import { CosEngine, wire as wireCosEvent, type Timers as CosTimers } from "../cos/engine";
-import { cosChat } from "../cos/chat";
+import { cosChat, WAKE_PROMPT_PREFIX } from "../cos/chat";
 import { LlmTriage, type CosTriage } from "../cos/triage";
 import { claudeCliEnv, resolveClaudeBin } from "../drivers/claude-code";
 import { DEFAULT_ANTHROPIC_MODEL } from "../drivers/anthropic-api";
@@ -685,6 +685,13 @@ export class Orchestrator {
     this.syncWatchers();
     this.cosOff.push(
       this.bus.onKind("activity.added", () => this.cosEngine.nudge()),
+      this.bus.onKind("transcript.appended", (e) => {
+        const m = e.entry;
+        if (m.subagentId || (m.role !== "user" && m.role !== "assistant") || m.content.type !== "text" || m.content.text.startsWith(WAKE_PROMPT_PREFIX)) return;
+        const cosId = this.store.sessions.get(m.sessionId)?.ticketId;
+        if (!cosId || !this.store.cos.get(cosId)) return;
+        this.bus.emit({ kind: "cos.transcript.appended", cosId, entry: { id: m.id, cosId, createdAt: m.createdAt, kind: "message", role: m.role, text: m.content.text } });
+      }),
       this.bus.onKind("run.upserted", (e) => {
         if (e.run.kind === "cos" && (e.run.status === "succeeded" || e.run.status === "failed" || e.run.status === "cancelled")) this.cosEngine.runEnded(e.run.id);
       }),

@@ -387,6 +387,7 @@ export class CosEngine {
     const wakeId = store.cosEvents.addWake({ cosId, kind: "wake", eventCount: events.length, digest });
     for (const e of events) this.patch(e.id, { status: "handling", wakeId });
     this.emitBadge();
+    this.d.emit({ kind: "cos.transcript.appended", cosId, entry: { id: `wake:${wakeId}`, cosId, createdAt: now, kind: "event_batch", wakeId, eventIds: events.map((e) => e.id), digest } });
     try {
       const runId = await this.d.deliver(cosId, text);
       for (const e of events) this.patch(e.id, { consumingRunId: runId });

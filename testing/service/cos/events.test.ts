@@ -570,6 +570,9 @@ test("chat shows the chief's messages, its board changes and the event batches, 
   s.happen(s.t, "marker-chat");
   await s.after(MIN);
 
+  const appended = s.h.events.flatMap((e) => (e.kind === "cos.transcript.appended" ? [e.entry] : []));
+  expect(appended.map((e) => e.kind)).toEqual(expect.arrayContaining(["message", "event_batch"]));
+  expect(appended.some((e) => e.kind === "message" && e.text.startsWith(WAKE_PROMPT_PREFIX))).toBe(false);
   const page = s.h.orch.cosTranscript(s.chief.ticketId, { limit: "100" });
   const kinds = page.entries.map((e) => e.kind);
   expect(kinds).toContain("event_batch");
