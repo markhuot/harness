@@ -42,8 +42,8 @@ test("a database from a newer service is refused rather than downgraded", () => 
 
 test("a failing migration rolls back whole and leaves the version where it was", () => {
   const db = dbAt(SCHEMA_VERSION - 1);
-  // Break the last migration's target: it adds a column that already exists.
-  db.exec("ALTER TABLE projects ADD COLUMN group_id TEXT");
+  // Break the last migration's target: it creates a table that already exists.
+  db.exec("CREATE TABLE cos (x INTEGER)");
   expect(() => migrate(db, paths())).toThrow();
   expect(version(db)).toBe(SCHEMA_VERSION - 1);
 });

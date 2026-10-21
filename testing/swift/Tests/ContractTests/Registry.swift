@@ -21,6 +21,16 @@ let ignoredFields: [String: String] = [
     "Ticket.blockedRunKind": "Swift has no property for it, and no iPhone screen reads it",
     "Ticket.blockedHead": "Swift has no property for it, and no iPhone screen reads it",
     "Ticket.startAfterPlanBy": "Swift has no property for it, and no iPhone screen reads it",
+    "Project.cosEnabled": "Swift has no property for it, and no iPhone screen reads it (the Mac app sets the chief of staff)",
+    "Project.cosCanUnblock": "Swift has no property for it, and no iPhone screen reads it (the Mac app sets the chief of staff)",
+    "CreateProjectBody.cosEnabled": "Swift has no property for it, and no iPhone screen reads it (the Mac app sets the chief of staff)",
+    "CreateProjectBody.cosCanUnblock": "Swift has no property for it, and no iPhone screen reads it (the Mac app sets the chief of staff)",
+    "Settings.cosEnabled": "Swift has no property for it, and no iPhone screen reads it (the Mac app sets the chief of staff)",
+    "Settings.cosCanUnblock": "Swift has no property for it, and no iPhone screen reads it (the Mac app sets the chief of staff)",
+    "PublicSettings.cosEnabled": "Swift has no property for it, and no iPhone screen reads it (the Mac app sets the chief of staff)",
+    "PublicSettings.cosCanUnblock": "Swift has no property for it, and no iPhone screen reads it (the Mac app sets the chief of staff)",
+    "SettingsPatch.cosEnabled": "Swift has no property for it, and no iPhone screen reads it (the Mac app sets the chief of staff)",
+    "SettingsPatch.cosCanUnblock": "Swift has no property for it, and no iPhone screen reads it (the Mac app sets the chief of staff)",
 ]
 
 /// TS type name → Swift type, round-tripped through its own Codable.

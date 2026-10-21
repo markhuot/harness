@@ -9,10 +9,15 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- The groundwork for a chief of staff: an always-on chat session that drives the app with the same tools agents have. Each project group gets its own, created the first time it is opened, and an All projects one covers everything else. A group's chief only sees and changes tickets in its group; anything else reads as not found. There are app settings and per-project overrides for "CoS enabled" (default on) and "CoS can unblock" (default off), and each chief has its own on/off switch. When "CoS can unblock" is off for a project, the chief can still read and report its blocked tickets but can't answer or move them. What it does to a ticket shows in that ticket's Activity. It can't launch sub-agents: it creates tickets for anything deeper than a lookup. There is no screen for it yet.
+
 ### Changed
 
 - Renaming a project group is now safe. Groups are real entries with their own ids, so a group's board, your saved board and layout, and anything later tied to the group keep following it when its name changes. Two groups can't share a name (case aside); renaming onto an existing name is refused. Existing groups, saved boards and links that name a group carry over. The iPhone, iPad and Mac project settings have a Group name row that renames the group for all of its projects. A group goes away when its last project leaves it, so its name is free to use again. Agents can still set a project's `group` by name, and can pass `group_id`.
 - The end-to-end walkthrough now opens a project's settings on the Mac and checks the Group name row, so a break there fails the gate.
+- Internal: tests now check that a ticket outside a chief of staff's scope can't be told apart from one that doesn't exist, on every tool that takes a ticket key, and fail for a new tool nobody has classified.
 
 ## [app-20261020.2300](https://github.com/markhuot/harness/releases/tag/app-20261020.2300) - 2026-10-20
 

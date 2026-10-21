@@ -801,6 +801,57 @@ harness doesn't follow the pull request after that: review and merge happen on G
 **Approve and take no action** is `POST /complete { skipAgent: true }`, the same as Mark done: no
 run, and the worktree and branch stay as they are. In review it also records the human approval.
 
+### Chief of staff
+
+A chief of staff (CoS) is an always-on chat session with the tools to drive the app. The foundation
+is here; events, schedules, memory and the chat UI build on it. It is a ticket (`kind: "cos"`, run
+kind `cos`) because a ticket already gives it approvals, grants, permission mode, steering, queueing,
+notes and a stored transcript, but it is not a board ticket: it lives in a hidden internal project
+(`projects.internal`, made on first use, running in the harness home folder with no worktree) that no
+project list, key lookup, ticket list, page or search returns, and `tickets.project_id` stays NOT NULL.
+Its ticket can't be deleted (409) or created or changed through `POST`/`PATCH /tickets` (`cos` isn't a
+valid kind there).
+
+Each project group has one CoS, and an **All projects** CoS covers the rest. Table `cos` (migration
+45): `ticket_id`, `scope` (`all` or `group:<group id>`, UNIQUE, since SQLite lets a nullable unique
+column repeat), `group_id`, `enabled` (the CoS's own switch, how All is turned off). `openCos(scope)`
+makes the row and ticket the first time it is asked for (opening its view, or an event arriving) and
+returns the same one after; GET never creates. Deleting a group deletes its CoS, ticket and session
+(`ProjectRepo.pruneGroups`). HTTP: `GET /cos`, `POST /cos { scope }` (opens; idempotent),
+`PATCH /cos/:ticketId { enabled }`. A switched-off CoS refuses new messages (409); a run under way ends.
+
+**Settings.** `settings.cosEnabled` (default true) and `settings.cosCanUnblock` (default false) are
+the app's values; a project's `cosEnabled` / `cosCanUnblock` are nullable overrides (null inherits;
+PATCH `null` resets). `resolveCosSetting` in `shared/src/cos.ts` is the one place that resolves
+project-else-app-else-default.
+
+**Scope is enforced once, in the store.** A scope is `"all"` or `{ group }` (`store/scope.ts`). The
+service resolves it from the CoS ticket's `cos` row on every operation (`scopeOf(ctx)`: never a tool
+argument, never kept from when the run started, so moving a project between groups applies at once;
+every non-CoS run resolves to all). `ScopedStore` is the only way a run's board tools reach tickets,
+projects, groups, watchers and Activity: an out-of-scope id is `null` (not found, with the message a
+missing ticket gets, so existence isn't revealed), lists and pages are filtered in SQL so totals are
+the group's, and parent, dependency and dependent edges that leave the scope are dropped from a
+ticket it returns. `agentLookup`, `agentTarget`, `relatedTickets` and `childOf` take the scope as a
+required argument, so a call site that forgets fails to compile. Watchers and the Inbox belong to no
+project, so only All sees them. The CoS's own ticket and the hidden project are in no scope, All
+included. A test lists every `HarnessOps` method and fails for one that isn't classified as keyed or
+not, and runs every keyed one against an out-of-scope key.
+
+**Tools.** `RUN_TOOLS.cos`: `post_note`, `update_notes`, the read board tools, the board write tools
+and the config read tools. No spec or lifecycle tools, no config writes (so no way to change the
+`cos*` settings), no files or shell, and no sub-agents: `buildClaudeArgs` passes
+`--disallowedTools Agent Task` for a `cos` run. `create_ticket` needs `project_key` (a CoS has no
+project) and takes no `child`. Its system prompt (`system.cos`, static, so the prefix stays
+byte-identical across wakes) says to create tickets, conductors for several parts, for anything deeper
+than a lookup or board action.
+
+**Unblocking.** Every board write goes through `boardTarget`, which calls `cosMayAct`: with the
+ticket's project's `cosCanUnblock` off, a CoS's write to a blocked ticket is refused, naming the
+setting and the ticket's question; reading it stays available. Human-only approvals are not bypassed
+(`noPendingApproval`). What a CoS changes on a ticket is added to that ticket's Activity as "Chief of
+staff (KEY) …".
+
 ### Conductor
 
 Any ticket with children acts as a conductor (`isConductor`: `kind: "conductor"` or
