@@ -510,6 +510,10 @@ export interface ProjectView {
   groupId: string | null;
   /** Base branch override; null → settings.baseBranch */
   baseBranch: string | null;
+  /** Whether a chief of staff handles the project; null → settings.cosEnabled */
+  cosEnabled: boolean | null;
+  /** Whether a chief of staff may answer the project's blocked tickets; null → settings.cosCanUnblock */
+  cosCanUnblock: boolean | null;
   /** What approving a ticket does by default: merge, pr (a GitHub pull request) or custom */
   completionAction: CompletionAction;
   /** The completion actions the project offers (pr needs a remote gh is logged into) */

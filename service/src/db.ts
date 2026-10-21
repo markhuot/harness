@@ -778,6 +778,23 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE projects ADD COLUMN group_id TEXT;
   CREATE INDEX projects_group ON projects(group_id);
   `,
+  // 45: chiefs of staff (DESIGN.md "Chief of staff"). cos is one row per chief of staff: its ticket
+  //     (kind 'cos'), its scope ('all' or 'group:<group id>', UNIQUE because SQLite lets a nullable
+  //     unique column repeat), and its own on/off switch. projects.cos_enabled and cos_can_unblock
+  //     override the settings of the same name (NULL: inherit). projects.internal marks the hidden
+  //     project that hosts the chiefs' tickets; it is left out of every project list.
+  `
+  CREATE TABLE cos (
+    ticket_id TEXT PRIMARY KEY REFERENCES tickets(id) ON DELETE CASCADE,
+    scope TEXT NOT NULL UNIQUE,
+    group_id TEXT,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    created_at INTEGER NOT NULL
+  );
+  ALTER TABLE projects ADD COLUMN cos_enabled INTEGER;
+  ALTER TABLE projects ADD COLUMN cos_can_unblock INTEGER;
+  ALTER TABLE projects ADD COLUMN internal INTEGER NOT NULL DEFAULT 0;
+  `,
 ];
 
 /** Where the files migrations look at live (HarnessPaths); by default next to the database file. */

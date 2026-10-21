@@ -327,6 +327,8 @@ function instructionsSection(info: PromptInfo, o: PromptOverrides | null | undef
         },
         o,
       );
+    case "cos":
+      return ""; // its instructions are the same every run, so they sit in the system prompt (systemPrompt)
     case "compact":
       return ""; // a compact run sends no instructions
     case "triage":
@@ -477,13 +479,17 @@ export function systemPrompt(info: PromptInfo): string {
   const { ticket } = info;
   const kind = toolKind(info.kind, ticket);
   const o = info.overrides;
-  const ticketRun = kind !== "triage";
+  // A chief of staff is a ticket for the machinery, but has no lifecycle, files or spec to talk about.
+  const cos = kind === "cos";
+  const ticketRun = kind !== "triage" && !cos;
   const browser = kind === "plan" || kind === "work" || kind === "review" || kind === "conductor";
   const changes = kind === "work" || kind === "conductor";
   const conductor = kind === "conductor";
   return join(
     renderPrompt("system.intro", {}, o),
     sessionSection(info, o),
+    // Static text, so the prompt prefix is byte-identical from one wake to the next (prompt caching).
+    cos && renderPrompt("system.cos", {}, o),
     ticketRun && renderPrompt("system.lifecycle", {}, o),
     ticketRun && filesSection(info, o),
     turnsSection(info, o),
@@ -491,11 +497,11 @@ export function systemPrompt(info: PromptInfo): string {
     ticketRun && renderPrompt("system.file_links", {}, o),
     // Read-only board tools, given to every run kind (tools/board.ts).
     renderPrompt("system.board", {}, o),
-    // Board tools that change other tickets (tools/board-write.ts).
+    // Board tools that change other tickets (tools/board-write.ts). A chief of staff's instructions cover them.
     changes && renderPrompt("system.board_changes", { conductor }, o),
     // Config tools (tools/config.ts): reads for every run; the gated writes where a human can approve them.
     renderPrompt("system.config", { canChange: changes }, o),
-    (changes || kind === "complete") && renderPrompt("system.approvals", { canBlock: kind === "work" || kind === "complete" }, o),
+    (changes || cos || kind === "complete") && renderPrompt("system.approvals", { canBlock: kind === "work" || kind === "complete" }, o),
     browser && renderPrompt("system.browser", {}, o),
   );
 }
@@ -510,7 +516,7 @@ export function systemPrompt(info: PromptInfo): string {
 export function runContext(info: PromptInfo): string {
   const { kind, ticket } = info;
   const o = info.overrides;
-  const ticketRun = kind !== "triage";
+  const ticketRun = kind !== "triage" && kind !== "cos";
   const browser = kind === "plan" || kind === "work" || kind === "review" || kind === "conductor" || kind === "chat";
   const changes = kind === "work" || kind === "conductor" || kind === "chat";
   return join(
@@ -526,7 +532,7 @@ export function runContext(info: PromptInfo): string {
       !!ticket?.branch &&
       renderPrompt("system.branches", { branch: ticket.branch, baseBranch: branchesOf(ticket, info.project, info.branches).base }, o),
     ticketRun && specSection(info, browser, o),
-    ticketRun && notesSection(info, o),
+    (ticketRun || kind === "cos") && notesSection(info, o),
   );
 }
 

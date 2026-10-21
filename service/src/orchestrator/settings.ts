@@ -1,5 +1,5 @@
 import type { ListenSetting, NotificationSettings, PhaseModels, PhaseModelsPatch, PromptId, PublicSettings, Settings } from "@harness/shared";
-import { applyLegacySettings, legacySettingsFields, mergePhaseModels, PHASES, DEFAULT_NOTIFICATION_SETTINGS, NOTIFICATION_CATEGORIES, branchNameError, CLASSIFIER_BACKENDS, DEFAULT_BASE_BRANCH, DEFAULT_BROWSER_IDLE_TAB_MINUTES, DEFAULT_CONTEXT_GAUGE_LIMIT, MAX_BROWSER_IDLE_TAB_MINUTES, MAX_CONTEXT_GAUGE_LIMIT, MIN_CONTEXT_GAUGE_LIMIT, LISTEN_MODES, PERMISSION_MODES, PROMPT_IDS, RENAMED_PROMPT_IDS } from "@harness/shared";
+import { COS_SETTING_DEFAULTS, applyLegacySettings, legacySettingsFields, mergePhaseModels, PHASES, DEFAULT_NOTIFICATION_SETTINGS, NOTIFICATION_CATEGORIES, branchNameError, CLASSIFIER_BACKENDS, DEFAULT_BASE_BRANCH, DEFAULT_BROWSER_IDLE_TAB_MINUTES, DEFAULT_CONTEXT_GAUGE_LIMIT, MAX_BROWSER_IDLE_TAB_MINUTES, MAX_CONTEXT_GAUGE_LIMIT, MIN_CONTEXT_GAUGE_LIMIT, LISTEN_MODES, PERMISSION_MODES, PROMPT_IDS, RENAMED_PROMPT_IDS } from "@harness/shared";
 import { badRequest } from "./errors";
 import { isPromptId, promptTemplateError } from "./prompt-templates";
 
@@ -20,6 +20,8 @@ export const DEFAULT_SETTINGS: Settings = {
   reviewModels: {},
   watcherDriver: null,
   watcherModels: {},
+  cosEnabled: COS_SETTING_DEFAULTS.cosEnabled,
+  cosCanUnblock: COS_SETTING_DEFAULTS.cosCanUnblock,
   anthropicApiKey: null,
   claudeOauthToken: null,
   copilotGithubToken: null,
@@ -209,6 +211,11 @@ export function validateSettingsPatch(body: unknown, knownDrivers?: string[], cu
         if (value !== null && value !== "" && typeof value !== "string") throw badRequest("watcherDriver must be a driver id or null");
         if (value && knownDrivers && !knownDrivers.includes(value as string)) throw badRequest(`Unknown driver: ${value}`);
         out.watcherDriver = (value as string) || null;
+        break;
+      case "cosEnabled":
+      case "cosCanUnblock":
+        if (typeof value !== "boolean") throw badRequest(`${key} must be true or false`);
+        out[key] = value;
         break;
       case "defaultModels":
       case "reviewModels":

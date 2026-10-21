@@ -87,6 +87,14 @@ export interface Project {
   group: string | null;
   /** The id of the project's group (see `group`): stable across renames. null → none. */
   groupId: string | null;
+  /**
+   * Whether a chief of staff handles this project (DESIGN.md "Chief of staff"). null → inherit
+   * settings.cosEnabled; a boolean overrides it. Resolve with `resolveCosSetting`. Optional so
+   * older payloads type-check.
+   */
+  cosEnabled?: boolean | null;
+  /** Whether a chief of staff may answer this project's blocked tickets. null → inherit settings.cosCanUnblock. */
+  cosCanUnblock?: boolean | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -143,7 +151,12 @@ export function reviewPassed(state: ReviewState): boolean {
   return state === "approved" || state === "skipped";
 }
 
-export type TicketKind = "task" | "conductor";
+/**
+ * "cos" is a chief of staff (DESIGN.md "Chief of staff"): an always-on chat session that drives the
+ * app with tools. It is a ticket for the machinery (approvals, steering, queueing, notes, transcript)
+ * but lives outside every project and never appears in ticket lists.
+ */
+export type TicketKind = "task" | "conductor" | "cos";
 
 /**
  * How an approved ticket's work lands (DESIGN.md "Completion"), each with its own completion
@@ -511,7 +524,7 @@ export interface Session {
 export type TriageStatus = "triaging" | "dispatched" | "declined" | "failed";
 
 /** chat: a human message to a blocked, review or done ticket, answered by its agent with the work tools (the agent moves the ticket itself). */
-export type RunKind = "plan" | "work" | "review" | "complete" | "conductor" | "triage" | "chat" | "compact";
+export type RunKind = "plan" | "work" | "review" | "complete" | "conductor" | "triage" | "chat" | "compact" | "cos";
 
 /**
  * The phases a driver + model is chosen for (DESIGN.md "Model selection"). Conductor and chat
@@ -984,6 +997,16 @@ export interface Settings {
    */
   watcherDriver?: string | null;
   /**
+   * Whether a chief of staff handles projects that don't say (Project.cosEnabled). Default true.
+   * Optional so clients tolerate an older service.
+   */
+  cosEnabled?: boolean;
+  /**
+   * Whether a chief of staff may answer blocked tickets of projects that don't say
+   * (Project.cosCanUnblock). Default false. Optional like cosEnabled.
+   */
+  cosCanUnblock?: boolean;
+  /**
    * Model per driver id for triage sessions of watchers that don't pick one. Missing / null →
    * defaultModels. PATCH merges per driver; null clears. Optional like watcherDriver.
    */
@@ -1065,6 +1088,7 @@ export const PROMPT_IDS = [
   "system.complete_custom",
   "system.conductor",
   "system.chat",
+  "system.cos",
   "system.triage",
   "system.children",
   "system.branches",
@@ -1652,6 +1676,10 @@ export interface CreateProjectBody {
   defaultModels?: Record<string, string | null>;
   /** A valid branch name; null or "" → inherit settings.baseBranch */
   baseBranch?: string | null;
+  /** Project.cosEnabled; null clears the override (inherit settings.cosEnabled) */
+  cosEnabled?: boolean | null;
+  /** Project.cosCanUnblock; null clears the override (inherit settings.cosCanUnblock) */
+  cosCanUnblock?: boolean | null;
   /** The default completion action; must be one the project offers. Default "merge". */
   completionAction?: CompletionAction;
 }

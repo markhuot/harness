@@ -218,8 +218,12 @@ export interface StoredPullRequest extends PullRequestLink {
   titleCheckedAt: number | null;
 }
 
-/** Narrow a page or search to one project, or to the projects in a group (a group's board). */
-function projectFilter(opts: { projectId?: string; groupId?: string }, where: string[], params: SqlParams) {
+/**
+ * Narrow a page or search to one project, or to the projects in a group (a group's board). A chief
+ * of staff's ticket (kind "cos") is in no project's list: only `includeCos` returns it.
+ */
+function projectFilter(opts: { projectId?: string; groupId?: string; includeCos?: boolean }, where: string[], params: SqlParams) {
+  if (!opts.includeCos) where.push("t.kind <> 'cos'");
   if (opts.projectId) {
     where.push("t.project_id = $projectId");
     params.projectId = opts.projectId;
@@ -339,10 +343,11 @@ export class TicketRepo {
   }
 
   /** `drafts: false` leaves drafts out (what agents see). */
-  list(filter: { projectId?: string; parentId?: string; statuses?: TicketStatus[]; drafts?: boolean } = {}): Ticket[] {
+  list(filter: { projectId?: string; groupId?: string; parentId?: string; statuses?: TicketStatus[]; drafts?: boolean; includeCos?: boolean } = {}): Ticket[] {
     const where: string[] = [];
     if (filter.drafts === false) where.push("t.draft = 0");
     const params: Record<string, string> = {};
+    projectFilter({ groupId: filter.groupId, includeCos: filter.includeCos }, where, params);
     if (filter.statuses) {
       if (!filter.statuses.length) return [];
       where.push(`t.status IN (${filter.statuses.map((_, i) => `$status${i}`).join(", ")})`);

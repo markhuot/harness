@@ -131,6 +131,11 @@ const RUN_TOOLS: Record<Exclude<RunKind, "chat" | "compact">, { harness: ToolDef
     native: "read",
   },
   triage: { harness: [...boardTools, ...triageTools, ...configReadTools], native: "none" },
+  // A chief of staff drives the app: it reads the board, changes tickets and writes its own notes. It
+  // has no spec or ticket lifecycle tools (it never submits or blocks), no config writes, no
+  // sub-agents (drivers/claude-code.ts keeps Agent and Task off it) and no files or shell: deeper work
+  // goes to tickets it creates. Everything it reads or changes is scoped (store/scope.ts).
+  cos: { harness: [postNote, updateNotes, ...boardTools, ...boardWriteTools, ...configReadTools], native: "none" },
 };
 
 /**

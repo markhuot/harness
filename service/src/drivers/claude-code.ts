@@ -348,6 +348,8 @@ export function buildClaudeArgs(
     // otherwise deny the launch, and a review run has nobody to approve it.
     ...(ADVISER_RUNS.includes(req.kind) ? ADVISER_TOOLS : []),
     ...rules,
+    // A chief of staff creates tickets for anything deeper than a lookup: no sub-agents of its own.
+    ...(req.kind === "cos" ? ["--disallowedTools", ...ADVISER_TOOLS] : []),
     "--permission-mode",
     permissionMode,
   ];

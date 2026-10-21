@@ -95,7 +95,8 @@ import {
   ticketLegacyChoice,
   withLegacyChoice,
 } from "@harness/shared";
-import { SpecConflictError, type GroupRepo, type Store } from "../store";
+import { ScopedStore, SpecConflictError, type GroupRepo, type Store } from "../store";
+import { cosScopeKey, parseCosScopeKey, resolveCosSetting, type Cos, type CosScope } from "@harness/shared";
 import { GroupNameTaken } from "../store/projects";
 
 /** A group a request names, before it is resolved: an existing id, a name to find or make, or null for none. */
@@ -319,27 +320,27 @@ const RUNNABLE_WORK: RunKind[] = ["work", "conductor", "chat"];
  * Run kinds with a human in the loop for tool-permission prompts. A chat's approval card leaves the
  * ticket in its column, and answering it resumes the chat (openApproval, answerApproval).
  */
-const APPROVABLE_RUNS: RunKind[] = ["work", "complete", "conductor", "chat"];
+const APPROVABLE_RUNS: RunKind[] = ["work", "complete", "conductor", "chat", "cos"];
 /** Run kinds whose native tool calls are checked as read_only, whatever the ticket's mode. */
 const READ_ONLY_RUNS: RunKind[] = ["plan", "triage"];
 /** Run kinds that get the board write tools (create_ticket, message_ticket, update_branch, ...) */
-const BOARD_WRITE_RUNS: RunKind[] = ["work", "conductor", "chat"];
+const BOARD_WRITE_RUNS: RunKind[] = ["work", "conductor", "chat", "cos"];
 /** Run kinds that get the (human-gated) config tools */
 const CONFIG_RUNS: RunKind[] = ["work", "conductor", "chat"];
 /** The agent's own runs of a ticket: a message for one of them can steer any other that's going. */
-const AGENT_RUNS = new Set<RunKind>(["work", "conductor", "chat"]);
+const AGENT_RUNS = new Set<RunKind>(["work", "conductor", "chat", "cos"]);
 /**
  * Runs that start a new driver conversation and never save theirs (DESIGN.md "Driver state"): a
  * reviewer judges the work cold, and a completion needs only its own prompt, not the work's history.
  */
 const FRESH_RUN_KINDS = new Set<RunKind>(["review", "complete"]);
 /** Runs that carry a human's words (the brief, a message, a chat question) and get their @-mentioned files attached. */
-const MENTION_RUN_KINDS = new Set<RunKind>(["plan", "work", "conductor", "chat"]);
+const MENTION_RUN_KINDS = new Set<RunKind>(["plan", "work", "conductor", "chat", "cos"]);
 /**
  * Runs a human message can steer while they're going (DESIGN.md "Steering"): the ones a message
  * would otherwise queue. Review and complete runs never take one (a message moves those tickets).
  */
-const STEERABLE_RUN_KINDS = new Set<RunKind>(["plan", "work", "conductor", "chat"]);
+const STEERABLE_RUN_KINDS = new Set<RunKind>(["plan", "work", "conductor", "chat", "cos"]);
 /** Why a plan run can't leave Claude Code's plan mode itself (ExitPlanMode). */
 export const PLAN_APPROVAL_MESSAGE =
   "The human approves the plan on the board by pressing Start (Approve plan, while the plan run is still going), which starts the work in a new run. Don't call ExitPlanMode: make sure the plan is saved in the spec with update_spec, then end your turn.";
@@ -452,6 +453,20 @@ function projectReviewDefaults(body: Partial<CreateProjectBody>): { skipAgentRev
   const legacy = validBoolean("requireHumanReview", body.requireHumanReview);
   const skipHumanReview = validBoolean("skipHumanReview", body.skipHumanReview) ?? (legacy === undefined ? undefined : !legacy);
   return { ...(skipAgentReview !== undefined && { skipAgentReview }), ...(skipHumanReview !== undefined && { skipHumanReview }) };
+}
+
+/** A boolean that null clears (a project's override of an app setting): omitted → undefined. */
+function nullableBoolean(name: string, value: unknown): boolean | null | undefined {
+  if (value === undefined || value === null) return value;
+  if (typeof value !== "boolean") throw badRequest(`${name} must be true, false or null`);
+  return value;
+}
+
+/** The chief-of-staff overrides of a project create / PATCH body (only the fields it carries). */
+function projectCosFields(body: Partial<CreateProjectBody>): { cosEnabled?: boolean | null; cosCanUnblock?: boolean | null } {
+  const cosEnabled = nullableBoolean("cosEnabled", body.cosEnabled);
+  const cosCanUnblock = nullableBoolean("cosCanUnblock", body.cosCanUnblock);
+  return { ...(cosEnabled !== undefined && { cosEnabled }), ...(cosCanUnblock !== undefined && { cosCanUnblock }) };
 }
 
 /** Validate a completion action from a request body (omitted / null → undefined). */
@@ -872,6 +887,7 @@ export class Orchestrator {
       key,
       useWorktrees: body.useWorktrees,
       ...projectReviewDefaults(body),
+      ...projectCosFields(body),
       color: body.color !== undefined ? validProjectColor(body.color) : null,
       group: this.groupRef(body) ?? null,
       baseBranch: validateBranchName("baseBranch", body.baseBranch),
@@ -1087,6 +1103,8 @@ export class Orchestrator {
       groupId: _groupId,
       baseBranch: rawBase,
       completionAction: rawAction,
+      cosEnabled: _cosEnabled,
+      cosCanUnblock: _cosCanUnblock,
       skipAgentReview: _skipAgent,
       skipHumanReview: _skipHuman,
       requireHumanReview: _require,
@@ -1097,14 +1115,83 @@ export class Orchestrator {
     const baseBranch = rawBase !== undefined ? validateBranchName("baseBranch", rawBase) : undefined;
     const completionAction = this.validProjectCompletion(path ?? existing.path, rawAction);
     const phaseModels = this.projectPhaseModels(existing.phaseModels, body);
-    return { newKey, permissionMode, rest: { ...rest, ...projectReviewDefaults(body), color, baseBranch, completionAction }, group, path, phaseModels };
+    return { newKey, permissionMode, rest: { ...rest, ...projectReviewDefaults(body), ...projectCosFields(body), color, baseBranch, completionAction }, group, path, phaseModels };
   }
 
   async deleteProject(id: string) {
-    if (!this.store.projects.get(id)) throw notFound(`Unknown project: ${id}`);
+    if (!this.store.projects.get(id) || this.store.projects.isInternal(id)) throw notFound(`Unknown project: ${id}`);
     for (const t of this.store.tickets.list({ projectId: id })) await this.deleteTicket(t.key);
     this.store.projects.delete(id);
     this.bus.emit({ kind: "project.deleted", id });
+  }
+
+  // =========================================================================
+  // Chiefs of staff (DESIGN.md "Chief of staff")
+  // =========================================================================
+
+  listCos(): Cos[] {
+    return this.store.cos.list();
+  }
+
+  /**
+   * The chief of staff of `scope`, made the first time it is asked for (opening its view, or an event
+   * arriving) and the same one every time after. Its ticket lives in the hidden internal project and
+   * runs in the harness home folder, with no worktree. Never called from a read: GET /cos lists what
+   * exists. A group scope needs the group to exist.
+   */
+  openCos(scope: CosScope): Cos {
+    if (scope !== "all" && !this.store.groups.get(scope.group)) throw notFound(`Unknown group: ${scope.group}`);
+    const existing = this.store.cos.getByScope(scope);
+    if (existing) return existing;
+    const settings = this.settings();
+    const group = scope === "all" ? null : this.store.groups.get(scope.group)!;
+    const title = group ? `Chief of staff: ${group.name}` : "Chief of staff";
+    const driver = resolvePhaseChoice("work", { settings: settings.phaseModels }).driver;
+    const cos = this.store.transaction(() => {
+      const project = this.store.projects.internal(this.paths.home);
+      const key = this.store.projects.takeNextKey(project.id, (k) => this.store.tickets.keyExists(k));
+      const session = this.store.sessions.create({ key, kind: "ticket", ticketId: null, driver, cwd: this.paths.home, title });
+      const t = this.store.tickets.create({
+        key,
+        projectId: project.id,
+        kind: "cos",
+        title,
+        spec: "",
+        status: "in_progress",
+        sessionId: session.id,
+        driver,
+        parentId: null,
+        dependsOn: [],
+        autoStart: false,
+        externalRef: null,
+        workdir: this.paths.home,
+        phaseModels: {},
+        useWorktree: false,
+        baseBranch: null,
+        requestedBranch: null,
+        skipAgentReview: true,
+        skipHumanReview: true,
+        draft: false,
+        promptAttachments: [],
+      });
+      this.store.sessions.update(session.id, { ticketId: t.id });
+      return this.store.cos.insert(t.id, scope);
+    });
+    const ticket = this.store.tickets.get(cos.ticketId);
+    if (ticket) {
+      this.bus.emit({ kind: "ticket.upserted", ticket });
+      this.touchSession(ticket.sessionId);
+    }
+    return cos;
+  }
+
+  /** A chief of staff's own on/off switch. Off, it takes no new runs (sendMessage refuses); a run under way is left to end. */
+  setCosEnabled(ticketId: string, enabled: unknown): Cos {
+    if (typeof enabled !== "boolean") throw badRequest("enabled must be true or false");
+    const cos = this.store.cos.setEnabled(ticketId, enabled);
+    if (!cos) throw notFound(`Unknown chief of staff: ${ticketId}`);
+    this.touchTicket(cos.ticketId);
+    return cos;
   }
 
   // =========================================================================
@@ -1148,15 +1235,34 @@ export class Orchestrator {
     if (t.draft) throw conflict(`${t.key} is a draft: it can't be ${what} until it's submitted (POST /tickets/${t.key}/submit)`);
   }
 
+  /** The whole board, for the HTTP API and the service's own work: no scope narrows it. */
+  private get everything(): ScopedStore {
+    return new ScopedStore(this.store, "all");
+  }
+
+  /**
+   * What the run's tools may see and act on. A chief of staff's scope is read from its `cos` row on
+   * every call, never kept from when the run started, so moving a project between groups takes effect
+   * at once; every other run sees the whole board. Throws when a chief of staff has no row (its
+   * ticket outlived its group): it sees nothing rather than everything.
+   */
+  private scopeOf(ctx: ToolContext): ScopedStore {
+    if (ctx.runKind !== "cos") return this.everything;
+    const row = ctx.ticket ? this.store.cos.get(ctx.ticket.id) : null;
+    const scope = row ? parseCosScopeKey(row.scope) : null;
+    if (!scope) throw new Error("This chief of staff no longer covers anything: its group is gone.");
+    return new ScopedStore(this.store, scope);
+  }
+
   /** The ticket an agent (tool) names, or null. Drafts are left out unless `drafts: true` (agents can read them, never act on them). */
-  private agentLookup(key: string, opts: { drafts?: boolean } = {}): { ticket: Ticket; alias: string | null } | null {
-    const found = this.store.tickets.lookup(key);
+  private agentLookup(sc: ScopedStore, key: string, opts: { drafts?: boolean } = {}): { ticket: Ticket; alias: string | null } | null {
+    const found = sc.tickets.lookup(key);
     return found && (opts.drafts || !found.ticket.draft) ? found : null;
   }
 
   /** The ticket an agent's write tool acts on, or null when none has the key; a draft is refused by name. */
-  private agentTarget(key: string): Ticket | null {
-    const t = this.agentLookup(key, { drafts: true })?.ticket ?? null;
+  private agentTarget(sc: ScopedStore, key: string): Ticket | null {
+    const t = this.agentLookup(sc, key, { drafts: true })?.ticket ?? null;
     if (t?.draft) throw new Error(`${t.key} is a draft: agents can't act on it until the human submits it.`);
     return t;
   }
@@ -1166,12 +1272,12 @@ export class Orchestrator {
    * first, without `ticket` itself. `drafts: false` leaves drafts out (what agents see). A remote
    * ID never resolves to a ticket (lookup is local keys only); this is how it points to them.
    */
-  private relatedTickets(requested: string, ticket: Ticket | null, opts: { drafts?: boolean } = {}): Ticket[] {
+  private relatedTickets(sc: ScopedStore, requested: string, ticket: Ticket | null, opts: { drafts?: boolean } = {}): Ticket[] {
     const remoteIds = new Set([requested.trim().toUpperCase(), ticket?.externalRef?.key?.trim().toUpperCase() ?? ""].filter(Boolean));
     const seen = new Set(ticket ? [ticket.id] : []);
     const out: Ticket[] = [];
     for (const k of remoteIds) {
-      for (const t of this.store.tickets.byExternalKey(k, opts)) {
+      for (const t of sc.tickets.byExternalKey(k, opts)) {
         if (seen.has(t.id)) continue;
         seen.add(t.id);
         out.push(t);
@@ -1195,7 +1301,7 @@ export class Orchestrator {
     const found = this.store.tickets.lookup(key);
     if (!found) {
       const requested = String(key ?? "").trim().toUpperCase();
-      const related = requested ? this.relatedTickets(requested, null) : [];
+      const related = requested ? this.relatedTickets(this.everything, requested, null) : [];
       if (related.length) {
         throw new HarnessError(404, this.remoteOnlyMessage(requested, related), {
           requested,
@@ -1209,7 +1315,7 @@ export class Orchestrator {
     if (ticket.status === "review") this.track(this.refreshHasChanges(ticket));
     return {
       ...(found.alias ? { resolvedFrom: found.alias } : {}),
-      relatedTickets: this.relatedTickets(found.alias ?? ticket.key, ticket).map((t) => this.relatedView(t)),
+      relatedTickets: this.relatedTickets(this.everything, found.alias ?? ticket.key, ticket).map((t) => this.relatedView(t)),
       ticket,
       session: this.store.sessions.get(ticket.sessionId)!,
       activity: this.store.activity.listBySession(ticket.sessionId),
@@ -1880,6 +1986,7 @@ export class Orchestrator {
 
   async deleteTicket(key: string) {
     const ticket = this.requireTicket(key);
+    if (ticket.kind === "cos") throw conflict(`${ticket.key} is a chief of staff, not a board ticket: switch it off (PATCH /cos/${ticket.id}) instead of deleting it`);
     await this.cancelSession(ticket.sessionId, true);
     for (const child of this.store.tickets.list({ parentId: ticket.id })) {
       this.store.db.query("UPDATE tickets SET parent_id = NULL WHERE id = $id").run({ id: child.id });
@@ -2057,6 +2164,7 @@ export class Orchestrator {
     if (!text.trim() && !attachments.length) throw badRequest("text is required");
     this.notDraft(ticket, "messaged (it has no agent yet)");
     this.notCompacting(ticket, "messaged");
+    if (ticket.kind === "cos" && this.store.cos.get(ticket.id)?.enabled === false) throw conflict(`${ticket.key} is switched off: turn it on to talk to it`);
     if (ticket.pendingApproval) {
       if (attachments.length) throw conflict(`${ticket.key} is waiting on a tool approval: answer it before sending attachments`);
       return this.answerApproval(ticket.key, { decision: "deny", message: text });
@@ -2767,7 +2875,7 @@ export class Orchestrator {
     // every ticket linked to it as a remote ID. Triage picks one (ticket_key) or starts another.
     const seen = new Set<string>();
     const existingTickets = findKeys(output.text).flatMap((key) =>
-      [this.agentLookup(key)?.ticket, ...this.store.tickets.byExternalKey(key, { drafts: false })].filter((t): t is Ticket => {
+      [this.agentLookup(this.everything, key)?.ticket, ...this.store.tickets.byExternalKey(key, { drafts: false })].filter((t): t is Ticket => {
         if (!t || seen.has(t.id)) return false;
         seen.add(t.id);
         return true;
@@ -3234,15 +3342,17 @@ ${numberLines(r.body)}`;
     return { ...rest, ...(opts.notes === false ? {} : { agentNotes: agentNotes ?? null }), projectKey: this.store.projects.get(t.projectId)?.key ?? "" };
   }
 
-  private boardProject(key: string): Project {
-    const project = this.store.projects.getByKey(key.trim());
+  private boardProject(sc: ScopedStore, key: string): Project {
+    const project = sc.projects.getByKey(key.trim());
     if (!project) throw new Error(`Unknown project: ${key}. Use list_projects for the valid keys.`);
     return project;
   }
 
   async listTickets_(ctx: ToolContext, filter: BoardListFilter = {}): Promise<{ tickets: BoardTicket[]; total: number; scope: BoardScope }> {
     const own = ctx.ticket ? this.ctxTicket(ctx) : null;
-    const scope: BoardScope = filter.scope ?? (filter.projectKey ? "project" : own && isConductor(own) ? "children" : own ? "project" : "all");
+    const sc = this.scopeOf(ctx);
+    // A chief of staff isn't in a project: with no filter it lists everything it can see.
+    const scope: BoardScope = filter.scope ?? (filter.projectKey ? "project" : own?.kind === "cos" ? "all" : own && isConductor(own) ? "children" : own ? "project" : "all");
     const statuses = filter.statuses?.length ? filter.statuses : undefined;
     const bad = statuses?.find((st) => !(TICKET_STATUSES as readonly string[]).includes(st));
     if (bad) throw new Error(`Unknown status: ${bad}`);
@@ -3251,15 +3361,15 @@ ${numberLines(r.body)}`;
     let tickets: Ticket[];
     if (scope === "children") {
       if (!own) throw new Error('scope "children" needs a ticket run; use "project" with project_key, or "all"');
-      const projectId = filter.projectKey ? this.boardProject(filter.projectKey).id : undefined;
-      tickets = this.store.tickets.list({ parentId: own.id, ...drafts, ...(projectId ? { projectId } : {}), ...(statuses ? { statuses } : {}) });
+      const projectId = filter.projectKey ? this.boardProject(sc, filter.projectKey).id : undefined;
+      tickets = sc.tickets.list({ parentId: own.id, ...drafts, ...(projectId ? { projectId } : {}), ...(statuses ? { statuses } : {}) });
     } else if (scope === "project") {
-      const projectId = filter.projectKey ? this.boardProject(filter.projectKey).id : own?.projectId;
+      const projectId = filter.projectKey ? this.boardProject(sc, filter.projectKey).id : own?.projectId;
       if (!projectId) throw new Error('project_key is required for scope "project" in a run without a ticket');
-      tickets = this.store.tickets.list({ projectId, ...drafts, ...(statuses ? { statuses } : {}) });
+      tickets = sc.tickets.list({ projectId, ...drafts, ...(statuses ? { statuses } : {}) });
     } else if (scope === "all") {
       if (filter.projectKey) throw new Error('scope "all" spans every project; drop project_key or use scope "project"');
-      tickets = this.store.tickets.list({ ...drafts, ...(statuses ? { statuses } : {}) });
+      tickets = sc.tickets.list({ ...drafts, ...(statuses ? { statuses } : {}) });
     } else {
       throw new Error(`Unknown scope: ${scope}`);
     }
@@ -3278,13 +3388,15 @@ ${numberLines(r.body)}`;
     return { ...this.relatedView(t), projectKey: this.store.projects.get(t.projectId)?.key ?? "" };
   }
 
-  async getTicket_(_ctx: ToolContext, key: string, opts: { transcript?: number; agents?: boolean } = {}): Promise<BoardTicketDetail> {
-    const found = this.agentLookup(key, { drafts: true });
+  async getTicket_(ctx: ToolContext, key: string, opts: { transcript?: number; agents?: boolean } = {}): Promise<BoardTicketDetail> {
+    const sc = this.scopeOf(ctx);
+    const found = this.agentLookup(sc, key, { drafts: true });
     if (!found) {
       const requested = String(key ?? "").trim().toUpperCase();
-      const related = requested ? this.relatedTickets(requested, null) : [];
+      const related = requested ? this.relatedTickets(sc, requested, null) : [];
       if (!related.length) {
-        const item = requested ? this.store.sessions.list("triage").find((s) => s.key.toUpperCase() === requested) : undefined;
+        // The Inbox isn't any project's: a group scope can't tell an item's key from a missing ticket's.
+        const item = requested && sc.scope === "all" ? this.store.sessions.list("triage").find((s) => s.key.toUpperCase() === requested) : undefined;
         if (item) {
           const routed = item.outcome ? ` (${item.outcome})` : "";
           throw new Error(`${item.key} is an Inbox item${routed}, not a ticket. Read it with list_inbox { key: "${item.key}", include_output: true }.`);
@@ -3300,14 +3412,14 @@ ${numberLines(r.body)}`;
     const t = found.ticket;
     const detail: BoardTicketDetail = {
       ticket: this.boardTicket(t),
-      relatedTickets: this.relatedTickets(found.alias ?? t.key, t).map((r) => this.boardRelated(r)),
+      relatedTickets: this.relatedTickets(sc, found.alias ?? t.key, t).map((r) => this.boardRelated(r)),
       resolvedFrom: found.alias,
-      parent: t.parentId ? (this.store.tickets.get(t.parentId)?.key ?? null) : null,
-      children: this.store.tickets.list({ parentId: t.id }).map((c) => c.key),
+      parent: t.parentId ? (sc.tickets.get(t.parentId)?.key ?? null) : null,
+      children: sc.tickets.list({ parentId: t.id }).map((c) => c.key),
       base: await this.refreshBaseBranch(t),
       specRevision: t.specRevision ?? 1,
       specBaselineRevision: t.specBaselineRevision ?? null,
-      activity: this.store.activity.listBySession(t.sessionId).map((e) => ({ kind: e.kind, author: e.author, body: e.body, meta: e.meta, createdAt: e.createdAt })),
+      activity: sc.activity(t).map((e) => ({ kind: e.kind, author: e.author, body: e.body, meta: e.meta, createdAt: e.createdAt })),
       attachments: this.store.attachments.listByTicket(t.id).map((a) => ({ id: a.id, name: a.name, kind: a.kind, path: a.path })),
       // Each with the human's numbered notes on it (Attachment.annotation), one line per note.
       promptAttachments: (t.promptAttachments ?? []).map((a) => ({ id: a.id, name: a.name, path: a.path, missing: !fileOf(a), ...(a.annotation ? { notes: compactNotes(a.annotation) } : {}) })),
@@ -3328,8 +3440,8 @@ ${numberLines(r.body)}`;
     }));
   }
 
-  async getTicketAgent_(_ctx: ToolContext, key: string, id: string, opts: { transcript?: number } = {}): Promise<BoardAgentDetail> {
-    const t = this.agentTarget(key);
+  async getTicketAgent_(ctx: ToolContext, key: string, id: string, opts: { transcript?: number } = {}): Promise<BoardAgentDetail> {
+    const t = this.agentTarget(this.scopeOf(ctx), key);
     if (!t) throw new Error(`Unknown ticket: ${key}`);
     const s = this.store.subagents.get(t.sessionId, id);
     if (!s) throw new Error(`${t.key} has no sub-agent or task ${id}. get_ticket { key: "${t.key}", include_agents: true } lists them.`);
@@ -3346,11 +3458,14 @@ ${numberLines(r.body)}`;
     return out;
   }
 
-  async searchTickets_(_ctx: ToolContext, input: Parameters<HarnessOps["searchTickets"]>[1]) {
-    const projectId = input.projectKey ? this.boardProject(input.projectKey).id : undefined;
+  async searchTickets_(ctx: ToolContext, input: Parameters<HarnessOps["searchTickets"]>[1]) {
+    const sc = this.scopeOf(ctx);
+    const projectId = input.projectKey ? this.boardProject(sc, input.projectKey).id : undefined;
     let page: TicketPage;
     try {
-      page = this.searchTickets({ q: input.query, projectId, limit: input.limit ?? BOARD_SEARCH_LIMIT, cursor: input.cursor ?? null, ...(input.includeDrafts === false ? { drafts: false } : {}) });
+      if (!input.query?.trim()) throw badRequest("q is required");
+      const limit = clampLimit(input.limit ?? BOARD_SEARCH_LIMIT, DEFAULT_SEARCH_LIMIT);
+      page = this.withCursor(() => sc.tickets.search({ q: input.query, projectId, limit, cursor: input.cursor ?? null, ...(input.includeDrafts === false ? { drafts: false } : {}) }));
     } catch (err) {
       throw new Error(errMsg(err));
     }
@@ -3364,11 +3479,13 @@ ${numberLines(r.body)}`;
     };
   }
 
-  async listProjects_(_ctx: ToolContext): Promise<ProjectView[]> {
-    return this.store.projects.list().map((p) => this.projectView(p));
+  async listProjects_(ctx: ToolContext): Promise<ProjectView[]> {
+    return this.scopeOf(ctx).projects.list().map((p) => this.projectView(p));
   }
 
-  async listInbox_(_ctx: ToolContext, filter: Parameters<HarnessOps["listInbox"]>[1]): Promise<{ items: InboxItem[]; total: number }> {
+  async listInbox_(ctx: ToolContext, filter: Parameters<HarnessOps["listInbox"]>[1]): Promise<{ items: InboxItem[]; total: number }> {
+    // Inbox items belong to no project: a group scope has none.
+    if (this.scopeOf(ctx).scope !== "all") return { items: [], total: 0 };
     const limit = Math.min(Math.max(1, filter.limit ?? BOARD_INBOX_LIMIT), 100);
     const source = filter.source?.trim().toLowerCase();
     const key = filter.key?.trim().toUpperCase();
@@ -3398,14 +3515,14 @@ ${numberLines(r.body)}`;
 
   /** The caller's ticket, for a run kind that may change the board. */
   private boardActor(ctx: ToolContext, tool: string): Ticket {
-    if (!BOARD_WRITE_RUNS.includes(ctx.runKind)) throw new Error(`${tool} is only available in work, conductor and chat runs`);
+    if (!BOARD_WRITE_RUNS.includes(ctx.runKind)) throw new Error(`${tool} is only available in work, conductor, chat and chief of staff runs`);
     return this.ctxTicket(ctx);
   }
 
   /** A plan run's update_ticket target: its own ticket, and no other. */
   private ownPlanTarget(ctx: ToolContext, key: string): Ticket {
     const own = this.ctxTicket(ctx);
-    const target = this.agentTarget(String(key ?? "").trim());
+    const target = this.agentTarget(this.scopeOf(ctx), String(key ?? "").trim());
     if (target?.id !== own.id) throw new Error(`In a planning run, update_ticket only edits your own ticket (${own.key}).`);
     return own;
   }
@@ -3413,12 +3530,42 @@ ${numberLines(r.body)}`;
   /** Another ticket the caller may act on: never its own (block / submit_for_review cover that). */
   private boardTarget(ctx: ToolContext, key: string, tool: string): { actor: Ticket; target: Ticket } {
     const actor = this.boardActor(ctx, tool);
-    const target = this.agentTarget(String(key ?? "").trim());
+    const target = this.agentTarget(this.scopeOf(ctx), String(key ?? "").trim());
     if (!target) throw new Error(`Unknown ticket: ${key}`);
+    this.cosMayAct(actor, target);
     if (target.id === actor.id) {
       throw new Error(`${target.key} is your own ticket. ${tool} acts on other tickets; use ${actor.kind === "conductor" ? "submit_for_review" : "block or submit_for_review"} to change your own.`);
     }
     return { actor, target };
+  }
+
+  /** depends_on keys a tool names: each must be a ticket the run's scope can see. */
+  private scopedDependencies(sc: ScopedStore, keys: string[] | undefined) {
+    for (const k of keys ?? []) if (!sc.tickets.getByKey(String(k))) throw new Error(`Unknown dependency: ${k}`);
+  }
+
+  /**
+   * A chief of staff acting on a blocked ticket is answering it. That is the project's call: with
+   * "CoS can unblock" off for the ticket's project (cosCanUnblock, else the app's) the write tools
+   * refuse, and reading and reporting on it stay available. Every board write passes through
+   * boardTarget, so this is the one place a chief of staff's actions on a blocked ticket are gated.
+   */
+  private cosMayAct(actor: Ticket, target: Ticket) {
+    if (actor.kind !== "cos" || target.status !== "blocked") return;
+    const project = this.store.projects.get(target.projectId);
+    if (resolveCosSetting(project, this.settings(), "cosCanUnblock")) return;
+    throw new Error(
+      `${target.key} is blocked and waiting on a human: "CoS can unblock" is off for ${project?.key ?? "its project"} (Settings, or the project's settings), so a chief of staff doesn't answer its tickets. You can still read it and report what it asks. ${
+        target.blockedReason ? `It asks: ${target.blockedReason}` : ""
+      }`.trim(),
+    );
+  }
+
+  /** Activity for what a chief of staff did to a ticket, so the ticket's own history says who. */
+  private cosNote(actor: Ticket, target: Ticket, what: string) {
+    if (actor.kind !== "cos") return;
+    const t = this.store.tickets.get(target.id);
+    if (t) this.addActivityLine(t, "note", "agent", `Chief of staff (${actor.key}) ${what}`);
   }
 
   private noPendingApproval(t: Ticket) {
@@ -3458,8 +3605,12 @@ ${numberLines(r.body)}`;
 
   async createTicket_(ctx: ToolContext, input: CreateTicketInput): Promise<Ticket> {
     const own = this.boardActor(ctx, "create_ticket");
-    const project = input.projectKey ? this.boardProject(input.projectKey) : this.store.projects.get(own.projectId);
+    const sc = this.scopeOf(ctx);
+    // A chief of staff belongs to no project, so it always names the one the ticket goes in.
+    if (own.kind === "cos" && !input.projectKey) throw new Error("project_key is required: a chief of staff has no project of its own. list_projects has the keys.");
+    const project = input.projectKey ? this.boardProject(sc, input.projectKey) : this.store.projects.get(own.projectId);
     if (!project) throw new Error(`Unknown project for ${own.key}`);
+    this.scopedDependencies(sc, input.dependsOn);
     const kind = input.conductor ? "conductor" : "task";
     // The new ticket runs no looser than its creator: it takes the caller's mode when the project's
     // would be looser, and otherwise keeps inheriting.
@@ -3475,7 +3626,7 @@ ${numberLines(r.body)}`;
     if (input.remoteUrl && !input.remoteId) throw new Error("remote_url needs remote_id: the external item's key, e.g. FOO-123");
     const externalRef = input.remoteId ? this.asToolSync(() => this.manualExternalRef(null, { key: input.remoteId!, url: input.remoteUrl })) : null;
     const promptAttachments = input.attachments?.length ? input.attachments.map((p) => ({ path: resolve(ctx.cwd, String(p)) })) : undefined;
-    if (input.child ?? own.kind === "conductor") {
+    if (own.kind !== "cos" && (input.child ?? own.kind === "conductor")) {
       // Children run on the parent's driver/model unless it picks another. Any ticket can take
       // children; having one makes it act as a conductor (isConductor).
       return this.asTool(() =>
@@ -3509,7 +3660,7 @@ ${numberLines(r.body)}`;
         }, "agent"),
       );
     }
-    return this.asTool(() =>
+    const created = await this.asTool(() =>
       this.createTicket({
         projectId: project.id,
         spec: input.spec || input.title,
@@ -3531,6 +3682,8 @@ ${numberLines(r.body)}`;
         promptAttachments,
       }, "agent"),
     );
+    this.cosNote(own, created, "created it");
+    return created;
   }
 
   /**
@@ -3543,7 +3696,7 @@ ${numberLines(r.body)}`;
     if ((ctx.runKind !== "work" && ctx.runKind !== "chat") || fields.length !== 1 || fields[0] !== "pullRequestUrls") return null;
     const own = this.ctxTicket(ctx);
     // Resolved like ownPlanTarget does, so an earlier key (alias) of this ticket counts too. A remote ID never identifies a ticket.
-    const target = this.agentTarget(String(key ?? "").trim());
+    const target = this.agentTarget(this.scopeOf(ctx), String(key ?? "").trim());
     return target?.id === own.id ? own : null;
   }
 
@@ -3577,7 +3730,10 @@ ${numberLines(r.body)}`;
     if (input.driver !== undefined) body.driver = input.driver;
     if (input.model !== undefined) body.model = input.model;
     if (input.phaseModels !== undefined) body.phaseModels = input.phaseModels;
-    if (input.dependsOn !== undefined) body.dependsOn = input.dependsOn;
+    if (input.dependsOn !== undefined) {
+      this.scopedDependencies(this.scopeOf(ctx), input.dependsOn);
+      body.dependsOn = input.dependsOn;
+    }
     if (input.pullRequestUrls !== undefined) body.pullRequestUrls = input.pullRequestUrls;
     if (input.baseBranch !== undefined) body.baseBranch = input.baseBranch;
     if (input.branch !== undefined) body.branch = input.branch;
@@ -3605,7 +3761,9 @@ ${numberLines(r.body)}`;
     }
     if (!Object.keys(body).length) throw new Error("Nothing to update: pass at least one field");
     try {
-      return await this.updateTicket(target.key, body, { author: "agent", runId: ctx.runId, runKind: ctx.runKind });
+      const updated = await this.updateTicket(target.key, body, { author: "agent", runId: ctx.runId, runKind: ctx.runKind });
+      if (!own) this.cosNote(actor, updated, `edited ${Object.keys(body).join(", ")}`);
+      return updated;
     } catch (err) {
       // The spec moved on between the check above and the write.
       if (err instanceof HarnessError && err.status === 409 && body.baseRevision !== undefined && (err.data as SpecConflict | undefined)?.currentRevision !== undefined) {
@@ -3664,20 +3822,24 @@ ${numberLines(r.body)}`;
       const column = this.store.tickets.list({ projectId: target.projectId, statuses: [status], drafts: false }).filter((t) => t.id !== target.id);
       pos = positionForDrop(column, position);
     }
-    return this.asTool(() =>
+    const moved = await this.asTool(() =>
       this.updateTicket(
         target.key,
         { ...(status !== target.status ? { status } : {}), ...(pos !== undefined ? { position: pos } : {}) },
         { author: "agent", runId: ctx.runId, runKind: ctx.runKind },
       ),
     );
+    if (status !== target.status) this.cosNote(actor, moved, `moved it to ${status}`);
+    return moved;
   }
 
   async startTicket_(ctx: ToolContext, key: string): Promise<Ticket> {
     const { actor, target } = this.boardTarget(ctx, key, "start_ticket");
     this.noPendingApproval(target);
     this.notLooserThanCaller(actor, target);
-    return this.asTool(() => this.startTicket(target.key, "agent"));
+    const started = await this.asTool(() => this.startTicket(target.key, "agent"));
+    this.cosNote(actor, started, "started it");
+    return started;
   }
 
   async messageTicket_(ctx: ToolContext, key: string, text: string): Promise<void> {
@@ -3685,19 +3847,24 @@ ${numberLines(r.body)}`;
     this.noPendingApproval(target);
     this.notLooserThanCaller(actor, target);
     await this.asTool(() => this.sendMessage(target.key, text));
+    this.cosNote(actor, target, "sent it a message");
   }
 
   async cancelTicket_(ctx: ToolContext, key: string): Promise<Ticket> {
-    const { target } = this.boardTarget(ctx, key, "cancel_ticket");
+    const { actor, target } = this.boardTarget(ctx, key, "cancel_ticket");
     // Nothing runs while an approval waits; cancelling would only strand it.
     this.noPendingApproval(target);
-    return this.asTool(() => this.cancelTicket(target.key));
+    const cancelled = await this.asTool(() => this.cancelTicket(target.key));
+    this.cosNote(actor, cancelled, "cancelled its run");
+    return cancelled;
   }
 
   async reopenTicket_(ctx: ToolContext, key: string, notes: string): Promise<Ticket> {
     const { actor, target } = this.boardTarget(ctx, key, "reopen_ticket");
     this.notLooserThanCaller(actor, target);
-    return this.asTool(() => this.reopenTicket(target.key, { notes }));
+    const reopened = await this.asTool(() => this.reopenTicket(target.key, { notes }));
+    this.cosNote(actor, reopened, "re-opened it");
+    return reopened;
   }
 
   // --- conductor ---
@@ -3707,15 +3874,15 @@ ${numberLines(r.body)}`;
     return this.boardActor(ctx, tool);
   }
 
-  private childOf(conductor: Ticket, key: string): Ticket {
-    const t = this.agentTarget(key);
+  private childOf(sc: ScopedStore, conductor: Ticket, key: string): Ticket {
+    const t = this.agentTarget(sc, key);
     if (!t) throw new Error(`Unknown ticket: ${key}`);
     if (t.parentId !== conductor.id) throw new Error(`${t.key} is not a child of ${conductor.key}`);
     return t;
   }
 
   async reviewTicket_(ctx: ToolContext, key: string, decision: "approve" | "request_changes", notes: string, action?: CompletionAction): Promise<Ticket> {
-    const child = this.childOf(this.conductorOf(ctx, "review_ticket"), key);
+    const child = this.childOf(this.scopeOf(ctx), this.conductorOf(ctx, "review_ticket"), key);
     try {
       return this.applyReview(child, decision, notes ?? "", "conductor", { action });
     } catch (err) {
@@ -3724,7 +3891,7 @@ ${numberLines(r.body)}`;
   }
 
   async completeTicket_(ctx: ToolContext, key: string, instructions?: string, action?: CompletionAction): Promise<Ticket> {
-    const child = this.childOf(this.conductorOf(ctx, "complete_ticket"), key);
+    const child = this.childOf(this.scopeOf(ctx), this.conductorOf(ctx, "complete_ticket"), key);
     if (child.status !== "review" || !reviewPassed(child.agentReview) || child.humanReview !== "approved") {
       throw new Error(`${child.key} is not ready: both reviews must be approved first`);
     }
@@ -3797,9 +3964,9 @@ ${numberLines(r.body)}`;
     const ticketKey = input.ticketKey?.trim() || null;
     if (ticketKey) {
       // A draft can't be routed to.
-      const existing = this.agentTarget(ticketKey);
+      const existing = this.agentTarget(this.everything, ticketKey);
       if (!existing) {
-        const related = this.relatedTickets(ticketKey, null, { drafts: false });
+        const related = this.relatedTickets(this.everything, ticketKey, null, { drafts: false });
         throw new Error(
           related.length
             ? `${this.remoteOnlyMessage(ticketKey.toUpperCase(), related)} Pass one of those as ticket_key, or leave ticket_key out to create a new ticket.`
@@ -3884,6 +4051,8 @@ ${numberLines(r.body)}`;
       group: p.group ?? null,
       groupId: p.groupId ?? null,
       baseBranch: p.baseBranch ?? null,
+      cosEnabled: p.cosEnabled ?? null,
+      cosCanUnblock: p.cosCanUnblock ?? null,
       completionAction: p.completionAction ?? "merge",
       completionActions: p.completionActions ?? offeredCompletionActions(p),
       pullRequestHost: p.pullRequestHost ?? null,
@@ -3913,8 +4082,9 @@ ${numberLines(r.body)}`;
     }
   }
 
-  async listWatchers_(_ctx: ToolContext): Promise<Watcher[]> {
-    return this.listWatchers();
+  async listWatchers_(ctx: ToolContext): Promise<Watcher[]> {
+    const visible = new Set(this.scopeOf(ctx).watchers.list().map((w) => w.id));
+    return this.listWatchers().filter((w) => visible.has(w.id));
   }
 
   async getSettings_(_ctx: ToolContext): Promise<PublicSettings> {
@@ -4003,7 +4173,7 @@ ${numberLines(r.body)}`;
 
   async deleteTicket_(ctx: ToolContext, key: string, dryRun = false): Promise<Ticket> {
     const own = this.configWriter(ctx);
-    const t = this.agentTarget(String(key ?? "").trim().toUpperCase());
+    const t = this.agentTarget(this.scopeOf(ctx), String(key ?? "").trim().toUpperCase());
     if (!t) throw new Error(`Unknown ticket: ${key}`);
     if (this.lineage(own).some((a) => a.id === t.id)) {
       throw new Error(t.id === own.id ? `You can't delete your own ticket (${t.key}).` : `You can't delete ${t.key}: it is an ancestor of your ticket ${own.key}.`);
@@ -4402,7 +4572,7 @@ ${numberLines(r.body)}`;
   // =========================================================================
 
   private workKind(t: Ticket): RunKind {
-    return t.kind === "conductor" ? "conductor" : "work";
+    return t.kind === "conductor" ? "conductor" : t.kind === "cos" ? "cos" : "work";
   }
 
   private isDone(key: string): boolean {

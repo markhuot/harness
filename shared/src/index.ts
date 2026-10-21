@@ -17,3 +17,4 @@ export * from "./completion";
 export * from "./projectGroups";
 export * from "./notifications";
 export * from "./viewOptions";
+export * from "./cos";

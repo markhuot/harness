@@ -15,7 +15,7 @@ import type { PresenceRegistry } from "../notifications/presence";
 import type { TerminalRegistry } from "../terminals/registry";
 import { isLoopback, type NetworkManager } from "./network";
 import { validateListen, validateSettingsPatch } from "../orchestrator/settings";
-import { TICKET_STATUSES, type ServiceStatus, type TicketStatus } from "@harness/shared";
+import { TICKET_STATUSES, parseCosScopeKey, type CosScope, type ServiceStatus, type TicketStatus } from "@harness/shared";
 
 /** The bearer token, rotatable at runtime (POST /token/rotate). */
 export interface TokenStore {
@@ -201,6 +201,13 @@ function statusList(raw: string | null): TicketStatus[] | undefined {
   return [...new Set(list)] as TicketStatus[];
 }
 
+/** POST /cos { scope: "all" | "group:<id>" } */
+function cosScopeOf(body: { scope?: unknown } | null): CosScope {
+  const scope = parseCosScopeKey(body?.scope);
+  if (!scope) throw new HarnessError(400, 'scope must be "all" or "group:<group id>"');
+  return scope;
+}
+
 /** The /files search's `?ignored=1&kind=file`: the file browser's options (the autocomplete sends neither). */
 function fileSearch(url: URL): { ignored: boolean; kind?: "file" | "dir" } {
   const kind = url.searchParams.get("kind") || undefined;
@@ -241,6 +248,10 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
   // Project groups (DESIGN.md "Project groups")
   add("GET", "/groups", () => o.listGroups());
   add("PATCH", "/groups/:id", async ({ params, body }) => o.renameGroup(params.id!, await body()));
+  // Chiefs of staff (DESIGN.md "Chief of staff"). POST opens (and on first use creates) a scope's.
+  add("GET", "/cos", () => o.listCos());
+  add("POST", "/cos", async ({ body }) => o.openCos(cosScopeOf(await body())));
+  add("PATCH", "/cos/:id", async ({ params, body }) => o.setCosEnabled(params.id!, ((await body()) ?? {}).enabled));
   add("DELETE", "/projects/:id", async ({ params }) => (await o.deleteProject(params.id!), ok));
   add("GET", "/projects/:id/files", ({ params, url }) => o.projectFiles(params.id!, url.searchParams.get("q") ?? "", url.searchParams.get("limit"), fileSearch(url)));
   add("GET", "/projects/:id/commands", ({ params, url }) =>

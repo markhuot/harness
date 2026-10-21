@@ -1,5 +1,6 @@
 import type { Database } from "bun:sqlite";
 import { GroupRepo, ProjectRepo } from "./projects";
+import { CosRepo } from "./cos";
 import { TicketRepo } from "./tickets";
 import { SessionRepo } from "./sessions";
 import { RunRepo } from "./runs";
@@ -18,6 +19,7 @@ import { resolveSettings } from "../orchestrator/settings";
 export class Store {
   readonly projects: ProjectRepo;
   readonly groups: GroupRepo;
+  readonly cos: CosRepo;
   readonly tickets: TicketRepo;
   readonly sessions: SessionRepo;
   readonly runs: RunRepo;
@@ -36,6 +38,7 @@ export class Store {
   constructor(readonly db: Database, now: Clock = systemClock) {
     this.projects = new ProjectRepo(db, now);
     this.groups = new GroupRepo(db, now);
+    this.cos = new CosRepo(db, now);
     this.settings = new SettingsRepo(db);
     // A ticket's legacy driver follows the settings' choices it inherits.
     this.tickets = new TicketRepo(db, () => resolveSettings(this.settings.all()).phaseModels ?? {}, now);
@@ -58,6 +61,7 @@ export class Store {
   }
 }
 
-export { ProjectRepo, GroupRepo, TicketRepo, SessionRepo, RunRepo, TranscriptRepo, ActivityRepo, AttachmentRepo, SpecRepo, SubagentRepo, WatcherRepo, SeenRepo, SettingsRepo, CounterRepo, BrowserTabRepo, DeviceRepo };
+export { ProjectRepo, GroupRepo, CosRepo, TicketRepo, SessionRepo, RunRepo, TranscriptRepo, ActivityRepo, AttachmentRepo, SpecRepo, SubagentRepo, WatcherRepo, SeenRepo, SettingsRepo, CounterRepo, BrowserTabRepo, DeviceRepo };
 export { normalizeProjectKey } from "./projects";
 export { SpecConflictError } from "./spec";
+export { ScopedStore, type Scope } from "./scope";

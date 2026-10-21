@@ -25,6 +25,8 @@ interface ProjectRow {
   group_label?: string | null;
   base_branch?: string | null;
   completion_action?: string | null;
+  cos_enabled?: number | null;
+  cos_can_unblock?: number | null;
   default_models: string;
   phase_models?: string | null;
   created_at: number;
@@ -55,6 +57,12 @@ export function clearPullRequestTargets() {
 /** A project row with its group's current name (group_label), so a rename shows at once. */
 const PROJECT_SELECT = "SELECT p.*, g.name AS group_label FROM projects p LEFT JOIN groups g ON g.id = p.group_id";
 
+/** A nullable boolean column's next value: the patch's (null clears it), else what it was. */
+const nullableFlag = (patch: boolean | null | undefined, existing: boolean | null | undefined): number | null => {
+  const v = patch !== undefined ? patch : (existing ?? null);
+  return v === null ? null : int(v);
+};
+
 const toProject = (r: ProjectRow): Project => {
   const isGit = insideGitCheckout(r.path);
   const pullRequestHost = isGit ? (cachedPullRequestTarget(r.path)?.host ?? null) : null;
@@ -78,6 +86,8 @@ const toProject = (r: ProjectRow): Project => {
     group: r.group_label ?? null,
     groupId: r.group_id ?? null,
     baseBranch: r.base_branch ?? null,
+    cosEnabled: r.cos_enabled === null || r.cos_enabled === undefined ? null : bool(r.cos_enabled),
+    cosCanUnblock: r.cos_can_unblock === null || r.cos_can_unblock === undefined ? null : bool(r.cos_can_unblock),
     completionAction: isCompletionAction(r.completion_action) ? r.completion_action : "merge",
     completionActions: offeredCompletionActions({ isGit, pullRequestHost }),
     pullRequestHost,
@@ -116,6 +126,10 @@ export interface NewProject {
   groupId?: string | null;
   baseBranch?: string | null;
   completionAction?: CompletionAction;
+  /** null → inherit settings.cosEnabled */
+  cosEnabled?: boolean | null;
+  /** null → inherit settings.cosCanUnblock */
+  cosCanUnblock?: boolean | null;
   /** The project's own per-phase choices (the legacy default_driver / default_models columns follow its Work choice) */
   phaseModels?: PhaseModels;
 }
@@ -123,8 +137,33 @@ export interface NewProject {
 export class ProjectRepo {
   constructor(private db: Database, private now: Clock = systemClock) {}
 
+  /** Every project the person sees: the hidden one that hosts the chiefs of staff (internal) is left out. */
   list(): Project[] {
-    return (this.db.query(`${PROJECT_SELECT} ORDER BY p.created_at, p.key`).all() as ProjectRow[]).map(toProject);
+    return (this.db.query(`${PROJECT_SELECT} WHERE p.internal = 0 ORDER BY p.created_at, p.key`).all() as ProjectRow[]).map(toProject);
+  }
+
+  /**
+   * The hidden project that hosts the chiefs of staff's tickets (tickets.project_id is NOT NULL, and
+   * a chief of staff belongs to no project). Made on first use; never listed, found by key or by path.
+   */
+  internal(path: string): Project {
+    const hit = this.db.query(`${PROJECT_SELECT} WHERE p.internal = 1 LIMIT 1`).get() as ProjectRow | null;
+    if (hit) return toProject(hit);
+    const id = newId();
+    const t = this.now();
+    const key = this.uniqueKey("COS");
+    this.db
+      .query(
+        `INSERT INTO projects (id, key, name, path, next_seq, use_worktrees, skip_agent_review, skip_human_review, completion_action, default_models, phase_models, internal, created_at, updated_at)
+         VALUES ($id, $key, 'Chief of staff', $path, 1, 0, 1, 1, 'custom', '{}', '{}', 1, $t, $t)`,
+      )
+      .run({ id, key, path, t });
+    return this.get(id)!;
+  }
+
+  /** Whether `id` is the hidden project that hosts the chiefs of staff. */
+  isInternal(id: string): boolean {
+    return !!this.db.query("SELECT 1 FROM projects WHERE id = $id AND internal = 1").get({ id });
   }
 
   get(id: string): Project | null {
@@ -133,12 +172,12 @@ export class ProjectRepo {
   }
 
   getByKey(key: string): Project | null {
-    const r = this.db.query(`${PROJECT_SELECT} WHERE p.key = $key`).get({ key: key.toUpperCase() }) as ProjectRow | null;
+    const r = this.db.query(`${PROJECT_SELECT} WHERE p.key = $key AND p.internal = 0`).get({ key: key.toUpperCase() }) as ProjectRow | null;
     return r ? toProject(r) : null;
   }
 
   getByPath(path: string): Project | null {
-    const r = this.db.query(`${PROJECT_SELECT} WHERE p.path = $path ORDER BY p.created_at LIMIT 1`).get({ path }) as ProjectRow | null;
+    const r = this.db.query(`${PROJECT_SELECT} WHERE p.path = $path AND p.internal = 0 ORDER BY p.created_at LIMIT 1`).get({ path }) as ProjectRow | null;
     return r ? toProject(r) : null;
   }
 
@@ -159,8 +198,8 @@ export class ProjectRepo {
       const key = this.uniqueKey(input.key ? normalizeProjectKey(input.key) : projectKeyFromPath(input.path));
       this.db
         .query(
-          `INSERT INTO projects (id, key, name, path, next_seq, default_driver, use_worktrees, skip_agent_review, skip_human_review, color, group_id, group_name, base_branch, completion_action, default_models, phase_models, created_at, updated_at)
-           VALUES ($id, $key, $name, $path, 1, $defaultDriver, $useWorktrees, $skipAgentReview, $skipHumanReview, $color, $groupId, (SELECT name FROM groups WHERE id = $groupId), $baseBranch, $completionAction, $defaultModels, $phaseModels, $t, $t)`,
+          `INSERT INTO projects (id, key, name, path, next_seq, default_driver, use_worktrees, skip_agent_review, skip_human_review, color, group_id, group_name, base_branch, completion_action, cos_enabled, cos_can_unblock, default_models, phase_models, created_at, updated_at)
+           VALUES ($id, $key, $name, $path, 1, $defaultDriver, $useWorktrees, $skipAgentReview, $skipHumanReview, $color, $groupId, (SELECT name FROM groups WHERE id = $groupId), $baseBranch, $completionAction, $cosEnabled, $cosCanUnblock, $defaultModels, $phaseModels, $t, $t)`,
         )
         .run({
           id,
@@ -175,6 +214,8 @@ export class ProjectRepo {
           groupId: input.groupId ?? null,
           baseBranch: input.baseBranch ?? null,
           completionAction: input.completionAction ?? "merge",
+          cosEnabled: input.cosEnabled === null || input.cosEnabled === undefined ? null : int(input.cosEnabled),
+          cosCanUnblock: input.cosCanUnblock === null || input.cosCanUnblock === undefined ? null : int(input.cosCanUnblock),
           defaultModels: toJson(legacyWork(input.phaseModels).models),
           phaseModels: toJson(input.phaseModels ?? {}),
           t,
@@ -192,7 +233,7 @@ export class ProjectRepo {
     this.db
       .query(
         `UPDATE projects SET name = $name, path = $path, default_driver = $defaultDriver,
-           use_worktrees = $useWorktrees, skip_agent_review = $skipAgentReview, skip_human_review = $skipHumanReview, color = $color, group_id = $groupId, group_name = (SELECT name FROM groups WHERE id = $groupId), base_branch = $baseBranch, completion_action = $completionAction, default_models = $defaultModels, phase_models = $phaseModels,
+           use_worktrees = $useWorktrees, skip_agent_review = $skipAgentReview, skip_human_review = $skipHumanReview, color = $color, group_id = $groupId, group_name = (SELECT name FROM groups WHERE id = $groupId), base_branch = $baseBranch, completion_action = $completionAction, cos_enabled = $cosEnabled, cos_can_unblock = $cosCanUnblock, default_models = $defaultModels, phase_models = $phaseModels,
            updated_at = $t WHERE id = $id`,
       )
       .run({
@@ -207,6 +248,8 @@ export class ProjectRepo {
         groupId: patch.groupId !== undefined ? patch.groupId : (existing.groupId ?? null),
         baseBranch: patch.baseBranch !== undefined ? patch.baseBranch : (existing.baseBranch ?? null),
         completionAction: patch.completionAction ?? existing.completionAction ?? "merge",
+        cosEnabled: nullableFlag(patch.cosEnabled, existing.cosEnabled),
+        cosCanUnblock: nullableFlag(patch.cosCanUnblock, existing.cosCanUnblock),
         defaultModels: toJson(legacy.models),
         phaseModels: toJson(phaseModels),
         t: this.now(),
@@ -215,9 +258,17 @@ export class ProjectRepo {
     return this.get(id);
   }
 
-  /** Drop the groups no project is in, so a name an emptied group had is free again. */
+  /**
+   * Drop the groups no project is in, so a name an emptied group had is free again, and with each
+   * the group's chief of staff: its row and its ticket (the session's rows go with the ticket).
+   */
   private pruneGroups() {
-    this.db.query("DELETE FROM groups WHERE id NOT IN (SELECT group_id FROM projects WHERE group_id IS NOT NULL)").run();
+    const gone = "SELECT id FROM groups WHERE id NOT IN (SELECT group_id FROM projects WHERE group_id IS NOT NULL)";
+    const tickets = `SELECT ticket_id FROM cos WHERE group_id IN (${gone})`;
+    const sessions = this.db.query(`SELECT session_id AS id FROM tickets WHERE id IN (${tickets})`).all() as { id: string }[];
+    this.db.query(`DELETE FROM tickets WHERE id IN (${tickets})`).run(); // the cos row cascades
+    for (const s of sessions) this.db.query("DELETE FROM sessions WHERE id = $id").run({ id: s.id });
+    this.db.query(`DELETE FROM groups WHERE id IN (${gone})`).run();
   }
 
   /**
