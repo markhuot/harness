@@ -72,6 +72,18 @@ export class TranscriptRepo {
     ).map(toEntry);
   }
 
+  /** A session's plain-text user and assistant messages (its own agent's) at or before `before`, newest first: the chief's chat. */
+  messagesBefore(sessionId: string, before: number, limit: number): TranscriptEntry[] {
+    return (
+      this.db
+        .query(
+          `SELECT * FROM transcript WHERE session_id = $sessionId AND subagent_id IS NULL AND role IN ('user', 'assistant') AND json_extract(content, '$.type') = 'text' AND created_at <= $before
+           ORDER BY created_at DESC, seq DESC LIMIT $limit`,
+        )
+        .all({ sessionId, before, limit }) as EntryRow[]
+    ).map(toEntry);
+  }
+
   /**
    * The session agent's last `limit` entries whose content type is in `types`, oldest first; with
    * `subagentId`, that sub-agent's.

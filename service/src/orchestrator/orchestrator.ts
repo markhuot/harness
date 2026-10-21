@@ -1,6 +1,7 @@
 // The orchestrator: ticket state machine, run queue/executor, scheduler, conductor
 // notifications and triage. Implements HarnessOps for tools.
 
+import { AsyncLocalStorage } from "node:async_hooks";
 import { existsSync, rmSync, statSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { createHash, randomBytes } from "node:crypto";
@@ -96,7 +97,20 @@ import {
   withLegacyChoice,
 } from "@harness/shared";
 import { ScopedStore, SpecConflictError, type GroupRepo, type Store } from "../store";
-import { cosScopeKey, parseCosScopeKey, resolveCosSetting, type Cos, type CosScope } from "@harness/shared";
+import {
+  COS_EVENT_STATUSES,
+  HAIKU_MODELS,
+  cosScopeKey,
+  parseCosScopeKey,
+  resolveCosSetting,
+  type Cos,
+  type CosBadge,
+  type CosChatPage,
+  type CosEvent,
+  type CosEventPage,
+  type CosEventStatus,
+  type CosScope,
+} from "@harness/shared";
 import { GroupNameTaken } from "../store/projects";
 
 /** A group a request names, before it is resolved: an existing id, a name to find or make, or null for none. */
@@ -179,6 +193,10 @@ import { CommandCatalog, type CommandCatalogOptions } from "../drivers/commands"
 import { PermissionGate, type GateEnv } from "../permissions/gate";
 import { AnthropicApiClassifier, ClaudeCliClassifier, type Classifier } from "../permissions/classifier";
 import { AutoModeRulesProvider } from "../permissions/rules";
+import { anthropicStructured, claudeCliStructured } from "../permissions/structured";
+import { CosEngine, wire as wireCosEvent, type Timers as CosTimers } from "../cos/engine";
+import { cosChat } from "../cos/chat";
+import { LlmTriage, type CosTriage } from "../cos/triage";
 import { claudeCliEnv, resolveClaudeBin } from "../drivers/claude-code";
 import { DEFAULT_ANTHROPIC_MODEL } from "../drivers/anthropic-api";
 import { clockTime, isUsageLimit, usageLimitResumeAt } from "./usage-limit";
@@ -234,6 +252,10 @@ export interface OrchestratorOptions {
    * (claude-cli / anthropic-api / off). null → none: auto mode asks a human instead.
    */
   classifier?: Classifier | null;
+  /** The chief-of-staff triage layer (default: built from settings.classifier and cosTriageModel); `{ unavailable }` for none */
+  cosTriage?: CosTriage | { unavailable: string };
+  /** Timers for the chief-of-staff event pipeline (default: real ones) */
+  cosTimers?: CosTimers;
   /** Classifier rules (default: `claude auto-mode config`, cached in HARNESS_HOME) */
   autoModeRules?: AutoModeRulesProvider;
   classifierTimeoutMs?: number;
@@ -567,6 +589,12 @@ export class Orchestrator {
   private autoModeRules: AutoModeRulesProvider;
   private classifierOption: Classifier | null | undefined;
   private classifierCache: { key: string; classifier: Classifier } | null = null;
+  /** The chief-of-staff event pipeline (DESIGN.md "Events") */
+  readonly cosEngine: CosEngine;
+  private cosOpts: Pick<OrchestratorOptions, "cosTriage">;
+  private cosOff: (() => void)[] = [];
+  /** Who caused the activity written in this async context ("cos:<ticket id>" inside a chief's run) */
+  private actorContext = new AsyncLocalStorage<string | null>();
   /**
    * `${project path}\0${settings base branch}` → the branch checked out in that checkout, for
    * repos without the settings' branch (refreshBaseBranch; see baseBranchFor)
@@ -580,6 +608,7 @@ export class Orchestrator {
   constructor(opts: OrchestratorOptions) {
     this.modelCatalog = new ModelCatalog(opts.modelCatalog);
     this.classifierOption = opts.classifier;
+    this.cosOpts = { cosTriage: opts.cosTriage };
     this.autoModeRules =
       opts.autoModeRules ??
       new AutoModeRulesProvider({
@@ -625,6 +654,16 @@ export class Orchestrator {
         if (w) this.bus.emit({ kind: "watcher.upserted", watcher: this.withLive(w) });
       },
     };
+    this.cosEngine = new CosEngine({
+      store: this.store,
+      emit: (e) => this.bus.emit(e),
+      now: () => this.now(),
+      settings: () => this.settings(),
+      triage: () => this.cosTriage(),
+      deliver: (cosTicketId, text) => this.wakeCos(cosTicketId, text),
+      log: this.log,
+      timers: opts.cosTimers,
+    });
     this.watcherRunner = opts.watchers === null ? null : opts.watchers ? opts.watchers(handlers) : new WatcherRunner({ ...handlers, now: this.now });
   }
 
@@ -644,6 +683,13 @@ export class Orchestrator {
       this.log(`upload sweep failed: ${errMsg(err)}`);
     }
     this.syncWatchers();
+    this.cosOff.push(
+      this.bus.onKind("activity.added", () => this.cosEngine.nudge()),
+      this.bus.onKind("run.upserted", (e) => {
+        if (e.run.kind === "cos" && (e.run.status === "succeeded" || e.run.status === "failed" || e.run.status === "cancelled")) this.cosEngine.runEnded(e.run.id);
+      }),
+    );
+    this.cosEngine.start();
     if (this.store.projects.orphanedCosTickets().length) void this.pruneCos(); // a chief of staff whose group emptied while the service was down
     // Restarts that came due while the service was down run now; the rest at their time.
     this.kickResume();
@@ -721,6 +767,8 @@ export class Orchestrator {
 
   async stop() {
     this.stopping = true;
+    this.cosEngine.stop();
+    for (const off of this.cosOff.splice(0)) off();
     if (this.reconcileTimer) clearInterval(this.reconcileTimer);
     this.reconcileTimer = null;
     if (this.resumeTimer) clearTimeout(this.resumeTimer);
@@ -808,6 +856,7 @@ export class Orchestrator {
     if (patch.copilotGithubToken !== undefined) this.modelCatalog.invalidate("github-copilot");
     const pub = this.publicSettings();
     this.bus.emit({ kind: "settings.updated", settings: pub });
+    if (patch.cosEnabled !== undefined) this.rehomeCosEvents();
     this.queue.pump();
     return pub;
   }
@@ -1052,6 +1101,7 @@ export class Orchestrator {
     const project = this.store.projects.get(id)!;
     this.bus.emit({ kind: "project.upserted", project });
     if (this.store.projects.orphanedCosTickets().length) void this.pruneCos();
+    this.rehomeCosEvents();
     if (renamed && renamed.renames.size) {
       const ticketIds = new Set(renamed.depTicketIds);
       for (const [from, to] of renamed.renames) {
@@ -1126,6 +1176,7 @@ export class Orchestrator {
     this.store.projects.delete(id);
     this.bus.emit({ kind: "project.deleted", id });
     await this.pruneCos();
+    this.rehomeCosEvents();
   }
 
   // =========================================================================
@@ -1133,7 +1184,87 @@ export class Orchestrator {
   // =========================================================================
 
   listCos(): Cos[] {
-    return this.store.cos.list();
+    const triageUnavailable = this.cosEngine.triageUnavailable;
+    return this.store.cos.list().map((c) => ({ ...c, triageUnavailable }));
+  }
+
+  /** Events changed owner (a chief on or off, a project's setting or group): pending ones find their owner again, and anything due is handled. */
+  private rehomeCosEvents() {
+    this.cosEngine.rehome();
+    void this.cosEngine.tick().catch((err) => this.log(`cos: tick failed: ${errMsg(err)}`));
+  }
+
+  /** The Inbox page of a chief (GET /cos/:id/events). */
+  cosEvents(cosId: string, query: { status?: string | null; before?: string | null; limit?: string | null }): CosEventPage {
+    if (!this.store.cos.get(cosId)) throw notFound(`Unknown chief of staff: ${cosId}`);
+    const status = query.status || undefined;
+    if (status && !COS_EVENT_STATUSES.includes(status as CosEventStatus)) throw badRequest(`status must be one of ${COS_EVENT_STATUSES.join(", ")}`);
+    const limit = Math.min(200, Math.max(1, Number(query.limit) || 50));
+    let before: { createdAt: number; id: string } | undefined;
+    if (query.before) {
+      const i = query.before.indexOf(":");
+      const createdAt = Number(query.before.slice(0, i));
+      if (i <= 0 || !Number.isFinite(createdAt)) throw badRequest("before is not a cursor from a previous page");
+      before = { createdAt, id: query.before.slice(i + 1) };
+    }
+    const rows = this.store.cosEvents.list({ cosId, status: status as CosEventStatus | undefined, before, limit: limit + 1 });
+    const items = rows.slice(0, limit);
+    const last = items[items.length - 1];
+    return { items: items.map(wireCosEvent), nextCursor: rows.length > limit && last ? `${last.createdAt}:${last.id}` : null };
+  }
+
+  cosBadge(): CosBadge {
+    return this.cosEngine.badge();
+  }
+
+  /** "Escalate anyway": an ignored event goes in the chief's next wake. */
+  async escalateCosEvent(id: string): Promise<CosEvent> {
+    const res = this.cosEngine.escalate(id);
+    if ("error" in res) {
+      if (res.error === "unknown") throw notFound(`Unknown event: ${id}`);
+      throw conflict(res.error === "handled" ? "That event was already handled" : "That event is being triaged right now; try again in a moment");
+    }
+    await this.cosEngine.tick();
+    return wireCosEvent(this.store.cosEvents.get(id)!);
+  }
+
+  cosTranscript(cosId: string, query: { before?: string | null; limit?: string | null }): CosChatPage {
+    if (!this.store.cos.get(cosId)) throw notFound(`Unknown chief of staff: ${cosId}`);
+    return cosChat(this.store, cosId, query.before || null, Math.min(200, Math.max(1, Number(query.limit) || 50)));
+  }
+
+  /** A human's message to a chief: straight to its run, with no triage in between. */
+  async sendCosMessage(cosId: string, body: { text?: unknown; attachments?: unknown }): Promise<{ entryId: string }> {
+    const cos = this.store.cos.get(cosId);
+    const ticket = cos ? this.store.tickets.get(cos.ticketId) : null;
+    if (!cos || !ticket) throw notFound(`Unknown chief of staff: ${cosId}`);
+    const after = this.store.transcript.list(ticket.sessionId, 0, 1_000_000).at(-1)?.seq ?? 0;
+    await this.sendMessage(ticket.key, body.text as string, { attachments: body.attachments });
+    const entry = this.store.transcript.list(ticket.sessionId, after).find((e) => e.role === "user" && e.content.type === "text");
+    if (!entry) throw conflict(`${ticket.key} didn't take the message`);
+    return { entryId: entry.id };
+  }
+
+  /** Hand a chief a message from the pipeline; resolves to the run that will read it. */
+  private async wakeCos(cosTicketId: string, text: string): Promise<string | null> {
+    const ticket = this.store.tickets.get(cosTicketId);
+    if (!ticket) throw notFound(`Unknown chief of staff: ${cosTicketId}`);
+    return this.steerOrEnqueue(ticket.sessionId, "cos", { text, attachments: [] });
+  }
+
+  /** The triage layer: injected, else a stateless Haiku call on the classifier's backend; `unavailable` when there is none to call. */
+  private cosTriage(): CosTriage | { unavailable: string } {
+    if (this.cosOpts.cosTriage) return this.cosOpts.cosTriage;
+    const settings = this.settings();
+    if (settings.classifier === "off") return { unavailable: "the classifier is switched off in Settings, and triage uses its backend" };
+    if (process.env.NODE_ENV === "test") return { unavailable: "no real model under bun test" };
+    const model = () => settings.cosTriageModel?.trim() || HAIKU_MODELS[settings.classifier] || HAIKU_MODELS["claude-code"]!;
+    if (settings.classifier === "anthropic-api") {
+      const apiKey = () => this.settings().anthropicApiKey ?? process.env.ANTHROPIC_API_KEY ?? null;
+      if (!apiKey()) return { unavailable: "no Anthropic API key" };
+      return new LlmTriage("anthropic-api", model, (req, signal) => anthropicStructured({ apiKey }, req, signal), this.paths.home);
+    }
+    return new LlmTriage("claude-cli", model, (req, signal) => claudeCliStructured({ bin: () => resolveClaudeBin(process.env), env: () => claudeCliEnv(process.env, this.settings()) }, req, signal), this.paths.home);
   }
 
   /**
@@ -1186,6 +1317,7 @@ export class Orchestrator {
       this.bus.emit({ kind: "ticket.upserted", ticket });
       this.touchSession(ticket.sessionId);
     }
+    this.rehomeCosEvents(); // events no chief qualified for until now
     return cos;
   }
 
@@ -1195,6 +1327,7 @@ export class Orchestrator {
     const cos = this.store.cos.setEnabled(ticketId, enabled);
     if (!cos) throw notFound(`Unknown chief of staff: ${ticketId}`);
     this.touchTicket(cos.ticketId);
+    this.rehomeCosEvents();
     return cos;
   }
 
@@ -2020,6 +2153,7 @@ export class Orchestrator {
         if (ticket && orphaned(id)) await this.removeTicket(ticket, () => orphaned(id));
       }
       this.store.projects.pruneGroups();
+      this.rehomeCosEvents(); // a removed chief's events go to whoever is next in line
     });
     this.pruning = this.pruning.catch((err) => this.log(`pruning chiefs of staff failed: ${errMsg(err)}`));
     return this.pruning;
@@ -2330,12 +2464,11 @@ export class Orchestrator {
    * step. Otherwise it waits for a run of its own, queued behind the active one, with a
    * transcript note when there was a running agent it couldn't reach.
    */
-  private async steerOrEnqueue(sessionId: string, kind: RunKind, message: SentMessage): Promise<void> {
+  private async steerOrEnqueue(sessionId: string, kind: RunKind, message: SentMessage): Promise<string | null> {
     const { text, attachments } = message;
     const active = [...this.active.values()].find((a) => a.run.sessionId === sessionId && !a.cancelled);
     if (!active) {
-      this.enqueueRun(sessionId, kind, text, undefined, { attachments });
-      return;
+      return this.enqueueRun(sessionId, kind, text, undefined, { attachments }).id;
     }
     const input = active.input;
     if (input && !input.isClosed && (active.run.kind === kind || (AGENT_RUNS.has(kind) && AGENT_RUNS.has(active.run.kind)))) {
@@ -2345,14 +2478,15 @@ export class Orchestrator {
       const attached = this.withAttachments(sessionId, active.run.id, attachments);
       const ticketId = this.store.sessions.get(sessionId)?.ticketId;
       const prompt = withFiles + this.blockedNote(ticketId ? this.store.tickets.get(ticketId) : null) + (attached?.block ?? "");
-      if (input.push(prompt, message, attached?.images)) return;
+      if (input.push(prompt, message, attached?.images)) return active.run.id;
       // The run stopped taking input while the mentions were read.
       const run = this.enqueueRun(sessionId, kind, text, undefined, { skipTranscript: true, attachments });
       this.appendStatus(sessionId, run.id, STEER_FALLBACK_STATUS);
-      return;
+      return run.id;
     }
     const run = this.enqueueRun(sessionId, kind, text, undefined, { attachments });
     this.appendStatus(sessionId, run.id, STEER_FALLBACK_STATUS);
+    return run.id;
   }
 
   /**
@@ -2918,6 +3052,13 @@ export class Orchestrator {
   async ingest(input: IngestInput): Promise<Session | null> {
     const hash = createHash("sha256").update(input.output.text).digest("hex");
     if (!this.store.seen.markSeen(input.sourceId, `sha256:${hash}`, null)) return null;
+    this.cosEngine.addExternal({
+      sourceKind: "watcher",
+      sourceRef: `${input.sourceId}:sha256:${hash}`,
+      actor: `watcher:${input.source}`,
+      title: `${input.source}: ${outputTitle(input.output.text)}`,
+      body: input.output.text,
+    });
     return this.triage(input);
   }
 
@@ -5124,7 +5265,15 @@ ${numberLines(r.body)}`;
     return run;
   }
 
-  private async execute(job: QueuedJob) {
+  /** One queued run, with who caused whatever it writes: a chief's run stamps its activity "cos:<id>", every other run none (a run started from a chief's context must not inherit it). */
+  private execute(job: QueuedJob): Promise<void> {
+    const run = this.store.runs.get(job.runId);
+    const ticketId = run ? this.store.sessions.get(run.sessionId)?.ticketId : null;
+    const chief = run?.kind === "cos" && ticketId ? `cos:${ticketId}` : null;
+    return this.actorContext.run(chief, () => this.executeRun(job));
+  }
+
+  private async executeRun(job: QueuedJob) {
     let run = this.store.runs.get(job.runId);
     if (!run || run.status !== "queued") return;
     const session = this.store.sessions.get(run.sessionId);
@@ -5737,7 +5886,7 @@ ${numberLines(r.body)}`;
 
   /** Add an entry to the ticket's Activity (DESIGN.md "Activity") and broadcast it. */
   private addActivity(ticket: Pick<Ticket, "id" | "sessionId">, kind: ActivityKind, author: ActivityAuthor, body: string, meta: ActivityMeta = {}): ActivityEntry {
-    const entry = this.store.activity.add({ sessionId: ticket.sessionId, ticketId: ticket.id, kind, author, body, meta });
+    const entry = this.store.activity.add({ sessionId: ticket.sessionId, ticketId: ticket.id, kind, author, body, meta, actor: this.actorContext.getStore() ?? null });
     this.bus.emit({ kind: "activity.added", entry });
     if (meta.to && kind !== "moved") this.movesRecorded.set(ticket.id, { to: meta.to, entryId: entry.id });
     return entry;

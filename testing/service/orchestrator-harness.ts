@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import type { HarnessEvent, Project, Ticket } from "@harness/shared";
+import type { Project, Ticket } from "@harness/shared";
+import type { BusEvent } from "../../service/src/events";
 import { ensureHome } from "../../service/src/config";
 import { openDb } from "../../service/src/db";
 import type { Driver } from "../../service/src/drivers/types";
@@ -21,7 +22,7 @@ export interface OrchestratorRig<D extends Driver = FakeDriver> {
   clock: FakeClock;
   project: Project;
   home: string;
-  events: HarnessEvent[];
+  events: BusEvent[];
   logs: string[];
   /** Resolves once the orchestrator has nothing queued, running or starting. Yields to the event loop; never sleeps. */
   settle(): Promise<void>;
@@ -45,7 +46,7 @@ export function makeOrchestrator<D extends Driver = FakeDriver>(opts: Partial<Or
   const driver = (opts.driver ?? new FakeDriver()) as D;
   const phase = { driver: driver.id, model: null };
   store.settings.set({ phaseModels: { plan: phase, work: phase, review: phase, adviser: phase, complete: phase } });
-  const events: HarnessEvent[] = [];
+  const events: BusEvent[] = [];
   bus.on((e) => events.push(e));
   const logs: string[] = [];
   const orch = new Orchestrator({
@@ -105,7 +106,7 @@ export async function stopAll() {
 }
 
 /** The kinds of the events seen so far, for asserting an order. */
-export const kindsOf = (events: HarnessEvent[]) => events.map((e) => e.kind);
+export const kindsOf = (events: BusEvent[]) => events.map((e) => e.kind);
 
 /**
  * Steps for one agent run that calls these tools in order, and the results it saw (text and error

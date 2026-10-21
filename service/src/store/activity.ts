@@ -12,6 +12,7 @@ interface ActivityRow {
   body: string;
   meta: string;
   created_at: number;
+  actor: string | null;
 }
 
 const toEntry = (r: ActivityRow): ActivityEntry => ({
@@ -29,11 +30,11 @@ const toEntry = (r: ActivityRow): ActivityEntry => ({
 export class ActivityRepo {
   constructor(private db: Database, private now: Clock = systemClock) {}
 
-  add(input: { sessionId: string; ticketId: string | null; kind: ActivityKind; author: ActivityAuthor; body: string; meta?: ActivityMeta }): ActivityEntry {
+  add(input: { sessionId: string; ticketId: string | null; kind: ActivityKind; author: ActivityAuthor; body: string; meta?: ActivityMeta; actor?: string | null }): ActivityEntry {
     const id = newId();
     this.db
       .query(
-        "INSERT INTO activity (id, session_id, ticket_id, kind, author, body, meta, created_at) VALUES ($id, $sessionId, $ticketId, $kind, $author, $body, $meta, $t)",
+        "INSERT INTO activity (id, session_id, ticket_id, kind, author, body, meta, actor, created_at) VALUES ($id, $sessionId, $ticketId, $kind, $author, $body, $meta, $actor, $t)",
       )
       .run({
         id,
@@ -43,6 +44,7 @@ export class ActivityRepo {
         author: input.author,
         body: input.body,
         meta: JSON.stringify(input.meta ?? {}),
+        actor: input.actor ?? null,
         t: this.now(),
       });
     return toEntry(this.db.query("SELECT * FROM activity WHERE id = $id").get({ id }) as ActivityRow);
@@ -50,5 +52,18 @@ export class ActivityRepo {
 
   listBySession(sessionId: string): ActivityEntry[] {
     return (this.db.query("SELECT * FROM activity WHERE session_id = $sessionId ORDER BY created_at, rowid").all({ sessionId }) as ActivityRow[]).map(toEntry);
+  }
+
+  /** Entries after activity row `seq` (SQLite rowid, which only grows), oldest first, each with its row's seq and actor. The chief-of-staff event feed reads these. */
+  listAfter(seq: number, limit: number): { seq: number; actor: string | null; entry: ActivityEntry }[] {
+    const rows = this.db.query("SELECT rowid AS seq, * FROM activity WHERE rowid > $seq ORDER BY rowid LIMIT $limit").all({ seq, limit }) as (ActivityRow & { seq: number })[];
+    return rows.map((r) => ({ seq: r.seq, actor: r.actor, entry: toEntry(r) }));
+  }
+
+  /** Entries a chief of staff caused (actor "cos:<id>"), newest first. */
+  listByActor(actor: string, before: number, limit: number): ActivityEntry[] {
+    return (
+      this.db.query("SELECT * FROM activity WHERE actor = $actor AND created_at <= $before ORDER BY created_at DESC, rowid DESC LIMIT $limit").all({ actor, before, limit }) as ActivityRow[]
+    ).map(toEntry);
   }
 }

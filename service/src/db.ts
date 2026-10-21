@@ -795,6 +795,56 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE projects ADD COLUMN cos_can_unblock INTEGER;
   ALTER TABLE projects ADD COLUMN internal INTEGER NOT NULL DEFAULT 0;
   `,
+  // 46: chief-of-staff events (DESIGN.md "Events"). activity.actor is who caused the entry
+  //     ('cos:<ticket id>' for a chief; NULL for everything stamped before this, which never counts
+  //     as a chief's). cos_events is the Inbox: one row per event with one owner (cos_id, NULL while
+  //     unassigned), fed from activity through a cursor (cos_state 'activity_seq', the last
+  //     activity rowid read, advanced with the inserts and seeded here at the current end so the
+  //     first boot doesn't triage history), deduped by
+  //     (source_kind, source_ref). cos_wakes logs each full wake and triage call for the hourly cap
+  //     and the token log.
+  `
+  ALTER TABLE activity ADD COLUMN actor TEXT;
+  CREATE TABLE cos_events (
+    id TEXT PRIMARY KEY,
+    cos_id TEXT,
+    project_id TEXT,
+    ticket_id TEXT,
+    source_kind TEXT NOT NULL,
+    source_ref TEXT NOT NULL,
+    source_seq INTEGER,
+    kind TEXT NOT NULL DEFAULT '',
+    actor TEXT NOT NULL,
+    title TEXT NOT NULL,
+    summary TEXT NOT NULL DEFAULT '',
+    payload TEXT NOT NULL DEFAULT '{}',
+    verdict TEXT NOT NULL DEFAULT 'pending',
+    reason TEXT,
+    model TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    wake_id TEXT,
+    consuming_run_id TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    UNIQUE (source_kind, source_ref)
+  );
+  CREATE INDEX cos_events_cos ON cos_events(cos_id, status);
+  CREATE INDEX cos_events_wake ON cos_events(wake_id);
+  CREATE TABLE cos_wakes (
+    id TEXT PRIMARY KEY,
+    cos_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    started_at INTEGER NOT NULL,
+    event_count INTEGER NOT NULL DEFAULT 0,
+    digest TEXT,
+    model TEXT,
+    tokens_in INTEGER,
+    tokens_out INTEGER
+  );
+  CREATE INDEX cos_wakes_cos ON cos_wakes(cos_id, kind, started_at);
+  CREATE TABLE cos_state (key TEXT PRIMARY KEY, value INTEGER NOT NULL);
+  INSERT INTO cos_state (key, value) SELECT 'activity_seq', COALESCE(MAX(rowid), 0) FROM activity;
+  `,
 ];
 
 /** Where the files migrations look at live (HarnessPaths); by default next to the database file. */

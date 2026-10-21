@@ -1006,6 +1006,8 @@ export interface Settings {
    * (Project.cosCanUnblock). Default false. Optional like cosEnabled.
    */
   cosCanUnblock?: boolean;
+  /** The model that triages a chief's events before it wakes (empty or absent: the backend's Haiku). Optional like cosEnabled. */
+  cosTriageModel?: string | null;
   /**
    * Model per driver id for triage sessions of watchers that don't pick one. Missing / null →
    * defaultModels. PATCH merges per driver; null clears. Optional like watcherDriver.

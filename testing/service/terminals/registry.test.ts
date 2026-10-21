@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { assertNoTimerLeaks, trackTimers } from "../leaks";
 import type { HarnessEvent } from "@harness/shared";
+import type { BusEvent } from "../../../service/src/events";
 import { EventBus } from "../../../service/src/events";
 import { HarnessError } from "../../../service/src/orchestrator/errors";
 import { isTerminalReply, loginShell, MAX_EXITED_TERMINALS, MAX_WRITE, MAX_WRITE_PER_SECOND, resolveCwd, shellEnv, TerminalRegistry } from "../../../service/src/terminals/registry";
@@ -13,7 +14,7 @@ afterEach(assertNoTimerLeaks);
 function rig(opts: { maxRunning?: number; exitedGraceMs?: number; idleMs?: number; poll?: ConstructorParameters<typeof TerminalRegistry>[0]["poll"]; highWater?: number } = {}) {
   const clock = manualTimers(1_000_000);
   const bus = new EventBus();
-  const events: HarnessEvent[] = [];
+  const events: BusEvent[] = [];
   bus.on((e) => events.push(e));
   const { spawn, ptys } = fakeSpawn();
   const emus = fakeEmulators();

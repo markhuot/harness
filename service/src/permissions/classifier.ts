@@ -5,12 +5,11 @@
 //  - anthropic-api: Messages API with the stored key, forced tool call
 // Callers treat any throw (timeout, bad output, missing key) as "ask the human".
 
-import Anthropic from "@anthropic-ai/sdk";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import type { RunKind } from "@harness/shared";
 import type { AutoModeRules } from "./rules";
+import { anthropicStructured, claudeCliStructured, claudeStructuredArgs, type MessagesCreateLike } from "./structured";
+
+export type { MessagesCreateLike };
 
 export type ClassifierVerdict = "allow" | "soft_deny" | "hard_deny";
 
@@ -131,25 +130,7 @@ export interface ClaudeCliClassifierOptions {
 
 /** argv (without the binary) for one classification; the system prompt is read from a file. */
 export function claudeClassifierArgs(systemPromptFile: string, model: string): string[] {
-  return [
-    "-p",
-    "--model",
-    model,
-    "--output-format",
-    "json",
-    "--json-schema",
-    JSON.stringify(DECISION_SCHEMA),
-    // No tools at all, so the permission mode is moot; dontAsk (not plan) because plan mode
-    // injects "you are in plan mode" context that the classifier then reasons about.
-    "--tools",
-    "",
-    "--permission-mode",
-    "dontAsk",
-    "--strict-mcp-config",
-    "--no-session-persistence",
-    "--system-prompt-file",
-    systemPromptFile,
-  ];
+  return claudeStructuredArgs(systemPromptFile, model, DECISION_SCHEMA);
 }
 
 export class ClaudeCliClassifier implements Classifier {
@@ -158,46 +139,23 @@ export class ClaudeCliClassifier implements Classifier {
 
   async classify(req: ClassifierRequest, signal: AbortSignal): Promise<ClassifierDecision> {
     const { system, user } = buildClassifierPrompt(await this.opts.rules(), req);
-    const dir = mkdtempSync(join(tmpdir(), "harness-classifier-"));
-    const file = join(dir, "system.md");
-    writeFileSync(file, system);
-    try {
-      // cwd = the agent's workdir: the CLI tells the model its cwd, which should match the prompt.
-      const proc = Bun.spawn([this.opts.bin(), ...claudeClassifierArgs(file, this.opts.model ?? "sonnet")], {
-        cwd: req.cwd,
-        stdin: "pipe",
-        stdout: "pipe",
-        stderr: "pipe",
-        env: this.opts.env(),
-      });
-      const kill = () => proc.kill("SIGKILL");
-      signal.addEventListener("abort", kill, { once: true });
-      try {
-        proc.stdin.write(user);
-        await proc.stdin.end();
-        const [out, err, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);
-        if (signal.aborted) throw new Error("classifier timed out");
-        const start = out.indexOf("{");
-        if (start === -1) throw new Error(`claude exited with ${code}${err.trim() ? `: ${err.trim().split("\n").slice(-2).join(" ")}` : ""}`);
-        const result = JSON.parse(out.slice(start)) as { is_error?: boolean; result?: unknown; structured_output?: unknown; subtype?: string };
-        if (result.is_error) throw new Error(`claude classifier error: ${typeof result.result === "string" ? result.result : result.subtype}`);
-        return parseDecision(result.structured_output ?? result.result);
-      } finally {
-        signal.removeEventListener("abort", kill);
-      }
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
+    // cwd = the agent's workdir: the CLI tells the model its cwd, which should match the prompt.
+    const { value } = await claudeCliStructured(this.opts, {
+      system,
+      user,
+      schema: DECISION_SCHEMA,
+      toolName: "decide",
+      toolDescription: "Record the permission decision.",
+      model: this.opts.model ?? "sonnet",
+      cwd: req.cwd,
+    }, signal);
+    return parseDecision(value);
   }
 }
 
 // ---------------------------------------------------------------------------
 // anthropic-api backend
 // ---------------------------------------------------------------------------
-
-export interface MessagesCreateLike {
-  messages: { create(params: Anthropic.MessageCreateParamsNonStreaming, options?: { signal?: AbortSignal }): Promise<Anthropic.Message> };
-}
 
 export interface AnthropicApiClassifierOptions {
   apiKey: () => string | null;
@@ -211,25 +169,16 @@ export class AnthropicApiClassifier implements Classifier {
   constructor(private readonly opts: AnthropicApiClassifierOptions) {}
 
   async classify(req: ClassifierRequest, signal: AbortSignal): Promise<ClassifierDecision> {
-    const key = this.opts.apiKey();
-    if (!key) throw new Error("no Anthropic API key for the classifier");
-    const client = this.opts.createClient ? this.opts.createClient(key) : (new Anthropic({ apiKey: key }) as unknown as MessagesCreateLike);
     const { system, user } = buildClassifierPrompt(await this.opts.rules(), req);
-    const message = await client.messages.create(
-      {
-        model: this.opts.model(),
-        max_tokens: 1024,
-        // The rules are identical for every call: cache them.
-        system: [{ type: "text", text: system, cache_control: { type: "ephemeral" } }],
-        messages: [{ role: "user", content: user }],
-        tools: [{ name: "decide", description: "Record the permission decision.", input_schema: DECISION_SCHEMA as unknown as Anthropic.Tool.InputSchema }],
-        tool_choice: { type: "tool", name: "decide" },
-      },
-      { signal },
-    );
-    const use = message.content.find((b): b is Anthropic.ToolUseBlock => b.type === "tool_use");
-    if (use) return parseDecision(use.input);
-    const text = message.content.find((b): b is Anthropic.TextBlock => b.type === "text");
-    return parseDecision(text?.text ?? "");
+    const { value } = await anthropicStructured(this.opts, {
+      system,
+      user,
+      schema: DECISION_SCHEMA,
+      toolName: "decide",
+      toolDescription: "Record the permission decision.",
+      model: this.opts.model(),
+      cwd: "",
+    }, signal);
+    return parseDecision(value);
   }
 }

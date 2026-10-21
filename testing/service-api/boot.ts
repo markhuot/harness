@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import type { HarnessEvent, Project } from "@harness/shared";
+import type { Project } from "@harness/shared";
+import type { BusEvent } from "../../service/src/events";
 import { createHarness, type CreateHarnessOptions, type Harness } from "../../service/src/app";
 import type { ApnsTransport } from "../../service/src/notifications/apns";
 import type { SpawnPty } from "../../service/src/terminals/pty";
@@ -28,9 +29,9 @@ export interface Rig {
   /** A project on a fresh directory, made through the API. */
   project(key?: string): Promise<Project>;
   /** Every event the service's bus emitted, in order, as seen by the service itself. */
-  busEvents: HarnessEvent[];
+  busEvents: BusEvent[];
   /** Resolves with the first bus event (already emitted, or the next) that satisfies `match`. */
-  busEvent(match: (e: HarnessEvent) => boolean): Promise<HarnessEvent>;
+  busEvent(match: (e: BusEvent) => boolean): Promise<BusEvent>;
 }
 
 const rigs: { harness: Harness; sockets: WsClient[] }[] = [];
@@ -74,7 +75,7 @@ export async function boot(overrides: Partial<CreateHarnessOptions> = {}): Promi
   // Work goes to the scripted driver in every phase.
   const phase = { driver: driver.id, model: null };
   const phaseModels = { plan: phase, work: phase, review: phase, adviser: phase, complete: phase };
-  const busEvents: HarnessEvent[] = [];
+  const busEvents: BusEvent[] = [];
   harness.bus.on((e) => busEvents.push(e));
 
   const rig: Rig = {

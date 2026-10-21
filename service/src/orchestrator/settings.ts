@@ -22,6 +22,7 @@ export const DEFAULT_SETTINGS: Settings = {
   watcherModels: {},
   cosEnabled: COS_SETTING_DEFAULTS.cosEnabled,
   cosCanUnblock: COS_SETTING_DEFAULTS.cosCanUnblock,
+  cosTriageModel: null,
   anthropicApiKey: null,
   claudeOauthToken: null,
   copilotGithubToken: null,
@@ -216,6 +217,10 @@ export function validateSettingsPatch(body: unknown, knownDrivers?: string[], cu
       case "cosCanUnblock":
         if (typeof value !== "boolean") throw badRequest(`${key} must be true or false`);
         out[key] = value;
+        break;
+      case "cosTriageModel":
+        if (value !== null && typeof value !== "string") throw badRequest("cosTriageModel must be a model name or null");
+        out.cosTriageModel = (value as string | null)?.trim() || null;
         break;
       case "defaultModels":
       case "reviewModels":
