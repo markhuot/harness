@@ -208,6 +208,10 @@ export function steps(start: Start, built: { app: string }): Step[] {
         const groups = await ctx.daemon.call<{ id: string; name: string }[]>("GET", "/groups");
         if (!groups.some((g) => g.name === "Walk group")) throw new Error(`the service has no "Walk group": ${JSON.stringify(groups)}`);
         await main.evaluate(`location.hash = ${JSON.stringify(previous)}`);
+        // Leaving the settings page closes the ticket pane the next steps use: open it again.
+        await main.waitFor("the board", `document.querySelector(${JSON.stringify(cardOnBoard)})`);
+        if (!(await main.evaluate<boolean>(`!!document.querySelector('.pane-ticket')`))) await main.click(cardOnBoard);
+        await main.waitFor("the ticket pane", `document.querySelector('.pane-ticket')`);
       },
     },
     {
