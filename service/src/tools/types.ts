@@ -7,6 +7,7 @@ import type {
   ActivityKind,
   ActivityMeta,
   CompletionAction,
+  CosMemory,
   CreateProjectBody,
   DriverInfo,
   DriverModels,
@@ -29,6 +30,7 @@ import type {
   Watcher,
 } from "@harness/shared";
 import type { BrowserService } from "../browser/types";
+import type { ActivityHit, ActivityQuery } from "../store/activity";
 
 /** JSON Schema object describing the tool input */
 export type JsonSchema = { type: "object"; properties: Record<string, unknown>; required?: string[]; additionalProperties?: boolean };
@@ -357,6 +359,13 @@ export interface HarnessOps {
     ctx: ToolContext,
     filter: { statuses?: TriageStatus[]; source?: string; key?: string; limit?: number; output?: boolean },
   ): Promise<{ items: InboxItem[]; total: number }>;
+
+  // --- memory and activity: chief of staff runs (DESIGN.md "Chief of staff memory") ---
+  /** Activity across the tickets the caller covers, newest first, with a blocked entry's answers. Out-of-scope tickets match nothing. */
+  queryActivity(ctx: ToolContext, query: Omit<ActivityQuery, "groupId">): Promise<{ hits: ActivityHit[]; nextCursor: string | null }>;
+  readMemory(ctx: ToolContext): Promise<CosMemory>;
+  /** Replace one section of the caller's memory; throws when the body is too long or would start another section. */
+  updateMemorySection(ctx: ToolContext, section: string, body: string): Promise<CosMemory>;
 
   // --- schedules: chief of staff runs (DESIGN.md "Schedules") ---
   // Each acts on the calling chief's own schedules only; another chief's behave as not found.

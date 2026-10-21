@@ -907,6 +907,36 @@ over the CoS session, its stamped activity and its wakes), `POST /cos/:id/messag
 attachments? }` → `{ entryId }`. Bus events `cos.event.upserted`, `cos.badge`, `cos.transcript.appended`
 (typed `CosBusEvent`, not part of `HarnessEvent`, so clients that don't know them ignore them).
 
+#### Memory and activity query
+
+A chief has one **memory document**: markdown in its ticket's `agent_notes`, split into sections by
+`#` and `##` headings (`service/src/cos/memory.ts`; deeper headings stay inside their section, and a
+heading inside a code fence is not one). It lives in durable notes rather than chat history because
+compaction loses chat. The `## Triage guidance` section is the one the triage layer reads
+(`triageGuidance` in `cos/engine.ts`): the chief writes "stop waking me for X" there. A chief has no
+`update_notes`; it has `read_memory` and `update_memory_section { section, body }`, which replace one
+section against the text as it is when the call runs and return every other byte unchanged (an empty
+body removes a section but leaves the guidance heading). A body can't contain a `#`/`##` heading
+outside a code fence, the guidance is capped at 4,000 characters and the whole document at 16,000.
+Haiku never writes memory, and there is no version history. The memory is shown under "Your memory" in
+the run's first message (`runContext`), never in the system prompt, so the prompt prefix is the same
+on every wake. The human reads and edits it over HTTP: `GET /tickets/:key/memory` → `{ text, revision }`
+and `PUT /tickets/:key/memory { text, baseRevision }` replace the whole document, and answer 409
+with a `MemoryConflict` when the revision (a hash of the text) is no longer current, so a human's save
+never overwrites the chief's edit unseen (409 for a ticket that isn't a chief).
+
+`query_activity` answers "what did I work on yesterday" and "how did the human answer this last time".
+It reads `activity` across the tickets the chief covers (`ActivityRepo.query`, reached through
+`ScopedStore.queryActivity`, which adds the scope): newest first, filtered by `from` (inclusive) and
+`to` (exclusive) as dates or date-times in the Mac's timezone, `project_keys`, `ticket_key` and
+`kinds`, keyset-paged on `(created_at, id)` with a `next_cursor` (25 per page, at most 200; bodies
+cut at 600 characters). Scope, project and ticket sit in one `WHERE` over the ticket's own row, so a
+ticket outside the scope returns an empty page, the same as one that doesn't exist; entries with no
+ticket, a chief's own ticket and the internal project are never returned, even to All. A `blocked`
+entry carries what it asked and the human's replies (`replies`): a human's message to a blocked ticket
+and the notes it is unblocked with are recorded as `answered` entries whose `meta.answers` is the id of
+the `blocked` entry they answer (nothing before that change has replies).
+
 #### Schedules
 
 A chief schedules itself with `schedule_create`, `schedule_list` and `schedule_cancel` (chief runs
@@ -2372,6 +2402,7 @@ their `ActivityMeta`:
 | `failed` | a run fails, or a worktree can't be made | `detail` when the error ran past one line |
 | `permission` | a tool approval is asked for or answered, or the classifier denied calls in a run that still submitted | `detail`: the classifier's reason, or the denied calls |
 | `system` | anything else the service records | |
+| `answered` | a human replies to a blocked ticket (a message to it, or the notes it is unblocked with); the body is the reply | `answers`: the id of the `blocked` entry |
 | `message`, `answer` | legacy: older services logged a human's message from the Spec or Activity tab and the agent's reply. Never written now; clients still render them | |
 
 **One line each.** Nothing is refused or cut. Every entry's body is the first line of what was

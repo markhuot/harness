@@ -60,6 +60,14 @@ export function describeSpec(spec: ScheduleSpec): string {
   return `cron "${spec.cron}"`;
 }
 
+/** A moment a tool names: an ISO 8601 date-time (the Mac's local time when it has no offset) or a bare date (that day's local midnight); NaN when it is neither. */
+export function parseInstant(text: string): number {
+  const t = text.trim();
+  const day = /^(\d{4})-(\d{2})-(\d{2})$/.exec(t);
+  if (day) return new Date(Number(day[1]), Number(day[2]) - 1, Number(day[3])).getTime();
+  return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(t) ? Date.parse(t) : NaN;
+}
+
 /** The spec a create call asks for: exactly one of `at` (a date-time; without an offset it is the Mac's local time), `everyMinutes` or `cron`. */
 export function specFromInput(input: { at?: string; everyMinutes?: number; cron?: string }): ScheduleSpec {
   const given = [input.at !== undefined, input.everyMinutes !== undefined, input.cron !== undefined].filter(Boolean).length;

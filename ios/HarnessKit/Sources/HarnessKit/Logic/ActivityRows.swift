@@ -31,7 +31,7 @@ public enum ActivityRows {
     /// The look `kind` takes.
     public static func look(_ e: ActivityEntry) -> ActivityLook {
         switch e.kind {
-        case .message: e.author == .human ? .mine : .plain
+        case .message, .answered: e.author == .human ? .mine : .plain
         case .answer: .reply
         case .blocked: .attention
         case .reviewApproved, .approved: .approved
@@ -52,7 +52,7 @@ public enum ActivityRows {
         case .reviewApproved: "checkCircle"
         case .changesRequested: "edit"
         case .approved: "check"
-        case .message: "user"
+        case .message, .answered: "user"
         case .answer: "sparkle"
         case .reopened: "refresh"
         case .moved: "chevronRight"
@@ -75,6 +75,7 @@ public enum ActivityRows {
         case .changesRequested: by(e) == "conductor" ? "Conductor requested changes" : "Changes requested"
         case .approved: by(e) == "conductor" ? "Approved by the conductor" : e.author == .human ? "You approved" : "Approved"
         case .message: TicketDetailLogic.authorLabel(e.author)
+        case .answered: "You answered"
         case .answer: "Agent"
         case .reopened: "Re-opened"
         case .moved: "Moved"

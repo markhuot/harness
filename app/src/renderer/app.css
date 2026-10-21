@@ -970,10 +970,12 @@ html[data-input="keyboard"] .card.cursor:not(:focus) {
   border-radius: var(--radius-lg);
   padding: 6px 12px 8px;
 }
-.activity-message {
+.activity-message,
+.activity-answered {
   justify-content: flex-end;
 }
-.activity-message .activity-bubble {
+.activity-message .activity-bubble,
+.activity-answered .activity-bubble {
   background: var(--accent-soft);
 }
 .activity-answer .activity-bubble {

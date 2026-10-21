@@ -172,7 +172,8 @@ import { compactNotes } from "../annotations";
 import { attachmentFile as fileOf, ORPHAN_UPLOAD_AGE_MS, registerFile, removeUploadDirs, resolveAttachments, runAttachments, storeUpload, sweepUploads, uploadDirs, type RunImage } from "../attachment-lists";
 import { badRequest, conflict, HarnessError, notFound } from "./errors";
 import { nextFire, specFromInput, validateSpec } from "../cos/schedule-time";
-import { SCHEDULE_MAX_ACTIVE, type Schedule } from "@harness/shared";
+import { SCHEDULE_MAX_ACTIVE, type CosMemory, type MemoryConflict, type Schedule } from "@harness/shared";
+import { checkMemory, MemoryError, memoryRevision, replaceMemorySection } from "../cos/memory";
 import {
   applySettingsPatch,
   LEGACY_MODEL_KEYS,
@@ -1367,6 +1368,59 @@ export class Orchestrator {
     return cos;
   }
 
+  /** The chief whose memory a tool acts on: its own ticket, read fresh on every call. */
+  private memoryOwner(ctx: ToolContext): Ticket {
+    const t = ctx.ticket?.kind === "cos" ? this.store.tickets.get(ctx.ticket.id) : null;
+    if (!t) throw new Error("Only a chief of staff has a memory.");
+    return t;
+  }
+
+  private writeMemory(t: Ticket, text: string): CosMemory {
+    const updated = this.store.tickets.update(t.id, { agentNotes: text.trim() ? text : null })!;
+    this.bus.emit({ kind: "ticket.upserted", ticket: updated });
+    return { text, revision: memoryRevision(text) };
+  }
+
+  private readMemory_(ctx: ToolContext): CosMemory {
+    const text = this.memoryOwner(ctx).agentNotes ?? "";
+    return { text, revision: memoryRevision(text) };
+  }
+
+  /** One section's body replaced against the current text (read and written in one synchronous step), so the other sections and a human's concurrent edit to them survive. */
+  private updateMemorySection_(ctx: ToolContext, section: string, body: string): CosMemory {
+    const t = this.memoryOwner(ctx);
+    return this.writeMemory(t, replaceMemorySection(t.agentNotes ?? "", section, body));
+  }
+
+  private requireCos(key: string): Ticket {
+    const t = this.requireTicket(key);
+    if (t.kind !== "cos") throw conflict(`${t.key} is not a chief of staff: only a chief has a memory`);
+    return t;
+  }
+
+  /** GET /tickets/:key/memory */
+  getMemory(key: string): CosMemory {
+    const text = this.requireCos(key).agentNotes ?? "";
+    return { text, revision: memoryRevision(text) };
+  }
+
+  /** PUT /tickets/:key/memory: the human's whole document, refused (409) when the memory changed since they opened it. */
+  putMemory(key: string, body: { text?: unknown; baseRevision?: unknown }): CosMemory {
+    const t = this.requireCos(key);
+    if (typeof body?.text !== "string") throw badRequest("text must be a string");
+    if (typeof body.baseRevision !== "string") throw badRequest("baseRevision is required");
+    const current = t.agentNotes ?? "";
+    if (body.baseRevision !== memoryRevision(current)) {
+      throw new HarnessError(409, `${t.key}'s memory changed since you opened it`, { currentRevision: memoryRevision(current), text: current } satisfies MemoryConflict);
+    }
+    try {
+      return this.writeMemory(t, checkMemory(body.text));
+    } catch (e) {
+      if (e instanceof MemoryError) throw badRequest(e.message);
+      throw e;
+    }
+  }
+
   private scheduleCreate_(ctx: ToolContext, input: Parameters<HarnessOps["scheduleCreate"]>[1]): Schedule {
     const cos = this.scheduleOwner(ctx);
     const spec = specFromInput(input);
@@ -2441,10 +2495,17 @@ export class Orchestrator {
         } else await this.chat(ticket, sent);
         break;
       case "blocked":
+        this.recordAnswer(ticket, text);
         await this.chat(ticket, sent);
         break;
     }
     return this.store.tickets.get(ticket.id)!;
+  }
+
+  /** A human's reply to a blocked ticket, in Activity beside the question it answers (what a chief of staff's query_activity reads). */
+  private recordAnswer(ticket: Pick<Ticket, "id" | "sessionId">, reply: string) {
+    const question = this.store.activity.latestOfKind(ticket.sessionId, "blocked");
+    if (question && reply.trim()) this.addActivityLine(ticket, "answered", "human", reply, { answers: question.id });
   }
 
   /**
@@ -2565,6 +2626,7 @@ export class Orchestrator {
     if (ticket.busy) throw conflict(`${ticket.key} is running; unblock it once the run ends`);
     const notes = typeof body?.notes === "string" ? body.notes.trim() : "";
     this.autoRetries.delete(ticket.id);
+    this.recordAnswer(ticket, notes);
     if (ticket.blockedRunKind === "complete") {
       if (!(await this.resumeCompletion(ticket, notes, "human"))) throw conflict(`${ticket.key} is already being unblocked`);
       return this.store.tickets.get(ticket.id)!;
@@ -5899,6 +5961,10 @@ ${numberLines(r.body)}`;
       searchTickets: (c, i) => this.searchTickets_(c, i),
       listProjects: (c) => this.listProjects_(c),
       listInbox: (c, f) => this.listInbox_(c, f),
+      // --- memory and activity (chief of staff) ---
+      queryActivity: async (c, q) => this.scopeOf(c).queryActivity(q),
+      readMemory: async (c) => this.readMemory_(c),
+      updateMemorySection: async (c, s, b) => this.updateMemorySection_(c, s, b),
       // --- schedules ---
       scheduleCreate: async (c, i) => this.scheduleCreate_(c, i),
       scheduleList: async (c, o) => this.store.schedules.list({ cosId: this.scheduleOwner(c).ticketId, all: o.all }),

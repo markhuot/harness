@@ -13,6 +13,10 @@ export const CORE_TOOL_NAMES: ReadonlySet<string> = new Set([
   "edit_spec",
   "update_spec",
   "update_notes",
+  // A chief of staff's memory, which it replaces update_notes with, and its look back at Activity.
+  "read_memory",
+  "update_memory_section",
+  "query_activity",
   "submit_for_review",
   "block",
   "unblock",

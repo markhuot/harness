@@ -63,6 +63,8 @@ import type {
   PairingInfo,
   PlanUsageReport,
   SessionActionBody,
+  CosMemory,
+  PutCosMemoryBody,
 } from "./protocol";
 import type { Device, NotificationStatus, Presence, RegisterDeviceBody, TestNotificationResult } from "./notifications";
 import type { FileMatch } from "./mentions";
@@ -264,6 +266,14 @@ export class HarnessClient {
   /** Save the message being written to the ticket (Ticket.messageDraft); empty clears it. */
   saveMessageDraft(key: string, body: MessageDraftBody) {
     return this.request<Ticket>("PUT", `/tickets/${key}/message-draft`, body);
+  }
+  /** A chief of staff's memory document and its revision. */
+  getCosMemory(key: string) {
+    return this.request<CosMemory>("GET", `/tickets/${key}/memory`);
+  }
+  /** Replace the memory. A memory that changed since `baseRevision` rejects with a 409 whose `data` is a MemoryConflict. */
+  putCosMemory(key: string, body: PutCosMemoryBody) {
+    return this.request<CosMemory>("PUT", `/tickets/${key}/memory`, body);
   }
   humanReview(key: string, body: HumanReviewBody) {
     return this.request<Ticket>("POST", `/tickets/${key}/review`, body);

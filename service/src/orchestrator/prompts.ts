@@ -535,9 +535,21 @@ export function runContext(info: PromptInfo): string {
       !!ticket?.branch &&
       renderPrompt("system.branches", { branch: ticket.branch, baseBranch: branchesOf(ticket, info.project, info.branches).base }, o),
     ticketRun && specSection(info, browser, o),
-    (ticketRun || kind === "cos") && notesSection(info, o),
+    ticketRun && notesSection(info, o),
+    kind === "cos" && memorySection(ticket?.agentNotes),
     kind === "cos" && schedulesSection(info),
   );
+}
+
+/**
+ * A chief's memory (its ticket's agent notes), in the run's first message and not the system prompt, so
+ * the prompt prefix is the same on every wake whatever the memory holds.
+ */
+function memorySection(notes: string | null | undefined): string {
+  const memory = notes?.trim();
+  return memory
+    ? `## Your memory\nThis is your memory as this run started; \`read_memory\` shows it now.\n<memory>\n${memory}\n</memory>`
+    : "## Your memory\nYour memory is empty. Start it with `update_memory_section` when you learn something a later run needs.";
 }
 
 /** A chief's active schedules, so it knows what it set before without a tool call. */

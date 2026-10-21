@@ -756,6 +756,8 @@ export const MAX_PROMPT_ATTACHMENTS = 20;
  *   meta.commit (the HEAD it reviewed), meta.by
  * - approved: a human (or conductor) approved the ticket; author "system" when it skips its human
  *   review and lands on its own
+ * - answered: a human's reply to a blocked ticket (a message to it, or the notes it was unblocked
+ *   with); meta.answers is the id of the blocked entry it answers
  * - message, answer: legacy. Older services logged a human's message from the Spec or Activity
  *   tab and the agent's reply; messages now go to the transcript only, and these are never written
  * - reopened: a done ticket went back to work; the notes
@@ -777,6 +779,7 @@ export const ACTIVITY_KINDS = [
   "approved",
   "message",
   "answer",
+  "answered",
   "reopened",
   "moved",
   "failed",
@@ -797,6 +800,8 @@ export interface ActivityMeta {
   by?: "agent" | "human" | "conductor";
   /** unblocked: what resolved it */
   note?: string;
+  /** answered: the id of the blocked entry this reply answers */
+  answers?: string;
   /** submitted: the spec revision the work was submitted at; spec_revised: the revision it records */
   specRevision?: number;
   /**
@@ -1961,6 +1966,25 @@ export interface MessageDraftBody {
 export interface SpecConflict {
   currentRevision: number;
   spec: string;
+}
+
+/** A chief of staff's memory (GET /tickets/:key/memory): one markdown document, and the revision a write is checked against. */
+export interface CosMemory {
+  text: string;
+  revision: string;
+}
+
+/** PUT /tickets/:key/memory: the whole document, written by the human. */
+export interface PutCosMemoryBody {
+  text: string;
+  /** The revision the editor opened (CosMemory.revision). A memory that changed since answers 409 with a MemoryConflict. */
+  baseRevision: string;
+}
+
+/** The `data` of PUT /tickets/:key/memory's 409 when baseRevision isn't the current revision. */
+export interface MemoryConflict {
+  currentRevision: string;
+  text: string;
 }
 
 /** Re-open a done ticket: back to in progress, with notes for the agent */

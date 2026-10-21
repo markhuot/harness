@@ -277,16 +277,17 @@ public enum ActivityAuthor: OpenEnum {
 /// - reopened: a done ticket went back to work; the notes
 /// - moved: a column change no other entry records (a drag, Start, Completed); meta.from and
 ///   meta.to, and a one-line body that may be empty
+/// - answered: a human's reply to a blocked ticket; meta.answers is the blocked entry it answers
 /// - failed: a run failed
 /// - permission: a tool approval was asked for or answered
 /// - system: anything else the service records
 public enum ActivityKind: OpenEnum {
     case note, submitted, specRevised, blocked, unblocked, reviewApproved, changesRequested, approved
-    case message, answer, reopened, moved, failed, permission, system
+    case message, answer, answered, reopened, moved, failed, permission, system
     case unknown(String)
     public static let allKnown: [Self] = [
         .note, .submitted, .specRevised, .blocked, .unblocked, .reviewApproved, .changesRequested, .approved,
-        .message, .answer, .reopened, .moved, .failed, .permission, .system,
+        .message, .answer, .answered, .reopened, .moved, .failed, .permission, .system,
     ]
     public var rawValue: String {
         switch self {
@@ -300,6 +301,7 @@ public enum ActivityKind: OpenEnum {
         case .approved: "approved"
         case .message: "message"
         case .answer: "answer"
+        case .answered: "answered"
         case .reopened: "reopened"
         case .moved: "moved"
         case .failed: "failed"

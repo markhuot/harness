@@ -54,7 +54,7 @@ export function ActivityTab({ ticket }: { ticket: Ticket }) {
                 </li>
               );
             }
-            if (e.kind === "message" || e.kind === "answer") {
+            if (e.kind === "message" || e.kind === "answer" || e.kind === "answered") {
               return (
                 <li key={e.id} className={`activity-entry activity-chat activity-${e.kind}`} data-kind={e.kind}>
                   <div className="activity-bubble">

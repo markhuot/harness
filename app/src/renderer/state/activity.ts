@@ -14,6 +14,7 @@ export const ACTIVITY_KIND: Record<ActivityKind, { icon: IconName; label: string
   approved: { icon: "check", label: "Approved" },
   message: { icon: "user", label: "You" },
   answer: { icon: "bot", label: "Agent" },
+  answered: { icon: "user", label: "You answered" },
   reopened: { icon: "refresh", label: "Re-opened" },
   moved: { icon: "chevronRight", label: "Moved" },
   failed: { icon: "x", label: "Failed" },

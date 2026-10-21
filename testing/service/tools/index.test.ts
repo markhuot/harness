@@ -76,7 +76,7 @@ test("a driver with no built-in tools gets native file and shell tools, read-onl
 test("a chief of staff reads and changes the board and keeps notes, with no sub-agent, spec, lifecycle, config-write, file or shell tool", () => {
   for (const driver of [{ hasBuiltinTools: true, usesPermissionPromptTool: false }, { hasBuiltinTools: false, usesPermissionPromptTool: false }]) {
     const tools = names("cos", driver);
-    expect(tools).toEqual(expect.arrayContaining(["list_tickets", "get_ticket", "search_tickets", "list_projects", "create_ticket", "update_ticket", "move_ticket", "start_ticket", "message_ticket", "cancel_ticket", "reopen_ticket", "post_note", "update_notes", "schedule_create", "schedule_list", "schedule_cancel"]));
+    expect(tools).toEqual(expect.arrayContaining(["list_tickets", "get_ticket", "search_tickets", "list_projects", "create_ticket", "update_ticket", "move_ticket", "start_ticket", "message_ticket", "cancel_ticket", "reopen_ticket", "post_note", "read_memory", "update_memory_section", "query_activity", "schedule_create", "schedule_list", "schedule_cancel"]));
     expect(tools.filter((t) => ["Agent", "Task", "bash", "read_file", "write_file", "edit_file", "list_files"].includes(t))).toEqual([]);
     for (const absent of ["read_spec", "edit_spec", "update_spec", "block", "unblock", "submit_for_review", "resume_work", "return_to_planning", "update_branch", "review_ticket", "complete_ticket", "dispatch_ticket", "update_settings", "create_project", "create_watcher", "delete_ticket", "browser_open"]) {
       expect(tools, absent).not.toContain(absent);
@@ -91,6 +91,13 @@ test("a chief of staff's ticket gets the chief's tools in a chat run too, whatev
     expect(names("chat", driver, chief)).toEqual(names("cos", driver));
     for (const absent of ["bash", "edit_spec", "update_settings", "submit_for_review"]) expect(names("chat", driver, chief)).not.toContain(absent);
   }
+});
+
+test("only a chief of staff gets the memory and activity tools, and it has no update_notes to overwrite its memory with", () => {
+  for (const kind of RUN_KINDS) {
+    for (const t of ["read_memory", "update_memory_section", "query_activity"]) expect(names(kind).includes(t), `${kind}: ${t}`).toBe(kind === "cos");
+  }
+  expect(names("cos")).not.toContain("update_notes");
 });
 
 test("only a chief of staff gets the schedule tools", () => {

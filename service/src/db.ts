@@ -873,6 +873,11 @@ export const MIGRATIONS: string[] = [
   CREATE INDEX schedules_due ON schedules(status, next_fire_at);
   CREATE INDEX schedules_cos ON schedules(cos_id, status);
   `,
+  // 48: the chief-of-staff activity query (query_activity) pages the whole table by time, or one ticket's rows by time
+  `
+  CREATE INDEX activity_created ON activity(created_at, id);
+  CREATE INDEX activity_ticket ON activity(ticket_id, created_at);
+  `,
 ];
 
 /** Where the files migrations look at live (HarnessPaths); by default next to the database file. */

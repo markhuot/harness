@@ -12,6 +12,8 @@ public struct ActivityMeta: Codable, Sendable, Equatable {
     public var by: String?
     /// unblocked: what resolved it
     public var note: String?
+    /// answered: the id of the blocked entry this reply answers
+    public var answers: String?
     /// submitted: the spec revision the work was submitted at
     public var specRevision: Int?
     /// The full text when the entry's body is a one-line summary of it: a review's whole
@@ -26,7 +28,7 @@ public struct ActivityMeta: Codable, Sendable, Equatable {
 
     public init(
         question: String? = nil, round: Int? = nil, commit: Patch<String> = .absent, by: String? = nil,
-        note: String? = nil, specRevision: Int? = nil, detail: String? = nil,
+        note: String? = nil, answers: String? = nil, specRevision: Int? = nil, detail: String? = nil,
         from: TicketStatus? = nil, to: TicketStatus? = nil
     ) {
         self.question = question
@@ -34,6 +36,7 @@ public struct ActivityMeta: Codable, Sendable, Equatable {
         self.commit = commit
         self.by = by
         self.note = note
+        self.answers = answers
         self.specRevision = specRevision
         self.detail = detail
         self.from = from

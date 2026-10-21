@@ -1,5 +1,6 @@
 import type { ActivityEntry, CosScope, Group, Project, Ticket, TicketPage, Watcher } from "@harness/shared";
 import type { Store } from "./index";
+import type { ActivityHit, ActivityQuery } from "./activity";
 
 /**
  * What a chief of staff may see and act on (DESIGN.md "Chief of staff"): `all` is everything, a
@@ -108,6 +109,11 @@ export class ScopedStore {
     list: (): Watcher[] => (this.scope === "all" ? this.store.watchers.list() : []),
     get: (id: string): Watcher | null => (this.scope === "all" ? this.store.watchers.get(id) : OUT_OF_SCOPE),
   };
+
+  /** Activity across the tickets this scope covers (a ticket outside it matches nothing). */
+  queryActivity(q: Omit<ActivityQuery, "groupId">): { hits: ActivityHit[]; nextCursor: string | null } {
+    return this.store.activity.query({ ...q, groupId: this.group });
+  }
 
   /** The Activity of a ticket this scope can see; nothing for one it can't. */
   activity(ticket: Ticket): ActivityEntry[] {

@@ -8,6 +8,7 @@
 
 import type { CosBadge, CosBusEvent, CosEvent, CosEventStatus, CosChief, Project, Settings, Ticket } from "@harness/shared";
 import { COS_HOUR_MS, collapseMoves, nextWakeAllowedAt, nextWakeAt, ownerOf } from "@harness/shared";
+import { memorySection, TRIAGE_GUIDANCE } from "./memory";
 import type { Store } from "../store";
 import type { StoredCosEvent } from "../store/cos-events";
 import { type CosTriage, type TriageEvent, type TriageVerdict, fenceUntrusted } from "./triage";
@@ -601,14 +602,9 @@ export function wire(e: StoredCosEvent): CosEvent {
   return event;
 }
 
-/** The "Triage guidance" section of a chief's notes (until chiefs have a notes editor of their own): from its heading to the next one. */
+/** The "Triage guidance" section of a chief's memory (cos/memory.ts), which its chat and the human both edit. */
 export function triageGuidance(ticket: Pick<Ticket, "agentNotes"> | null): string {
-  const notes = ticket?.agentNotes ?? "";
-  const m = /^#{1,6}[ \t]*triage guidance[ \t]*$/im.exec(notes);
-  if (!m) return "";
-  const rest = notes.slice(m.index + m[0].length);
-  const next = /^#{1,6}[ \t]/m.exec(rest);
-  return (next ? rest.slice(0, next.index) : rest).trim();
+  return memorySection(ticket?.agentNotes ?? "", TRIAGE_GUIDANCE);
 }
 
 export type { CosEventStatus };
