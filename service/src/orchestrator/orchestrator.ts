@@ -62,6 +62,7 @@ import type {
   WatcherLive,
   Group,
 } from "@harness/shared";
+import type { TerminalInfo } from "@harness/shared";
 import type { BaseBranchSource, BranchInfo, CompletionAction, MessageDraft, MessageDraftBody, PlanUsageReport, PromptEntry, SessionActionBody } from "@harness/shared";
 import {
   checkProjectKey,
@@ -138,6 +139,7 @@ import type {
   ProjectView,
   ReviewSkips,
   UpdateTicketInput,
+  TerminalView,
   ToolContext,
   ToolDefinition,
 } from "../tools/types";
@@ -268,6 +270,16 @@ export interface OrchestratorOptions {
   now?: () => number;
   /** A pull request's title from GitHub, or null (default: gh pr view; tests stub it) */
   fetchPullRequestTitle?: (url: string) => Promise<string | null>;
+  /** The service's terminals, for a chief of staff's terminal tools (none: they find no terminals) */
+  terminals?: TerminalAccess;
+}
+
+/** What the orchestrator needs of the terminal registry (service/src/terminals/registry.ts). */
+export interface TerminalAccess {
+  list(): TerminalInfo[];
+  get(id: string): TerminalInfo | null;
+  text(id: string, lines?: number): Promise<{ text: string; lines: number; truncated: boolean }>;
+  writeAgent(id: string, data: string): void;
 }
 
 interface ActiveRun {
@@ -594,6 +606,7 @@ export class Orchestrator {
   private classifierCache: { key: string; classifier: Classifier } | null = null;
   /** The chief-of-staff event pipeline (DESIGN.md "Events") */
   readonly cosEngine: CosEngine;
+  private readonly terminalAccess: TerminalAccess | undefined;
   private cosOpts: Pick<OrchestratorOptions, "cosTriage">;
   private cosOff: (() => void)[] = [];
   /** Who caused the activity written in this async context ("cos:<ticket id>" inside a chief's run) */
@@ -627,6 +640,7 @@ export class Orchestrator {
     this.bus = opts.bus;
     this.browser = opts.browser;
     this.paths = opts.paths;
+    this.terminalAccess = opts.terminals;
     for (const d of opts.drivers) this.drivers.set(d.id, d);
     this.tools = opts.tools ?? toolsForRun;
     this.baseUrl = opts.baseUrl ?? (() => "http://127.0.0.1:0");
@@ -1506,6 +1520,53 @@ export class Orchestrator {
    * at once; every other run sees the whole board. Throws when a chief of staff has no row (its
    * ticket outlived its group): it sees nothing rather than everything.
    */
+  // --- terminals (chief of staff) ---
+
+  /**
+   * The terminals a chief of staff may see: those whose cwd is inside the worktree (or folder) of a
+   * ticket it covers. A terminal under no ticket is in no scope, not even all's: it may be a home
+   * directory shell with tokens in its environment. Because the cwd follows `cd`, a terminal that
+   * leaves its worktree leaves the scope.
+   */
+  private terminalsInScope(ctx: ToolContext): { info: TerminalInfo; ticket: Ticket }[] {
+    const sc = this.scopeOf(ctx);
+    const owners = sc.tickets.list().filter((t) => t.workdir);
+    const out: { info: TerminalInfo; ticket: Ticket }[] = [];
+    for (const info of this.terminalAccess?.list() ?? []) {
+      // The deepest workdir wins, so a ticket's worktree beats the project folder it sits in.
+      const owner = owners.filter((t) => isInside(info.cwd, t.workdir!)).sort((a, b) => b.workdir!.length - a.workdir!.length)[0];
+      if (owner) out.push({ info, ticket: owner });
+    }
+    return out;
+  }
+
+  /** The terminal as the caller may see it; a missing and an out-of-scope id read the same. */
+  private scopedTerminal(ctx: ToolContext, id: string): { info: TerminalInfo; ticket: Ticket } {
+    const found = this.terminalsInScope(ctx).find((t) => t.info.id === id);
+    if (!found) throw new Error(`Unknown terminal: ${id}. Use list_terminals for the valid ids.`);
+    return found;
+  }
+
+  private terminalView({ info, ticket }: { info: TerminalInfo; ticket: Ticket }): TerminalView {
+    return { id: info.id, cwd: info.cwd, title: info.title, process: info.process, state: info.state, exitCode: info.exitCode, ticketKey: ticket.key };
+  }
+
+  private listTerminals_(ctx: ToolContext): TerminalView[] {
+    return this.terminalsInScope(ctx).map((t) => this.terminalView(t));
+  }
+
+  private async readTerminal_(ctx: ToolContext, id: string, lines?: number) {
+    const found = this.scopedTerminal(ctx, id);
+    return { terminal: this.terminalView(found), ...(await this.terminalAccess!.text(id, lines)) };
+  }
+
+  private writeTerminal_(ctx: ToolContext, id: string, data: string): void {
+    const found = this.scopedTerminal(ctx, id);
+    if (found.info.state !== "running") throw new Error(`Terminal ${id} has exited`);
+    this.terminalAccess!.writeAgent(id, data);
+    if (ctx.ticket) this.addActivityLine(ctx.ticket, "system", "agent", `Typed into terminal ${id} (${found.ticket.key}): ${JSON.stringify(data).slice(0, 200)}`);
+  }
+
   private scopeOf(ctx: ToolContext): ScopedStore {
     if (ctx.runKind !== "cos" && ctx.ticket?.kind !== "cos") return this.everything;
     const row = ctx.ticket ? this.store.cos.get(ctx.ticket.id) : null;
@@ -5964,6 +6025,10 @@ ${numberLines(r.body)}`;
       listInbox: (c, f) => this.listInbox_(c, f),
       // --- memory and activity (chief of staff) ---
       queryActivity: async (c, q) => this.scopeOf(c).queryActivity(q),
+      // --- terminals (chief of staff) ---
+      listTerminals: async (c) => this.listTerminals_(c),
+      readTerminal: (c, id, n) => this.readTerminal_(c, id, n),
+      writeTerminal: async (c, id, d) => this.writeTerminal_(c, id, d),
       readMemory: async (c) => this.readMemory_(c),
       updateMemorySection: async (c, s, b) => this.updateMemorySection_(c, s, b),
       // --- schedules ---

@@ -28,6 +28,7 @@ import { permissionPrompt } from "./permission";
 import { scheduleTools } from "./schedules";
 import { block, editSpec, postNote, readSpec, recordPullRequest, resumeWork, returnToPlanning, reviewDecision, submitForReview, unblock, updateBranch, updateNotes, updateSpec } from "./ticket";
 import { memoryTools } from "./memory";
+import { terminalTools } from "./terminals";
 import { declineWork, dispatchTicket } from "./triage";
 import type { ToolDefinition } from "./types";
 
@@ -39,6 +40,7 @@ export * from "./conductor";
 export * from "./dispatch";
 export * from "./config";
 export * from "./memory";
+export * from "./terminals";
 export * from "./native";
 export * from "./permission";
 export * from "./schedules";
@@ -96,6 +98,7 @@ export const allTools: ToolDefinition[] = [
   ...configWriteTools,
   ...scheduleTools,
   ...memoryTools,
+  ...terminalTools,
   ...browserTools,
   permissionPrompt,
   ...nativeTools,
@@ -139,9 +142,9 @@ const RUN_TOOLS: Record<Exclude<RunKind, "chat" | "compact">, { harness: ToolDef
   triage: { harness: [...boardTools, ...triageTools, ...configReadTools], native: "none" },
   // A chief of staff drives the app: it reads the board, changes tickets and writes its own notes. It
   // has no spec or ticket lifecycle tools (it never submits or blocks), no config writes, no
-  // sub-agents (drivers/claude-code.ts keeps Agent and Task off it) and no files or shell: deeper work
-  // goes to tickets it creates. Everything it reads or changes is scoped (store/scope.ts).
-  cos: { harness: [postNote, ...memoryTools, ...scheduleTools, ...boardTools, ...boardWriteTools, ...configReadTools], native: "none" },
+  // sub-agents (drivers/claude-code.ts keeps Agent and Task off it) and no files or shell of its own (it can read
+  // and, with approval, type into the terminals of tickets it covers): deeper work goes to tickets it creates. Everything it reads or changes is scoped (store/scope.ts).
+  cos: { harness: [postNote, ...memoryTools, ...scheduleTools, ...terminalTools, ...boardTools, ...boardWriteTools, ...configReadTools], native: "none" },
 };
 
 /**

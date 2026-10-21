@@ -38,3 +38,24 @@ test("a snapshot restores the screen into a fresh emulator of the same size", as
   a.dispose();
   b.dispose();
 });
+
+test("lines() is plain text: no escapes, wrapped rows joined, trailing blanks trimmed, bounded to the last lines", async () => {
+  const emu = createEmulator(10, 4, { title() {}, cwd() {} });
+  emu.write("\x1b[31mred\x1b[0m line\r\n0123456789abcdef\r\n\r\nlast\r\n\r\n");
+  await emu.idle();
+  expect(emu.lines(100)).toEqual(["red line", "0123456789abcdef", "", "last"]);
+  expect(emu.lines(2)).toEqual(["", "last"]);
+  emu.dispose();
+});
+
+test("lines() reads the alternate screen while a full-screen program is up, and the scrollback after", async () => {
+  const emu = createEmulator(20, 3, { title() {}, cwd() {} });
+  emu.write("one\r\ntwo\r\nthree\r\nfour\r\n");
+  emu.write("\x1b[?1049h\x1b[Htui screen");
+  await emu.idle();
+  expect(emu.lines(100)).toEqual(["tui screen"]);
+  emu.write("\x1b[?1049l");
+  await emu.idle();
+  expect(emu.lines(100)).toEqual(["one", "two", "three", "four"]);
+  emu.dispose();
+});

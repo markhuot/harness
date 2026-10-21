@@ -259,6 +259,17 @@ export interface ToolContext {
  * All methods act on behalf of the run in `ctx` and throw Error(message) on invalid use —
  * the tool layer converts thrown errors into isError tool results.
  */
+/** A terminal as a chief of staff sees it, with the ticket whose worktree it is in. */
+export interface TerminalView {
+  id: string;
+  cwd: string;
+  title: string;
+  process: string;
+  state: "running" | "exited";
+  exitCode: number | null;
+  ticketKey: string;
+}
+
 export interface HarnessOps {
   // --- any ticket run ---
   /** A short Activity note on the ticket (post_note). */
@@ -366,6 +377,14 @@ export interface HarnessOps {
   readMemory(ctx: ToolContext): Promise<CosMemory>;
   /** Replace one section of the caller's memory; throws when the body is too long or would start another section. */
   updateMemorySection(ctx: ToolContext, section: string, body: string): Promise<CosMemory>;
+
+  // --- terminals: chief of staff runs (DESIGN.md "Chief of staff terminals") ---
+  // Only terminals inside the worktree of a ticket the caller covers; any other id behaves as not found.
+  listTerminals(ctx: ToolContext): Promise<TerminalView[]>;
+  /** The last `lines` lines of a terminal as plain text (bounded); throws for an unknown or out-of-scope id. */
+  readTerminal(ctx: ToolContext, id: string, lines?: number): Promise<{ terminal: TerminalView; text: string; lines: number; truncated: boolean }>;
+  /** Type into a running terminal, logging it to the caller's Activity. The tool asks for approval first; this does not. */
+  writeTerminal(ctx: ToolContext, id: string, data: string): Promise<void>;
 
   // --- schedules: chief of staff runs (DESIGN.md "Schedules") ---
   // Each acts on the calling chief's own schedules only; another chief's behave as not found.

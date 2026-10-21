@@ -554,5 +554,5 @@ export const configWriteTools = [
   deleteTicket,
 ];
 
-/** Names of the tools whose every call a human approves (defineGatedTool). */
-export const GATED_TOOL_NAMES: ReadonlySet<string> = new Set(configWriteTools.map((t) => t.name));
+/** Names of the tools whose every call a human approves (defineGatedTool, and write_terminal, which asks the same way). */
+export const GATED_TOOL_NAMES: ReadonlySet<string> = new Set([...configWriteTools.map((t) => t.name), "write_terminal"]);

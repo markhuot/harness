@@ -102,6 +102,9 @@ export class FakeEmulator implements Emulator {
   serialize() {
     return { data: `SCREEN(${this.written.join("")})@${this.cols}x${this.rows}`, truncated: false };
   }
+  lines(max: number) {
+    return this.written.join("").split("\n").slice(-max);
+  }
   dispose() {
     this.disposed = true;
   }

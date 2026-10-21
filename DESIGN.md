@@ -838,9 +838,9 @@ project, so only All sees them. The CoS's own ticket and the hidden project are 
 included. A test lists every `HarnessOps` method and fails for one that isn't classified as keyed or
 not, and runs every keyed one against an out-of-scope key.
 
-**Tools.** `RUN_TOOLS.cos`: `post_note`, `update_notes`, the read board tools, the board write tools
-and the config read tools. No spec or lifecycle tools, no config writes (so no way to change the
-`cos*` settings), no files or shell, and no sub-agents: `buildClaudeArgs` passes
+**Tools.** `RUN_TOOLS.cos`: `post_note`, `update_notes`, the read board tools, the board write tools,
+the terminal tools (below) and the config read tools. No spec or lifecycle tools, no config writes (so no way to change the
+`cos*` settings), no files or shell of its own, and no sub-agents: `buildClaudeArgs` passes
 `--disallowedTools Agent Task` for a `cos` run. `create_ticket` needs `project_key` (a CoS has no
 project) and takes no `child`. Its system prompt (`system.cos`, static, so the prefix stays
 byte-identical across wakes) says to create tickets, conductors for several parts, for anything deeper
@@ -939,6 +939,12 @@ ticket (a human's, or an agent's through `message_ticket`) and the notes it is u
 as `answered` entries, authored by whoever sent them, whose `meta.answers` is the id of the `blocked`
 entry they answer (nothing before that change has replies). The text of every entry and reply is
 fenced `<untrusted-event>` like the triage path's, since ticket agents write it.
+
+#### Terminals
+
+A chief of staff has `list_terminals`, `read_terminal` and `write_terminal` (service/src/tools/terminals.ts; the terminal registry reaches the orchestrator as `OrchestratorOptions.terminals`). Terminals carry no ticket key (only a cwd and an optional project), so a terminal is in a chief's scope when its cwd is inside the `workdir` of a ticket the chief covers (the deepest workdir owns it). A terminal under no ticket is in no scope, not even All's, because a home-folder shell may show tokens and environment. The cwd follows `cd`, so a shell that leaves its worktree leaves the scope; an explicit ticket key on terminals would need protocol, Mac and iOS changes and was left out. A missing and an out-of-scope id fail with the same `Unknown terminal` error.
+
+`read_terminal` reads the emulator's active buffer (`Emulator.lines`: the alternate screen while a TUI runs, else screen plus scrollback, wrapped rows joined) as plain text, capped at 1000 lines and 60,000 characters, and fences it as `<untrusted-terminal>`. The fence only tells the model what the text is; the approval on `write_terminal` is what stops a prompt injection from typing into a shell. `write_terminal` calls `requestApproval` every time (`onceOnly`, and in `GATED_TOOL_NAMES`, so no always-allow), with the data's control bytes escaped and the last screen lines on the card. It is written beside `defineGatedTool` because the card needs the run's context to read the screen. The approved retry matches the exact `{id, data}`; the keystrokes go through `TerminalRegistry.writeAgent`, which shares `MAX_WRITE` and the per-second budget with the sockets, and are logged to Activity. The card shows the screen at request time; the service does not re-check that the foreground process is unchanged on the retry.
 
 #### Schedules
 

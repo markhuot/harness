@@ -115,6 +115,9 @@ export async function createHarness(opts: CreateHarnessOptions): Promise<Harness
   });
   const mcp: McpHandler = (await import("./api/mcp")).handleMcpRequest;
 
+  const terminals = new TerminalRegistry({ bus, spawn: opts.spawnPty ?? spawnBunPty, log: opts.log });
+  terminals.start();
+
   let baseUrl = "";
   const orchestrator = new Orchestrator({
     store,
@@ -127,6 +130,7 @@ export async function createHarness(opts: CreateHarnessOptions): Promise<Harness
     watchers: opts.watchers,
     log: opts.log,
     now,
+    terminals,
   });
   orchestrator.start();
 
@@ -149,9 +153,6 @@ export async function createHarness(opts: CreateHarnessOptions): Promise<Harness
   // Reminders and wake-ups (DESIGN.md "Schedules"): wakes become events for the chief, reminders push to the human.
   const scheduler = new Scheduler({ store, now, sink: orchestrator.cosEngine, notifier: notifications, log: opts.log, intervalMs: opts.schedulerIntervalMs });
   scheduler.start();
-
-  const terminals = new TerminalRegistry({ bus, spawn: opts.spawnPty ?? spawnBunPty, log: opts.log });
-  terminals.start();
 
   const plugins = new PluginHost({
     dirs: opts.pluginDirs ?? [

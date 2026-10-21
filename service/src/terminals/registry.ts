@@ -57,6 +57,11 @@ export const MAX_WRITE = 1024 * 1024;
 export const MAX_WRITE_PER_SECOND = 4 * 1024 * 1024;
 /** Exited terminals kept for their grace period; the oldest go first past this. */
 export const MAX_EXITED_TERMINALS = 8;
+/** What an agent reads from a terminal: lines by default, and the most it can ask for. */
+export const DEFAULT_READ_LINES = 200;
+export const MAX_READ_LINES = 1000;
+/** A cap on the characters returned, so one enormous line can't overflow a tool result. */
+export const MAX_READ_CHARS = 60_000;
 const UPDATE_INTERVAL_MS = 1000;
 const ENV_DROP = /^(ELECTRON_|HARNESS_|BUN_|npm_|NODE_OPTIONS$)/;
 
@@ -400,6 +405,23 @@ export class TerminalRegistry {
     } else {
       term.primary = socketId;
     }
+    this.send(term, id, data);
+  }
+
+  /**
+   * Typing by an agent (the chief of staff's write_terminal), not a socket: it shares the size and
+   * per-second limits with the sockets but has no primary client, and it fails loudly on a shell
+   * that has exited, where a socket's write is a silent no-op.
+   */
+  writeAgent(id: string, data: string) {
+    const term = this.terms.get(id);
+    if (!term) throw notFound(`No terminal ${id}`);
+    if (data.length > MAX_WRITE) throw badRequest(`writes are limited to ${MAX_WRITE} characters`);
+    if (term.info.state !== "running") throw badRequest(`Terminal ${id} has exited`);
+    this.send(term, id, data);
+  }
+
+  private send(term: Term, id: string, data: string) {
     const now = this.o.now();
     if (now - term.writeWindowAt >= 1000) {
       term.writeWindowAt = now;
@@ -413,6 +435,36 @@ export class TerminalRegistry {
       // The shell went away between its master closing and its exit being reported: it ended.
       throw notFound(`Terminal ${id} has ended`);
     }
+  }
+
+  /**
+   * What the terminal shows as plain text: the last `lines` logical lines (at most MAX_READ_LINES)
+   * and at most MAX_READ_CHARS characters, the oldest dropped first. Output still waiting to be
+   * parsed is included.
+   */
+  async text(id: string, lines = DEFAULT_READ_LINES): Promise<{ text: string; lines: number; truncated: boolean }> {
+    const term = this.terms.get(id);
+    if (!term) throw notFound(`No terminal ${id}`);
+    this.flush(term);
+    await term.emu.idle();
+    const want = Math.min(MAX_READ_LINES, Math.max(1, Math.floor(lines)));
+    let out = term.emu.lines(want + 1);
+    let truncated = out.length > want;
+    out = out.slice(-want);
+    let size = 0;
+    const kept: string[] = [];
+    for (let i = out.length - 1; i >= 0; i--) {
+      let line = out[i]!;
+      if (size + line.length + 1 > MAX_READ_CHARS) {
+        truncated = true;
+        const room = MAX_READ_CHARS - size - 1;
+        if (kept.length === 0 && room > 0) kept.unshift(line.slice(-room));
+        break;
+      }
+      size += line.length + 1;
+      kept.unshift(line);
+    }
+    return { text: kept.join("\n"), lines: kept.length, truncated };
   }
 
   /** Housekeeping: expire silent clients, poll attached terminals, drop exited and idle ones. */

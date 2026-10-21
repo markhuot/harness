@@ -4,7 +4,7 @@ import type { HarnessEvent } from "@harness/shared";
 import type { BusEvent } from "../../../service/src/events";
 import { EventBus } from "../../../service/src/events";
 import { HarnessError } from "../../../service/src/orchestrator/errors";
-import { isTerminalReply, loginShell, MAX_EXITED_TERMINALS, MAX_WRITE, MAX_WRITE_PER_SECOND, resolveCwd, shellEnv, TerminalRegistry } from "../../../service/src/terminals/registry";
+import { DEFAULT_READ_LINES, MAX_READ_CHARS, MAX_READ_LINES, isTerminalReply, loginShell, MAX_EXITED_TERMINALS, MAX_WRITE, MAX_WRITE_PER_SECOND, resolveCwd, shellEnv, TerminalRegistry } from "../../../service/src/terminals/registry";
 import { tempDir } from "../../builders/tmp";
 import { FakeClient, fakeEmulators, fakeSpawn, manualTimers } from "./fakes";
 
@@ -392,4 +392,32 @@ test("a callback that throws is logged, not allowed to escape into the PTY's nat
   expect(() => r.clock.advance(4)).not.toThrow();
   expect(r.logs[0]).toContain("terminal callback failed: ");
   expect(r.logs[0]).toContain("emulator exploded");
+});
+
+test("text() flushes output still waiting and keeps the last lines within the line and character caps", async () => {
+  const r = rig();
+  const { id } = await r.registry.create({ cwd: r.home });
+  r.emus.made[0]!.lines = (max) => ["a", "b", "c", "d"].slice(-max);
+  expect(await r.registry.text(id, 2)).toEqual({ text: "c\nd", lines: 2, truncated: true });
+  expect((await r.registry.text(id)).truncated).toBe(false);
+  expect(DEFAULT_READ_LINES).toBeLessThanOrEqual(MAX_READ_LINES);
+  r.emus.made[0]!.lines = () => ["x".repeat(MAX_READ_CHARS * 2)];
+  const huge = await r.registry.text(id);
+  expect(huge.text.length).toBeLessThan(MAX_READ_CHARS);
+  expect(huge.truncated).toBe(true);
+  await expect(r.registry.text("t-nope")).rejects.toMatchObject({ status: 404 });
+});
+
+test("writeAgent types without a socket, shares the per-second budget with sockets, and refuses an exited shell", async () => {
+  const r = rig();
+  const { id } = await r.registry.create({ cwd: r.home });
+  r.registry.writeAgent(id, "ls\r");
+  expect(r.ptys[0]!.writes).toEqual(["ls\r"]);
+  for (let i = 0; i < MAX_WRITE_PER_SECOND / MAX_WRITE - 1; i++) r.registry.write("s1", id, "x".repeat(MAX_WRITE));
+  rejects(() => r.registry.writeAgent(id, "x".repeat(MAX_WRITE)), 400);
+  rejects(() => r.registry.writeAgent("t-nope", "x"), 404);
+  r.clock.advance(1000);
+  r.ptys[0]!.exit(0);
+  await settle();
+  rejects(() => r.registry.writeAgent(id, "x"), 400);
 });

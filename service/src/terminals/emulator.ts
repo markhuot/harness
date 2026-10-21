@@ -25,6 +25,12 @@ export interface Emulator {
   resize(cols: number, rows: number): void;
   /** Escape sequences that restore the screen into an empty emulator of the current size. */
   serialize(): { data: string; truncated: boolean };
+  /**
+   * The last `max` logical lines of the visible buffer (the alternate screen while a full-screen
+   * program runs, else screen plus scrollback) as plain text: wrapped rows joined, trailing blanks
+   * trimmed, no escape sequences.
+   */
+  lines(max: number): string[];
   dispose(): void;
 }
 
@@ -104,6 +110,25 @@ export const createEmulator: CreateEmulator = (cols, rows, events) => {
     serialize() {
       const data = serializer.serialize({ scrollback: SCROLLBACK_LINES });
       return { data, truncated: dropped || term.buffer.normal.length >= SCROLLBACK_LINES + term.rows };
+    },
+    lines(max) {
+      const buf = term.buffer.active;
+      const out: string[] = [];
+      let current = "";
+      for (let y = 0; y < buf.length; y++) {
+        const row = buf.getLine(y);
+        if (!row) continue;
+        // A row that continues onto the next keeps its trailing cells so the join has no gap.
+        const text = row.translateToString(!buf.getLine(y + 1)?.isWrapped);
+        if (row.isWrapped) current += text;
+        else {
+          if (y > 0) out.push(current);
+          current = text;
+        }
+      }
+      out.push(current);
+      while (out.length && out[out.length - 1] === "") out.pop();
+      return out.slice(-Math.max(0, max));
     },
     dispose() {
       term.dispose();

@@ -109,6 +109,13 @@ test("only a chief of staff gets the schedule tools", () => {
   expect(names("chat", { hasBuiltinTools: true, usesPermissionPromptTool: false }, { kind: "task" })).not.toContain("schedule_create");
 });
 
+test("only a chief of staff gets the terminal tools", () => {
+  for (const kind of RUN_KINDS) {
+    for (const t of ["list_terminals", "read_terminal", "write_terminal"]) expect(names(kind).includes(t), `${kind}: ${t}`).toBe(kind === "cos");
+  }
+  expect(names("chat", { hasBuiltinTools: true, usesPermissionPromptTool: false }, { kind: "task" })).not.toContain("write_terminal");
+});
+
 test("an unknown run kind still throws", () => {
   expect(() => toolsForRun("nope" as RunKind, { hasBuiltinTools: true, usesPermissionPromptTool: false })).toThrow(/Unknown run kind/);
 });
