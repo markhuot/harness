@@ -63,9 +63,8 @@ import type {
   PairingInfo,
   PlanUsageReport,
   SessionActionBody,
-  CosMemory,
-  PutCosMemoryBody,
 } from "./protocol";
+import type { CosMemory, PutCosMemoryBody } from "./cos";
 import type { Device, NotificationStatus, Presence, RegisterDeviceBody, TestNotificationResult } from "./notifications";
 import type { FileMatch } from "./mentions";
 import type { CommandMatch } from "./commands";

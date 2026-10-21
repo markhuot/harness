@@ -40,8 +40,11 @@ test("time range is from-inclusive and to-exclusive, newest first", () => {
 });
 
 test("project, ticket and kind filters narrow the page; an unknown project or ticket is an empty page", () => {
-  const { log, w1, h1, scoped } = board();
+  const b = board();
+  const { log, w1, h1, scoped } = b;
+  const { clock } = b;
   log(w1, "note", "w note");
+  clock.advance(1);
   log(w1, "approved", "w approved");
   log(h1, "note", "h note");
   const sc = scoped("all");

@@ -1968,25 +1968,6 @@ export interface SpecConflict {
   spec: string;
 }
 
-/** A chief of staff's memory (GET /tickets/:key/memory): one markdown document, and the revision a write is checked against. */
-export interface CosMemory {
-  text: string;
-  revision: string;
-}
-
-/** PUT /tickets/:key/memory: the whole document, written by the human. */
-export interface PutCosMemoryBody {
-  text: string;
-  /** The revision the editor opened (CosMemory.revision). A memory that changed since answers 409 with a MemoryConflict. */
-  baseRevision: string;
-}
-
-/** The `data` of PUT /tickets/:key/memory's 409 when baseRevision isn't the current revision. */
-export interface MemoryConflict {
-  currentRevision: string;
-  text: string;
-}
-
 /** Re-open a done ticket: back to in progress, with notes for the agent */
 export interface ReopenBody {
   notes: string;

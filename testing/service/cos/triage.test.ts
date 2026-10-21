@@ -57,7 +57,7 @@ test("the system prompt is byte-identical for every batch, so a provider can cac
 
 test("triageGuidance is the chief's 'Triage guidance' section of its notes, up to the next heading", () => {
   expect(triageGuidance({ agentNotes: "intro\n## Triage guidance\nEscalate invoices.\nIgnore bots.\n\n## Memory\nunrelated" })).toBe("Escalate invoices.\nIgnore bots.");
-  expect(triageGuidance({ agentNotes: "### triage guidance  \nonly this" })).toBe("only this");
+  expect(triageGuidance({ agentNotes: "# triage guidance  \nonly this" })).toBe("only this");
   expect(triageGuidance({ agentNotes: "no section here" })).toBe("");
   expect(triageGuidance({ agentNotes: null })).toBe("");
   expect(triageGuidance(null)).toBe("");
