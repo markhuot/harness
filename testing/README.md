@@ -58,7 +58,7 @@ One journey through the real apps, last in the gate: the service (dummy driver, 
 home), the built Mac app, and the iPhone and iPad apps from the same build-for-testing as L4 iOS.
 Seven steps, each building on the last: launch the Mac app; pair both phones by link; create a
 ticket on the Mac and see it on both phones; approve its plan and watch the dummy session arrive on
-all three; edit and save a file; open a terminal and pop it out into its own window (the
+all three; rename a project group in its settings; edit and save a file; open a terminal and pop it out into its own window (the
 renderer↔main IPC the L4 layers can't reach); relaunch each app and check the state survived.
 
 - Data for the journey is `testing/world/walk.ts` (a checkout, the ticket, the dummy driver's

@@ -195,6 +195,22 @@ export function steps(start: Start, built: { app: string }): Step[] {
       },
     },
     {
+      name: "4d. project settings renames the group for every project in it",
+      async run(ctx) {
+        const main = ctx.mac.main;
+        const row = `[...document.querySelectorAll('.settings-row')].find((r) => r.innerText.startsWith('Group name'))`;
+        const previous = await main.evaluate<string>(`location.hash`);
+        await ctx.daemon.call("PATCH", `/projects/${ctx.projectId}`, { group: "Walk group" });
+        await main.evaluate(`location.hash = '#/project/${ctx.projectId}/settings'`);
+        await main.waitFor("the Group name row", `${row}`);
+        await main.evaluate(`${row}.scrollIntoView({ block: 'center' })`);
+        await shot(ctx, "04d-mac-project-settings-group-name");
+        const groups = await ctx.daemon.call<{ id: string; name: string }[]>("GET", "/groups");
+        if (!groups.some((g) => g.name === "Walk group")) throw new Error(`the service has no "Walk group": ${JSON.stringify(groups)}`);
+        await main.evaluate(`location.hash = ${JSON.stringify(previous)}`);
+      },
+    },
+    {
       name: "5. edit a file in the Mac app's editor",
       async run(ctx) {
         const main = ctx.mac.main;
