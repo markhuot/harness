@@ -17,9 +17,9 @@ export interface RunChoiceInput {
   settings: Pick<Settings, "phaseModels">;
 }
 
-/** The driver + model for a ticket run of this kind (triage runs follow their watcher instead). */
+/** The driver + model for a ticket run of this kind (a chief of staff's runs use the work choice). */
 export function resolveRunChoice({ kind, ticket, project, settings }: RunChoiceInput): PhaseChoice {
-  const phase = runPhase(kind) ?? "work";
+  const phase = runPhase(kind);
   if (!ticket) return settingsPhaseChoice(settings.phaseModels, phase);
   return resolvePhaseChoice(phase, { ticket: ticket.phaseModels, project: project?.phaseModels, settings: settings.phaseModels });
 }

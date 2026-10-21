@@ -21,6 +21,8 @@ let ignoredFields: [String: String] = [
     "Ticket.blockedRunKind": "Swift has no property for it, and no iPhone screen reads it",
     "Ticket.blockedHead": "Swift has no property for it, and no iPhone screen reads it",
     "Ticket.startAfterPlanBy": "Swift has no property for it, and no iPhone screen reads it",
+    "WatcherBody.cosId": "Swift has no property for it: the iPhone's watcher form never sets the owner (no owner means the All chief)",
+    "Watcher.cosId": "Swift has no property for it, and no iPhone screen shows which chief of staff owns a watcher",
     "Project.cosEnabled": "Swift has no property for it, and no iPhone screen reads it (the Mac app sets the chief of staff)",
     "Project.cosCanUnblock": "Swift has no property for it, and no iPhone screen reads it (the Mac app sets the chief of staff)",
     "CreateProjectBody.cosEnabled": "Swift has no property for it, and no iPhone screen reads it (the Mac app sets the chief of staff)",

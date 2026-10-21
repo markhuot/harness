@@ -13,7 +13,9 @@ test("core tools and native tools are advertised directly; anything else is stub
   expect(isCoreTool(tool("submit_for_review", ""))).toBe(true);
   expect(isCoreTool(tool("bash", "", {}, [], "native"))).toBe(true);
   expect(isCoreTool(tool("browser_open", ""))).toBe(false);
-  expect(CORE_TOOL_NAMES.has("dispatch_ticket")).toBe(true);
+  // Triage's terminal calls are gone, so nothing is kept advertised for them.
+  expect(CORE_TOOL_NAMES.has("dispatch_ticket")).toBe(false);
+  expect(CORE_TOOL_NAMES.has("decline_work")).toBe(false);
 });
 
 test("firstSentence takes the first line's first sentence and cuts a long one at a word with an ellipsis", () => {

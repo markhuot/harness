@@ -86,8 +86,6 @@ import {
   PROMPT_IDS,
   rankCommands,
   TICKET_STATUSES,
-  watcherDriver,
-  watcherModel,
   adviserFor,
   applyLegacyProject,
   mergePhaseModels,
@@ -148,7 +146,7 @@ import { GATED_TOOL_NAMES, stopBrowserJobs, toolsForRun } from "../tools/index";
 import { isTask, positionForDrop } from "@harness/shared/state";
 import * as prompts from "./prompts";
 import { PROMPTS, promptTemplateError } from "./prompt-templates";
-import { findKeys, toOutput, WatcherRunner, type WatcherOutput } from "./watchers";
+import { toOutput, WatcherRunner, type WatcherOutput } from "./watchers";
 import { RunQueue, type QueuedJob } from "./queue";
 import {
   branchExists,
@@ -314,29 +312,22 @@ interface ActiveRun {
   compacted?: { before?: number; after?: number };
 }
 
-interface TriageMeta {
+/** What the Inbox's old triage sessions (kept, read-only) stored: the output they were triaging. */
+interface LegacyTriageMeta {
   source: string;
-  /** The watcher output being triaged */
   text: string;
-  truncated?: boolean;
-  /** The watcher's prompt at the time ("" → none) */
   prompt?: string;
-  /** The watcher that printed it (absent for injected output); its models apply to the triage run */
-  watcherId?: string | null;
 }
 
-/** One chunk of watcher (or injected) output on its way into triage. */
+/** One chunk of watcher (or injected) output on its way into the chief of staff's events. */
 export interface IngestInput {
   /** Dedupe scope: the watcher id, or inject:<source> */
   sourceId: string;
-  /** Watcher name shown to triage and on dispatched tickets */
+  /** Watcher name shown on the event */
   source: string;
   output: WatcherOutput;
-  prompt: string;
-  /** The watcher's own driver (null → settings.watcherDriver, then settings.defaultDriver) */
-  driver: string | null;
-  /** The watcher's id, so its model applies when the triage run starts (absent for injected output) */
-  watcherId?: string | null;
+  /** The chief of staff (its ticket id) the output goes to; null or absent: the All chief */
+  cosId?: string | null;
 }
 
 /** Runs that do the ticket's work: a queued one holds off auto-submit (see finishWork). */
@@ -347,7 +338,7 @@ const RUNNABLE_WORK: RunKind[] = ["work", "conductor", "chat"];
  */
 const APPROVABLE_RUNS: RunKind[] = ["work", "complete", "conductor", "chat", "cos"];
 /** Run kinds whose native tool calls are checked as read_only, whatever the ticket's mode. */
-const READ_ONLY_RUNS: RunKind[] = ["plan", "triage"];
+const READ_ONLY_RUNS: RunKind[] = ["plan"];
 /** Run kinds that get the board write tools (create_ticket, message_ticket, update_branch, ...) */
 const BOARD_WRITE_RUNS: RunKind[] = ["work", "conductor", "chat", "cos"];
 /** Run kinds that get the (human-gated) config tools */
@@ -646,7 +637,8 @@ export class Orchestrator {
     this.planUsage = new PlanUsageTracker(() => this.driverList(), this.bus, () => this.now());
     const handlers = {
       onOutput: async (w: Watcher, output: WatcherOutput) => {
-        await this.ingest({ sourceId: w.id, source: w.name, output, prompt: w.prompt, driver: w.driver, watcherId: w.id });
+        // Read the owner now: a CoS that was deleted since the supervisor started has already handed its watchers to All.
+        this.ingest({ sourceId: w.id, source: w.name, output, cosId: this.store.watchers.get(w.id)?.cosId ?? null });
       },
       onStatus: (id: string, patch: { lastRunAt?: number; lastError?: string | null }) => {
         const w = this.store.watchers.update(id, patch);
@@ -769,10 +761,6 @@ export class Orchestrator {
       if (planned) this.dropPlanApproval(planned, "Plan approval cleared: planning run interrupted; work not started");
     }
     if (run.kind === "complete") this.completionStopped(run.sessionId, "interrupted");
-    const session = this.store.sessions.get(run.sessionId);
-    if (session?.kind === "triage" && session.triageStatus === "triaging") {
-      this.store.sessions.update(session.id, { triageStatus: "failed", outcome: `Interrupted: ${reason}` });
-    }
     this.touchSession(run.sessionId);
   }
 
@@ -2999,7 +2987,9 @@ export class Orchestrator {
   // Sessions & transcript
   // =========================================================================
 
+  /** "triage" is accepted for apps that still ask for the old Inbox: there are no triage sessions to show any more (their items are events). */
   listSessions(kind?: "ticket" | "triage"): Session[] {
+    if (kind === "triage") return [];
     // A chief of staff's conversation isn't on the board: it is read through /cos.
     const chiefs = new Set(this.store.cos.list().map((c) => c.ticketId));
     return this.store.sessions.list(kind).filter((s) => !(s.ticketId && chiefs.has(s.ticketId)));
@@ -3143,6 +3133,13 @@ export class Orchestrator {
       out.intervalSec = Math.round(body.intervalSec);
     }
     if (body.enabled !== undefined) out.enabled = !!body.enabled;
+    if (body.cosId !== undefined) {
+      if (body.cosId !== null && typeof body.cosId !== "string") throw badRequest("cosId must be a string or null");
+      const row = body.cosId ? this.store.cos.get(body.cosId) : null;
+      if (body.cosId && !row) throw badRequest(`Unknown chief of staff: ${body.cosId}`);
+      // The All chief is stored as NULL, so a watcher never points at a row that could be recreated.
+      out.cosId = row && row.scope !== "all" ? row.ticketId : null;
+    }
     if (body.cwd !== undefined) out.cwd = body.cwd || null;
     if (body.driver !== undefined) {
       if (body.driver && !this.drivers.has(body.driver)) throw badRequest(`Unknown driver: ${body.driver}`);
@@ -3157,66 +3154,32 @@ export class Orchestrator {
   }
 
   /**
-   * Feed output as if a watcher named `source` printed `text` (an object is taken as its JSON).
-   * `prompt` plays the watcher's prompt. Null when deduped or when the text is only whitespace.
+   * Feed output as if a watcher named `source` printed `text` (an object is taken as its JSON): an
+   * event for the All chief of staff. Null when deduped or when the text is only whitespace.
    */
-  async injectOutput(source: string, text: unknown, prompt?: unknown): Promise<Session | null> {
+  async injectOutput(source: string, text: unknown, prompt?: unknown): Promise<CosEvent | null> {
     if (typeof source !== "string" || !source.trim()) throw badRequest("source is required");
     if (prompt !== undefined && prompt !== null && typeof prompt !== "string") throw badRequest("prompt must be a string");
     const raw = typeof text === "string" ? text : text === undefined || text === null ? "" : JSON.stringify(text);
     const output = toOutput(raw);
     if (!output) throw badRequest("text is required");
     const name = source.trim();
-    return this.ingest({ sourceId: `inject:${name}`, source: name, output, prompt: (prompt ?? "").trim(), driver: null });
+    return this.ingest({ sourceId: `inject:${name}`, source: name, output });
   }
 
-  /** Dedupe (identical text from the same source is triaged once), then triage. */
-  async ingest(input: IngestInput): Promise<Session | null> {
+  /** Dedupe (identical text from the same source is delivered once), then an event owned by the watcher's chief of staff. */
+  ingest(input: IngestInput): CosEvent | null {
     const hash = createHash("sha256").update(input.output.text).digest("hex");
     if (!this.store.seen.markSeen(input.sourceId, `sha256:${hash}`, null)) return null;
-    this.cosEngine.addExternal({
+    return this.cosEngine.addExternal({
       sourceKind: "watcher",
       sourceRef: `${input.sourceId}:sha256:${hash}`,
       actor: `watcher:${input.source}`,
       title: `${input.source}: ${outputTitle(input.output.text)}`,
       body: input.output.text,
+      // A chief that is gone (its ticket deleted) no longer owns anything: the All chief takes the event.
+      ...(input.cosId && this.store.cos.get(input.cosId) ? { cosId: input.cosId } : {}),
     });
-    return this.triage(input);
-  }
-
-  triage(input: Omit<IngestInput, "sourceId">): Session {
-    const { source, output, prompt, driver, watcherId = null } = input;
-    const projects = this.store.projects.list();
-    // Every ticket a key in the output could mean: the local ticket with that key (or alias), and
-    // every ticket linked to it as a remote ID. Triage picks one (ticket_key) or starts another.
-    const seen = new Set<string>();
-    const existingTickets = findKeys(output.text).flatMap((key) =>
-      [this.agentLookup(this.everything, key)?.ticket, ...this.store.tickets.byExternalKey(key, { drafts: false })].filter((t): t is Ticket => {
-        if (!t || seen.has(t.id)) return false;
-        seen.add(t.id);
-        return true;
-      }),
-    );
-    const title = outputTitle(output.text);
-    const n = this.store.counters.next("triage");
-    const session = this.store.sessions.create({
-      key: `TRIAGE-${n}`,
-      kind: "triage",
-      ticketId: null,
-      driver: watcherDriver({ driver }, this.settings()),
-      cwd: this.paths.home,
-      title,
-      triageStatus: "triaging",
-      meta: { source, text: output.text, truncated: output.truncated, prompt, watcherId } satisfies TriageMeta,
-    });
-    this.touchSession(session.id);
-    this.appendStatus(session.id, null, `New output from ${source}`);
-    this.enqueueRun(
-      session.id,
-      "triage",
-      this.prompts().triagePrompt({ source, title, text: output.text, truncated: output.truncated, prompt, projects, existingTickets }),
-    );
-    return this.store.sessions.get(session.id)!;
   }
 
   // =========================================================================
@@ -3284,7 +3247,6 @@ ${numberLines(r.body)}`;
    * review run may edit_spec (to record what it found) but not replace the spec whole.
    */
   private specWriter(ctx: ToolContext, tool: string): Ticket {
-    if (ctx.runKind === "triage") throw new Error(`${tool} isn't available in triage runs: they don't change the spec`);
     if (ctx.runKind === "review" && tool !== "edit_spec") throw new Error(`${tool} isn't available in review runs: record what you found with edit_spec instead`);
     return this.ctxTicket(ctx);
   }
@@ -3807,7 +3769,7 @@ ${numberLines(r.body)}`;
     const key = filter.key?.trim().toUpperCase();
     const matches = this.store.sessions
       .list("triage")
-      .map((s) => ({ s, meta: this.store.sessions.getMeta<TriageMeta>(s.id) }))
+      .map((s) => ({ s, meta: this.store.sessions.getMeta<LegacyTriageMeta>(s.id) }))
       .filter(({ s, meta }) => {
         if (key && s.key.toUpperCase() !== key) return false;
         if (filter.statuses?.length && !filter.statuses.includes(s.triageStatus ?? "triaging")) return false;
@@ -4254,93 +4216,6 @@ ${numberLines(r.body)}`;
     return `Recorded ${u} at ${resolved.stdout.slice(0, 8)} on ${t.key}.`;
   }
 
-  /** `more`: a dispatch may follow earlier dispatches (one output can hold several items). */
-  private triageMeta(ctx: ToolContext, more = false): { session: Session; meta: TriageMeta } {
-    const session = this.store.sessions.get(ctx.session.id);
-    if (!session || session.kind !== "triage") throw new Error("Not a triage session");
-    const meta = this.store.sessions.getMeta<TriageMeta>(session.id);
-    if (!meta) throw new Error("Triage session has no output");
-    const open = session.triageStatus === "triaging" || (more && session.triageStatus === "dispatched");
-    if (!open) throw new Error(`This output was already ${session.triageStatus}`);
-    return { session, meta };
-  }
-
-  /**
-   * dispatch_ticket. `key` is the remote ID and never looks a ticket up: without `ticketKey` it
-   * creates a new ticket with the project's next native key, linked to the remote ID (any number
-   * of tickets can link one). `ticketKey` sends the update to that local ticket (current key or
-   * alias) and links it to `key` when it has no remote ID yet. Reusing a ticket is the triage
-   * agent's call, made from the "Existing tickets" list; nothing matches automatically.
-   */
-  async dispatchTicket(ctx: ToolContext, input: Parameters<HarnessOps["dispatchTicket"]>[1]): Promise<Ticket> {
-    const { session, meta } = this.triageMeta(ctx, true);
-    const project = this.store.projects.getByKey(input.projectKey ?? "");
-    if (!project) throw new Error(`Unknown project: ${input.projectKey}`);
-    const key = input.key?.trim().toUpperCase() || null;
-    if (key && !isTicketKey(key)) throw new Error(`Invalid remote ID: ${input.key}. key must look like FOO-123; leave it out when the item has none.`);
-    const url = input.url?.trim() || null;
-    const ticketKey = input.ticketKey?.trim() || null;
-    if (ticketKey) {
-      // A draft can't be routed to.
-      const existing = this.agentTarget(this.everything, ticketKey);
-      if (!existing) {
-        const related = this.relatedTickets(this.everything, ticketKey, null, { drafts: false });
-        throw new Error(
-          related.length
-            ? `${this.remoteOnlyMessage(ticketKey.toUpperCase(), related)} Pass one of those as ticket_key, or leave ticket_key out to create a new ticket.`
-            : `Unknown ticket: ${ticketKey}. ticket_key must be an existing local ticket's key; leave it out to create a new ticket.`,
-        );
-      }
-      const current = existing.externalRef?.key?.trim().toUpperCase() || null;
-      if (key && current && current !== key) {
-        throw new Error(`${existing.key} is already linked to ${current}, so it can't carry ${key} too. Leave ticket_key out to create a new ticket linked to ${key}.`);
-      }
-      const link = !!key && !current;
-      if (link) {
-        this.store.tickets.setExternalRef(existing.id, { source: meta.source, key: key!, url, raw: meta.text ?? null });
-        this.appendStatus(existing.sessionId, null, `Linked to ${key}`);
-        this.touchTicket(existing.id);
-      } else if (current && url && !existing.externalRef?.url) {
-        this.store.tickets.setExternalRef(existing.id, { ...existing.externalRef!, url });
-        this.touchTicket(existing.id);
-      }
-      const body = input.spec?.trim() || `Update from ${meta.source}: ${input.title || session.title}`;
-      // Triage only dispatches work, and a done ticket's chat can't do any: its worktree may be
-      // gone and nothing reviews or lands the result. The update re-opens it instead.
-      const reopened = existing.status === "done";
-      if (reopened) {
-        this.notCompleting(existing, "re-opened");
-        this.resetRejections(existing);
-        this.addActivity(existing, "reopened", "system", `Re-opened by an update from ${meta.source}`, this.moveMeta(existing, "in_progress"));
-        await this.reopen(existing, body, `Re-opened by an update from ${meta.source}`);
-      } else await this.sendMessage(existing.key, body, { author: "system" });
-      const sent = reopened ? "re-opened it with the update" : "sent update";
-      this.finishTriage(
-        session.id,
-        "dispatched",
-        link ? `Linked ${existing.key} to ${key} and ${sent}` : reopened ? `Re-opened ${existing.key} with the update` : `Sent update to existing ${existing.key}`,
-        input.title,
-      );
-      return this.store.tickets.get(existing.id)!;
-    }
-    const t = await this.createTicket({
-      projectId: project.id,
-      title: input.title,
-      spec: input.spec || input.title,
-      kind: input.conductor ? "conductor" : "task",
-      start: input.start ?? false,
-      driver: project.defaultDriver ?? session.driver,
-      // Work on an existing branch (a pull request's head) sets both to it: nothing to merge later.
-      branch: input.branch || null,
-      baseBranch: input.baseBranch || null,
-      // Only a remote ID links the ticket; otherwise the spec carries the context.
-      externalRef: key ? { source: meta.source, key, url, raw: meta.text ?? null } : null,
-    }, "system");
-    // The local key comes first: the Inbox links the first key in the outcome (dispatchedKey).
-    this.finishTriage(session.id, "dispatched", `Dispatched to ${t.key}${key ? ` (${key})` : ""} in ${project.key}`, input.title);
-    return t;
-  }
-
   // =========================================================================
   // Config tools (DESIGN.md "Config tools"). The tools gate every mutation behind a human
   // approval; these check the run may make config changes at all and resolve agent-facing
@@ -4383,10 +4258,12 @@ ${numberLines(r.body)}`;
     return p;
   }
 
-  private watcherByRef(ref: string): Watcher {
-    const byId = this.store.watchers.get(ref);
+  /** The watcher a chief names, among the ones its scope covers (another chief's can't be told from one that doesn't exist). */
+  private watcherByRef(ctx: ToolContext, ref: string): Watcher {
+    const sc = this.scopeOf(ctx);
+    const byId = sc.watchers.get(ref);
     if (byId) return byId;
-    const named = this.store.watchers.list().filter((w) => w.name === ref);
+    const named = sc.watchers.list().filter((w) => w.name === ref);
     if (named.length === 1) return named[0]!;
     throw new Error(named.length ? `Several watchers are named "${ref}"; use its id (list_watchers).` : `Unknown watcher: ${ref}. Use list_watchers.`);
   }
@@ -4405,6 +4282,13 @@ ${numberLines(r.body)}`;
     return this.listWatchers().filter((w) => visible.has(w.id));
   }
 
+  /** The chief a watcher write acts for: only a chief of staff has watchers, and a human approves each call (the tool is gated). */
+  private watcherWriter(ctx: ToolContext): Cos {
+    const cos = ctx.ticket?.kind === "cos" ? this.store.cos.get(ctx.ticket.id) : null;
+    if (!cos) throw new Error("Only a chief of staff manages watchers.");
+    return cos;
+  }
+
   /** App-wide configuration (settings, prompts) is for the All chief of staff; a group's chief sees only its group. */
   private appWide(ctx: ToolContext, what: string) {
     if (this.scopeOf(ctx).scope !== "all") throw new Error(`${what} shows app-wide configuration: only the All chief of staff may read it.`);
@@ -4421,19 +4305,22 @@ ${numberLines(r.body)}`;
   }
 
   async createWatcher_(ctx: ToolContext, input: WatcherBody & { name: string; command: string }, dryRun = false): Promise<Watcher | null> {
-    this.configWriter(ctx);
+    const cos = this.watcherWriter(ctx);
+    // The tools take no owner: a watcher belongs to the chief that makes it (the All chief is stored as NULL).
+    const owned = { ...input, cosId: cos.scope === "all" ? null : cos.ticketId };
     return this.asToolError(() => {
-      if (dryRun) return (this.validateWatcher(input, null), null);
-      const w = this.createWatcher(input);
+      if (dryRun) return (this.validateWatcher(owned, null), null);
+      const w = this.createWatcher(owned);
       this.log(`watcher "${w.name}" created by ${ctx.ticket!.key}`);
       return w;
     });
   }
 
   async updateWatcher_(ctx: ToolContext, ref: string, input: WatcherBody, dryRun = false): Promise<Watcher | null> {
-    this.configWriter(ctx);
-    const w = this.watcherByRef(ref);
-    const body: WatcherBody = { ...input };
+    this.watcherWriter(ctx);
+    const w = this.watcherByRef(ctx, ref);
+    const { cosId: _owner, ...rest } = input;
+    const body: WatcherBody = rest;
     if (input.env !== undefined) {
       // Tools merge env (a model never sees the stored values): "" removes a variable.
       const env = { ...w.env };
@@ -4447,15 +4334,15 @@ ${numberLines(r.body)}`;
   }
 
   async deleteWatcher_(ctx: ToolContext, ref: string, dryRun = false): Promise<Watcher> {
-    this.configWriter(ctx);
-    const w = this.watcherByRef(ref);
+    this.watcherWriter(ctx);
+    const w = this.watcherByRef(ctx, ref);
     if (!dryRun) this.deleteWatcher(w.id);
     return w;
   }
 
   async runWatcher_(ctx: ToolContext, ref: string, dryRun = false): Promise<Watcher> {
-    this.configWriter(ctx);
-    const w = this.watcherByRef(ref);
+    this.watcherWriter(ctx);
+    const w = this.watcherByRef(ctx, ref);
     if (!this.watcherRunner) throw new Error("Watchers are disabled in this service.");
     if (!dryRun) await this.runWatcher(w.id);
     return w;
@@ -4869,26 +4756,6 @@ ${numberLines(r.body)}`;
       }
     }
     return lines.slice(-max);
-  }
-
-  async declineWork(ctx: ToolContext, reason: string, title?: string): Promise<void> {
-    const { session } = this.triageMeta(ctx);
-    this.finishTriage(session.id, "declined", `Declined: ${reason?.trim() || "no reason given"}`, title);
-  }
-
-  /**
-   * `title` (from triage) replaces the Inbox title derived from the raw output. Later dispatches
-   * from the same output add to the outcome and keep the first title.
-   */
-  private finishTriage(sessionId: string, status: "dispatched" | "declined" | "failed", outcome: string, title?: string) {
-    const prev = this.store.sessions.get(sessionId);
-    if (prev?.triageStatus === "dispatched" && status === "dispatched") {
-      this.store.sessions.update(sessionId, { outcome: `${prev.outcome}; ${outcome}` });
-    } else {
-      this.store.sessions.update(sessionId, { triageStatus: status, outcome, title: title?.trim() || undefined });
-    }
-    this.appendStatus(sessionId, null, outcome);
-    this.touchSession(sessionId);
   }
 
   // =========================================================================
@@ -5340,15 +5207,10 @@ ${numberLines(r.body)}`;
   // =========================================================================
 
   /**
-   * The model a run starts with (see resolveRunModel). Triage runs follow their watcher's models,
-   * then settings.watcherModels (the watcher's current values: an edit applies to the next run).
+   * The model a run starts with (see resolveRunModel).
    */
   private runModel(run: Run, session: Session, ticket: Ticket | null, project: Project | null): string | null {
     const settings = this.settings();
-    if (run.kind === "triage") {
-      const watcherId = this.store.sessions.getMeta<TriageMeta>(session.id)?.watcherId;
-      return watcherModel(run.driver, watcherId ? this.store.watchers.get(watcherId) : null, settings);
-    }
     return resolveRunModel({ driver: run.driver, kind: run.kind, ticket, project, settings });
   }
 
@@ -5365,7 +5227,7 @@ ${numberLines(r.body)}`;
 
   /** The driver a run of this kind goes to: its phase's (see resolveRunChoice); a standalone session keeps its own. */
   private runDriver(kind: RunKind, session: Session, ticket: Ticket | null): string {
-    if (!ticket || kind === "triage") return session.driver;
+    if (!ticket) return session.driver;
     return resolveRunChoice({ kind, ticket, project: this.store.projects.get(ticket.projectId) ?? null, settings: this.settings() }).driver;
   }
 
@@ -5794,14 +5656,6 @@ ${numberLines(r.body)}`;
   private async afterRun(run: Run, active: ActiveRun, error: string | null) {
     const session = this.store.sessions.get(run.sessionId);
     if (!session) return;
-    if (run.kind === "triage") {
-      if (session.triageStatus === "triaging") {
-        if (run.status === "succeeded") this.finishTriage(session.id, "failed", "Triage ended without dispatching or declining");
-        else if (run.status === "failed") this.finishTriage(session.id, "failed", `Triage failed: ${error}`);
-        else this.finishTriage(session.id, "failed", "Triage cancelled");
-      }
-      return;
-    }
     const ticket = session.ticketId ? this.store.tickets.get(session.ticketId) : null;
     if (!ticket) return;
     if (run.kind === "compact") return this.afterCompact(ticket, run, active, error);
@@ -5982,9 +5836,6 @@ ${numberLines(r.body)}`;
       reviewTicket: (c, k, d, n, a) => this.reviewTicket_(c, k, d, n, a),
       completeTicket: (c, k, i, a) => this.completeTicket_(c, k, i, a),
       recordPullRequest: (c, u, h) => this.recordPullRequest(c, u, h),
-      // --- triage ---
-      dispatchTicket: (c, i) => this.dispatchTicket(c, i),
-      declineWork: (c, r, title) => this.declineWork(c, r, title),
       requestApproval: (c, n, i, m) => this.requestApproval(c, n, i, m),
       checkPermission: (c, n, i) => this.checkPermission(c, n, i),
       fileOutputScope: (c) => this.fileOutputScope(c),

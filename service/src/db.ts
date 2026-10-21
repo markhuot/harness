@@ -878,6 +878,14 @@ export const MIGRATIONS: string[] = [
   CREATE INDEX activity_created ON activity(created_at, id);
   CREATE INDEX activity_ticket ON activity(ticket_id, created_at);
   `,
+  // 49: watchers belong to a chief of staff and their output is events (DESIGN.md "Watchers"). cos_id
+  //     is the owning chief's ticket id; NULL is the All chief, so every existing watcher is the All
+  //     chief's, and a deleted group chief hands its watchers to All. The code step (convertTriageItems)
+  //     turns the old Inbox into events; the triage sessions, their runs, sessions.triage_status and
+  //     watchers.prompt/driver/models stay, unread: tickets and Activity still link to TRIAGE-n.
+  `
+  ALTER TABLE watchers ADD COLUMN cos_id TEXT REFERENCES cos(ticket_id) ON DELETE SET NULL;
+  `,
 ];
 
 /** Where the files migrations look at live (HarnessPaths); by default next to the database file. */
@@ -896,7 +904,53 @@ export const MIGRATION_CODE: Record<number, (db: Database, paths: Required<Migra
   30: backfillAttachments,
   38: convertPhaseModels,
   44: backfillGroups,
+  49: convertTriageItems,
 };
+
+/**
+ * Migration 49's code: the Inbox's TRIAGE items become `watcher` events of the All chief (its id, or
+ * unassigned when it doesn't exist yet). An item still being triaged is a pending event; a dispatched
+ * one is a handled event, a declined or failed one an ignored event, each with the outcome as its
+ * reason; triage runs still queued or running are failed. The event's source_ref is the TRIAGE key, so a rerun inserts nothing twice. The sessions
+ * stay as they are.
+ */
+function convertTriageItems(db: Database, paths: Required<MigrationPaths>) {
+  // A triage run that was queued or running when the service stopped has nothing left to run it.
+  db.query("UPDATE runs SET status = 'failed', error = 'Triage was removed', ended_at = $t WHERE kind = 'triage' AND status IN ('queued', 'running')").run({ t: paths.now() });
+  const all = db.query("SELECT ticket_id FROM cos WHERE scope = 'all'").get() as { ticket_id: string } | null;
+  const rows = db
+    .query("SELECT key, title, triage_status, outcome, meta, created_at, updated_at FROM sessions WHERE kind = 'triage' ORDER BY created_at")
+    .all() as { key: string; title: string; triage_status: string | null; outcome: string | null; meta: string | null; created_at: number; updated_at: number }[];
+  const insert = db.query(
+    `INSERT OR IGNORE INTO cos_events (id, cos_id, project_id, ticket_id, source_kind, source_ref, kind, actor, title, summary, payload, verdict, reason, status, created_at, updated_at)
+     VALUES ($id, $cosId, NULL, NULL, 'watcher', $ref, '', $actor, $title, $summary, $payload, $verdict, $reason, $status, $createdAt, $updatedAt)`,
+  );
+  const firstLine = (text: string, max: number) => (text.split("\n").find((l) => l.trim()) ?? "").trim().slice(0, max);
+  for (const r of rows) {
+    let meta: { source?: unknown; text?: unknown; prompt?: unknown } = {};
+    try {
+      meta = r.meta ? JSON.parse(r.meta) : {};
+    } catch {}
+    const body = typeof meta.text === "string" ? meta.text : r.title;
+    const source = typeof meta.source === "string" && meta.source ? meta.source : "watcher";
+    const open = r.triage_status === "triaging" || r.triage_status === null;
+    const status = open ? "pending" : r.triage_status === "dispatched" ? "handled" : "ignored";
+    insert.run({
+      id: randomUUID(),
+      cosId: all?.ticket_id ?? null,
+      ref: `triage:${r.key}`,
+      actor: `watcher:${source}`,
+      title: firstLine(r.title || body, 120),
+      summary: firstLine(body, 200),
+      payload: JSON.stringify({ body, prompt: typeof meta.prompt === "string" ? meta.prompt : "", triageKey: r.key }),
+      verdict: open ? "pending" : status === "handled" ? "escalate" : "ignore",
+      reason: open ? null : r.outcome || `Triage: ${r.triage_status}`,
+      status,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at,
+    });
+  }
+}
 
 /**
  * Migration 44's code: a group per distinct project group name. Names that differ only in case or

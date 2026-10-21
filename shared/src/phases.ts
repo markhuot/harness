@@ -62,15 +62,13 @@ export function adviserFor(run: { driver: string; model: string | null }, advise
 /** What a run with no model chosen runs on, per driver, when it's one of the models named above (Claude Code's default is Opus). */
 const DEFAULT_RUN_MODELS: Readonly<Record<string, string>> = { "claude-code": "opus" };
 
-/** The phase a run kind's driver and model come from (null: triage, which follows its watcher). */
-export function runPhase(kind: RunKind): Phase | null {
+/** The phase a run kind's driver and model come from (a run of the retired "triage" kind in an old database reads as work). */
+export function runPhase(kind: RunKind): Phase {
   switch (kind) {
     case "plan":
     case "review":
     case "complete":
       return kind;
-    case "triage":
-      return null;
     default:
       return "work"; // work, conductor, chat, cos
   }

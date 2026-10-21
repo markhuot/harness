@@ -16,21 +16,6 @@ async function run(calls: [string, unknown][]) {
 }
 const json = (text: string) => JSON.parse(text);
 
-test("list_watchers says none are configured, then lists them with env values hidden", async () => {
-  const empty = await run([["list_watchers", {}]]);
-  expect(empty.results[0]!.text).toBe("No watchers are configured.");
-
-  const h = makeOrchestrator({ tools: undefined });
-  h.orch.createWatcher({ name: "jira", command: "watch-jira", env: { TOKEN: "super-secret" }, prompt: "dispatch to ACME" });
-  const { steps, results } = callTools([["list_watchers", {}]]);
-  h.driver.script(steps);
-  await h.orch.createTicket({ projectId: h.project.id, spec: "x", skipAgentReview: true });
-  await h.settle();
-  const [w] = json(results[0]!.text);
-  expect(w).toMatchObject({ name: "jira", command: "watch-jira", mode: "loop", enabled: true, prompt: "dispatch to ACME", env: { TOKEN: "(set)" }, last_run_at: null });
-  expect(results[0]!.text).not.toContain("super-secret");
-});
-
 test("get_settings shows the settings without any secret, and which prompts the user customized", async () => {
   const h = makeOrchestrator({ tools: undefined });
   h.orch.updateSettings({ anthropicApiKey: "sk-secret", prompts: { "run.work_start": "Start: {{spec}}" } });
@@ -48,34 +33,31 @@ test("list_drivers lists each driver with its models", async () => {
 });
 
 test("a config change is never run on the agent's say-so: it opens an approval card saying what it would do, and blocks the ticket", async () => {
-  const { h, t, results } = await run([["create_watcher", { name: "events", command: "poll-events", env: { API_TOKEN: "secret-value" }, mode: "interval", interval_sec: 30 }]]);
+  const { h, t, results } = await run([["update_project", { project_key: "ACME", name: "Renamed", color: "red" }]]);
   expect(results[0]!.isError).toBe(true);
-  expect(h.orch.listWatchers()).toEqual([]);
+  expect(h.store.projects.get(h.project.id)!.name).not.toBe("Renamed");
   const card = h.ticket(t.key);
   expect(card.status).toBe("blocked");
-  expect(card.pendingApproval).toMatchObject({ toolName: "create_watcher", onceOnly: true, source: "policy" });
-  expect(card.pendingApproval!.summary).toContain("events");
-  expect(card.pendingApproval!.summary).toContain("poll-events");
-  expect(card.pendingApproval!.summary).toContain("every 30s");
-  expect(card.pendingApproval!.summary).toContain("API_TOKEN");
-  expect(card.pendingApproval!.summary).not.toContain("secret-value");
+  expect(card.pendingApproval).toMatchObject({ toolName: "update_project", onceOnly: true, source: "policy" });
+  expect(card.pendingApproval!.summary).toContain("ACME");
+  expect(card.pendingApproval!.summary).toContain("Renamed");
 });
 
 test("allowing the call once lets the identical retry through, and it runs exactly once", async () => {
-  const input = { name: "events", command: "poll-events", enabled: false };
+  const input = { max_concurrent_runs: 3 };
   const h = makeOrchestrator({ tools: undefined });
-  const first = callTools([["create_watcher", input]]);
-  const retry = callTools([["create_watcher", input], ["create_watcher", input]]);
+  const first = callTools([["update_settings", input]]);
+  const retry = callTools([["update_settings", input], ["update_settings", input]]);
   h.driver.script(first.steps, retry.steps);
   const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x", skipAgentReview: true });
   await h.settle();
+  expect(h.orch.settings().maxConcurrentRuns).not.toBe(3);
   await h.orch.answerApproval(t.key, { decision: "allow_once" });
   await h.settle();
   expect(retry.results[0]!.isError).toBe(false);
-  expect(h.orch.listWatchers().map((w) => w.name)).toEqual(["events"]);
+  expect(h.orch.settings().maxConcurrentRuns).toBe(3);
   // The grant is used up: a second identical call needs a new approval.
   expect(retry.results[1]!.isError).toBe(true);
-  expect(h.orch.listWatchers()).toHaveLength(1);
 });
 
 test("allowing a gated tool for the whole ticket isn't possible: only one call at a time", async () => {
@@ -85,7 +67,7 @@ test("allowing a gated tool for the whole ticket isn't possible: only one call a
 });
 
 test("a call that's invalid is refused without bothering a human", async () => {
-  const { h, t, results } = await run([["delete_watcher", { watcher: "no-such-watcher" }]]);
+  const { h, t, results } = await run([["update_project", { project_key: "NOPE", name: "x" }]]);
   expect(results[0]!.isError).toBe(true);
   expect(h.ticket(t.key).pendingApproval).toBeNull();
 });

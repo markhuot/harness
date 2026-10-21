@@ -154,7 +154,7 @@ test("session list filters by kind, newest first, and busy tracks open runs", ()
   expect(store.sessions.list().map((s) => s.id)).toEqual([chat.id, ticket.sessionId]);
   expect(store.sessions.list("ticket").map((s) => s.id)).toEqual([ticket.sessionId]);
   expect(store.sessions.get(chat.id)!.busy).toBe(false);
-  store.runs.create({ sessionId: chat.id, kind: "triage", driver: "d", prompt: "p" });
+  store.runs.create({ sessionId: chat.id, kind: "chat", driver: "d", prompt: "p" });
   expect(store.sessions.get(chat.id)!.busy).toBe(true);
   expect(store.sessions.update(chat.id, { title: "t2", outcome: "done" })).toMatchObject({ title: "t2", outcome: "done", updatedAt: 1_001 });
 });

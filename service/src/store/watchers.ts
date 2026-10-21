@@ -20,6 +20,7 @@ interface WatcherRow {
   last_error: string | null;
   created_at: number;
   updated_at: number;
+  cos_id: string | null;
 }
 
 const toWatcher = (r: WatcherRow): Watcher => ({
@@ -39,6 +40,7 @@ const toWatcher = (r: WatcherRow): Watcher => ({
   lastError: r.last_error,
   createdAt: r.created_at,
   updatedAt: r.updated_at,
+  cosId: r.cos_id,
 });
 
 export type WatcherInput = Partial<Omit<Watcher, "id" | "createdAt" | "updatedAt">>;
@@ -60,8 +62,8 @@ export class WatcherRepo {
     const t = this.now();
     this.db
       .query(
-        `INSERT INTO watchers (id, name, command, args, prompt, cwd, env, mode, interval_sec, enabled, driver, models, last_run_at, last_error, created_at, updated_at)
-         VALUES ($id, $name, $command, $args, $prompt, $cwd, $env, $mode, $intervalSec, $enabled, $driver, $models, NULL, NULL, $t, $t)`,
+        `INSERT INTO watchers (id, name, command, args, prompt, cwd, env, mode, interval_sec, enabled, driver, models, last_run_at, last_error, created_at, updated_at, cos_id)
+         VALUES ($id, $name, $command, $args, $prompt, $cwd, $env, $mode, $intervalSec, $enabled, $driver, $models, NULL, NULL, $t, $t, $cosId)`,
       )
       .run({
         id,
@@ -76,6 +78,7 @@ export class WatcherRepo {
         enabled: int(input.enabled ?? true),
         driver: input.driver ?? null,
         models: JSON.stringify(input.models ?? {}),
+        cosId: input.cosId ?? null,
         t,
       });
     return this.get(id)!;
@@ -88,7 +91,7 @@ export class WatcherRepo {
     this.db
       .query(
         `UPDATE watchers SET name = $name, command = $command, args = $args, prompt = $prompt, cwd = $cwd, env = $env, mode = $mode,
-           interval_sec = $intervalSec, enabled = $enabled, driver = $driver, models = $models, last_run_at = $lastRunAt, last_error = $lastError, updated_at = $t
+           interval_sec = $intervalSec, enabled = $enabled, driver = $driver, models = $models, last_run_at = $lastRunAt, last_error = $lastError, cos_id = $cosId, updated_at = $t
          WHERE id = $id`,
       )
       .run({
@@ -106,6 +109,7 @@ export class WatcherRepo {
         models: JSON.stringify(next.models ?? {}),
         lastRunAt: next.lastRunAt,
         lastError: next.lastError,
+        cosId: next.cosId ?? null,
         t: this.now(),
       });
     return this.get(id);

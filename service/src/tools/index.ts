@@ -21,14 +21,13 @@ import {
 } from "./browser";
 import { browserRun, browserRunStatus, browserRunStop } from "./browser-run";
 import { cancelTicket, createTicket, messageTicket, moveTicket, reopenTicket, startTicket, updateTicket } from "./board-write";
-import { configReadTools, configWriteTools } from "./config";
+import { configReadTools, configWriteTools, listWatchers, watcherWriteTools } from "./config";
 import { completeTicket, reviewTicket } from "./conductor";
 import { nativeTools, readOnlyNativeTools } from "./native";
 import { permissionPrompt } from "./permission";
 import { scheduleTools } from "./schedules";
 import { block, editSpec, postNote, readSpec, recordPullRequest, resumeWork, returnToPlanning, reviewDecision, submitForReview, unblock, updateBranch, updateNotes, updateSpec } from "./ticket";
 import { memoryTools } from "./memory";
-import { declineWork, dispatchTicket } from "./triage";
 import type { ToolDefinition } from "./types";
 
 export * from "./board";
@@ -43,7 +42,6 @@ export * from "./native";
 export * from "./permission";
 export * from "./schedules";
 export * from "./ticket";
-export * from "./triage";
 export { defineGatedTool, defineTool, validateInput } from "./util";
 
 export const browserTools: ToolDefinition[] = [
@@ -71,7 +69,8 @@ export const boardTools: ToolDefinition[] = [listTickets, getTicket, getTicketAg
 export const boardWriteTools: ToolDefinition[] = [createTicket, updateTicket, moveTicket, startTicket, messageTicket, cancelTicket, reopenTicket];
 /** Reviewing and completing the caller's own children: work and conductor runs (any ticket may have children). */
 export const conductorTools: ToolDefinition[] = [reviewTicket, completeTicket];
-export const triageTools: ToolDefinition[] = [dispatchTicket, declineWork];
+/** A chief of staff's watcher tools: the reads, and the human-gated writes (a group's chief reaches only its own watchers). */
+export const watcherTools: ToolDefinition[] = [listWatchers, ...watcherWriteTools];
 
 /** Every tool definition, for lookup/documentation. */
 export const allTools: ToolDefinition[] = [
@@ -91,7 +90,7 @@ export const allTools: ToolDefinition[] = [
   ...boardTools,
   ...boardWriteTools,
   ...conductorTools,
-  ...triageTools,
+  ...watcherTools,
   ...configReadTools,
   ...configWriteTools,
   ...scheduleTools,
@@ -101,9 +100,9 @@ export const allTools: ToolDefinition[] = [
   ...nativeTools,
 ];
 
-// Config reads (watchers, settings, drivers) go to every run kind, like the board reads.
-// Config writes, all human-gated, go to work, conductor and chat runs only: plan/review/triage have
-// no human in the loop to approve them.
+// Config reads (settings, drivers) go to every run kind, like the board reads. Config writes, all
+// human-gated, go to work and conductor runs only: plan and review have no human in the loop to
+// approve them. The watcher tools (reads and human-gated writes) are a chief of staff's alone.
 
 /**
  * Harness tools per run kind (see DESIGN.md "Tools"), plus which native set the
@@ -112,7 +111,7 @@ export const allTools: ToolDefinition[] = [
  *  - "read": read_file, list_files, bash (review; also plan and conductor, which
  *    shouldn't edit the tree: plan runs are read-only in claude-code's plan mode too,
  *    and a conductor's children work in the same checkout)
- *  - "none": triage only routes work
+ *  - "none": a chief of staff drives the app through tools only
  * A plan run's update_ticket edits only its own ticket (the orchestrator checks).
  * A chat (a human's message to a blocked, review or done ticket) gets its ticket's work tools:
  * see toolsForRun.
@@ -136,17 +135,16 @@ const RUN_TOOLS: Record<Exclude<RunKind, "chat" | "compact">, { harness: ToolDef
     harness: [postNote, ...specTools, updateNotes, unblock, resumeWork, returnToPlanning, submitForReview, updateBranch, ...boardTools, ...boardWriteTools, ...conductorTools, ...configReadTools, ...configWriteTools, ...browserTools],
     native: "read",
   },
-  triage: { harness: [...boardTools, ...triageTools, ...configReadTools], native: "none" },
   // A chief of staff drives the app: it reads the board, changes tickets and writes its own notes. It
-  // has no spec or ticket lifecycle tools (it never submits or blocks), no config writes, no
+  // has no spec or ticket lifecycle tools (it never submits or blocks), no project or settings writes (its watcher tools are human-gated), no
   // sub-agents (drivers/claude-code.ts keeps Agent and Task off it) and no files or shell: deeper work
   // goes to tickets it creates. Everything it reads or changes is scoped (store/scope.ts).
-  cos: { harness: [postNote, ...memoryTools, ...scheduleTools, ...boardTools, ...boardWriteTools, ...configReadTools], native: "none" },
+  cos: { harness: [postNote, ...memoryTools, ...scheduleTools, ...watcherTools, ...boardTools, ...boardWriteTools, ...configReadTools], native: "none" },
 };
 
 /**
  * permission_prompt is added for every run kind of a driver with usesPermissionPromptTool:
- * requestApproval decides per kind (review/plan/triage are denied with guidance). A chat run gets
+ * requestApproval decides per kind (review/plan are denied with guidance). A chat run gets
  * the same tools as its ticket's work runs (a conductor ticket's: the conductor tools).
  */
 export function toolsForRun(

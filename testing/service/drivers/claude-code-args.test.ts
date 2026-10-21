@@ -14,7 +14,7 @@ const listAfter = (a: string[], flag: string) => {
 test("a chief of staff run has the CLI's sub-agent tools turned off; no other run does", () => {
   expect(listAfter(args("cos"), "--disallowedTools")).toEqual(["Agent", "Task"]);
   expect(listAfter(args("cos"), "--allowedTools")).not.toContain("Agent");
-  for (const kind of ["plan", "work", "review", "complete", "conductor", "triage", "chat"] as const) expect(args(kind)).not.toContain("--disallowedTools");
+  for (const kind of ["plan", "work", "review", "complete", "conductor", "chat"] as const) expect(args(kind)).not.toContain("--disallowedTools");
 });
 
 test("only planning and review runs are allowed to launch the adviser sub-agent", () => {
@@ -25,5 +25,5 @@ test("only planning and review runs are allowed to launch the adviser sub-agent"
 test("a chief of staff run has no built-in tool at all, so only the harness server is left; no other run is narrowed", () => {
   const a = args("cos");
   expect(a[a.indexOf("--tools") + 1]).toBe("");
-  for (const kind of ["plan", "work", "review", "complete", "conductor", "triage", "chat"] as const) expect(args(kind)).not.toContain("--tools");
+  for (const kind of ["plan", "work", "review", "complete", "conductor", "chat"] as const) expect(args(kind)).not.toContain("--tools");
 });

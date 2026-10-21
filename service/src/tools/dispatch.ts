@@ -24,9 +24,6 @@ export const CORE_TOOL_NAMES: ReadonlySet<string> = new Set([
   "review_decision",
   "record_pull_request",
   "permission_prompt",
-  // Triage's terminal calls, the way submit_for_review is a work run's: every triage makes one.
-  "dispatch_ticket",
-  "decline_work",
 ]);
 
 export const TOOL_SEARCH = "tool_search";

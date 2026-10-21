@@ -81,10 +81,10 @@ describe("runHeader", () => {
     expect(runHeader(run({ model: null }), { models }).title).toBe("Work • Claude Code, Sonnet 5.5");
     expect(runHeader(run({ model: null }), { models: [{ id: "a", name: "A", default: false }] as never[] }).title).toBe("Work • Claude Code");
   });
-  test("kinds that map to work but aren't Work get their own label; triage is capitalised", () => {
+  test("kinds that map to work but aren't Work get their own label; the retired triage kind of an old run is capitalised", () => {
     expect(runHeader(run({ kind: "chat" }), {}).title).toBe("Chat • Claude Code");
     expect(runHeader(run({ kind: "compact" }), {}).title).toBe("Compact • Claude Code");
-    expect(runHeader(run({ kind: "triage" }), {}).title).toBe("Triage • Claude Code");
+    expect(runHeader(run({ kind: "triage" as never }), {}).title).toBe("Triage • Claude Code");
     expect(runHeader(run({ kind: "complete" }), {}).title).toBe("Complete • Claude Code");
   });
   test("time: startedAt, else createdAt, else the first row's, else null", () => {

@@ -187,20 +187,20 @@ instead of showing a stale bar.
   conductor's branch and merge back into it, so the goal lands in one piece when you approve the
   conductor. A child's Approve button stays off while its conductor runs, because the conductor
   approves and lands it.
-- **Watchers** are any command that prints text, plus a prompt that says what you want done
-  with it. The command runs in your login shell, so a `watch-jira` poller works, and so does a
-  loop like `while true; do curl -s …/events; sleep 60; done`. Examples are in
-  `service/examples/watchers/`. In interval mode, each run's output becomes an Inbox item. In
-  loop mode, each burst of output does. Output identical to something the watcher already
-  printed is skipped. Each item starts a triage session in the Inbox. The triage agent reads
-  the output and your prompt, then either dispatches it to a ticket in the right project or
-  declines it. Say in the prompt which project the work goes to ("dispatch it to the PLAYR
-  project"); triage declines output whose project it can't tell. A ticket made from a Jira issue
+- **Watchers** are any command that prints text. The command runs in your login shell, so a
+  `watch-jira` poller works, and so does a loop like `while true; do curl -s …/events; sleep 60; done`.
+  Examples are in `service/examples/watchers/`. In interval mode, each run's output becomes an
+  event. In loop mode, each burst of output does. Output identical to something the watcher
+  already printed is skipped. A watcher belongs to a **chief of staff**: its output lands in that
+  chief's inbox, a cheap model summarizes it, and the chief wakes only when it needs to, then
+  decides what to do (start a ticket in the right project, send an update to an existing one, or
+  nothing). Watcher output is treated as untrusted text, never as instructions. Ask a chief to set
+  one up ("watch our events API every minute and tell me about anything assigned to me"); you
+  approve the watcher before it runs, because it runs a command as you. A group's chief manages only
+  its own watchers; the All chief manages every one. A ticket made from a Jira issue
   or a pull request carries its ID as a **remote ID**. The board shows that ID with the ticket's
   own key beside it (`MH-62 · MH-124`), and search finds it. Several tickets can share one remote
-  ID. Triage can send an update to an existing ticket as a message, or start a new ticket; the
-  prompt can say which you want ("send changes to the open ticket for that issue"). You can also
-  link or unlink a remote ID in a ticket's settings.
+  ID. You can also link or unlink a remote ID in a ticket's settings.
 
 ## Keyboard
 

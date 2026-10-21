@@ -414,32 +414,6 @@ export interface HarnessOps {
    */
   recordPullRequest(ctx: ToolContext, url: string, head: string): Promise<string>;
 
-  // --- triage runs ---
-  /**
-   * `key` is the remote ID: without `ticketKey` a new ticket (native key) is created, linked to
-   * it. `ticketKey` names an existing local ticket (current key or alias) that gets the
-   * spec as a message instead, and is linked to `key` when it has no remote ID yet.
-   */
-  dispatchTicket(
-    ctx: ToolContext,
-    input: {
-      projectKey: string;
-      key?: string;
-      ticketKey?: string;
-      url?: string;
-      title: string;
-      spec: string;
-      start?: boolean;
-      conductor?: boolean;
-      /** The new ticket's branch (CreateTicketBody.branch); ignored with ticketKey */
-      branch?: string;
-      /** The new ticket's base branch override (CreateTicketBody.baseBranch); ignored with ticketKey */
-      baseBranch?: string;
-    },
-  ): Promise<Ticket>;
-  /** `title` replaces the Inbox title derived from the raw output. */
-  declineWork(ctx: ToolContext, reason: string, title?: string): Promise<void>;
-
   // --- permission prompts (claude-code --permission-prompt-tool) ---
   /**
    * The external agent wants to use a tool its permission mode doesn't auto-allow.

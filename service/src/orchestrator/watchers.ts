@@ -40,16 +40,6 @@ export function toOutput(raw: string, limit = MAX_OUTPUT_CHARS, truncated = fals
   return { text, truncated };
 }
 
-/** Upper-case external keys (FOO-123) mentioned in text, in order of first appearance. */
-export function findKeys(text: string, max = 20): string[] {
-  const out: string[] = [];
-  for (const m of text.matchAll(/\b[A-Z][A-Z0-9_]*-\d+\b/g)) {
-    if (!out.includes(m[0])) out.push(m[0]);
-    if (out.length >= max) break;
-  }
-  return out;
-}
-
 // ---------------------------------------------------------------------------
 // Process supervision
 // ---------------------------------------------------------------------------

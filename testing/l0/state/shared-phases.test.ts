@@ -57,8 +57,8 @@ describe("adviserFor", () => {
   });
 });
 
-test("runPhase maps kinds to phases; triage has none; unlisted kinds are work", () => {
-  const kinds: [RunKind, Phase | null][] = [["plan", "plan"], ["review", "review"], ["complete", "complete"], ["triage", null], ["work", "work"], ["conductor", "work"], ["chat", "work"], ["compact", "work"]];
+test("runPhase maps kinds to phases; unlisted kinds are work", () => {
+  const kinds: [RunKind, Phase][] = [["plan", "plan"], ["review", "review"], ["complete", "complete"], ["work", "work"], ["conductor", "work"], ["chat", "work"], ["compact", "work"]];
   for (const [k, p] of kinds) expect(runPhase(k)).toBe(p);
 });
 
