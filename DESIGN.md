@@ -82,31 +82,53 @@ current key first, then an alias, so a real ticket holding a key always wins. Ru
 
 ## Project groups
 
-A project group is a name several projects share, such as "Work" or "Personal"
-(`Project.group`, column `projects.group_name`, migration 31; null means no group). A project is
-in at most one group, and a group exists for as long as some project carries it: there's no group
-table, and `projectGroups(projects)` (`shared/src/projectGroups.ts`) lists them alphabetically
-without case. `POST`/`PATCH /projects` take `group`: trimmed, inner whitespace collapsed, at most
-60 characters (`normalizeProjectGroup`; longer or not a string is a 400), `null` or `""` clears
-it. A name that matches another project's group without case takes that group's spelling
-(`canonicalGroup`), so "work" joins "Work" instead of starting a second group. The project being
-changed doesn't count, so the only project in a group can re-spell it. The project tools take
-`group` too.
+A project group is a name several projects share, such as "Work" or "Personal". Groups are rows
+(table `groups`: `id`, `name`, `created_at`, migration 44), and a project is in at most one
+(`Project.groupId`, column `projects.group_id`; null means no group). The id never changes, so a
+rename can't orphan or duplicate what is keyed to it: every board scope, saved filter and (in later
+work) per-group state uses the id. `Project.group` is the group's current name, joined on every
+read, so display code needs no lookup. Names are unique without case (a unique index on
+`name COLLATE NOCASE`, and `sameGroup` in the service, since SQLite folds only ASCII). Migration 44
+creates a group per distinct `group_name`, merging names that differ only in case or spacing (the
+most common spelling wins, the first seen on a tie), and sets `group_id`. `group_name` stays and
+is mirrored with the group's name on every write, so an older build still shows current names.
+
+`GroupRepo` (`service/src/store/projects.ts`) lists, finds by name, finds or creates, and renames.
+A rename changes the name only, in one transaction, and a name another group has is refused
+(`GroupNameTaken`, a 409 from the orchestrator), not merged. After the rename commits the service
+emits `project.upserted` for every member project, since clients learn a project's group from the
+project. A group whose last project leaves keeps its row, so what is keyed to its id survives;
+clients list only groups some project is in (`projectGroups(projects)` in
+`shared/src/projectGroups.ts` gives `{ id, name }` alphabetically), and nothing deletes a group yet.
+
+HTTP: `GET /groups`, `POST /groups { name }` (finds or creates), `PATCH /groups/:id { name }`.
+`POST`/`PATCH /projects` take `groupId` (null clears; an unknown id is a 400) or the older `group`
+as a name, which finds or creates the group (a name that matches in any case takes that group's
+spelling, so "work" joins "Work"). The name is trimmed, inner whitespace collapsed, at most 60
+characters (`normalizeProjectGroup`; longer or not a string is a 400), `null` or `""` clears it.
+The project tools take `group` (a name, which agents reason in) and `group_id`.
 
 Each group has a board, like All projects but with only its projects' tickets. Its scope is
-`groupScope(name)` = `"group:<name>"` beside project ids and `ALL_SCOPE` (project ids never
-contain a colon). `scopeOf`, the board selectors (`boardColumns`, `doneColumn`, `searchColumns`,
-…) and Done paging all take it, and `inScope` matches a ticket by its project's group.
-`/tickets/page` and `/tickets/search` take `group=` to narrow to the projects in a group
-(`scopeQuery(scope)` gives a client the filter to send). Because joining or leaving a group
-changes what a group's board counts, a `project.upserted` that changes a project's group drops
-the paging of both groups, and the board pages them afresh.
+`groupScope(id)` = `"group:<id>"` beside project ids and `ALL_SCOPE` (project ids never contain a
+colon). `scopeOf`, the board selectors (`boardColumns`, `doneColumn`, `searchColumns`, …) and Done
+paging all take it, and `inScope` matches a ticket by its project's `groupId`. `/tickets/page` and
+`/tickets/search` take `groupId=` to narrow to the projects in a group (`scopeQuery(scope)` gives a
+client the filter to send); `group=<name>` still works and is resolved to the id (a name no group
+has matches nothing). Because joining or leaving a group changes what a group's board counts, a
+`project.upserted` that changes a project's `groupId` drops the paging of both groups, and the board
+pages them afresh. A rename changes no id, so it drops nothing.
+
+Scopes, routes, popouts and board prefs saved before groups had ids hold the name
+(`group:Work`, `#/board/group/Work`). A client treats a key that is no group's id as a name and
+swaps in the id (`resolveGroupKey`, `currentGroupScope`; the Mac rekeys its saved panes and the
+route when the snapshot loads, the iPhone resolves the board filter pref on every read).
 
 The iPhone and iPad app ports all of it to Swift (`Paging.groupScope`, `ProjectGroups` in
-HarnessKit). Its Projects sheet and
-iPad sidebar list the groups under All projects. The board filter pref (`boardProject`) stores a
-group's board as its scope, so values saved before groups still read as project ids. Project
-settings has a Group picker on the same `groupRows`, where Return sets the typed name.
+HarnessKit). Its Projects sheet and iPad sidebar list the groups under All projects. The board
+filter pref (`boardProject`) stores a group's board as its scope, so values saved before groups
+still read as project ids. Project settings has a Group picker on the same `groupRows` (an existing
+group reports its id, a typed name reports the name), and, for a grouped project, a Group name row
+that renames the group for every project in it. The Mac's project settings has the same row.
 
 ## Remote IDs
 
@@ -1846,8 +1868,8 @@ PUT    /projects/:id/file   PUT /tickets/:key/file   {path, contents}   → File
 GET    /projects/:id/file/diff?path=   GET /tickets/:key/file/diff?path=   → FileDiff (409 outside a git repo)
 GET    /projects/:id/branches?q=&limit=50   → BranchInfo[] (branch picker; see "Branches")
 GET    /tickets?projectId=&status=planning,review   POST /tickets {spec, …}   (no status = every ticket)
-GET    /tickets/page?status=done&projectId=&group=&q=&limit=50&cursor= → TicketPage
-GET    /tickets/search?q=&projectId=&group=&limit=100&cursor=       → TicketPage
+GET    /tickets/page?status=done&projectId=&groupId=&q=&limit=50&cursor= → TicketPage
+GET    /tickets/search?q=&projectId=&groupId=&limit=100&cursor=       → TicketPage
 GET    /tickets/:key             PATCH/DELETE /tickets/:key      → TicketDetail / Ticket
 PATCH  /tickets/:key {spec, baseRevision, specNote?, …}   (baseRevision required with spec outside drafts → 400; stale → 409, data SpecConflict)
 POST   /tickets/:key/start | /messages {text, move?, attachments?} | /review | /reopen | /complete | /cancel | /agent-review | /session {action}
@@ -2412,7 +2434,7 @@ completed, moved or deleted between fetches never duplicate or skip a row.
 
 - `/tickets/page` takes exactly one `status`. done sorts by `completedAt` desc; other statuses by
   `position`, then `createdAt`. `q` narrows the page to search hits (an empty `q` is a 400).
-  `projectId` narrows a page or a search to one project and `group` to the projects in a group
+  `projectId` narrows a page or a search to one project and `groupId` to the projects in a group
   ("Project groups").
 - `Ticket.completedAt` is when the ticket last entered done, and null outside done. SQLite
   triggers maintain it (migration 6 backfilled existing done tickets from `updatedAt`), so every
@@ -3132,7 +3154,7 @@ Settings, project settings, or on the board route the pane workspace.
 - **Pane workspace.** A tmux-style split tree (`state/panes.ts`) per board scope: each project's
   board has its own, each project group's board has one, and All projects has one too.
   `harness.panes` stores `{ scopes: { [scope]: PaneState } }`, keyed like Done paging (`scopeOf`:
-  the project id, `groupScope(name)`, or `ALL_SCOPE` = `"*"`), and a board with no entry shows a
+  the project id, `groupScope(id)`, or `ALL_SCOPE` = `"*"`), and a board with no entry shows a
   bare board. The operations work on one
   scope's `PaneState`. The store takes the scope (`usePanes(scope)`, `updatePanes(scope, fn)`),
   and `updateAllPanes` covers the edits that reach every board: a deleted ticket (`ticket.deleted`
@@ -3393,7 +3415,7 @@ Settings, project settings, or on the board route the pane workspace.
     any pointer press (`state/inputModality.ts`). In keyboard mode, the pane the keyboard acts on
     (or the sidebar) gets an inset accent ring and the board's parked cursor a dashed outline.
     Elements get `:focus-visible` rings from `--focus`. A click never shows any of them.
-- **Routing.** `#/board/<project>` is the board's filter, `#/board/group/<name>` a project
+- **Routing.** `#/board/<project>` is the board's filter, `#/board/group/<id>` a project
   group's board and `#/board/all` All projects. `#/board/<project>/ticket/<KEY>[/<tab>]`
   still works as a link (Inbox, New session, the test and screenshot scripts): arriving at it
   opens the ticket the way a card click does. The route the app launches with opens its ticket

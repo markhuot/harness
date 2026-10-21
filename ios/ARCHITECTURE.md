@@ -307,7 +307,7 @@ feature needs something new here, add to it without changing what's there.
   The sidebar's rows are `SidebarRow` (HarnessKit/Shell): `SidebarRow.current(tab:board:)` (the
   board from `BoardState.boardFilter(prefs.boardProject)`) is the highlighted row and
   `router.select(row, app:)` goes there (a board row saves its filter first: a project id, or a
-  group's `Paging.groupScope(name)`), tested in SidebarRowTests. A ticket screen leaves the stack through
+  group's `Paging.groupScope(id)`), tested in SidebarRowTests. A ticket screen leaves the stack through
   `router.removeTicket(where:)` and swaps itself with `router.replaceTicket(_:with:)`, never by
   editing `path(router.selectedTab)`, so the same code works as a ticket window's root.
 - **iPad layout:** see § iPad layout and § Windows.
@@ -1178,7 +1178,7 @@ native-pattern difference, not a missing feature.
 | Driver screen: status, Log in, Anthropic API key | screens/DriverSettings, app/driver/[id] | Features/Settings/DriverSettingsScreen | done |
 | Settings: prompts summary, watchers (menu, enable), projects | screens/Settings | SettingsListSections | done |
 | Project settings: identifier rename preview, color, folder, agents, completion, Remove | screens/ProjectSettings | ProjectSettingsScreen | done |
-| Project groups (HARNESS-269, after the RN app): group boards (`group:<name>` scope, Done paging and search by `group=`, regroup paging reset), the Group picker in project settings, New session defaulting into the group | — (desktop: shared/src/projectGroups.ts, state/groups.ts, state/paging.ts) | Logic/ProjectGroups, State/Paging, Shell/SidebarRow, Features/Pickers/GroupPicker, ProjectSettingsScreen, BoardScreen | done (fixtures: projectGroups, statePaging groupScenarios) |
+| Project groups (HARNESS-269, after the RN app): group boards (`group:<id>` scope, Done paging and search by `groupId=`, regroup paging reset), the Group picker in project settings, New session defaulting into the group | — (desktop: shared/src/projectGroups.ts, state/groups.ts, state/paging.ts) | Logic/ProjectGroups, State/Paging, Shell/SidebarRow, Features/Pickers/GroupPicker, ProjectSettingsScreen, BoardScreen | done (fixtures: projectGroups, statePaging groupScenarios) |
 | Prompts list and editor (Customize, Reset, Compare, variables) | screens/Prompts, app/prompt/[id] | Features/Prompts/* | done |
 | Watcher form | screens/WatcherForm, lib/watcherDraft | Features/Watchers/WatcherFormScreen | done |
 | Deep links (every `harness://` route above) | app/+native-intent, expo-router routes | Shell/DeepLink, Router, App/Destinations | done |
