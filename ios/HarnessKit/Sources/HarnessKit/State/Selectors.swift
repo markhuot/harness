@@ -135,15 +135,16 @@ extension BoardState {
     }
 
     /// The board a stored filter (prefs.boardProject) shows: the project while it exists, a
-    /// group's scope while some project carries the group, else nil (All projects).
+    /// group's scope while some project is in the group, else nil (All projects). A filter saved
+    /// before groups had ids names the group (`group:Work`): it shows that group's board by id.
     public func boardFilter(_ stored: String?) -> String? {
         guard let stored, !stored.isEmpty else { return nil }
-        if let group = Paging.scopeGroup(stored) { return ProjectGroups.exists(group, in: projects.values) ? stored : nil }
+        if let key = Paging.scopeGroup(stored) { return ProjectGroups.resolve(key, in: projectGroups()).map(Paging.groupScope) }
         return projects[stored] != nil ? stored : nil
     }
 
-    /// The groups the projects carry, alphabetically (ProjectGroups.list), as the sidebar lists them.
-    public func projectGroups() -> [String] { ProjectGroups.list(projects.values) }
+    /// The groups the projects are in, alphabetically (ProjectGroups.list), as the sidebar lists them.
+    public func projectGroups() -> [ProjectGroup] { ProjectGroups.list(projects.values) }
 
     /// Projects by name.
     public func sortedProjects() -> [Project] {
@@ -158,7 +159,7 @@ extension BoardState {
     /// it's in the group, else the group's first by name; then the last used anywhere.
     public func composerCandidates(_ board: String?, last: String?) -> [String?] {
         guard let group = board.flatMap(Paging.scopeGroup) else { return [board == Paging.allScope ? nil : board, last] }
-        let members = sortedProjects().filter { $0.group == group }
+        let members = sortedProjects().filter { $0.groupId == group }
         let lastInGroup = members.first { $0.id == last }?.id
         return [lastInGroup, members.first?.id, last]
     }

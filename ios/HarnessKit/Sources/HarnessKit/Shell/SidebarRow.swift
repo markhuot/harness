@@ -5,7 +5,7 @@ import Foundation
 public enum SidebarRow: Hashable, Sendable {
     case inbox
     case allProjects
-    /// A project group's board, by the group's name
+    /// A project group's board, by the group's id
     case group(String)
     case project(String)
     case settings
@@ -23,7 +23,7 @@ public enum SidebarRow: Hashable, Sendable {
     /// The board filter the row saves (prefs.boardProject): a project id, a group's scope, or nil.
     public var board: String? {
         switch self {
-        case let .group(name): Paging.groupScope(name)
+        case let .group(id): Paging.groupScope(id)
         case let .project(id): id
         case .inbox, .allProjects, .settings: nil
         }

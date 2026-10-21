@@ -3,40 +3,79 @@ import Foundation
 // Port of shared/src/projectGroups.ts and shared/src/state/groups.ts. A project group is a
 // human-readable name ("Work", "Personal") several projects share. Each group gets its own board,
 // like All projects but with only its projects (Paging.groupScope). A project is in at most one
-// group; the name is all there is to a group, so it exists while a project carries it.
+// group. A group has an id that never changes and a name that can; everything that refers to a
+// group (a board's scope, a saved filter, a project's membership) uses the id. The apps only learn
+// groups from the projects that carry them, so a group with no project isn't listed.
+
+/// A project group as the apps list it: its id and the name it shows under.
+public struct ProjectGroup: Hashable, Sendable, Identifiable {
+    public var id: String
+    public var name: String
+
+    public init(id: String, name: String) {
+        self.id = id
+        self.name = name
+    }
+}
+
+/// A group as the service sends it (GET /groups, PATCH /groups/:id).
+public struct GroupRecord: Codable, Equatable, Sendable {
+    public var id: String
+    public var name: String
+    public var createdAt: Timestamp
+
+    public init(id: String, name: String, createdAt: Timestamp) {
+        self.id = id
+        self.name = name
+        self.createdAt = createdAt
+    }
+}
+
+/// What picking a row sets on the project: no group, an existing group by id, or a name the
+/// service finds or makes a group for.
+public enum GroupPick: Equatable, Sendable {
+    case clear
+    case group(String)
+    case named(String)
+}
 
 /// A row of project settings' Group picker for what's typed (`groupRows`).
 public enum GroupRow: Equatable, Sendable {
     /// Leave the project out of every group
     case none
-    case group(String)
+    case group(ProjectGroup)
     /// The typed name, which no group has yet
     case new(String)
     /// A typed name the service would refuse (not pickable)
     case invalid
 
-    /// What picking the row sets (nil: no group, or not pickable).
-    public var value: String? {
+    /// What picking the row sets (nil: not pickable).
+    public var pick: GroupPick? {
         switch self {
-        case .none, .invalid: nil
-        case let .group(g), let .new(g): g
+        case .invalid: nil
+        case .none: .clear
+        case let .group(g): .group(g.id)
+        case let .new(name): .named(name)
         }
     }
 
     public var label: String {
         switch self {
         case .none: ProjectGroups.noGroupLabel
-        case let .group(g): g
+        case let .group(g): g.name
         case let .new(g): "New group \"\(g)\""
         case .invalid: "Group names are at most \(ProjectGroups.maxLength) characters"
         }
     }
 
-    /// groupRowIds: No group is "", a group (or new name) its name, invalid rows have none.
+    /// groupRowId: No group is "", a group its id, a new name "new:<name>" (so a name can't be taken
+    /// for an id). Invalid rows have none.
     public var id: String? {
         switch self {
         case .invalid: nil
-        default: value ?? ""
+        case .none: ""
+        case let .group(g): g.id
+        case let .new(name): "new:\(name)"
         }
     }
 }
@@ -77,20 +116,31 @@ public enum ProjectGroups {
         existing.first { same($0, name) } ?? name
     }
 
-    /// Every group the projects carry, once each, alphabetically without case or accents (as the
-    /// sidebar lists them), then by code unit.
-    public static func list(_ projects: some Sequence<Project>) -> [String] {
-        var out: [String] = []
-        for p in projects { if let g = p.group, !g.isEmpty, !out.contains(g) { out.append(g) } }
+    /// Every group the projects carry, once each by id, alphabetically without case or accents (as
+    /// the sidebar lists them), then by code unit, then by id.
+    public static func list(_ projects: some Sequence<Project>) -> [ProjectGroup] {
+        var out: [ProjectGroup] = []
+        for p in projects {
+            if let id = p.groupId, let name = p.group, !name.isEmpty, !out.contains(where: { $0.id == id }) { out.append(ProjectGroup(id: id, name: name)) }
+        }
         return out.sorted { a, b in
-            let c = a.compare(b, options: [.caseInsensitive, .diacriticInsensitive], range: nil, locale: Locale(identifier: "en_US"))
-            return c != .orderedSame ? c == .orderedAscending : JSString.less(a, b)
+            let c = a.name.compare(b.name, options: [.caseInsensitive, .diacriticInsensitive], range: nil, locale: Locale(identifier: "en_US"))
+            if c != .orderedSame { return c == .orderedAscending }
+            return a.name != b.name ? JSString.less(a.name, b.name) : JSString.less(a.id, b.id)
         }
     }
 
-    /// Whether some project carries the group (its board exists).
-    public static func exists(_ group: String, in projects: some Sequence<Project>) -> Bool {
-        projects.contains { $0.group == group }
+    /// Whether some project is in the group (its board exists).
+    public static func exists(_ groupId: String, in projects: some Sequence<Project>) -> Bool {
+        projects.contains { $0.groupId == groupId }
+    }
+
+    /// `resolveGroupKey`: the id a saved group reference means. `key` itself when a group has that
+    /// id, else the group named `key` (any case): scopes saved before groups had ids hold the name.
+    /// nil when neither matches.
+    public static func resolve(_ key: String, in groups: [ProjectGroup]) -> String? {
+        if let g = groups.first(where: { $0.id == key }) { return g.id }
+        return groups.first { same($0.name, key) }?.id
     }
 
     /// `groupMatchRank`: how well a group's name matches the typed text (lower-cased, whitespace
@@ -123,12 +173,12 @@ public enum ProjectGroups {
     /// every typed word, best match first (`matchRank`, alphabetical within a rank), then No group
     /// when every typed word is in its label, then the typed name as a new group when no group has
     /// it in any case (typing "work" picks "Work" instead). The first row is the best pick.
-    public static func rows(_ groups: [String], query: String) -> [GroupRow] {
+    public static func rows(_ groups: [ProjectGroup], query: String) -> [GroupRow] {
         let words = JSString.lower(query).split(whereSeparator: { $0.unicodeScalars.allSatisfy(JSCompat.isWhitespace) }).map(String.init)
         let typed = words.joined(separator: " ")
         let matches = groups.enumerated()
-            .filter { _, g in words.allSatisfy { JSString.includes(JSString.lower(g), $0) } }
-            .map { i, g in (i: i, g: g, rank: matchRank(g, typed: typed)) }
+            .filter { _, g in words.allSatisfy { JSString.includes(JSString.lower(g.name), $0) } }
+            .map { i, g in (i: i, g: g, rank: matchRank(g.name, typed: typed)) }
             .sorted { $0.rank != $1.rank ? $0.rank < $1.rank : $0.i < $1.i }
             .map { GroupRow.group($0.g) }
         if typed.isEmpty { return [.none] + matches }
@@ -136,7 +186,7 @@ public enum ProjectGroups {
         if words.allSatisfy({ JSString.includes(JSString.lower(noGroupLabel), $0) }) { rows.append(.none) }
         switch normalize(query) {
         case .absent: rows.append(.invalid)
-        case let .value(name) where !groups.contains(where: { same($0, name) }): rows.append(.new(name))
+        case let .value(name) where !groups.contains(where: { same($0.name, name) }): rows.append(.new(name))
         default: break
         }
         return rows

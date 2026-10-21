@@ -20,7 +20,7 @@ public struct Prefs: Codable, Sendable, Equatable {
     public var hideChildren: Bool
     @Nullable public var lastProject: String?
     /// Board project filter (nil = All projects): a project id, or a project group's board as
-    /// `Paging.groupScope(name)` ("group:Work"). Project ids never contain a colon, so values from
+    /// `Paging.groupScope(id)` ("group:<group id>"; a filter saved with the name still resolves). Project ids never contain a colon, so values from
     /// before groups read as they always did. Resolve with `BoardState.boardFilter`.
     @Nullable public var boardProject: String?
     @Nullable public var activeServer: String?

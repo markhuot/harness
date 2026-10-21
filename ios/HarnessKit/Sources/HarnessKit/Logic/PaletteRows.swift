@@ -69,7 +69,7 @@ public enum PaletteCommands {
             symbol: "arrow.turn.down.right", action: .toggleChildren))
         out.append(PaletteCommand(id: "board", label: "Go to All Projects", group: "Go to", keywords: ["Board: All Projects"], symbol: "square.grid.2x2", action: .goAllProjects))
         for g in state.projectGroups() {
-            out.append(PaletteCommand(id: "group:\(g)", label: "Board: \(g)", group: "Go to", keywords: ["group"], symbol: "folder", action: .goGroup(g)))
+            out.append(PaletteCommand(id: "group:\(g.id)", label: "Board: \(g.name)", group: "Go to", keywords: ["group"], symbol: "folder", action: .goGroup(g.id)))
         }
         for p in state.sortedProjects() {
             out.append(PaletteCommand(id: "project:\(p.id)", label: "Board: \(p.name)", group: "Go to", keywords: [p.key], symbol: "square.grid.2x2", action: .goProject(p.id)))

@@ -69,7 +69,22 @@ private struct ProjectSettingsForm: View {
                 }
                 .settingsRowBackground(c)
                 SettingsRow(label: "Group", hint: "Projects in a group share a board in the Projects list.") {
-                    GroupPicker(value: project.group, groups: state.projectGroups()) { save(UpdateProjectBody(group: Patch($0))) }
+                    GroupPicker(value: projectGroup, groups: state.projectGroups()) { pick in
+                        switch pick {
+                        case .clear: save(UpdateProjectBody(groupId: .null))
+                        case let .group(id): save(UpdateProjectBody(groupId: .value(id)))
+                        case let .named(name): save(UpdateProjectBody(group: .value(name)))
+                        }
+                    }
+                }
+                if let group = projectGroup {
+                    SettingsRow(label: "Group name", hint: "Renames the group for every project in it. Its board stays as it is.") {
+                        DraftField(value: group.name, prompt: "Group name") { v in
+                            let name = v.trimmingCharacters(in: .whitespacesAndNewlines)
+                            if !name.isEmpty, name != group.name { renameGroup(group.id, name) }
+                        }
+                        .accessibilityLabel("Group name")
+                    }
                 }
                 VStack(alignment: .leading, spacing: 8) {
                     VStack(alignment: .leading, spacing: 2) {
@@ -186,6 +201,17 @@ private struct ProjectSettingsForm: View {
         SettingsRow(label: label, hint: hint) {
             Toggle(label, isOn: Binding(get: { on }, set: set)).labelsHidden().tint(c.accent).accessibilityLabel(label)
         }
+    }
+
+    /// The project's group, nil when it is in none.
+    private var projectGroup: ProjectGroup? {
+        guard let id = project.groupId, let name = project.group, !name.isEmpty else { return nil }
+        return ProjectGroup(id: id, name: name)
+    }
+
+    private func renameGroup(_ id: String, _ name: String) {
+        guard let api = store.api else { return }
+        actions.perform { _ = try await api.renameGroup(id, name: name) }
     }
 
     private func save(_ body: UpdateProjectBody) {

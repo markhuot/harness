@@ -116,7 +116,7 @@ public final class BoardLoader {
         return Task { @MainActor in
             do {
                 let filter = Paging.scopeQuery(scope)
-                let page = try await client.ticketPage(status: .done, projectId: filter.projectId, group: filter.group, q: nil, limit: Paging.donePageSize, cursor: cursor)
+                let page = try await client.ticketPage(status: .done, projectId: filter.projectId, groupId: filter.groupId, q: nil, limit: Paging.donePageSize, cursor: cursor)
                 guard gen == self.gen else { return }
                 self.dispatch(.donePage(scope: scope, page: page, append: cursor != nil, cursor: Patch(cursor)))
             } catch {
@@ -182,7 +182,7 @@ public final class BoardLoader {
         return Task { @MainActor in
             do {
                 let filter = Paging.scopeQuery(scope)
-                let page = try await client.searchTickets(q: q, projectId: filter.projectId, group: filter.group, limit: Paging.searchPageSize, cursor: cursor)
+                let page = try await client.searchTickets(q: q, projectId: filter.projectId, groupId: filter.groupId, limit: Paging.searchPageSize, cursor: cursor)
                 guard gen == self.searchGen else { return }
                 self.dispatch(.searchResults(q: q, scope: scope, page: page, append: cursor != nil))
             } catch {

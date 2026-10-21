@@ -57,10 +57,10 @@ struct ProjectsSidebar: View {
                         select(.allProjects)
                     }
                     // Each group's board, like All projects with only its projects.
-                    ForEach(groups, id: \.self) { g in
+                    ForEach(groups) { g in
                         Divider().overlay(c.border)
-                        ProjectsNavRow(icon: "folder", label: g, count: groupCounts[g] ?? 0, active: row == .group(g)) {
-                            select(.group(g))
+                        ProjectsNavRow(icon: "folder", label: g.name, count: groupCounts[g.id] ?? 0, active: row == .group(g.id)) {
+                            select(.group(g.id))
                         }
                     }
                 }

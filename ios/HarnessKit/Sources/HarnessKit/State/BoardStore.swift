@@ -511,7 +511,7 @@ public final class BoardStore {
         async let donePage: TicketPage? = {
             do {
                 let filter = Paging.scopeQuery(scope)
-                return try await client.ticketPage(status: .done, projectId: filter.projectId, group: filter.group, q: nil, limit: Paging.donePageSize, cursor: nil)
+                return try await client.ticketPage(status: .done, projectId: filter.projectId, groupId: filter.groupId, q: nil, limit: Paging.donePageSize, cursor: nil)
             } catch let e as HarnessAPIError where e.status == 404 {
                 return nil
             }

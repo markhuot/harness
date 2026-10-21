@@ -8,15 +8,16 @@ import SwiftUI
 /// the best match (ProjectGroups.submitRow), as Enter does on the Mac.
 ///
 /// nil = no group. `groups` is every group in use, alphabetically (BoardState.projectGroups).
+/// Picking an existing group reports its id, a typed name reports the name (the service makes the group).
 struct GroupPicker: View {
-    let value: String?
-    let groups: [String]
-    let onChange: (String?) -> Void
+    let value: ProjectGroup?
+    let groups: [ProjectGroup]
+    let onChange: (GroupPick) -> Void
 
     @State private var open = false
 
     var body: some View {
-        let label = value ?? ProjectGroups.noGroupLabel
+        let label = value?.name ?? ProjectGroups.noGroupLabel
         Button {
             open = true
         } label: {
@@ -28,10 +29,10 @@ struct GroupPicker: View {
         .accessibilityAddTraits(.isButton)
         .sheet(isPresented: $open) {
             GroupSheet(picked: value, groups: groups) { row in
-                guard row != .invalid else { return }
+                guard let pick = row.pick else { return }
                 haptic(.select)
                 open = false
-                if row.value != value { onChange(row.value) }
+                if pick != (value.map { GroupPick.group($0.id) } ?? .clear) { onChange(pick) }
             }
         }
     }
@@ -39,8 +40,8 @@ struct GroupPicker: View {
 
 /// The sheet: a field (focused on open) over the rows.
 private struct GroupSheet: View {
-    let picked: String?
-    let groups: [String]
+    let picked: ProjectGroup?
+    let groups: [ProjectGroup]
     let onPick: (GroupRow) -> Void
 
     @Environment(\.palette) private var c
@@ -98,7 +99,7 @@ private struct GroupSheet: View {
                 subtitle: { EmptyView() })
         case .group:
             PickerSheetRow(
-                label: row.label, selected: row.value == picked, action: { onPick(row) },
+                label: row.label, selected: row.id == picked?.id, action: { onPick(row) },
                 leading: { Icon("folder", size: 15).foregroundStyle(c.text3) },
                 subtitle: { EmptyView() })
         case .new:
@@ -111,11 +112,11 @@ private struct GroupSheet: View {
 }
 
 private extension GroupRow {
-    /// A stable list id: the kind and the name.
+    /// A stable list id: the kind and the id or name.
     var listId: String {
         switch self {
         case .none: "none"
-        case let .group(g): "group:\(g)"
+        case let .group(g): "group:\(g.id)"
         case let .new(g): "new:\(g)"
         case .invalid: "invalid"
         }

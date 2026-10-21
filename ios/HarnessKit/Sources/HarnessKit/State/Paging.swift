@@ -6,7 +6,7 @@ import Foundation
 // - The snapshot loads every non-done ticket, plus the first page of done for the current board
 //   scope. Other done tickets arrive by paging, search, ticket details (children, deps) and live
 //   events, so `tickets` holds an arbitrary subset of done.
-// - Paging is per scope (a project id, `groupScope(name)` for a project group's board, or
+// - Paging is per scope (a project id, `groupScope(id)` for a project group's board, or
 //   `allScope` for "All projects"). The Done column shows a contiguous prefix of the server's
 //   ordering (completedAt desc): done tickets at or after the scope's `frontier` (the oldest
 //   completedAt paged in so far). Older done tickets that happen to be loaded (a dependency, a
@@ -17,7 +17,7 @@ import Foundation
 //   reducer drops the paging of both groups and the board pages them afresh.
 //
 // Selectors that take a board (`_ board: String?`) take a project id, a scope (`allScope`,
-// `groupScope(name)`) or nil for All projects.
+// `groupScope(id)`) or nil for All projects.
 //
 // How a client drives this: see BoardLoader (Done paging + debounced search) and BoardStore
 // (snapshot on connect).
@@ -31,9 +31,9 @@ public enum Paging {
     /// Paging scope key for "All projects".
     public static let allScope = "*"
     static let groupPrefix = "group:"
-    /// The scope of a project group's board (ProjectGroups.swift). Project ids never contain a colon.
-    public static func groupScope(_ group: String) -> String { groupPrefix + group }
-    /// The group a scope is the board of, or nil for All projects and project scopes.
+    /// The scope of a project group's board (ProjectGroups.swift), by the group's id. Project ids never contain a colon.
+    public static func groupScope(_ groupId: String) -> String { groupPrefix + groupId }
+    /// The group id a scope is the board of, or nil for All projects and project scopes.
     public static func scopeGroup(_ scope: String) -> String? {
         scope.hasPrefix(groupPrefix) ? String(scope.dropFirst(groupPrefix.count)) : nil
     }
@@ -43,14 +43,14 @@ public enum Paging {
         return board
     }
     /// The ticket page and search filter for a scope: one project, one group's projects, or none.
-    public static func scopeQuery(_ scope: String) -> (projectId: String?, group: String?) {
-        if let group = scopeGroup(scope) { return (nil, group) }
+    public static func scopeQuery(_ scope: String) -> (projectId: String?, groupId: String?) {
+        if let groupId = scopeGroup(scope) { return (nil, groupId) }
         return (scope == allScope ? nil : scope, nil)
     }
     /// Whether a ticket shows on a scope's board: every ticket on All projects, its group's, or its project's.
     static func inScope(_ projects: [String: Project], _ t: Ticket, _ scope: String) -> Bool {
         if scope == allScope { return true }
-        if let group = scopeGroup(scope) { return projects[t.projectId]?.group == group }
+        if let groupId = scopeGroup(scope) { return projects[t.projectId]?.groupId == groupId }
         return t.projectId == scope
     }
 

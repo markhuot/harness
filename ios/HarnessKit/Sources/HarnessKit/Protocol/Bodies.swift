@@ -25,6 +25,8 @@ public struct CreateProjectBody: Codable, Sendable, Equatable {
     /// The project's group (ProjectGroups.normalize); null or "" → none. A name matching an
     /// existing group without case takes that group's spelling.
     public var group: Patch<String>
+    /// The group by id; null → none. Wins over `group`.
+    public var groupId: Patch<String>
     /// null → settings.permissionMode
     public var permissionMode: Patch<PermissionMode>
     /// Per-phase driver + model; PATCH merges per phase, null clears one (it inherits settings')
@@ -39,7 +41,7 @@ public struct CreateProjectBody: Codable, Sendable, Equatable {
     public init(
         path: String, name: String? = nil, key: String? = nil, defaultDriver: Patch<String> = .absent,
         useWorktrees: Bool? = nil, skipAgentReview: Bool? = nil, skipHumanReview: Bool? = nil, requireHumanReview: Bool? = nil,
-        color: Patch<String> = .absent, group: Patch<String> = .absent, permissionMode: Patch<PermissionMode> = .absent,
+        color: Patch<String> = .absent, group: Patch<String> = .absent, groupId: Patch<String> = .absent, permissionMode: Patch<PermissionMode> = .absent,
         phaseModels: PhaseModelsPatch? = nil, defaultModels: [String: String?]? = nil, baseBranch: Patch<String> = .absent,
         completionAction: CompletionAction? = nil
     ) {
@@ -53,6 +55,7 @@ public struct CreateProjectBody: Codable, Sendable, Equatable {
         self.requireHumanReview = requireHumanReview
         self.color = color
         self.group = group
+        self.groupId = groupId
         self.permissionMode = permissionMode
         self.phaseModels = phaseModels
         self.defaultModels = defaultModels
@@ -79,6 +82,8 @@ public struct UpdateProjectBody: Codable, Sendable, Equatable {
     /// The project's group (ProjectGroups.normalize); null or "" → none. A name matching an
     /// existing group without case takes that group's spelling.
     public var group: Patch<String>
+    /// The group by id; null → none. Wins over `group`.
+    public var groupId: Patch<String>
     /// null → settings.permissionMode
     public var permissionMode: Patch<PermissionMode>
     /// Per-phase driver + model; PATCH merges per phase, null clears one (it inherits settings')
@@ -93,7 +98,7 @@ public struct UpdateProjectBody: Codable, Sendable, Equatable {
     public init(
         path: String? = nil, name: String? = nil, key: String? = nil, defaultDriver: Patch<String> = .absent,
         useWorktrees: Bool? = nil, skipAgentReview: Bool? = nil, skipHumanReview: Bool? = nil, requireHumanReview: Bool? = nil,
-        color: Patch<String> = .absent, group: Patch<String> = .absent, permissionMode: Patch<PermissionMode> = .absent,
+        color: Patch<String> = .absent, group: Patch<String> = .absent, groupId: Patch<String> = .absent, permissionMode: Patch<PermissionMode> = .absent,
         phaseModels: PhaseModelsPatch? = nil, defaultModels: [String: String?]? = nil, baseBranch: Patch<String> = .absent,
         completionAction: CompletionAction? = nil
     ) {
@@ -107,6 +112,7 @@ public struct UpdateProjectBody: Codable, Sendable, Equatable {
         self.requireHumanReview = requireHumanReview
         self.color = color
         self.group = group
+        self.groupId = groupId
         self.permissionMode = permissionMode
         self.phaseModels = phaseModels
         self.defaultModels = defaultModels

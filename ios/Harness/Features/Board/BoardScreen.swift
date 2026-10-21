@@ -298,7 +298,7 @@ struct BoardContext {
     let filter: String?
     /// The filter's project (nil on All projects and a group's board).
     let project: Project?
-    /// The filter's group, on a group's board.
+    /// The name of the filter's group, on a group's board.
     let group: String?
     let board: Columns
     let pending: Bool
@@ -317,7 +317,7 @@ struct BoardContext {
         self.state = state
         let id = state.boardFilter(prefs.boardProject)
         filter = id
-        group = id.flatMap(Paging.scopeGroup)
+        group = id.flatMap(Paging.scopeGroup).map { gid in state.projectGroups().first { $0.id == gid }?.name ?? "Group" }
         project = id.flatMap { state.projects[$0] }
         board = state.boardColumns(id)
         // The same columns presence reports (BoardColumns.shownKeys).

@@ -10,7 +10,6 @@ let swiftExemptions: [String: String] = [:]
 /// `Type.field`s the iPhone and iPad apps leave out on purpose, each with why. A field Swift drops
 /// that isn't here fails the test, and so does an entry Swift has since started modelling.
 let ignoredFields: [String: String] = [
-    "Project.group": "The iPhone app has no project groups: it shows one board of every project",
     "PullRequestLink.title": "Swift has no property for it, and no iPhone screen shows a pull request's title",
     "Run.model": "Swift has no property for it, and no iPhone screen shows a run's model",
     "Run.inputTokens": "Swift has no property for it, and no iPhone screen shows a run's token usage",
@@ -99,6 +98,7 @@ let codecs: [String: Codec] = [
         "PluginInfo": .codable(PluginInfo.self),
         "PluginTab": .codable(PluginTab.self),
         "PluginThemeFields": .codable(PluginThemeFields.self),
+        "Group": .codable(GroupRecord.self),
         "Project": .codable(Project.self),
         "PromptEntry": .codable(PromptEntry.self),
         "PromptGroup": .codable(PromptGroup.self),
