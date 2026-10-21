@@ -39,7 +39,6 @@ export const EXCLUSIONS: Exclusion[] = [
 
   // -- Drivers: a real CLI, a real API --
   { file: "service/src/drivers/anthropic-api.ts", reason: "Calls the Messages API with a native tool loop", layer: "L3 (driver contract against a fake CLI/API)" },
-  { file: "service/src/drivers/github-copilot.ts", reason: "Spawns the Copilot CLI and parses its output", layer: "L3 (driver contract against a fake CLI)" },
 
   // -- The integrated browser: a real Chrome --
   { file: "service/src/browser/chrome.ts", reason: "Launches and supervises a Chrome process", layer: "L4 (a real browser)" },

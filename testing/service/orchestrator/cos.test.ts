@@ -279,6 +279,46 @@ test("a group's chief goes with the group when its last project leaves", async (
   expect(h.store.tickets.get(w.id)).not.toBeNull();
 });
 
+test("a project that joins the group while its chief is being torn down keeps the chief", async () => {
+  const { h, groupOf, work, home } = await board();
+  const cos = h.orch.openCos({ group: groupOf("Work") });
+  const orch = h.orch as unknown as { browser: { close: (id: string) => Promise<void> } };
+  const close = orch.browser.close.bind(orch.browser);
+  orch.browser.close = async (id) => {
+    await close(id);
+    h.orch.updateProject(home.id, { group: "Work" }); // lands during removeTicket's awaits
+  };
+  h.orch.updateProject(work.id, { group: null });
+  await h.orch.pruneCos();
+  expect(h.store.tickets.get(cos.ticketId)).not.toBeNull();
+  expect(h.orch.listCos().map((c) => c.ticketId)).toEqual([cos.ticketId]);
+  expect(h.store.groups.findByName("Work")).not.toBeNull();
+});
+
+test("a chief of staff cannot be opened for a group with no projects, so none is orphaned at birth", async () => {
+  const { h, groupOf, work } = await board();
+  const cos = h.orch.openCos({ group: groupOf("Work") });
+  const group = groupOf("Work");
+  h.orch.updateProject(work.id, { group: null }); // the chief still holds the emptied group
+  expect(() => h.orch.openCos({ group })).toThrow(/no projects/); // not even the doomed chief is handed out
+  await h.orch.pruneCos();
+  expect(h.orch.listCos()).toEqual([]);
+  expect(h.store.tickets.get(cos.ticketId)).toBeNull();
+  expect(() => h.orch.openCos({ group })).toThrow(/Unknown group/);
+  expect(h.orch.listCos()).toEqual([]);
+});
+
+test("starting the service tears down a chief whose group emptied while it was down", async () => {
+  const { h, groupOf, work } = await board();
+  const cos = h.orch.openCos({ group: groupOf("Work") });
+  h.store.db.query("UPDATE projects SET group_id = NULL, group_name = NULL WHERE id = $id").run({ id: work.id });
+  expect(h.store.projects.orphanedCosTickets()).toEqual([cos.ticketId]);
+  h.orch.start();
+  await h.orch.pruneCos();
+  expect(h.orch.listCos()).toEqual([]);
+  expect(h.store.tickets.get(cos.ticketId)).toBeNull();
+});
+
 test("every operation that takes a key answers an out-of-scope key like a missing one, and a new operation has to be classified", async () => {
   const { h, groupOf, o } = await board();
   const cos = h.orch.openCos({ group: groupOf("Work") });

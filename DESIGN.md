@@ -828,7 +828,7 @@ project-else-app-else-default.
 **Scope is enforced once, in the store.** A scope is `"all"` or `{ group }` (`store/scope.ts`). The
 service resolves it from the CoS ticket's `cos` row on every operation (`scopeOf(ctx)`: never a tool
 argument, never kept from when the run started, so moving a project between groups applies at once;
-it follows the ticket's kind, not the run's, so a chat run on a CoS ticket is scoped too, and every other ticket resolves to all). A CoS ticket has only `cos` runs (a message is always one; a tool approval never moves it), its PATCH and lifecycle routes answer 409, and on Claude Code its run is started with `--tools ""` so the harness MCP server is all it has: no shell, files or web that could get around the store. `ScopedStore` is the only way a run's board tools reach tickets,
+it follows the ticket's kind, not the run's, so a chat run on a CoS ticket is scoped too, and every other ticket resolves to all). A CoS ticket has only `cos` runs (a message is always one; a tool approval never moves it), its PATCH and lifecycle routes answer 409, and on Claude Code its run is started with `--tools ""` so the harness MCP server is all it has (on Copilot every built-in is `--deny-tool`ed instead): no shell, files or web that could get around the store. `ScopedStore` is the only way a run's board tools reach tickets,
 projects, groups, watchers and Activity: an out-of-scope id is `null` (not found, with the message a
 missing ticket gets, so existence isn't revealed), lists and pages are filtered in SQL so totals are
 the group's, and parent, dependency and dependent edges that leave the scope are dropped from a

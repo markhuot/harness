@@ -267,6 +267,11 @@ export function planCopilotPermissions(
 ): CopilotPermissionPlan {
   const mode: PermissionMode = req.kind === "plan" ? "read_only" : (req.permissionMode ?? settings.permissionMode);
   const plan: CopilotPermissionPlan = { args: ["--allow-tool", COPILOT_MCP_SERVER], applied: [], unexpressed: [] };
+  if (req.kind === "cos") {
+    // A chief of staff acts only through its harness tools (ScopedStore); every built-in is denied, whatever the mode.
+    for (const tool of ["shell", "write", "read", "url"]) plan.args.push("--deny-tool", tool);
+    return plan;
+  }
   if (mode === "read_only") {
     plan.args.push("--deny-tool", "write", "--deny-tool", "shell");
     return plan;

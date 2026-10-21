@@ -644,6 +644,7 @@ export class Orchestrator {
       this.log(`upload sweep failed: ${errMsg(err)}`);
     }
     this.syncWatchers();
+    if (this.store.projects.orphanedCosTickets().length) void this.pruneCos(); // a chief of staff whose group emptied while the service was down
     // Restarts that came due while the service was down run now; the rest at their time.
     this.kickResume();
     if (this.reconcileIntervalMs > 0) {
@@ -1143,6 +1144,7 @@ export class Orchestrator {
    */
   openCos(scope: CosScope): Cos {
     if (scope !== "all" && !this.store.groups.get(scope.group)) throw notFound(`Unknown group: ${scope.group}`);
+    if (scope !== "all" && !this.store.projects.list().some((p) => p.groupId === scope.group)) throw conflict(`Group ${scope.group} has no projects`);
     const existing = this.store.cos.getByScope(scope);
     if (existing) return existing;
     const settings = this.settings();
@@ -2011,9 +2013,11 @@ export class Orchestrator {
    */
   pruneCos(): Promise<void> {
     this.pruning = this.pruning.then(async () => {
+      const orphaned = (id: string) => this.store.projects.orphanedCosTickets().includes(id);
       for (const id of this.store.projects.orphanedCosTickets()) {
         const ticket = this.store.tickets.get(id);
-        if (ticket) await this.removeTicket(ticket);
+        // Re-checked per ticket and again before the delete: a project may move into the group meanwhile.
+        if (ticket && orphaned(id)) await this.removeTicket(ticket, () => orphaned(id));
       }
       this.store.projects.pruneGroups();
     });
@@ -2022,7 +2026,7 @@ export class Orchestrator {
   }
 
   /** Cancel the ticket's run and remove it with its session, files and uploads (the guard against deleting a chief of staff is in deleteTicket). */
-  private async removeTicket(ticket: Ticket) {
+  private async removeTicket(ticket: Ticket, stillWanted?: () => boolean) {
     await this.cancelSession(ticket.sessionId, true);
     for (const child of this.store.tickets.list({ parentId: ticket.id })) {
       this.store.db.query("UPDATE tickets SET parent_id = NULL WHERE id = $id").run({ id: child.id });
@@ -2030,6 +2034,7 @@ export class Orchestrator {
     }
     this.conductorBuffer.delete(ticket.id);
     await this.browser.close(ticket.sessionId).catch(() => {});
+    if (stillWanted && !stillWanted()) return; // the awaits above let the world change (a chief of staff's group gained a project)
     // Its spec media go with it (their rows cascade), even when another ticket's message sent one
     // on by id: there it becomes a missing file, like a moved "file". Copying it would keep a
     // deleted ticket's screenshots around for good.
