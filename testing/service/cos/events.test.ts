@@ -2,6 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { COS_CEILING_MS, COS_HOUR_MS, COS_QUIET_MS, COS_WAKES_PER_HOUR } from "../../../shared/src/cos";
+import { WAKE_PROMPT_PREFIX } from "../../../service/src/cos/chat";
 import type { CosEngine } from "../../../service/src/cos/engine";
 import { LlmTriage, type CosTriage, type TriageInput, type TriageResult, type TriageVerdict } from "../../../service/src/cos/triage";
 import type { StoredCosEvent } from "../../../service/src/store/cos-events";
@@ -575,7 +576,7 @@ test("chat shows the chief's messages, its board changes and the event batches, 
   expect(kinds).toContain("ticket_created");
   expect(page.entries.filter((e) => e.kind === "message").map((e) => (e as { text: string }).text)).toEqual(expect.arrayContaining(["make one", "Made it"]));
   // The wake prompt isn't shown as a message: the batch stands in for it.
-  expect(page.entries.some((e) => e.kind === "message" && e.text.startsWith("[Harness:"))).toBe(false);
+  expect(page.entries.some((e) => e.kind === "message" && e.text.startsWith(WAKE_PROMPT_PREFIX))).toBe(false);
   const times = page.entries.map((e) => e.createdAt);
   expect([...times].sort((a, b) => b - a)).toEqual(times);
 
