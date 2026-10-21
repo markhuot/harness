@@ -125,6 +125,47 @@ export type CosBusEvent =
   | { kind: "cos.transcript.appended"; cosId: string; entry: CosChatEntry };
 
 // ---------------------------------------------------------------------------
+// Schedules: a chief of staff's reminders and wake-ups (DESIGN.md "Schedules")
+// ---------------------------------------------------------------------------
+
+/** A reminder notifies the human and starts no run; a wake becomes an event for the chief. */
+export type ScheduleKind = "reminder" | "wake";
+
+/** When it fires: once at a time (ms since the epoch), every N ms, or on a 5-field cron expression in the Mac's timezone. */
+export type ScheduleSpec = { type: "at"; at: number } | { type: "every"; everyMs: number } | { type: "cron"; cron: string };
+
+/** active: will fire; done: a one-shot that fired; missed: a one-shot found long past its time; cancelled. */
+export type ScheduleStatus = "active" | "done" | "missed" | "cancelled";
+
+/** What the last fire did: fired, or skipped because its chief was off. */
+export type ScheduleOutcome = "fired" | "skipped" | "missed";
+
+/** One schedule (GET /schedules, schedule_list). */
+export interface Schedule {
+  id: string;
+  /** The chief of staff that made it and that a wake goes to */
+  cosId: string;
+  kind: ScheduleKind;
+  title: string;
+  message: string;
+  spec: ScheduleSpec;
+  projectKey: string | null;
+  status: ScheduleStatus;
+  /** When it fires next; null once it can't */
+  nextFireAt: number | null;
+  lastFireAt: number | null;
+  lastOutcome: ScheduleOutcome | null;
+  createdAt: number;
+}
+
+/** The fewest ms between two fires of a repeating schedule, so a wake that makes schedules can't feed back on itself. */
+export const SCHEDULE_MIN_INTERVAL_MS = 5 * 60_000;
+/** Active schedules per chief. */
+export const SCHEDULE_MAX_ACTIVE = 50;
+/** A one-shot found this late (the Mac was off) is marked missed instead of fired. */
+export const SCHEDULE_STALE_MS = 24 * 60 * 60_000;
+
+// ---------------------------------------------------------------------------
 // Pure rules
 // ---------------------------------------------------------------------------
 

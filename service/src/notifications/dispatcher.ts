@@ -224,6 +224,23 @@ export class NotificationService {
     return { ok: true as const };
   }
 
+  /**
+   * A chief of staff's reminder (DESIGN.md "Schedules"): a push with no ticket behind it, to every device.
+   * Settings' master switch silences it; presence doesn't, since there is no card to be looking at.
+   */
+  remind(reminder: { title: string; body: string }) {
+    if (!this.settings.enabled) {
+      this.opts.log?.("notifications: reminder skipped disabled");
+      return;
+    }
+    this.opts.log?.("notifications: reminder sent");
+    this.track(
+      this.deliver({
+        aps: { alert: { title: "Reminder", subtitle: clip(reminder.title, 120), body: clip(reminder.body, 1000) }, "thread-id": "reminders", sound: "default" },
+      }),
+    ).catch(() => {});
+  }
+
   /** Settings → Send test notification: to every device, ignoring the switches and presence. */
   sendTest(): Promise<TestNotificationResult> {
     return this.track(

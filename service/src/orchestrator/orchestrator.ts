@@ -171,6 +171,8 @@ import { attachMentions, searchPaths, type SearchOptions } from "./files";
 import { compactNotes } from "../annotations";
 import { attachmentFile as fileOf, ORPHAN_UPLOAD_AGE_MS, registerFile, removeUploadDirs, resolveAttachments, runAttachments, storeUpload, sweepUploads, uploadDirs, type RunImage } from "../attachment-lists";
 import { badRequest, conflict, HarnessError, notFound } from "./errors";
+import { nextFire, specFromInput, validateSpec } from "../cos/schedule-time";
+import { SCHEDULE_MAX_ACTIVE, type Schedule } from "@harness/shared";
 import {
   applySettingsPatch,
   LEGACY_MODEL_KEYS,
@@ -1338,6 +1340,52 @@ export class Orchestrator {
     this.touchTicket(cos.ticketId);
     this.rehomeCosEvents();
     return cos;
+  }
+
+  // =========================================================================
+  // Schedules (DESIGN.md "Schedules")
+  // =========================================================================
+
+  /** Every chief's schedules (GET /schedules): the human sees them all. */
+  listSchedules(opts: { all?: boolean } = {}): Schedule[] {
+    return this.store.schedules.list({ all: opts.all });
+  }
+
+  /** The human stops a schedule (DELETE /schedules/:id). */
+  cancelSchedule(id: string): Schedule {
+    const s = this.store.schedules.get(id);
+    if (!s) throw notFound(`Unknown schedule: ${id}`);
+    if (!this.store.schedules.cancel(id)) throw conflict(`That schedule is already ${s.status}`);
+    return this.store.schedules.get(id)!;
+  }
+
+  /** The chief a schedule tool acts for: its own row, read on every call. Schedules are theirs alone. */
+  private scheduleOwner(ctx: ToolContext): Cos {
+    const cos = ctx.ticket?.kind === "cos" ? this.store.cos.get(ctx.ticket.id) : null;
+    if (!cos) throw new Error("Only a chief of staff has schedules.");
+    return cos;
+  }
+
+  private scheduleCreate_(ctx: ToolContext, input: Parameters<HarnessOps["scheduleCreate"]>[1]): Schedule {
+    const cos = this.scheduleOwner(ctx);
+    const spec = specFromInput(input);
+    const now = this.now();
+    validateSpec(spec, now);
+    if (this.store.schedules.countActive(cos.ticketId) >= SCHEDULE_MAX_ACTIVE) throw new Error(`You have ${SCHEDULE_MAX_ACTIVE} active schedules: cancel one first.`);
+    const project = input.projectKey ? this.scopeOf(ctx).projects.getByKey(input.projectKey) : null;
+    if (input.projectKey && !project) throw new Error(`Unknown project: ${input.projectKey}`);
+    const first = nextFire(spec, now);
+    if (first === null) throw new Error("That schedule never fires.");
+    return this.store.schedules.insert({ cosId: cos.ticketId, kind: input.kind, title: input.title.trim(), message: input.message.trim(), spec, projectId: project?.id ?? null, nextFireAt: first });
+  }
+
+  private scheduleCancel_(ctx: ToolContext, id: string): Schedule {
+    const cos = this.scheduleOwner(ctx);
+    const s = this.store.schedules.get(id);
+    // Another chief's schedule can't be told from one that doesn't exist.
+    if (!s || s.cosId !== cos.ticketId) throw new Error(`Unknown schedule: ${id}`);
+    if (!this.store.schedules.cancel(id)) throw new Error(`That schedule is already ${s.status}.`);
+    return this.store.schedules.get(id)!;
   }
 
   // =========================================================================
@@ -5463,6 +5511,7 @@ ${numberLines(r.body)}`;
           ...this.adviserInfo(run, model, driver, ticket, project),
           branches: ticket ? this.branchContext(ticket, project) : undefined,
           activity: ticket ? this.store.activity.listBySession(ticket.sessionId).slice(-PROMPT_ACTIVITY_ENTRIES) : undefined,
+          schedules: ticket?.kind === "cos" ? this.store.schedules.list({ cosId: ticket.id }) : undefined,
         };
         const req: RunRequest = {
           runId: run.id,
@@ -5848,6 +5897,10 @@ ${numberLines(r.body)}`;
       searchTickets: (c, i) => this.searchTickets_(c, i),
       listProjects: (c) => this.listProjects_(c),
       listInbox: (c, f) => this.listInbox_(c, f),
+      // --- schedules ---
+      scheduleCreate: async (c, i) => this.scheduleCreate_(c, i),
+      scheduleList: async (c, o) => this.store.schedules.list({ cosId: this.scheduleOwner(c).ticketId, all: o.all }),
+      scheduleCancel: async (c, id) => this.scheduleCancel_(c, id),
       // --- board (write) ---
       createTicket: (c, i) => this.createTicket_(c, i),
       updateTicket: (c, k, p) => this.updateTicket_(c, k, p),

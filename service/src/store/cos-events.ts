@@ -149,7 +149,7 @@ export class CosEventRepo {
       )
       .run({
         id,
-        cosId: filtered ? null : input.cosId,
+        cosId: input.cosId,
         projectId: input.projectId,
         ticketId: input.ticketId,
         sourceKind: input.sourceKind,

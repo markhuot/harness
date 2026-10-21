@@ -20,6 +20,7 @@ import { BUILTIN_PLUGINS_DIR } from "./runtime";
 import { systemClock, type Clock } from "./clock";
 import { PresenceRegistry } from "./notifications/presence";
 import { NotificationService } from "./notifications/dispatcher";
+import { Scheduler } from "./cos/scheduler";
 import { TerminalRegistry } from "./terminals/registry";
 import { spawnBunPty, type SpawnPty } from "./terminals/pty";
 import { ApnsClient, ApnsTokens, Http2Transport, type ApnsTransport } from "./notifications/apns";
@@ -49,6 +50,8 @@ export interface CreateHarnessOptions {
   /** Watcher supervisor factory; null disables watchers. Defaults to WatcherRunner. */
   watchers?: OrchestratorOptions["watchers"];
   log?: (msg: string) => void;
+  /** How often the scheduler looks for due schedules (default 30 s); 0 only catches up at boot (tests) */
+  schedulerIntervalMs?: number;
   /** Plugin search path; defaults to <repo>/plugins (builtin) then $HARNESS_HOME/plugins (user). [] disables plugins. */
   pluginDirs?: PluginDir[];
   /**
@@ -82,6 +85,7 @@ export interface Harness {
   plugins: PluginHost;
   codeWatch: CodeWatch | null;
   notifications: NotificationService;
+  scheduler: Scheduler;
   terminals: TerminalRegistry;
   stop(): Promise<void>;
 }
@@ -141,6 +145,10 @@ export async function createHarness(opts: CreateHarnessOptions): Promise<Harness
     now,
   });
   notifications.start();
+
+  // Reminders and wake-ups (DESIGN.md "Schedules"): wakes become events for the chief, reminders push to the human.
+  const scheduler = new Scheduler({ store, now, sink: orchestrator.cosEngine, notifier: notifications, log: opts.log, intervalMs: opts.schedulerIntervalMs });
+  scheduler.start();
 
   const terminals = new TerminalRegistry({ bus, spawn: opts.spawnPty ?? spawnBunPty, log: opts.log });
   terminals.start();
@@ -204,6 +212,7 @@ export async function createHarness(opts: CreateHarnessOptions): Promise<Harness
   try {
     await network.boot();
   } catch (err) {
+    scheduler.stop();
     notifications.stop();
     terminals.shutdown();
     await orchestrator.stop();
@@ -230,6 +239,7 @@ export async function createHarness(opts: CreateHarnessOptions): Promise<Harness
     plugins,
     codeWatch,
     notifications,
+    scheduler,
     terminals,
     async stop() {
       if (stopped) return;
@@ -237,6 +247,7 @@ export async function createHarness(opts: CreateHarnessOptions): Promise<Harness
       terminals.shutdown();
       codeWatch?.stop();
       orchestrator.planUsage.stop();
+      scheduler.stop();
       notifications.stop();
       await orchestrator.stop();
       await plugins.stop();

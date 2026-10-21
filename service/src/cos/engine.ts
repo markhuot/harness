@@ -175,10 +175,22 @@ export class CosEngine {
   }
 
   /** Something other than activity happened (a watcher's output, a schedule): an event with no project yet, owned by the All chief. */
-  addExternal(input: { sourceKind: "watcher" | "schedule"; sourceRef: string; actor: string; title: string; body: string; projectId?: string | null }): CosEvent | null {
+  addExternal(input: {
+    sourceKind: "watcher" | "schedule";
+    sourceRef: string;
+    actor: string;
+    title: string;
+    body: string;
+    projectId?: string | null;
+    /** The owner, when the source knows it (a schedule belongs to the chief that made it); else the project's */
+    cosId?: string | null;
+    /** Record it as ignored with this reason: it shows in the Inbox and wakes nobody (a reminder) */
+    filtered?: string;
+  }): CosEvent | null {
     const project = input.projectId ? this.d.store.projects.get(input.projectId) : null;
     const ev = this.d.store.cosEvents.insert({
-      cosId: this.ownerFor(project),
+      cosId: input.cosId !== undefined ? input.cosId : this.ownerFor(project),
+      filtered: input.filtered,
       projectId: project?.id ?? null,
       ticketId: null,
       sourceKind: input.sourceKind,
@@ -207,7 +219,9 @@ export class CosEngine {
     // Escalations waiting for a wake (held by the cap, or by a chief that is off) move with the rest; ones being handled don't.
     for (const e of [...store.cosEvents.byStatus("pending"), ...store.cosEvents.byStatus("escalated")]) {
       const project = e.projectId ? store.projects.get(e.projectId) : null;
-      const owner = this.ownerFor(project, chiefs);
+      // A schedule's wake belongs to the chief that made it, wherever its project sits.
+      const schedule = e.sourceKind === "schedule" ? store.schedules.get(e.sourceRef.split(":")[0]!) : null;
+      const owner = schedule ? schedule.cosId : this.ownerFor(project, chiefs);
       if (owner === e.cosId) continue;
       moved++;
       const next = store.cosEvents.update(e.id, { cosId: owner });
@@ -285,7 +299,10 @@ export class CosEngine {
         this.patch(id, { summary: `${firstLine(e.summary, 100)} (net: ${move.from} → ${move.to})`, payload: { ...e.payload, from: move.from, to: move.to } });
       }
       // Oldest first, in calls the model's answer fits in; what a busy board leaves over waits for the next pass.
-      const batch = pending.filter((e) => !gone.has(e.id)).slice(0, TRIAGE_MAX_PER_PASS).map((e) => store.cosEvents.get(e.id)!);
+      const all = pending.filter((e) => !gone.has(e.id)).slice(0, TRIAGE_MAX_PER_PASS).map((e) => store.cosEvents.get(e.id)!);
+      // A wake the chief scheduled for itself is never second-guessed: it asked to be woken.
+      for (const e of all) if (e.sourceKind === "schedule") this.patch(e.id, { status: "escalated", verdict: "escalate", reason: "scheduled by the chief itself", wakeId: null });
+      const batch = all.filter((e) => e.sourceKind !== "schedule");
       this.emitBadge();
       for (let i = 0; i < batch.length && !this.stopped; i += TRIAGE_CHUNK) await this.triageChunk(cosId, batch.slice(i, i + TRIAGE_CHUNK));
     } finally {

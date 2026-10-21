@@ -25,6 +25,7 @@ import { configReadTools, configWriteTools } from "./config";
 import { completeTicket, reviewTicket } from "./conductor";
 import { nativeTools, readOnlyNativeTools } from "./native";
 import { permissionPrompt } from "./permission";
+import { scheduleTools } from "./schedules";
 import { block, editSpec, postNote, readSpec, recordPullRequest, resumeWork, returnToPlanning, reviewDecision, submitForReview, unblock, updateBranch, updateNotes, updateSpec } from "./ticket";
 import { declineWork, dispatchTicket } from "./triage";
 import type { ToolDefinition } from "./types";
@@ -38,6 +39,7 @@ export * from "./dispatch";
 export * from "./config";
 export * from "./native";
 export * from "./permission";
+export * from "./schedules";
 export * from "./ticket";
 export * from "./triage";
 export { defineGatedTool, defineTool, validateInput } from "./util";
@@ -90,6 +92,7 @@ export const allTools: ToolDefinition[] = [
   ...triageTools,
   ...configReadTools,
   ...configWriteTools,
+  ...scheduleTools,
   ...browserTools,
   permissionPrompt,
   ...nativeTools,
@@ -135,7 +138,7 @@ const RUN_TOOLS: Record<Exclude<RunKind, "chat" | "compact">, { harness: ToolDef
   // has no spec or ticket lifecycle tools (it never submits or blocks), no config writes, no
   // sub-agents (drivers/claude-code.ts keeps Agent and Task off it) and no files or shell: deeper work
   // goes to tickets it creates. Everything it reads or changes is scoped (store/scope.ts).
-  cos: { harness: [postNote, updateNotes, ...boardTools, ...boardWriteTools, ...configReadTools], native: "none" },
+  cos: { harness: [postNote, updateNotes, ...scheduleTools, ...boardTools, ...boardWriteTools, ...configReadTools], native: "none" },
 };
 
 /**

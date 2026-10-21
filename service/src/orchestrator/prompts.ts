@@ -12,7 +12,8 @@
 //    conductor turns `- ` bullets into child tickets and the dummy work run reacts to
 //    slash-prefixed directives. System prompts use `*` bullets for the same reason.
 
-import type { ActivityEntry, CompletionAction, Project, RunKind, Session, Ticket, TicketStatus } from "@harness/shared";
+import type { ActivityEntry, CompletionAction, Project, RunKind, Schedule, Session, Ticket, TicketStatus } from "@harness/shared";
+import { describeSpec, describeTime } from "../cos/schedule-time";
 import { displayKey, harnessBranch, plannedBranch, resolveBaseBranch, secondaryKey } from "@harness/shared";
 import { toolsForRun } from "../tools/index";
 import { type PromptOverrides, renderPrompt } from "./prompt-templates";
@@ -63,6 +64,8 @@ export interface PromptInfo {
   overrides?: PromptOverrides | null;
   /** The ticket's last few Activity entries, oldest first (system.spec shows them) */
   activity?: ActivityEntry[];
+  /** A chief of staff's active schedules, soonest first (runContext lists them) */
+  schedules?: Schedule[];
 }
 
 /** What a review run reads (Orchestrator.reviewContext). */
@@ -533,7 +536,16 @@ export function runContext(info: PromptInfo): string {
       renderPrompt("system.branches", { branch: ticket.branch, baseBranch: branchesOf(ticket, info.project, info.branches).base }, o),
     ticketRun && specSection(info, browser, o),
     (ticketRun || kind === "cos") && notesSection(info, o),
+    kind === "cos" && schedulesSection(info),
   );
+}
+
+/** A chief's active schedules, so it knows what it set before without a tool call. */
+function schedulesSection(info: PromptInfo): string {
+  const list = info.schedules ?? [];
+  if (!list.length) return "";
+  const lines = list.map((s) => `* ${s.id}: ${s.kind} "${s.title}", ${describeSpec(s.spec)}${s.projectKey ? `, ${s.projectKey}` : ""}; next ${s.nextFireAt ? describeTime(s.nextFireAt) : "never"}`);
+  return `## Your schedules\n${lines.join("\n")}`;
 }
 
 // ---------------------------------------------------------------------------

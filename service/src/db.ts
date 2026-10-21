@@ -851,6 +851,28 @@ export const MIGRATIONS: string[] = [
   INSERT INTO cos_state (key, value) SELECT 'activity_seq', COALESCE(MAX(seq), 0) FROM activity;
   INSERT INTO cos_state (key, value) SELECT 'activity_counter', COALESCE(MAX(seq), 0) FROM activity;
   `,
+  // 47: chief-of-staff schedules (DESIGN.md "Schedules"). One row per reminder or wake-up a chief made;
+  //     spec is the JSON ScheduleSpec, next_fire_at what the scheduler's tick looks at (NULL once it
+  //     can't fire). A fire's id is '<id>:<scheduled time>', the dedupe key of the cos_events row it
+  //     makes, so a restart never fires one twice. They go with their chief's ticket.
+  `
+  CREATE TABLE schedules (
+    id TEXT PRIMARY KEY,
+    cos_id TEXT NOT NULL REFERENCES cos(ticket_id) ON DELETE CASCADE,
+    kind TEXT NOT NULL,
+    title TEXT NOT NULL,
+    message TEXT NOT NULL DEFAULT '',
+    spec TEXT NOT NULL,
+    project_id TEXT,
+    status TEXT NOT NULL DEFAULT 'active',
+    next_fire_at INTEGER,
+    last_fire_at INTEGER,
+    last_outcome TEXT,
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX schedules_due ON schedules(status, next_fire_at);
+  CREATE INDEX schedules_cos ON schedules(cos_id, status);
+  `,
 ];
 
 /** Where the files migrations look at live (HarnessPaths); by default next to the database file. */

@@ -17,6 +17,7 @@ import type {
   PublicSettings,
   RelatedTicket,
   RunKind,
+  Schedule,
   Session,
   SubagentKind,
   SubagentStatus,
@@ -356,6 +357,17 @@ export interface HarnessOps {
     ctx: ToolContext,
     filter: { statuses?: TriageStatus[]; source?: string; key?: string; limit?: number; output?: boolean },
   ): Promise<{ items: InboxItem[]; total: number }>;
+
+  // --- schedules: chief of staff runs (DESIGN.md "Schedules") ---
+  // Each acts on the calling chief's own schedules only; another chief's behave as not found.
+  /** Make a schedule; throws for a past time, too tight a repeat, a project out of scope or too many active ones. */
+  scheduleCreate(
+    ctx: ToolContext,
+    input: { kind: "reminder" | "wake"; title: string; message: string; at?: string; everyMinutes?: number; cron?: string; projectKey?: string },
+  ): Promise<Schedule>;
+  scheduleList(ctx: ToolContext, opts: { all: boolean }): Promise<Schedule[]>;
+  /** Cancel an active schedule of the caller's; throws when it isn't one. */
+  scheduleCancel(ctx: ToolContext, id: string): Promise<Schedule>;
 
   // --- board (write): work and conductor runs ---
   // What a person does to cards on the board, through the same Orchestrator methods as the HTTP
