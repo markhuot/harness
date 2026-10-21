@@ -907,6 +907,37 @@ over the CoS session, its stamped activity and its wakes), `POST /cos/:id/messag
 attachments? }` → `{ entryId }`. Bus events `cos.event.upserted`, `cos.badge`, `cos.transcript.appended`
 (typed `CosBusEvent`, not part of `HarnessEvent`, so clients that don't know them ignore them).
 
+#### Schedules
+
+A chief schedules itself with `schedule_create`, `schedule_list` and `schedule_cancel` (chief runs
+only; each sees and cancels just its own). A schedule is a **reminder** (a push to the human, no run)
+or a **wake** (a `schedule` event for the chief), and fires once (`at`), every N minutes (at least 5)
+or on a 5-field cron expression in the Mac's timezone (parsed by `croner`, which owns the DST rules:
+a skipped time runs at the next valid one, a repeated time runs once). A chief has at most 50 active
+ones. They live in `schedules` (migration 47, `service/src/store/schedules.ts`) and go with the
+chief's ticket.
+
+`Scheduler` (`service/src/cos/scheduler.ts`) is the one component that fires them: a 30 s
+`setInterval` (not a long timeout, since timers stand still while the Mac sleeps) calls `tick()`,
+which reads `clock.now()` and takes the rows whose `next_fire_at` has passed; `start()` runs one
+tick first as the catch-up after a restart. A schedule due several times fires **once** and moves to
+the first occurrence after now (an interval keeps its phase); a one-shot more than a day late is
+marked `missed`. Each fire has the id `<schedule id>:<scheduled time>`, used as the `cos_events`
+dedupe key, written in the same transaction that moves the schedule on, so a wake happens exactly once
+across restarts; a reminder is pushed after that commit, so it happens at most once, and a repeated
+fire id never pushes again. The event's body says when it was scheduled and, if late, when it fired.
+
+- A wake belongs to the chief that made it (also when re-homed), skips triage (it asked to be woken)
+  and goes into the next wake. When that chief is switched off the fire is recorded as `skipped` and
+  nothing queues for when it comes back. A wake with no project is the chief's to place.
+- A reminder is an `ignored` event ("reminder: posted to the human, no run") so it shows in the Inbox,
+  plus `NotificationService.remind`, a ticket-less push to every device that the Settings master
+  switch silences; presence doesn't, since no card is on screen.
+- The chief's run context lists its active schedules (`## Your schedules`).
+- HTTP for the apps: `GET /schedules?all=1` (active ones, or every status; all chiefs) and
+  `DELETE /schedules/:id` (409 when it is no longer active) return the `Schedule` shape in
+  `shared/src/cos.ts`.
+
 ### Conductor
 
 Any ticket with children acts as a conductor (`isConductor`: `kind: "conductor"` or

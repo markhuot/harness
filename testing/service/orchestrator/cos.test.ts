@@ -347,7 +347,7 @@ test("every operation that takes a key answers an out-of-scope key like a missin
   const unkeyed = [
     "postNote", "updateNotes", "wroteNotes", "statusLine", "readSpec", "editSpec", "updateSpec", "block", "unblock", "resumeWork", "returnToPlanning", "submitForReview", "updateBranch", "reviewDecision",
     "listTickets", "searchTickets", "listProjects", "listInbox", "createTicket", "recordPullRequest", "dispatchTicket", "declineWork", "requestApproval", "checkPermission", "fileOutputScope",
-    "listWatchers", "getSettings", "listPrompts", "listDrivers", "createWatcher", "createProject", "updateSettings",
+    "listWatchers", "getSettings", "listPrompts", "listDrivers", "createWatcher", "createProject", "updateSettings", "scheduleCreate", "scheduleList", "scheduleCancel",
   ];
   expect(Object.keys(ops).sort()).toEqual([...Object.keys(keyed), ...unkeyed].sort());
   const message = async (fn: () => Promise<unknown>, key: string) => {

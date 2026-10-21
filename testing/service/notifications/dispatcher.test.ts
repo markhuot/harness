@@ -207,6 +207,24 @@ test("the public device list never carries the full token", async () => {
   expect(d.tokenSuffix).toBe("a".repeat(8));
 });
 
+test("a reminder reaches every device with no ticket behind it, even when a ticket is on screen; the master switch silences it", async () => {
+  const r = await rig();
+  register(r, "d1", "a");
+  r.presence.set("s", { deviceId: "mac", platform: "mac", visible: true, tickets: [r.t.key] });
+  r.service.remind({ title: "Deploy SHOP-4", body: "Friday morning" });
+  await r.service.idle();
+  expect(r.posts).toHaveLength(1);
+  const payload = JSON.parse(r.posts[0]!.body);
+  expect(payload.aps.alert).toMatchObject({ title: "Reminder", subtitle: "Deploy SHOP-4", body: "Friday morning" });
+  expect(payload.ticketKey).toBeUndefined();
+
+  const off = await rig({ settings: settings({ enabled: false }) });
+  register(off, "d1", "a");
+  off.service.remind({ title: "x", body: "y" });
+  await off.service.idle();
+  expect(off.posts).toHaveLength(0);
+});
+
 test("sendTest reaches every device regardless of the master switch or presence", async () => {
   const r = await rig({ settings: undefined });
   register(r, "d1", "a");
