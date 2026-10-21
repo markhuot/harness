@@ -53,7 +53,9 @@ final class ScreenTests: ScreenTestCase {
 
     /// A grouped project's settings: the Group picker and, under it, the Group name row that renames the group for every project in it.
     func testProjectSettingsGroup() async throws {
-        try await screen("project-settings-group") { NavigationStack { ProjectSettingsScreen(projectId: "project-HARNESS") } }
+        let router = Router()
+        router.push(.project(id: "project-HARNESS"))
+        try await screen("project-settings-group", router: router) { RootView() }
     }
 
     func testInbox() async throws {

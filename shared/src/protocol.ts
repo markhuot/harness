@@ -82,11 +82,11 @@ export interface Project {
   color: string | null;
   /**
    * The project's group ("Work", "Personal"; see projectGroups.ts): each group has a board of its
-   * own projects. null → in no group. Optional only so older payloads type-check.
+   * own projects. null → in no group.
    */
-  group?: string | null;
-  /** The id of the project's group (see `group`): stable across renames. null → none. Optional only so older payloads type-check. */
-  groupId?: string | null;
+  group: string | null;
+  /** The id of the project's group (see `group`): stable across renames. null → none. */
+  groupId: string | null;
   createdAt: number;
   updatedAt: number;
 }

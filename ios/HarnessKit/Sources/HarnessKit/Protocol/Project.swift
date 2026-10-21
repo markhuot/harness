@@ -54,9 +54,9 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
     @Nullable public var color: String?
     /// The project's group ("Work", "Personal"; see ProjectGroups.swift): each group has a board of
     /// its own projects. nil → in no group. Absent from older payloads.
-    public var group: String?
+    @Nullable public var group: String?
     /// The id of the project's group (stable across renames); nil → none. Absent from older payloads.
-    public var groupId: String?
+    @Nullable public var groupId: String?
     public var createdAt: Timestamp
     public var updatedAt: Timestamp
 
