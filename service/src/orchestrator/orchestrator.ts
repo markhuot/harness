@@ -1356,6 +1356,7 @@ export class Orchestrator {
     const s = this.store.schedules.get(id);
     if (!s) throw notFound(`Unknown schedule: ${id}`);
     if (!this.store.schedules.cancel(id)) throw conflict(`That schedule is already ${s.status}`);
+    this.cosEngine.ignoreScheduleEvents(id);
     return this.store.schedules.get(id)!;
   }
 
@@ -1385,6 +1386,7 @@ export class Orchestrator {
     // Another chief's schedule can't be told from one that doesn't exist.
     if (!s || s.cosId !== cos.ticketId) throw new Error(`Unknown schedule: ${id}`);
     if (!this.store.schedules.cancel(id)) throw new Error(`That schedule is already ${s.status}.`);
+    this.cosEngine.ignoreScheduleEvents(id);
     return this.store.schedules.get(id)!;
   }
 

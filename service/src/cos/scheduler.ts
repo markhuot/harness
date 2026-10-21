@@ -6,7 +6,13 @@
 // the schedule on, so a wake happens exactly once; a reminder's push goes out after that commit, so
 // it happens at most once.
 
-import { SCHEDULE_STALE_MS, type CosEvent, type Schedule, type ScheduleOutcome, type ScheduleStatus } from "@harness/shared";
+import {
+  SCHEDULE_STALE_MS,
+  type CosEvent,
+  type Schedule,
+  type ScheduleOutcome,
+  type ScheduleStatus,
+} from "@harness/shared";
 import type { Clock } from "../clock";
 import type { Store } from "../store";
 import type { FireResult } from "../store/schedules";
@@ -44,7 +50,8 @@ export interface SchedulerDeps {
 
 export const SCHEDULER_TICK_MS = 30_000;
 
-export const fireId = (scheduleId: string, scheduledFor: number) => `${scheduleId}:${scheduledFor}`;
+export const fireId = (scheduleId: string, scheduledFor: number) =>
+  `${scheduleId}:${scheduledFor}`;
 
 export class Scheduler {
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -75,7 +82,9 @@ export class Scheduler {
         if (this.fire(s, now)) fired++;
       } catch (err) {
         // The row didn't move (the transaction rolled back): the next tick tries again.
-        this.d.log?.(`schedule ${s.id}: fire failed: ${err instanceof Error ? err.message : String(err)}`);
+        this.d.log?.(
+          `schedule ${s.id}: fire failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
       }
     }
     return fired;
@@ -86,45 +95,78 @@ export class Scheduler {
     const scheduledFor = s.nextFireAt!;
     const next = advance(s.spec, scheduledFor, now);
     const status: ScheduleStatus = next === null ? "done" : "active";
-    const move = (outcome: ScheduleOutcome, finalStatus: ScheduleStatus = status): FireResult => ({ status: finalStatus, nextFireAt: next, lastFireAt: now, outcome });
+    const move = (
+      outcome: ScheduleOutcome,
+      finalStatus: ScheduleStatus = status,
+    ): FireResult => ({
+      status: finalStatus,
+      nextFireAt: next,
+      lastFireAt: now,
+      outcome,
+    });
 
     // A one-shot found long after its time (the Mac was off) is stale, not late: say so, don't fire.
     if (s.spec.type === "at" && now - scheduledFor > SCHEDULE_STALE_MS) {
-      store.schedules.fired(s.id, move("missed", "missed"));
-      this.d.log?.(`schedule ${s.id}: "${s.title}" was due ${describeTime(scheduledFor)} and is long past: marked missed`);
+      store.schedules.fired(s.id, scheduledFor, move("missed", "missed"));
+      this.d.log?.(
+        `schedule ${s.id}: "${s.title}" was due ${describeTime(scheduledFor)} and is long past: marked missed`,
+      );
       return false;
     }
 
     const cos = store.cos.get(s.cosId);
     const id = fireId(s.id, scheduledFor);
-    const late = now - scheduledFor > 2 * (this.d.intervalMs ?? SCHEDULER_TICK_MS) + 1000;
-    const when = late ? `${describeTime(scheduledFor)} (late: fired ${describeTime(now)})` : describeTime(scheduledFor);
-    const projectId = s.projectKey ? (store.projects.getByKey(s.projectKey)?.id ?? null) : null;
+    const late =
+      now - scheduledFor > 2 * (this.d.intervalMs ?? SCHEDULER_TICK_MS) + 1000;
+    const when = late
+      ? `${describeTime(scheduledFor)} (late: fired ${describeTime(now)})`
+      : describeTime(scheduledFor);
+    const projectId = s.projectKey
+      ? (store.projects.getByKey(s.projectKey)?.id ?? null)
+      : null;
 
     if (s.kind === "wake" && cos && !cos.enabled) {
       // A switched-off chief doesn't wake, and nothing queues for when it is switched back on.
-      store.schedules.fired(s.id, move("skipped"));
-      this.d.log?.(`schedule ${s.id}: "${s.title}" skipped, chief ${cos.key} is off`);
+      store.schedules.fired(s.id, scheduledFor, move("skipped"));
+      this.d.log?.(
+        `schedule ${s.id}: "${s.title}" skipped, chief ${cos.key} is off`,
+      );
       return false;
     }
 
-    const body = s.message ? `${s.message}\n\nScheduled for ${when}.` : `Scheduled for ${when}.`;
+    const body = s.message
+      ? `${s.message}\n\nScheduled for ${when}.`
+      : `Scheduled for ${when}.`;
     let event: CosEvent | null = null;
-    store.transaction(() => {
-      event = sink.addExternal({
-        sourceKind: "schedule",
-        sourceRef: id,
-        actor: `schedule:${s.id}`,
-        title: s.kind === "reminder" ? `Reminder: ${s.title}` : s.title,
-        body,
-        projectId,
-        cosId: s.cosId,
-        ...(s.kind === "reminder" ? { filtered: "reminder: posted to the human, no run" } : {}),
+    const cancelled = new Error("cancelled");
+    try {
+      store.transaction(() => {
+        event = sink.addExternal({
+          sourceKind: "schedule",
+          sourceRef: id,
+          actor: `schedule:${s.id}`,
+          title: s.kind === "reminder" ? `Reminder: ${s.title}` : s.title,
+          body,
+          projectId,
+          cosId: s.cosId,
+          ...(s.kind === "reminder"
+            ? { filtered: "reminder: posted to the human, no run" }
+            : {}),
+        });
+        // Cancelled since the due list was read: roll the event back so the cancel stands.
+        if (!store.schedules.fired(s.id, scheduledFor, move("fired")))
+          throw cancelled;
       });
-      store.schedules.fired(s.id, move("fired"));
-    });
+    } catch (err) {
+      if (err === cancelled) return false;
+      throw err;
+    }
     // A null event is a fire id the Inbox already has: the push went out with it.
-    if (s.kind === "reminder" && event) this.d.notifier.remind({ title: s.title, body: s.message || `Scheduled for ${when}.` });
+    if (s.kind === "reminder" && event)
+      this.d.notifier.remind({
+        title: s.title,
+        body: s.message || `Scheduled for ${when}.`,
+      });
     return true;
   }
 }

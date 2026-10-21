@@ -93,11 +93,13 @@ export class ScheduleRepo {
     return rows.map(toSchedule);
   }
 
-  /** Record a fire (or a skipped or missed one) and move the schedule on. */
-  fired(id: string, r: FireResult): void {
-    this.db
-      .query("UPDATE schedules SET status = $status, next_fire_at = $next, last_fire_at = $last, last_outcome = $outcome WHERE id = $id")
-      .run({ id, status: r.status, next: r.nextFireAt, last: r.lastFireAt, outcome: r.outcome });
+  /** Record a fire (or a skipped or missed one) of the occurrence due at `scheduledFor` and move the schedule on; false when it is no longer active at that time (cancelled meanwhile), so a fire can't undo a cancel. */
+  fired(id: string, scheduledFor: number, r: FireResult): boolean {
+    return (
+      this.db
+        .query("UPDATE schedules SET status = $status, next_fire_at = $next, last_fire_at = $last, last_outcome = $outcome WHERE id = $id AND status = 'active' AND next_fire_at = $scheduledFor")
+        .run({ id, scheduledFor, status: r.status, next: r.nextFireAt, last: r.lastFireAt, outcome: r.outcome }).changes > 0
+    );
   }
 
   /** Cancel an active schedule; false when it isn't one. */

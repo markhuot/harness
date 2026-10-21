@@ -207,6 +207,19 @@ export class CosEngine {
     return wire(ev);
   }
 
+  private ignoreScheduleEvent(id: string, reason: string) {
+    this.patch(id, { status: "ignored", verdict: "filtered", reason, wakeId: null });
+  }
+
+  /** A cancelled schedule's fires that no run has picked up yet are dropped, so cancelling stops them too. */
+  ignoreScheduleEvents(scheduleId: string): void {
+    const { store } = this.d;
+    for (const e of [...store.cosEvents.byStatus("pending"), ...store.cosEvents.byStatus("escalated")]) {
+      if (e.sourceKind === "schedule" && e.sourceRef.split(":")[0] === scheduleId) this.ignoreScheduleEvent(e.id, "its schedule was cancelled");
+    }
+    this.emitBadge();
+  }
+
   /**
    * Recompute the owner of every event that hasn't been picked up yet (pending, or escalated and
    * waiting for a wake). Runs on every change that can move one: a chief's toggle, a project's setting or
@@ -222,6 +235,11 @@ export class CosEngine {
       // A schedule's wake belongs to the chief that made it, wherever its project sits.
       const schedule = e.sourceKind === "schedule" ? store.schedules.get(e.sourceRef.split(":")[0]!) : null;
       const owner = schedule ? schedule.cosId : this.ownerFor(project, chiefs);
+      // Off means nothing queues: a wake its chief hasn't picked up is dropped, not held for when it is switched back on.
+      if (schedule && !store.cos.get(schedule.cosId)?.enabled) {
+        this.ignoreScheduleEvent(e.id, "its chief is switched off");
+        continue;
+      }
       if (owner === e.cosId) continue;
       moved++;
       const next = store.cosEvents.update(e.id, { cosId: owner });

@@ -65,7 +65,8 @@ export function specFromInput(input: { at?: string; everyMinutes?: number; cron?
   const given = [input.at !== undefined, input.everyMinutes !== undefined, input.cron !== undefined].filter(Boolean).length;
   if (given !== 1) throw new Error("Give exactly one of `at` (once), `every_minutes` (repeating) or `cron` (repeating).");
   if (input.at !== undefined) {
-    const at = Date.parse(input.at);
+    // A bare date parses as UTC midnight, which is the wrong day for a Mac west of Greenwich: ask for a time.
+    const at = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(input.at.trim()) ? Date.parse(input.at.trim()) : NaN;
     if (Number.isNaN(at)) throw new Error('`at` must be an ISO 8601 date-time such as "2026-10-23T09:00" (the Mac\'s local time when it has no offset).');
     return { type: "at", at };
   }

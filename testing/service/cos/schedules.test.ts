@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { SCHEDULE_MAX_ACTIVE, SCHEDULE_MIN_INTERVAL_MS, SCHEDULE_STALE_MS, type ScheduleSpec } from "../../../shared/src/cos";
 import { type CosTriage, type TriageInput, type TriageResult } from "../../../service/src/cos/triage";
 import { Scheduler, fireId } from "../../../service/src/cos/scheduler";
-import { advance, nextFire, validateSpec } from "../../../service/src/cos/schedule-time";
+import { advance, nextFire, specFromInput, validateSpec } from "../../../service/src/cos/schedule-time";
 import { callTools, makeOrchestrator, stopAll } from "../orchestrator-harness";
 
 afterEach(stopAll);
@@ -196,6 +196,43 @@ test("a wake carries its project when it has one", async () => {
   s.h.clock.advance(MIN);
   s.scheduler.tick();
   expect(s.events()[0]).toMatchObject({ projectId: s.h.project.id });
+});
+
+test("a wake the chief hadn't picked up when it was switched off is dropped, not delivered when it comes back", async () => {
+  const s = await setup();
+  s.add({ type: "at", at: s.h.clock() + 10 * MIN });
+  s.h.clock.advance(10 * MIN);
+  expect(s.scheduler.tick()).toBe(1);
+  expect(s.events()).toEqual([expect.objectContaining({ status: "pending" })]);
+  s.h.orch.setCosEnabled(s.chief.ticketId, false);
+  s.h.orch.setCosEnabled(s.chief.ticketId, true);
+  expect(s.events()).toEqual([expect.objectContaining({ status: "ignored", reason: "its chief is switched off" })]);
+});
+
+test("cancelling a schedule drops its fires no run has picked up", async () => {
+  const s = await setup();
+  const sched = s.add({ type: "every", everyMs: 10 * MIN });
+  s.h.clock.advance(10 * MIN);
+  s.scheduler.tick();
+  expect(s.events()).toEqual([expect.objectContaining({ status: "pending" })]);
+  s.h.orch.cancelSchedule(sched.id);
+  expect(s.events()).toEqual([expect.objectContaining({ status: "ignored", reason: "its schedule was cancelled" })]);
+});
+
+test("a fire can't undo a cancel", async () => {
+  const s = await setup();
+  const sched = s.add({ type: "every", everyMs: 10 * MIN });
+  const due = sched.nextFireAt!;
+  s.h.store.schedules.cancel(sched.id);
+  const result = { status: "active" as const, nextFireAt: due + 10 * MIN, lastFireAt: due, outcome: "fired" as const };
+  expect(s.h.store.schedules.fired(sched.id, due, result)).toBe(false);
+  expect(s.h.store.schedules.get(sched.id)).toMatchObject({ status: "cancelled", nextFireAt: null });
+});
+
+test("`at` needs a time: a bare date would parse as UTC midnight", () => {
+  expect(() => specFromInput({ at: "2026-10-23" })).toThrow(/ISO 8601 date-time/);
+  const spec = specFromInput({ at: "2026-10-23T09:00" });
+  expect(spec).toEqual({ type: "at", at: new Date(2026, 9, 23, 9, 0).getTime() }); // the Mac's local time
 });
 
 test("a switched-off chief doesn't wake: the fire is skipped and nothing queues for when it is back; reminders still go", async () => {
