@@ -63,6 +63,11 @@ export class TranscriptRepo {
     });
   }
 
+  /** The seq of a session's newest entry (0 when empty). */
+  lastSeq(sessionId: string): number {
+    return (this.db.query("SELECT MAX(seq) AS seq FROM transcript WHERE session_id = $sessionId").get({ sessionId }) as { seq: number | null }).seq ?? 0;
+  }
+
   /** The session agent's entries, or with `subagentId` that sub-agent's. */
   list(sessionId: string, afterSeq = 0, limit = 5000, subagentId: string | null = null): TranscriptEntry[] {
     return (
@@ -72,15 +77,16 @@ export class TranscriptRepo {
     ).map(toEntry);
   }
 
-  /** A session's plain-text user and assistant messages (its own agent's) older than the cursor, newest first (ties by id): the chief's chat. */
-  messagesBefore(sessionId: string, before: { createdAt: number; id: string } | null, limit: number): TranscriptEntry[] {
+  /** A session's plain-text user and assistant messages (its own agent's) older than the cursor, newest first (ties by id): the chief's chat. `skipUserPrefix`: user messages starting with it are left out in the query, so a page never comes up short. */
+  messagesBefore(sessionId: string, before: { createdAt: number; id: string } | null, limit: number, skipUserPrefix = ""): TranscriptEntry[] {
     return (
       this.db
         .query(
           `SELECT * FROM transcript WHERE session_id = $sessionId AND subagent_id IS NULL AND role IN ('user', 'assistant') AND json_extract(content, '$.type') = 'text'
+           AND ($skip = '' OR role <> 'user' OR substr(json_extract(content, '$.text'), 1, length($skip)) <> $skip)
            AND ($bt IS NULL OR created_at < $bt OR (created_at = $bt AND id < $bid)) ORDER BY created_at DESC, id DESC LIMIT $limit`,
         )
-        .all({ sessionId, bt: before?.createdAt ?? null, bid: before?.id ?? "", limit }) as EntryRow[]
+        .all({ sessionId, bt: before?.createdAt ?? null, bid: before?.id ?? "", limit, skip: skipUserPrefix }) as EntryRow[]
     ).map(toEntry);
   }
 

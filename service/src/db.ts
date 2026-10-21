@@ -799,12 +799,16 @@ export const MIGRATIONS: string[] = [
   //     ('cos:<ticket id>' for a chief; NULL for everything stamped before this, which never counts
   //     as a chief's). cos_events is the Inbox: one row per event with one owner (cos_id, NULL while
   //     unassigned), fed from activity through a cursor (cos_state 'activity_seq', the last
-  //     activity rowid read, advanced with the inserts and seeded here at the current end so the
+  //     activity.seq read, advanced with the inserts and seeded here at the current end so the
   //     first boot doesn't triage history), deduped by
   //     (source_kind, source_ref). cos_wakes logs each full wake and triage call for the hourly cap
-  //     and the token log.
+  //     and the token log. activity.seq is a monotonic counter (cos_state 'activity_counter'), not
+  //     the rowid, which SQLite reuses after the newest rows are deleted (a session's delete).
   `
   ALTER TABLE activity ADD COLUMN actor TEXT;
+  ALTER TABLE activity ADD COLUMN seq INTEGER;
+  UPDATE activity SET seq = rowid;
+  CREATE INDEX activity_seq ON activity(seq);
   CREATE TABLE cos_events (
     id TEXT PRIMARY KEY,
     cos_id TEXT,
@@ -829,6 +833,7 @@ export const MIGRATIONS: string[] = [
     UNIQUE (source_kind, source_ref)
   );
   CREATE INDEX cos_events_cos ON cos_events(cos_id, status);
+  CREATE INDEX cos_events_status ON cos_events(status, created_at);
   CREATE INDEX cos_events_wake ON cos_events(wake_id);
   CREATE TABLE cos_wakes (
     id TEXT PRIMARY KEY,
@@ -843,7 +848,8 @@ export const MIGRATIONS: string[] = [
   );
   CREATE INDEX cos_wakes_cos ON cos_wakes(cos_id, kind, started_at);
   CREATE TABLE cos_state (key TEXT PRIMARY KEY, value INTEGER NOT NULL);
-  INSERT INTO cos_state (key, value) SELECT 'activity_seq', COALESCE(MAX(rowid), 0) FROM activity;
+  INSERT INTO cos_state (key, value) SELECT 'activity_seq', COALESCE(MAX(seq), 0) FROM activity;
+  INSERT INTO cos_state (key, value) SELECT 'activity_counter', COALESCE(MAX(seq), 0) FROM activity;
   `,
 ];
 

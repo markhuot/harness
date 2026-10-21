@@ -13,6 +13,8 @@ export interface StoredCosEvent extends CosEvent {
   sourceRef: string;
   /** Raw content of the event (a watcher's output, an activity body): untrusted */
   payload: Record<string, unknown>;
+  /** The run a wake went to, once handed over */
+  consumingRunId: string | null;
   updatedAt: number;
 }
 
@@ -64,6 +66,7 @@ const toEvent = (r: Row): StoredCosEvent => ({
   kind: r.kind,
   sourceRef: r.source_ref,
   payload: fromJson<Record<string, unknown>>(r.payload, {}),
+  consumingRunId: r.consuming_run_id,
   updatedAt: r.updated_at,
 });
 
@@ -231,12 +234,9 @@ export class CosEventRepo {
     return { total, byCos };
   }
 
-  /** A crash left events mid-flight: triage starts over, and what a lost run was handling is delivered again. */
+  /** A crash left events mid-triage: triage starts over. (Events a wake was handling are settled by the engine, which can see whether the run survived.) */
   recover(): number {
-    const t = this.now();
-    const a = this.db.query("UPDATE cos_events SET status = 'pending', wake_id = NULL, updated_at = $t WHERE status = 'triaging'").run({ t });
-    const b = this.db.query("UPDATE cos_events SET status = 'escalated', consuming_run_id = NULL, updated_at = $t WHERE status = 'handling'").run({ t });
-    return a.changes + b.changes;
+    return this.db.query("UPDATE cos_events SET status = 'pending', wake_id = NULL, updated_at = $t WHERE status = 'triaging'").run({ t: this.now() }).changes;
   }
 
   /** What was ignored for a chief since `since` (the digest an escalation brief ends with), newest first. */
@@ -246,9 +246,20 @@ export class CosEventRepo {
       .all({ cosId, since }) as { reason: string | null; title: string }[];
   }
 
-  /** Delete settled events (ignored, handled) last touched before `before`. */
+  /** Delete settled events (ignored, handled) last touched before `before`, and the wake log from before it. */
   prune(before: number): number {
+    this.db.query("DELETE FROM cos_wakes WHERE started_at < $before").run({ before });
     return this.db.query("DELETE FROM cos_events WHERE status IN ('ignored', 'handled') AND updated_at < $before").run({ before }).changes;
+  }
+
+  /** Delete unowned events still waiting (pending, escalated) that are older than `before`, and all but the newest `keep` of the rest. */
+  pruneUnassigned(before: number, keep: number): number {
+    const open = "cos_id IS NULL AND status IN ('pending', 'escalated')";
+    const old = this.db.query(`DELETE FROM cos_events WHERE ${open} AND created_at < $before`).run({ before }).changes;
+    const over = this.db
+      .query(`DELETE FROM cos_events WHERE ${open} AND id IN (SELECT id FROM cos_events WHERE ${open} ORDER BY created_at DESC, rowid DESC LIMIT -1 OFFSET $keep)`)
+      .run({ keep }).changes;
+    return old + over;
   }
 
   addWake(log: WakeLog): string {

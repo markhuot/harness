@@ -661,6 +661,7 @@ export class Orchestrator {
       settings: () => this.settings(),
       triage: () => this.cosTriage(),
       deliver: (cosTicketId, text) => this.wakeCos(cosTicketId, text),
+      runStatus: (runId) => this.store.runs.get(runId)?.status ?? null,
       log: this.log,
       timers: opts.cosTimers,
     });
@@ -693,7 +694,7 @@ export class Orchestrator {
         this.bus.emit({ kind: "cos.transcript.appended", cosId, entry: { id: m.id, cosId, createdAt: m.createdAt, kind: "message", role: m.role, text: m.content.text } });
       }),
       this.bus.onKind("run.upserted", (e) => {
-        if (e.run.kind === "cos" && (e.run.status === "succeeded" || e.run.status === "failed" || e.run.status === "cancelled")) this.cosEngine.runEnded(e.run.id);
+        if (e.run.kind === "cos" && (e.run.status === "succeeded" || e.run.status === "failed" || e.run.status === "cancelled")) this.cosEngine.runEnded(e.run.id, e.run.status);
       }),
     );
     this.cosEngine.start();
@@ -1231,7 +1232,8 @@ export class Orchestrator {
       if (res.error === "unknown") throw notFound(`Unknown event: ${id}`);
       throw conflict(res.error === "handled" ? "That event was already handled" : "That event is being triaged right now; try again in a moment");
     }
-    await this.cosEngine.tick();
+    // The wake is the engine's to deliver; the answer doesn't wait on a triage call or a chief.
+    void this.cosEngine.tick().catch((err) => this.log(`cos: tick failed: ${errMsg(err)}`));
     return wireCosEvent(this.store.cosEvents.get(id)!);
   }
 
@@ -1245,7 +1247,7 @@ export class Orchestrator {
     const cos = this.store.cos.get(cosId);
     const ticket = cos ? this.store.tickets.get(cos.ticketId) : null;
     if (!cos || !ticket) throw notFound(`Unknown chief of staff: ${cosId}`);
-    const after = this.store.transcript.list(ticket.sessionId, 0, 1_000_000).at(-1)?.seq ?? 0;
+    const after = this.store.transcript.lastSeq(ticket.sessionId);
     await this.sendMessage(ticket.key, body.text as string, { attachments: body.attachments });
     const entry = this.store.transcript.list(ticket.sessionId, after).find((e) => e.role === "user" && e.content.type === "text");
     if (!entry) throw conflict(`${ticket.key} didn't take the message`);
@@ -5272,12 +5274,20 @@ ${numberLines(r.body)}`;
     return run;
   }
 
-  /** One queued run, with who caused whatever it writes: a chief's run stamps its activity "cos:<id>", every other run none (a run started from a chief's context must not inherit it). */
+  /** One queued run. It starts with no actor, so a run a chief's tool call queued doesn't inherit the chief's stamp (see `asActor`). */
   private execute(job: QueuedJob): Promise<void> {
-    const run = this.store.runs.get(job.runId);
-    const ticketId = run ? this.store.sessions.get(run.sessionId)?.ticketId : null;
-    const chief = run?.kind === "cos" && ticketId ? `cos:${ticketId}` : null;
-    return this.actorContext.run(chief, () => this.executeRun(job));
+    return this.actorContext.run(null, () => this.executeRun(job));
+  }
+
+  /**
+   * A chief's tools stamp the activity they write "cos:<id>". The stamp is scoped to the tool call
+   * itself, the one place every driver passes through (in-process, or over POST /mcp/:token, which
+   * starts a fresh async root), so timers armed during a chief's run don't inherit it.
+   */
+  private asActor(tools: ToolDefinition[], ticket: Ticket | null, kind: RunKind): ToolDefinition[] {
+    if (kind !== "cos" || !ticket) return tools;
+    const actor = `cos:${ticket.id}`;
+    return tools.map((t) => ({ ...t, execute: (input, ctx) => this.actorContext.run(actor, () => t.execute(input, ctx)) }));
   }
 
   private async executeRun(job: QueuedJob) {
@@ -5421,7 +5431,7 @@ ${numberLines(r.body)}`;
         browser: this.browser,
         signal: controller.signal,
       };
-      const tools = this.tools(run.kind, driver, ticket);
+      const tools = this.asActor(this.tools(run.kind, driver, ticket), ticket, run.kind);
       const token = randomBytes(24).toString("hex");
       this.mcpRuns.set(token, { tools, ctx });
       active.mcpToken = token;

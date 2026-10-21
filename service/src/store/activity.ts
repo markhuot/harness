@@ -32,12 +32,14 @@ export class ActivityRepo {
 
   add(input: { sessionId: string; ticketId: string | null; kind: ActivityKind; author: ActivityAuthor; body: string; meta?: ActivityMeta; actor?: string | null }): ActivityEntry {
     const id = newId();
+    const seq = (this.db.query("UPDATE cos_state SET value = value + 1 WHERE key = 'activity_counter' RETURNING value").get() as { value: number }).value;
     this.db
       .query(
-        "INSERT INTO activity (id, session_id, ticket_id, kind, author, body, meta, actor, created_at) VALUES ($id, $sessionId, $ticketId, $kind, $author, $body, $meta, $actor, $t)",
+        "INSERT INTO activity (id, session_id, ticket_id, kind, author, body, meta, actor, seq, created_at) VALUES ($id, $sessionId, $ticketId, $kind, $author, $body, $meta, $actor, $seq, $t)",
       )
       .run({
         id,
+        seq,
         sessionId: input.sessionId,
         ticketId: input.ticketId,
         kind: input.kind,
@@ -54,17 +56,19 @@ export class ActivityRepo {
     return (this.db.query("SELECT * FROM activity WHERE session_id = $sessionId ORDER BY created_at, rowid").all({ sessionId }) as ActivityRow[]).map(toEntry);
   }
 
-  /** Entries after activity row `seq` (SQLite rowid, which only grows), oldest first, each with its row's seq and actor. The chief-of-staff event feed reads these. */
+  /** Entries after activity row `seq` (a monotonic counter, not the rowid, which SQLite reuses after deletes), oldest first, each with its row's seq and actor. The chief-of-staff event feed reads these. */
   listAfter(seq: number, limit: number): { seq: number; actor: string | null; entry: ActivityEntry }[] {
-    const rows = this.db.query("SELECT rowid AS seq, * FROM activity WHERE rowid > $seq ORDER BY rowid LIMIT $limit").all({ seq, limit }) as (ActivityRow & { seq: number })[];
+    const rows = this.db.query("SELECT * FROM activity WHERE seq > $seq ORDER BY seq LIMIT $limit").all({ seq, limit }) as (ActivityRow & { seq: number })[];
     return rows.map((r) => ({ seq: r.seq, actor: r.actor, entry: toEntry(r) }));
   }
 
-  /** Entries a chief of staff caused (actor "cos:<id>") older than the cursor, newest first (ties by id). */
+  /** Entries a chief of staff caused (actor "cos:<id>") that its chat shows (a ticket's move, or a ticket it created) older than the cursor, newest first (ties by id). Filtered in the query so a page never comes up short. */
   listByActor(actor: string, before: { createdAt: number; id: string } | null, limit: number): ActivityEntry[] {
     return (
       this.db
-        .query("SELECT * FROM activity WHERE actor = $actor AND ($bt IS NULL OR created_at < $bt OR (created_at = $bt AND id < $bid)) ORDER BY created_at DESC, id DESC LIMIT $limit")
+        .query(`SELECT * FROM activity WHERE actor = $actor AND ticket_id IN (SELECT id FROM tickets)
+           AND ((kind = 'moved' AND json_extract(meta, '$.from') IS NOT NULL AND json_extract(meta, '$.to') IS NOT NULL) OR (kind = 'note' AND body LIKE 'Chief of staff (%) created it'))
+           AND ($bt IS NULL OR created_at < $bt OR (created_at = $bt AND id < $bid)) ORDER BY created_at DESC, id DESC LIMIT $limit`)
         .all({ actor, bt: before?.createdAt ?? null, bid: before?.id ?? "", limit }) as ActivityRow[]
     ).map(toEntry);
   }

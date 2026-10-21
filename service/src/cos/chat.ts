@@ -27,9 +27,8 @@ export function cosChat(store: Store, cosId: string, rawCursor: string | null, l
   const fetch = limit + 1;
   const found: CosChatEntry[] = [];
 
-  for (const m of store.transcript.messagesBefore(ticket.sessionId, cursor, fetch)) {
+  for (const m of store.transcript.messagesBefore(ticket.sessionId, cursor, fetch, WAKE_PROMPT_PREFIX)) {
     if (m.content.type !== "text") continue;
-    if (m.role === "user" && m.content.text.startsWith(WAKE_PROMPT_PREFIX)) continue;
     found.push({ id: m.id, cosId, createdAt: m.createdAt, kind: "message", role: m.role === "user" ? "user" : "assistant", text: m.content.text });
   }
 

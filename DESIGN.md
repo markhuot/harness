@@ -854,15 +854,17 @@ staff (KEY) …".
 
 **Events.** What wakes a CoS is a row in `cos_events` (migration 46), not the in-process bus, so a
 restart loses nothing. One drain path (`cos/engine.ts` `drain`) reads `activity` rows after a cursor
-(`cos_state.activity_seq`, an activity rowid, seeded at the current end so the first boot doesn't
-triage history) and inserts events with the cursor advance in one transaction; the bus
+(`cos_state.activity_seq`, an `activity.seq`: a monotonic counter, not the rowid, which SQLite reuses
+after a session's delete; seeded at the current end so the first boot doesn't triage history) and inserts events with the cursor advance in one transaction; the bus
 `activity.added` only nudges it to run now, and `start()` catches up after a restart. Watcher output
 (`ingest`) adds events directly, deduped by `(source_kind, source_ref)`. A plain human message to a
 ticket is not an event (the human is already there); a message to a CoS goes straight to its run.
 `activity.actor` (`cos:<ticket id>` or null; older rows are null, never a CoS) is stamped once in
-`addActivity` from an `AsyncLocalStorage` that `execute()` sets for every run (a chief's run sets it,
-every other run clears it), not by callers. Events caused by a chief, on a chief's own ticket, or with
-no ticket are stored `verdict=filtered` and never triaged, which also audits the filter.
+`addActivity` from an `AsyncLocalStorage` scoped to a chief's tool call (the tools of a `cos` run are
+wrapped, so it holds in-process and over `POST /mcp/:token`, which starts a fresh async root; `execute()`
+clears it for every run and timers never inherit it), not by callers. Events caused by a chief, on a chief's own ticket, or with
+no ticket are stored `verdict=filtered` and never triaged, which also audits the filter. Events nobody
+could own are bounded: the newest 200, none older than a day.
 
 **One owner.** `ownerOf` (`shared/src/cos.ts`, pure): the project's group's CoS when it is on and the
 project has CoS enabled (`resolveCosSetting`), else the All CoS under the same conditions, else null
@@ -882,14 +884,18 @@ conditions (tickets blocked, reviews waiting past 2 hours, owned by this CoS) an
 bodies fenced `<untrusted-event>`. Output per event: ignore or escalate, a reason, and for an
 escalation a brief and the project. An error, timeout, garbage, an id the answer left out, or no
 backend at all escalates (fail-open); `Cos.triageUnavailable` says why when none can run. Prompt over
-rules: what is worth waking for is the prompt's call; code keeps only the invariants.
+rules: what is worth waking for is the prompt's call; code keeps only the invariants. A batch goes in
+calls of 20 events (at most 100 a pass, oldest first), each failing open on its own.
 
 **Hand-off.** Escalated events become one wake: `steerOrEnqueue` into the CoS session with the briefs,
 the raw events (untrusted), a one-line digest of what was ignored since the last wake, and the open
 conditions. A CoS runs one run at a time, so a wake steers into a running run or queues the next. At
 most 6 wakes an hour per CoS (`nextWakeAllowedAt`); fail-open escalations count, and the overflow
-waits and goes in one later wake. Events are `handling` with the run that took them and `handled` when
-it ends. Ignored, filtered and handled events are pruned after 30 days. `cos_wakes` logs each wake and
+waits and goes in one later wake. A wake holds at most 40 events with bodies clipped to 2000
+characters, and says how many more wait. It is recorded (cap, chat) only once the chief took it. Events
+are `handling` with the run that took them and `handled` when it succeeds; a run that fails or is
+cancelled, or is gone after a restart, puts them back to `escalated`, while one still queued or running
+keeps them. Ignored, filtered and handled events are pruned after 30 days. `cos_wakes` logs each wake and
 triage call (tokens, model) for the cap and the token log.
 
 **Wire contract** (`shared/src/cos.ts`; the Mac and iOS Inbox and chat build on it):

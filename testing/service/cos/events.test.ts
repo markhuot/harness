@@ -6,6 +6,8 @@ import { WAKE_PROMPT_PREFIX } from "../../../service/src/cos/chat";
 import type { CosEngine } from "../../../service/src/cos/engine";
 import { LlmTriage, type CosTriage, type TriageInput, type TriageResult, type TriageVerdict } from "../../../service/src/cos/triage";
 import type { StoredCosEvent } from "../../../service/src/store/cos-events";
+import { handleMcpRequest } from "../../../service/src/api/mcp";
+import { COS_UNASSIGNED_MAX, TRIAGE_CHUNK, WAKE_BODY_MAX, WAKE_MAX_EVENTS } from "../../../service/src/cos/engine";
 import { FakeDriver, gate, replyScript } from "../fake-driver";
 import { callTools, makeOrchestrator, stopAll } from "../orchestrator-harness";
 
@@ -546,9 +548,11 @@ test("settled events are pruned after a month; events still open never are", asy
   s.happen(s.t, "marker-settled");
   await s.after(MIN);
   expect(s.eventOf("marker-settled").status).toBe("ignored");
+  await s.after(12 * 60 * MIN);
+  expect(s.eventOf("marker-unowned").status).toBe("pending"); // waiting for an owner: kept for a day
   await s.after(31 * 24 * 60 * MIN);
   expect(s.events().some((e) => e.title.includes("marker-settled"))).toBe(false);
-  expect(s.eventOf("marker-unowned").status).toBe("pending"); // waiting for an owner: kept
+  expect(s.events().some((e) => e.title.includes("marker-unowned"))).toBe(false); // …and no longer
 });
 
 test("the Inbox badge counts what is still open, unassigned included", async () => {
@@ -588,4 +592,168 @@ test("chat shows the chief's messages, its board changes and the event batches, 
   expect(first.nextCursor).toBeTruthy();
   const second = s.h.orch.cosTranscript(s.chief.ticketId, { limit: "2", before: first.nextCursor });
   expect([...first.entries, ...second.entries].map((e) => e.id)).toEqual(page.entries.slice(0, first.entries.length + second.entries.length).map((e) => e.id));
+});
+
+// ---------------------------------------------------------------------------
+// Bounds, recovery and the actor stamp
+// ---------------------------------------------------------------------------
+
+test("a chief's tool call over HTTP MCP (a fresh async root) is stamped as the chief's, so its own moves never wake it", async () => {
+  const driver = new FakeDriver({ supportsSteering: true });
+  const s = await quiet({ driver });
+  const hold = gate();
+  let url = "";
+  driver.script([{ run: (req) => void (url = req.mcp.url) }, { wait: hold }, ...replyScript("done")]);
+  await s.h.orch.sendCosMessage(s.chief.ticketId, { text: "go" });
+  await driver.runStarted(1);
+  const run = s.h.orch.mcpRun(decodeURIComponent(url.split("/").at(-1)!))!;
+  const call = (name: string, args: unknown) =>
+    handleMcpRequest(new Request(url, { method: "POST", body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }) }), run);
+  const res = (await (await call("create_ticket", { title: "Over the wire", spec: "x", project_key: "ACME" })).json()) as { result: { isError: boolean } };
+  expect(res.result.isError).toBe(false);
+  s.engine.drain();
+  const made = s.events().filter((e) => e.actor.startsWith("cos:"));
+  expect(made.length).toBeGreaterThan(0);
+  for (const e of made) expect(e).toMatchObject({ actor: `cos:${s.chief.ticketId}`, verdict: "filtered" });
+  hold.open();
+  await s.h.settle();
+});
+
+test("events nobody can own stay few and recent: capped, and gone after a day", async () => {
+  const s = await quiet();
+  const off = s.project("OFF2");
+  s.h.orch.updateProject(off.id, { cosEnabled: false });
+  const t = await s.ticket(off.id, "unowned");
+  for (let i = 0; i < COS_UNASSIGNED_MAX + 50; i++) s.happen(t, `marker-pile-${i}`);
+  s.engine.drain();
+  const unowned = () => s.events().filter((e) => e.cosId === null && e.status === "pending");
+  expect(unowned().length).toBeLessThanOrEqual(COS_UNASSIGNED_MAX);
+  expect(unowned().some((e) => e.title.includes(`marker-pile-${COS_UNASSIGNED_MAX + 49}`))).toBe(true); // the newest are kept
+  expect(unowned().some((e) => e.title.includes("marker-pile-0 ") || e.title.endsWith("marker-pile-0"))).toBe(false);
+  expect(s.engine.badge().total).toBeLessThanOrEqual(COS_UNASSIGNED_MAX);
+});
+
+test("a big batch is triaged in chunks, so one answer never has to hold the whole board", async () => {
+  const s = await quiet();
+  const n = TRIAGE_CHUNK * 2 + 5;
+  for (let i = 0; i < n; i++) s.happen(s.t, `marker-chunk-${i}`);
+  await s.after(MIN);
+  expect(s.scripted!.calls.map((c) => c.events.length)).toEqual([TRIAGE_CHUNK, TRIAGE_CHUNK, 5]);
+  expect(s.events().filter((e) => e.title.includes("marker-chunk-") && e.status === "ignored")).toHaveLength(n);
+});
+
+test("a wake carries a bounded number of events and clipped bodies, and says how many are waiting", async () => {
+  const s = await quiet({ triage: { unavailable: "no model" } });
+  const n = WAKE_MAX_EVENTS + 7;
+  s.happen(s.t, `marker-huge ${"x".repeat(WAKE_BODY_MAX * 3)}`);
+  for (let i = 1; i < n; i++) s.happen(s.t, `marker-wake-${i}`);
+  await s.after(MIN);
+  const wakes = s.h.driver.requests.map((r) => r.prompt);
+  expect(wakes).toHaveLength(2); // the 7 left over came in the next wake
+  const prompt = wakes[0]!;
+  expect(prompt).toContain("[Harness: 40 events for you]");
+  expect(wakes[1]).toContain("[Harness: 7 events for you]");
+  expect(prompt).toContain("7 more events are waiting");
+  expect(prompt).toContain("more characters");
+  expect(prompt.length).toBeLessThan(WAKE_BODY_MAX * 2 + WAKE_MAX_EVENTS * 1500);
+  expect(s.events().filter((e) => e.title.includes("marker-") && e.status === "handled")).toHaveLength(n);
+});
+
+test("the activity cursor survives deleted rows: a new entry is read even where an old rowid was freed", async () => {
+  const s = await quiet();
+  const t2 = await s.ticket(s.h.project.id, "second");
+  s.engine.drain();
+  s.happen(s.t, "marker-last-before");
+  s.engine.drain();
+  // Deleting the newest rows frees their rowids for reuse (what deleting a session does).
+  s.h.store.db.query("DELETE FROM activity WHERE session_id = $id").run({ id: t2.sessionId });
+  s.h.store.db.query("DELETE FROM activity WHERE body = 'marker-last-before'").run();
+  s.happen(s.t, "marker-after-delete");
+  expect(s.engine.drain()).toBe(1);
+  expect(s.eventOf("marker-after-delete")).toBeTruthy();
+});
+
+test("a failed or cancelled wake hands its events back for the next one instead of closing them", async () => {
+  const s = await quiet();
+  s.h.driver.script([{ throw: new Error("boom") }]);
+  s.scripted!.answers.push(escalating("marker-crash"));
+  s.happen(s.t, "marker-crash");
+  await s.after(MIN);
+  const e = s.eventOf("marker-crash");
+  expect(e.status).toBe("escalated");
+  expect(e.consumingRunId).toBeNull();
+  expect(s.engine.badge().total).toBe(1);
+  // The next wake brings it again, and a run that finishes closes it.
+  await s.after(COS_HOUR_MS / COS_WAKES_PER_HOUR);
+  expect(s.h.driver.requests.at(-1)!.prompt).toContain("marker-crash");
+  expect(s.eventOf("marker-crash").status).toBe("handled");
+});
+
+test("a restart leaves a wake whose run is still going alone, and sends again only one that is gone", async () => {
+  const driver = new FakeDriver({ supportsSteering: true });
+  const s = await quiet({ driver });
+  const hold = gate();
+  driver.script([{ wait: hold }, ...replyScript("done")]);
+  s.scripted!.answers.push(escalating("marker-live"));
+  s.happen(s.t, "marker-live");
+  s.h.clock.advance(MIN);
+  await s.engine.tick();
+  await driver.runStarted(1);
+  expect(s.eventOf("marker-live").status).toBe("handling");
+  s.engine.start(); // the service restarted around a run that survived
+  expect(s.eventOf("marker-live").status).toBe("handling");
+  await s.engine.tick();
+  expect(driver.requests).toHaveLength(1); // no second wake for the same events
+  hold.open();
+  await s.h.settle();
+  expect(s.eventOf("marker-live").status).toBe("handled");
+});
+
+test("events handled by a chief that was removed are put back for an owner instead of sticking", async () => {
+  const s = await quiet();
+  const e = s.engine.addExternal({ sourceKind: "watcher", sourceRef: "feed:x", actor: "watcher:feed", title: "marker-orphaned", body: "b" })!;
+  s.h.store.cosEvents.update(e.id, { status: "handling", cosId: "no-such-chief", consumingRunId: null });
+  await s.after(MIN);
+  expect(s.eventOf("marker-orphaned").status).not.toBe("handling");
+});
+
+test("a wake that can't be handed over costs no wake and leaves nothing in the chat", async () => {
+  const s = await quiet({ triage: { unavailable: "no model" } });
+  s.h.store.db.query("UPDATE tickets SET draft = 1 WHERE id = $id").run({ id: s.chief.ticketId }); // enqueueRun refuses drafts
+  s.happen(s.t, "marker-undeliverable");
+  await s.after(MIN);
+  expect(s.eventOf("marker-undeliverable").status).toBe("escalated");
+  expect(s.h.store.cosEvents.wakeTimes(s.chief.ticketId, "wake", 0)).toEqual([]);
+  const chat = s.h.orch.cosTranscript(s.chief.ticketId, {});
+  expect(chat.entries.filter((x) => x.kind === "event_batch")).toEqual([]);
+});
+
+test("escalate anyway gives a filtered or unowned event the owner its project has now", async () => {
+  const s = await quiet();
+  s.happen(s.t, "marker-mine", { actor: `cos:${s.chief.ticketId}` });
+  s.engine.drain();
+  const filtered = s.eventOf("marker-mine");
+  expect(filtered.cosId).toBeNull();
+  const out = await s.h.orch.escalateCosEvent(filtered.id);
+  expect(out.cosId).toBe(s.chief.ticketId);
+});
+
+test("chat pages don't skip entries when wake prompts crowd the message rows", async () => {
+  const s = await quiet();
+  const sessionId = s.h.store.tickets.get(s.chief.ticketId)!.sessionId;
+  for (let i = 0; i < 6; i++) {
+    s.h.store.transcript.append(sessionId, null, "user", { type: "text", text: `${WAKE_PROMPT_PREFIX} wake ${i}]` }, null);
+    s.h.clock.advance(1);
+    s.h.store.transcript.append(sessionId, null, "user", { type: "text", text: `human ${i}` }, null);
+    s.h.clock.advance(1);
+  }
+  const seen: string[] = [];
+  let before: string | null = null;
+  for (let guard = 0; guard < 20; guard++) {
+    const page = s.h.orch.cosTranscript(s.chief.ticketId, { before, limit: "2" });
+    for (const e of page.entries) if (e.kind === "message" && e.text.startsWith("human")) seen.push(e.text);
+    if (!page.nextCursor) break;
+    before = page.nextCursor;
+  }
+  expect(seen).toEqual(Array.from({ length: 6 }, (_, i) => `human ${5 - i}`));
 });
