@@ -72,15 +72,15 @@ export class TranscriptRepo {
     ).map(toEntry);
   }
 
-  /** A session's plain-text user and assistant messages (its own agent's) at or before `before`, newest first: the chief's chat. */
-  messagesBefore(sessionId: string, before: number, limit: number): TranscriptEntry[] {
+  /** A session's plain-text user and assistant messages (its own agent's) older than the cursor, newest first (ties by id): the chief's chat. */
+  messagesBefore(sessionId: string, before: { createdAt: number; id: string } | null, limit: number): TranscriptEntry[] {
     return (
       this.db
         .query(
-          `SELECT * FROM transcript WHERE session_id = $sessionId AND subagent_id IS NULL AND role IN ('user', 'assistant') AND json_extract(content, '$.type') = 'text' AND created_at <= $before
-           ORDER BY created_at DESC, seq DESC LIMIT $limit`,
+          `SELECT * FROM transcript WHERE session_id = $sessionId AND subagent_id IS NULL AND role IN ('user', 'assistant') AND json_extract(content, '$.type') = 'text'
+           AND ($bt IS NULL OR created_at < $bt OR (created_at = $bt AND id < $bid)) ORDER BY created_at DESC, id DESC LIMIT $limit`,
         )
-        .all({ sessionId, before, limit }) as EntryRow[]
+        .all({ sessionId, bt: before?.createdAt ?? null, bid: before?.id ?? "", limit }) as EntryRow[]
     ).map(toEntry);
   }
 

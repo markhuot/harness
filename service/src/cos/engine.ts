@@ -177,19 +177,16 @@ export class CosEngine {
   }
 
   /**
-   * Recompute the owner of every event that hasn't been picked up yet (pending, or escalated with
-   * no owner). Runs on every change that can move one: a chief's toggle, a project's setting or
+   * Recompute the owner of every event that hasn't been picked up yet (pending, or escalated and
+   * waiting for a wake). Runs on every change that can move one: a chief's toggle, a project's setting or
    * group, a chief removed. Events being triaged or delivered stay where they are.
    */
   rehome(): number {
     const { store } = this.d;
     const chiefs = this.chiefs();
     let moved = 0;
-    // An escalation whose chief is gone starts over with whoever owns it now.
-    for (const e of store.cosEvents.byStatus("escalated")) {
-      if (e.cosId && !chiefs.some((c) => c.ticketId === e.cosId)) this.patch(e.id, { status: "pending", verdict: "pending", cosId: null });
-    }
-    for (const e of [...store.cosEvents.byStatus("pending"), ...store.cosEvents.byStatus("escalated", null)]) {
+    // Escalations waiting for a wake (held by the cap, or by a chief that is off) move with the rest; ones being handled don't.
+    for (const e of [...store.cosEvents.byStatus("pending"), ...store.cosEvents.byStatus("escalated")]) {
       const project = e.projectId ? store.projects.get(e.projectId) : null;
       const owner = this.ownerFor(project, chiefs);
       if (owner === e.cosId) continue;
@@ -326,7 +323,8 @@ export class CosEngine {
     } finally {
       this.triaging.delete(cosId);
     }
-    // The batch may have escalated for this chief or (after a project proposal) another.
+    // The batch may have escalated for this chief or (after a project proposal, or a chief switched off meanwhile) another.
+    this.rehome();
     for (const id of new Set(store.cosEvents.byStatus("escalated").flatMap((e) => (e.cosId ? [e.cosId] : [])))) await this.deliver(id);
   }
 

@@ -24,30 +24,27 @@ export function cosChat(store: Store, cosId: string, rawCursor: string | null, l
   const ticket = cos ? store.tickets.get(cos.ticketId) : null;
   if (!cos || !ticket) return { entries: [], nextCursor: null };
   const cursor = parseCursor(rawCursor);
-  const at = cursor?.createdAt ?? Number.MAX_SAFE_INTEGER;
   const fetch = limit + 1;
   const found: CosChatEntry[] = [];
 
-  for (const m of store.transcript.messagesBefore(ticket.sessionId, at, fetch)) {
+  for (const m of store.transcript.messagesBefore(ticket.sessionId, cursor, fetch)) {
     if (m.content.type !== "text") continue;
     if (m.role === "user" && m.content.text.startsWith(WAKE_PROMPT_PREFIX)) continue;
     found.push({ id: m.id, cosId, createdAt: m.createdAt, kind: "message", role: m.role === "user" ? "user" : "assistant", text: m.content.text });
   }
 
-  for (const a of store.activity.listByActor(`cos:${cosId}`, at, fetch)) {
+  for (const a of store.activity.listByActor(`cos:${cosId}`, cursor, fetch)) {
     const t = a.ticketId ? store.tickets.get(a.ticketId) : null;
     if (!t) continue;
     if (a.kind === "moved" && a.meta.from && a.meta.to) found.push({ id: a.id, cosId, createdAt: a.createdAt, kind: "ticket_moved", key: t.key, title: t.title, from: a.meta.from, to: a.meta.to });
     else if (a.kind === "note" && CREATED_NOTE.test(a.body)) found.push({ id: a.id, cosId, createdAt: a.createdAt, kind: "ticket_created", key: t.key, title: t.title, status: t.status });
   }
 
-  for (const w of store.cosEvents.wakesBefore(cosId, at, fetch)) {
+  for (const w of store.cosEvents.wakesBefore(cosId, cursor, fetch)) {
     found.push({ id: `wake:${w.id}`, cosId, createdAt: w.startedAt, kind: "event_batch", wakeId: w.id, eventIds: store.cosEvents.byWake(w.id).map((e) => e.id), digest: w.digest });
   }
 
-  const older = found
-    .filter((e) => !cursor || e.createdAt < cursor.createdAt || (e.createdAt === cursor.createdAt && e.id < cursor.id))
-    .sort((a, b) => b.createdAt - a.createdAt || (a.id < b.id ? 1 : -1));
+  const older = found.sort((a, b) => b.createdAt - a.createdAt || (a.id < b.id ? 1 : -1));
   const entries = older.slice(0, limit);
   return { entries, nextCursor: older.length > limit ? cursorOf(entries[entries.length - 1]!) : null };
 }

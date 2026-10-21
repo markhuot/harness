@@ -60,10 +60,12 @@ export class ActivityRepo {
     return rows.map((r) => ({ seq: r.seq, actor: r.actor, entry: toEntry(r) }));
   }
 
-  /** Entries a chief of staff caused (actor "cos:<id>"), newest first. */
-  listByActor(actor: string, before: number, limit: number): ActivityEntry[] {
+  /** Entries a chief of staff caused (actor "cos:<id>") older than the cursor, newest first (ties by id). */
+  listByActor(actor: string, before: { createdAt: number; id: string } | null, limit: number): ActivityEntry[] {
     return (
-      this.db.query("SELECT * FROM activity WHERE actor = $actor AND created_at <= $before ORDER BY created_at DESC, rowid DESC LIMIT $limit").all({ actor, before, limit }) as ActivityRow[]
+      this.db
+        .query("SELECT * FROM activity WHERE actor = $actor AND ($bt IS NULL OR created_at < $bt OR (created_at = $bt AND id < $bid)) ORDER BY created_at DESC, id DESC LIMIT $limit")
+        .all({ actor, bt: before?.createdAt ?? null, bid: before?.id ?? "", limit }) as ActivityRow[]
     ).map(toEntry);
   }
 }

@@ -852,6 +852,55 @@ setting and the ticket's question; reading it stays available. Human-only approv
 (`noPendingApproval`). What a CoS changes on a ticket is added to that ticket's Activity as "Chief of
 staff (KEY) …".
 
+**Events.** What wakes a CoS is a row in `cos_events` (migration 46), not the in-process bus, so a
+restart loses nothing. One drain path (`cos/engine.ts` `drain`) reads `activity` rows after a cursor
+(`cos_state.activity_seq`, an activity rowid, seeded at the current end so the first boot doesn't
+triage history) and inserts events with the cursor advance in one transaction; the bus
+`activity.added` only nudges it to run now, and `start()` catches up after a restart. Watcher output
+(`ingest`) adds events directly, deduped by `(source_kind, source_ref)`. A plain human message to a
+ticket is not an event (the human is already there); a message to a CoS goes straight to its run.
+`activity.actor` (`cos:<ticket id>` or null; older rows are null, never a CoS) is stamped once in
+`addActivity` from an `AsyncLocalStorage` that `execute()` sets for every run (a chief's run sets it,
+every other run clears it), not by callers. Events caused by a chief, on a chief's own ticket, or with
+no ticket are stored `verdict=filtered` and never triaged, which also audits the filter.
+
+**One owner.** `ownerOf` (`shared/src/cos.ts`, pure): the project's group's CoS when it is on and the
+project has CoS enabled (`resolveCosSetting`), else the All CoS under the same conditions, else null
+(unassigned until one qualifies). Never fans out. `rehome()` recomputes the owner of events still
+`pending` or `escalated` (not yet delivered) on every trigger: a CoS toggled, opened or removed, a
+project's `cosEnabled` or group changed, the app setting changed, a project deleted. Events being
+triaged or handled are never moved. A watcher event has no project: it belongs to the All CoS, and
+triage may propose a project, which moves it to that project's owner.
+
+**Batching and triage.** A batch is due 45 seconds after its last event, never later than 5 minutes
+after its first (`nextWakeAt`); one timer is armed for the next due time and rebuilt from the rows.
+A ticket's status moves in a batch collapse to its net state (`collapseMoves`). The batch goes to a
+stateless, tool-less Haiku call (`cos/triage.ts`) on the classifier's backend (`claude-cli` or
+`anthropic-api`, via the shared `permissions/structured.ts`; model `HAIKU_MODELS`, overridable with
+`settings.cosTriageModel`). Input: the CoS's "Triage guidance" note section, the projects, open
+conditions (tickets blocked, reviews waiting past 2 hours, owned by this CoS) and the events with their
+bodies fenced `<untrusted-event>`. Output per event: ignore or escalate, a reason, and for an
+escalation a brief and the project. An error, timeout, garbage, an id the answer left out, or no
+backend at all escalates (fail-open); `Cos.triageUnavailable` says why when none can run. Prompt over
+rules: what is worth waking for is the prompt's call; code keeps only the invariants.
+
+**Hand-off.** Escalated events become one wake: `steerOrEnqueue` into the CoS session with the briefs,
+the raw events (untrusted), a one-line digest of what was ignored since the last wake, and the open
+conditions. A CoS runs one run at a time, so a wake steers into a running run or queues the next. At
+most 6 wakes an hour per CoS (`nextWakeAllowedAt`); fail-open escalations count, and the overflow
+waits and goes in one later wake. Events are `handling` with the run that took them and `handled` when
+it ends. Ignored, filtered and handled events are pruned after 30 days. `cos_wakes` logs each wake and
+triage call (tokens, model) for the cap and the token log.
+
+**Wire contract** (`shared/src/cos.ts`; the Mac and iOS Inbox and chat build on it):
+`CosEvent`, `CosChatEntry` (`message`, `ticket_created`, `ticket_moved`, `event_batch`). `GET
+/cos/:id/events?status=&before=&limit=` (newest first; the chief's own plus unassigned, so a stuck or
+disabled CoS never hides events), `GET /cos/events/badge`, `POST /cos/events/:id/escalate` ("Escalate
+anyway"; 409 once handled), `GET /cos/:id/transcript?before=&limit=` (newest page first; a projection
+over the CoS session, its stamped activity and its wakes), `POST /cos/:id/messages { text,
+attachments? }` → `{ entryId }`. Bus events `cos.event.upserted`, `cos.badge`, `cos.transcript.appended`
+(typed `CosBusEvent`, not part of `HarnessEvent`, so clients that don't know them ignore them).
+
 ### Conductor
 
 Any ticket with children acts as a conductor (`isConductor`: `kind: "conductor"` or

@@ -195,11 +195,11 @@ export class CosEventRepo {
     const owner = cosId === undefined ? "" : cosId === null ? "AND e.cos_id IS NULL" : "AND e.cos_id = $cosId";
     const args: Record<string, string> = { status };
     if (typeof cosId === "string") args.cosId = cosId;
-    return (this.db.query(`${SELECT} WHERE e.status = $status ${owner} ORDER BY e.created_at, e.id`).all(args) as Row[]).map(toEvent);
+    return (this.db.query(`${SELECT} WHERE e.status = $status ${owner} ORDER BY e.created_at, e.rowid`).all(args) as Row[]).map(toEvent);
   }
 
   byWake(wakeId: string): StoredCosEvent[] {
-    return (this.db.query(`${SELECT} WHERE e.wake_id = $wakeId ORDER BY e.created_at, e.id`).all({ wakeId }) as Row[]).map(toEvent);
+    return (this.db.query(`${SELECT} WHERE e.wake_id = $wakeId ORDER BY e.created_at, e.rowid`).all({ wakeId }) as Row[]).map(toEvent);
   }
 
   byRun(runId: string, status: CosEventStatus): StoredCosEvent[] {
@@ -290,10 +290,15 @@ export class CosEventRepo {
       : null;
   }
 
-  /** Wakes (full, newest first) of a chief, for the chat's event batches. */
-  wakesBefore(cosId: string, before: number, limit: number): { id: string; startedAt: number; digest: string }[] {
-    return (this.db.query("SELECT id, started_at, digest FROM cos_wakes WHERE cos_id = $cosId AND kind = 'wake' AND started_at <= $before ORDER BY started_at DESC LIMIT $limit").all({ cosId, before, limit }) as { id: string; started_at: number; digest: string | null }[]).map(
-      (r) => ({ id: r.id, startedAt: r.started_at, digest: r.digest ?? "" }),
-    );
+  /** Wakes (full) of a chief older than the cursor, newest first (ties by id), for the chat's event batches. */
+  wakesBefore(cosId: string, before: { createdAt: number; id: string } | null, limit: number): { id: string; startedAt: number; digest: string }[] {
+    return (
+      this.db
+        .query(
+          `SELECT id, started_at, digest FROM cos_wakes WHERE cos_id = $cosId AND kind = 'wake'
+           AND ($bt IS NULL OR started_at < $bt OR (started_at = $bt AND ('wake:' || id) < $bid)) ORDER BY started_at DESC, id DESC LIMIT $limit`,
+        )
+        .all({ cosId, bt: before?.createdAt ?? null, bid: before?.id ?? "", limit }) as { id: string; started_at: number; digest: string | null }[]
+    ).map((r) => ({ id: r.id, startedAt: r.started_at, digest: r.digest ?? "" }));
   }
 }
