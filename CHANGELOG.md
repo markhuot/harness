@@ -9,6 +9,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- On the iPad, docked ticket cards now stack above the board's bottom bar instead of covering its search and New session buttons.
+
 ## [app-20261020.2300](https://github.com/markhuot/harness/releases/tag/app-20261020.2300) - 2026-10-20
 
 ### Added

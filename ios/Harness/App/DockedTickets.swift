@@ -432,13 +432,14 @@ struct DockedCardsLayout {
             ghostSlot: true)
     }
 
-    /// The board's bottom-right corner, in the column `available` wide.
-    static func pad(available: CGSize) -> DockedCardsLayout {
+    /// The board's bottom-right corner, in the column `available` wide, `bottom` from its bottom edge
+    /// (above the system bar's buttons).
+    static func pad(available: CGSize, bottom: CGFloat = margin) -> DockedCardsLayout {
         var layout = DockedCardsLayout(
             region: available, alignment: .bottomTrailing, columnAlignment: .trailing,
-            insets: EdgeInsets(top: margin, leading: margin, bottom: margin, trailing: margin),
-            cardWidth: nil, listWidth: nil, listHeightCap: available.height - margin * 2,
-            maxVisible: DockCards.padVisible, fitting: DockMetrics.rowsFitting(height: available.height),
+            insets: EdgeInsets(top: margin, leading: margin, bottom: bottom, trailing: margin),
+            cardWidth: nil, listWidth: nil, listHeightCap: available.height - margin - bottom,
+            maxVisible: DockCards.padVisible, fitting: DockMetrics.rowsFitting(height: available.height, bottom: bottom),
             edge: .trailing, backdropAnchor: .bottomTrailing, backdropRadius: max(available.width, available.height) * 0.9,
             backdropFillsRegion: true)
         switch DockMetrics.cardMode(width: available.width) {

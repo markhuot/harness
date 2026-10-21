@@ -284,6 +284,8 @@ struct TicketPanelHost: View {
             // The board's column only: the sidebar (left of `contentLeading`) stays clear.
             let sidebar = max(0, (dockInset?.contentLeading ?? 0) - geo.frame(in: .global).minX)
             let board = CGSize(width: max(0, geo.size.width - besidePanel - sidebar), height: geo.size.height)
+            // The cards float above the board's bottom bar, not over its search and New session.
+            let bottom = DockMetrics.padBottomMargin(barInset: dockInset?.barInset ?? 0, safeArea: geo.safeAreaInsets.bottom)
             ZStack(alignment: .trailing) {
                 Color.clear.allowsHitTesting(false)
                 if let sheet {
@@ -319,7 +321,7 @@ struct TicketPanelHost: View {
                 let ghost = sheet != nil && !docked && hold.armed ? DockMetrics.cardMode(width: board.width) : nil
                 if !waiting.isEmpty {
                     let shift: CGFloat = if case .cards? = ghost { DockedCardMetrics.height + DockedCardMetrics.spacing } else { 0 }
-                    DockedCardsContainer(sheets: waiting, layout: .pad(available: board))
+                    DockedCardsContainer(sheets: waiting, layout: .pad(available: board, bottom: bottom))
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                         .padding(.trailing, besidePanel)
                         .offset(y: -shift)
@@ -329,13 +331,13 @@ struct TicketPanelHost: View {
                 if let sheet, let ghost, let width = Self.ghostWidth(ghost) {
                     DockGhostCard(title: sheet.title, armed: true)
                         .frame(width: width)
-                        .padding(DockedCardsLayout.margin)
+                        .padding(.init(top: 0, leading: DockedCardsLayout.margin, bottom: bottom, trailing: DockedCardsLayout.margin))
                         .padding(.trailing, besidePanel)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                         .transition(.opacity)
                 }
             }
-            .onChange(of: DockedCardsLayout.pad(available: board).stackHeight(count: waiting.count), initial: true) { _, h in
+            .onChange(of: DockedCardsLayout.pad(available: board, bottom: bottom).stackHeight(count: waiting.count), initial: true) { _, h in
                 dockInset?.cards = h > 0 ? h + DockedCardsLayout.margin * 2 : 0
             }
         }

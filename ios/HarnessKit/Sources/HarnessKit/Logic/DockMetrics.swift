@@ -30,6 +30,13 @@ public enum DockMetrics {
     /// The room a lone "N more…" card needs, margins included.
     public static let collapsedRoom: CGFloat = 150
 
+    /// How far the iPad's cards sit from the host's bottom edge: the corner margin above the board's
+    /// system bar. `barInset` reaches up from the screen's edge and includes the `safeArea` the host
+    /// already keeps clear, so only the rest of it is added.
+    public static func padBottomMargin(barInset: CGFloat, safeArea: CGFloat) -> CGFloat {
+        cornerMargin + max(0, barInset - safeArea)
+    }
+
     /// What the iPad's corner stack shows in a board column `width` wide.
     public enum CardMode: Equatable {
         /// Cards this wide.
@@ -46,8 +53,8 @@ public enum DockMetrics {
     }
 
     /// How many rows (cards and "N more…") fit a column `height` tall.
-    public static func rowsFitting(height: CGFloat) -> Int {
-        max(1, Int((height - cornerMargin * 2 + spacing) / (self.height + spacing)))
+    public static func rowsFitting(height: CGFloat, bottom: CGFloat = cornerMargin) -> Int {
+        max(1, Int((height - cornerMargin - bottom + spacing) / (self.height + spacing)))
     }
 
     /// A stack of `rows` cards, gaps included.
