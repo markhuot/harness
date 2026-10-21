@@ -27,10 +27,13 @@ let ignoredFields: [String: String] = [
     "CreateProjectBody.cosCanUnblock": "Swift has no property for it, and no iPhone screen reads it (the Mac app sets the chief of staff)",
     "Settings.cosEnabled": "Swift has no property for it, and no iPhone screen reads it (the Mac app sets the chief of staff)",
     "Settings.cosCanUnblock": "Swift has no property for it, and no iPhone screen reads it (the Mac app sets the chief of staff)",
+    "Settings.cosTriageModel": "Swift has no property for it, and no iPhone screen reads it (the Mac app sets the chief of staff)",
     "PublicSettings.cosEnabled": "Swift has no property for it, and no iPhone screen reads it (the Mac app sets the chief of staff)",
     "PublicSettings.cosCanUnblock": "Swift has no property for it, and no iPhone screen reads it (the Mac app sets the chief of staff)",
+    "PublicSettings.cosTriageModel": "Swift has no property for it, and no iPhone screen reads it (the Mac app sets the chief of staff)",
     "SettingsPatch.cosEnabled": "Swift has no property for it, and no iPhone screen reads it (the Mac app sets the chief of staff)",
     "SettingsPatch.cosCanUnblock": "Swift has no property for it, and no iPhone screen reads it (the Mac app sets the chief of staff)",
+    "SettingsPatch.cosTriageModel": "Swift has no property for it, and no iPhone screen reads it (the Mac app sets the chief of staff)",
 ]
 
 /// TS type name → Swift type, round-tripped through its own Codable.

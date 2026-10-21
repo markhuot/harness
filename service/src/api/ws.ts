@@ -57,7 +57,9 @@ export function createWsHandlers(opts: { bus: EventBus; browser: BrowserService;
     open(ws) {
       sockets.add(ws);
       send(ws, { type: "welcome", version: VERSION });
-      ws.data.off = bus.on((event: HarnessEvent) => {
+      ws.data.off = bus.on((busEvent) => {
+        // The chief-of-staff events ride the same socket; clients that don't know a kind ignore it.
+        const event = busEvent as HarnessEvent;
         if (event.kind === "browser.frame" || event.kind === "browser.state") {
           if (!ws.data.subs.has(event.sessionId)) return;
         }

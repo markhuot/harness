@@ -1,16 +1,19 @@
 // In-process typed event bus for HarnessEvent.
 
-import type { HarnessEvent } from "@harness/shared";
+import type { CosBusEvent, HarnessEvent } from "@harness/shared";
 
-export type HarnessEventKind = HarnessEvent["kind"];
-export type EventOf<K extends HarnessEventKind> = Extract<HarnessEvent, { kind: K }>;
-export type Listener = (event: HarnessEvent) => void;
+/** Everything the bus carries: the protocol's events and the chief-of-staff ones (shared/src/cos.ts). */
+export type BusEvent = HarnessEvent | CosBusEvent;
+
+export type HarnessEventKind = BusEvent["kind"];
+export type EventOf<K extends HarnessEventKind> = Extract<BusEvent, { kind: K }>;
+export type Listener = (event: BusEvent) => void;
 
 export class EventBus {
   private listeners = new Set<Listener>();
-  private kindListeners = new Map<HarnessEventKind, Set<(e: HarnessEvent) => void>>();
+  private kindListeners = new Map<HarnessEventKind, Set<(e: BusEvent) => void>>();
 
-  emit(event: HarnessEvent) {
+  emit(event: BusEvent) {
     for (const l of [...this.listeners]) safe(l, event);
     const set = this.kindListeners.get(event.kind);
     if (set) for (const l of [...set]) safe(l, event);
@@ -26,7 +29,7 @@ export class EventBus {
   onKind<K extends HarnessEventKind>(kind: K, listener: (e: EventOf<K>) => void): () => void {
     let set = this.kindListeners.get(kind);
     if (!set) this.kindListeners.set(kind, (set = new Set()));
-    const l = listener as (e: HarnessEvent) => void;
+    const l = listener as (e: BusEvent) => void;
     set.add(l);
     return () => set!.delete(l);
   }
@@ -38,7 +41,7 @@ export class EventBus {
   }
 }
 
-function safe(l: Listener, e: HarnessEvent) {
+function safe(l: Listener, e: BusEvent) {
   try {
     l(e);
   } catch (err) {

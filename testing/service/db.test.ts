@@ -43,7 +43,7 @@ test("a database from a newer service is refused rather than downgraded", () => 
 test("a failing migration rolls back whole and leaves the version where it was", () => {
   const db = dbAt(SCHEMA_VERSION - 1);
   // Break the last migration's target: it creates a table that already exists.
-  db.exec("CREATE TABLE cos (x INTEGER)");
+  db.exec("CREATE TABLE cos_events (x INTEGER)");
   expect(() => migrate(db, paths())).toThrow();
   expect(version(db)).toBe(SCHEMA_VERSION - 1);
 });
@@ -234,4 +234,21 @@ test("migration 44 on a database with no groups makes none and a rerun changes n
   const before = JSON.stringify(db.query("SELECT * FROM projects").all());
   migrate(db, paths());
   expect(JSON.stringify(db.query("SELECT * FROM projects").all())).toBe(before);
+});
+
+test("migration 46 seeds the event cursor at the end of existing activity, so the first boot doesn't triage history", () => {
+  const db = dbAt(45);
+  db.exec(`INSERT INTO projects (id, key, name, path, created_at, updated_at) VALUES ('p1', 'K', 'n', '/p', 0, 0)`);
+  db.exec(`INSERT INTO tickets (id, key, project_id, kind, title, spec, status, session_id, driver, created_at, updated_at) VALUES ('t1', 'K-1', 'p1', 'task', 't', '', 'planning', 's1', 'dummy', 0, 0)`);
+  for (const id of ["a", "b", "c"]) db.query("INSERT INTO activity (id, session_id, ticket_id, kind, author, body, meta, created_at) VALUES ($id, 's1', 't1', 'note', 'agent', 'x', '{}', 0)").run({ id });
+  migrate(db, paths());
+  const store = new Store(db);
+  expect(store.cosEvents.activitySeq()).toBe(3);
+  expect(store.activity.listAfter(store.cosEvents.activitySeq(), 10)).toEqual([]);
+  // The old rows carry no actor: they never count as a chief's.
+  expect(db.query("SELECT actor FROM activity WHERE id = 'a'").get()).toEqual({ actor: null });
+  // A source is only ever one event.
+  const base = { cosId: null, projectId: null, ticketId: null, sourceKind: "watcher" as const, sourceRef: "r", actor: "watcher:x", title: "t" };
+  expect(store.cosEvents.insert(base)).not.toBeNull();
+  expect(store.cosEvents.insert(base)).toBeNull();
 });

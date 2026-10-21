@@ -45,4 +45,163 @@ export interface Cos {
   groupId: string | null;
   enabled: boolean;
   createdAt: number;
+  /** Why the Haiku triage in front of it can't run (its events escalate instead); absent or null when it can */
+  triageUnavailable?: string | null;
 }
+
+// ---------------------------------------------------------------------------
+// Events: what wakes a chief of staff (DESIGN.md "Chief of staff", "Events")
+// ---------------------------------------------------------------------------
+
+export type CosEventSource = "activity" | "watcher" | "schedule";
+
+/** Where an event is: pending (waiting for triage), triaging, escalated (for the next wake), handling (in a run), handled, or ignored. */
+export type CosEventStatus = "pending" | "triaging" | "escalated" | "handling" | "handled" | "ignored";
+
+/** What triage said: not yet, ignore, escalate, or dropped by a coded rule (a chief's own activity, a net-zero move). */
+export type CosEventVerdict = "pending" | "ignore" | "escalate" | "filtered";
+
+/** Statuses that count toward the Inbox badge (an event somebody still has to see to). */
+export const COS_OPEN_STATUSES: readonly CosEventStatus[] = ["pending", "triaging", "escalated", "handling"];
+
+/** One row of a chief of staff's Inbox (GET /cos/:id/events). */
+export interface CosEvent {
+  id: string;
+  /** The chief that owns it; null while no chief qualifies (unassigned) */
+  cosId: string | null;
+  projectKey: string | null;
+  sourceKind: CosEventSource;
+  title: string;
+  summary: string;
+  /** Who caused it: "human", "agent", "system", "watcher:<name>", or "cos:<chief id>" */
+  actor: string;
+  status: CosEventStatus;
+  verdict: CosEventVerdict;
+  reason: string | null;
+  /** The model that triaged it; null when none did (filtered, or a fail-open escalation) */
+  model: string | null;
+  ticketKey: string | null;
+  wakeId: string | null;
+  /** The run that handled it */
+  handledBy: string | null;
+  createdAt: number;
+}
+
+/** GET /cos/:id/events */
+export interface CosEventPage {
+  items: CosEvent[];
+  nextCursor: string | null;
+}
+
+/** GET /cos/events/badge */
+export interface CosBadge {
+  total: number;
+  byCos: Record<string, number>;
+}
+
+interface CosChatBase {
+  id: string;
+  cosId: string;
+  createdAt: number;
+}
+
+/** One entry of a chief's chat (GET /cos/:id/transcript). */
+export type CosChatEntry =
+  | (CosChatBase & { kind: "message"; role: "user" | "assistant"; text: string })
+  | (CosChatBase & { kind: "ticket_created"; key: string; title: string; status: string })
+  | (CosChatBase & { kind: "ticket_moved"; key: string; title: string; from: string; to: string })
+  | (CosChatBase & { kind: "event_batch"; wakeId: string; eventIds: string[]; digest: string });
+
+/** GET /cos/:id/transcript, newest page first */
+export interface CosChatPage {
+  entries: CosChatEntry[];
+  nextCursor: string | null;
+}
+
+/** Bus events for the Inbox and chat (not part of protocol.ts's HarnessEvent: clients that don't know them ignore them). */
+export type CosBusEvent =
+  | { kind: "cos.event.upserted"; event: CosEvent }
+  | { kind: "cos.badge"; total: number; byCos: Record<string, number> }
+  | { kind: "cos.transcript.appended"; cosId: string; entry: CosChatEntry };
+
+// ---------------------------------------------------------------------------
+// Pure rules
+// ---------------------------------------------------------------------------
+
+/** Quiet time before a batch is triaged, and the longest an event waits however busy it is. */
+export const COS_QUIET_MS = 45_000;
+export const COS_CEILING_MS = 5 * 60_000;
+/** Full wakes per chief per hour; more join one later wake. */
+export const COS_WAKES_PER_HOUR = 6;
+export const COS_HOUR_MS = 60 * 60_000;
+
+/** A chief as ownership sees it. */
+export type CosChief = Pick<Cos, "ticketId" | "scope" | "groupId" | "enabled">;
+
+/**
+ * The one chief that owns an event: the project's group's chief when it is on and the project has
+ * chiefs enabled, otherwise the All chief under the same conditions, otherwise null (unassigned
+ * until one qualifies). `project` null (an event with no project yet) is judged on the app's setting alone.
+ */
+export function ownerOf(
+  project: (Pick<Project, "cosEnabled"> & { groupId?: string | null }) | null,
+  settings: Pick<Settings, "cosEnabled">,
+  chiefs: readonly CosChief[],
+): string | null {
+  if (!resolveCosSetting(project, { ...settings, cosCanUnblock: false }, "cosEnabled")) return null;
+  const group = project?.groupId ? chiefs.find((c) => c.enabled && c.scope === `group:${project.groupId}`) : undefined;
+  return (group ?? chiefs.find((c) => c.enabled && c.scope === "all"))?.ticketId ?? null;
+}
+
+/** When a batch is due: 45s after its last event, but never later than 5 minutes after its first. Null for an empty batch. */
+export function nextWakeAt(createdAts: readonly number[]): number | null {
+  if (!createdAts.length) return null;
+  return Math.min(Math.max(...createdAts) + COS_QUIET_MS, Math.min(...createdAts) + COS_CEILING_MS);
+}
+
+/** When a chief may be woken again: now, or once the oldest wake of the last hour ages out when `cap` are already in it. */
+export function nextWakeAllowedAt(wakeTimes: readonly number[], now: number, cap = COS_WAKES_PER_HOUR): number {
+  const recent = wakeTimes.filter((t) => t > now - COS_HOUR_MS).sort((a, b) => a - b);
+  return recent.length < cap ? now : recent[recent.length - cap]! + COS_HOUR_MS;
+}
+
+export interface CollapsibleEvent {
+  id: string;
+  ticketId: string | null;
+  /** The activity kind; only "moved" events are collapsed */
+  kind: string;
+  from?: string | null;
+  to?: string | null;
+  createdAt: number;
+}
+
+/**
+ * Per-ticket net state: a ticket's status moves in one batch become one move from where it started
+ * to where it ended, or none when it ended where it started. Returns the ids to drop with the id
+ * they merged into (null when they cancelled out), and the net move of the surviving event.
+ */
+export function collapseMoves(events: readonly CollapsibleEvent[]): { dropped: { id: string; into: string | null }[]; net: Map<string, { from: string; to: string }> } {
+  const byTicket = new Map<string, CollapsibleEvent[]>();
+  for (const e of events) {
+    if (e.kind !== "moved" || !e.ticketId || !e.from || !e.to) continue;
+    byTicket.set(e.ticketId, [...(byTicket.get(e.ticketId) ?? []), e]);
+  }
+  const dropped: { id: string; into: string | null }[] = [];
+  const net = new Map<string, { from: string; to: string }>();
+  for (const moves of byTicket.values()) {
+    if (moves.length < 2) continue;
+    const sorted = [...moves].sort((a, b) => a.createdAt - b.createdAt);
+    const first = sorted[0]!;
+    const last = sorted[sorted.length - 1]!;
+    if (first.from === last.to) {
+      for (const m of sorted) dropped.push({ id: m.id, into: null });
+      continue;
+    }
+    for (const m of sorted.slice(0, -1)) dropped.push({ id: m.id, into: last.id });
+    net.set(last.id, { from: first.from!, to: last.to! });
+  }
+  return { dropped, net };
+}
+
+/** Every CosEventStatus, for validating ?status= */
+export const COS_EVENT_STATUSES: readonly CosEventStatus[] = ["pending", "triaging", "escalated", "handling", "handled", "ignored"];
