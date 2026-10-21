@@ -11,7 +11,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
-- Renaming a project group is now safe. Groups are real entries with their own ids, so a group's board, your saved board and layout, and anything later tied to the group keep following it when its name changes. Two groups can't share a name (case aside); renaming onto an existing name is refused. Existing groups, saved boards and links that name a group carry over. The iPhone, iPad and Mac project settings have a Group name row that renames the group for all of its projects. Agents can still set a project's `group` by name, and can pass `group_id`.
+- Renaming a project group is now safe. Groups are real entries with their own ids, so a group's board, your saved board and layout, and anything later tied to the group keep following it when its name changes. Two groups can't share a name (case aside); renaming onto an existing name is refused. Existing groups, saved boards and links that name a group carry over. The iPhone, iPad and Mac project settings have a Group name row that renames the group for all of its projects. A group goes away when its last project leaves it, so its name is free to use again. Agents can still set a project's `group` by name, and can pass `group_id`.
 - The end-to-end walkthrough now opens a project's settings on the Mac and checks the Group name row, so a break there fails the gate.
 
 ## [app-20261020.2300](https://github.com/markhuot/harness/releases/tag/app-20261020.2300) - 2026-10-20

@@ -144,9 +144,39 @@ test("renaming a group keeps its id, shows the new name on its projects, and mir
   expect(renamed.projectIds).toEqual([a.id]);
   expect(store.projects.get(a.id)).toMatchObject({ groupId: work.id, group: "Clients" });
   expect(store.projects.get(b.id)).toMatchObject({ groupId: null, group: null });
-  // An older build reads group_name.
-  expect(store.db.query("SELECT group_name FROM projects WHERE id = $id").get({ id: a.id })).toEqual({ group_name: "Clients" });
   expect(store.groups.rename("missing", "X")).toBeNull();
+});
+
+test("a group is deleted when its last project leaves it, freeing the name", () => {
+  const store = makeStore();
+  const work = store.groups.findOrCreate("Work");
+  const play = store.groups.findOrCreate("Play");
+  const a = store.projects.create({ name: "A", path: "/a", groupId: work.id });
+  const b = store.projects.create({ name: "B", path: "/b", groupId: work.id });
+  const c = store.projects.create({ name: "C", path: "/c", groupId: play.id });
+  store.projects.update(a.id, { groupId: null });
+  expect(store.groups.get(work.id)).not.toBeNull(); // b is still in it
+  store.projects.update(b.id, { groupId: play.id }); // moved out
+  expect(store.groups.get(work.id)).toBeNull();
+  store.projects.delete(c.id);
+  expect(store.groups.get(play.id)).not.toBeNull(); // b is in it
+  store.projects.delete(b.id);
+  expect(store.groups.list()).toEqual([]);
+  // The name an emptied group had can be taken by a rename.
+  const other = store.groups.findOrCreate("Other");
+  store.projects.create({ name: "D", path: "/d", groupId: other.id });
+  expect(store.groups.rename(other.id, "Work")!.group.name).toBe("Work");
+});
+
+test("a unique-index clash the in-code check misses is still a GroupNameTaken", () => {
+  const store = makeStore();
+  store.groups.findOrCreate("Work");
+  const play = store.groups.findOrCreate("Play");
+  const miss = store.groups as unknown as { list: () => unknown[]; findByName: () => null };
+  miss.list = () => [{ id: play.id, name: "Play", createdAt: 0 }];
+  miss.findByName = () => null;
+  expect(() => store.groups.rename(play.id, "work")).toThrow(GroupNameTaken);
+  expect(() => store.groups.findOrCreate("WORK")).toThrow(GroupNameTaken);
 });
 
 test("a group can't take another group's name in any case, but may change its own case", () => {

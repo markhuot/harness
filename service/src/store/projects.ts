@@ -211,7 +211,13 @@ export class ProjectRepo {
         phaseModels: toJson(phaseModels),
         t: this.now(),
       });
+    if (existing.groupId && patch.groupId !== undefined && patch.groupId !== existing.groupId) this.pruneGroups();
     return this.get(id);
+  }
+
+  /** Drop the groups no project is in, so a name an emptied group had is free again. */
+  private pruneGroups() {
+    this.db.query("DELETE FROM groups WHERE id NOT IN (SELECT group_id FROM projects WHERE group_id IS NOT NULL)").run();
   }
 
   /**
@@ -302,6 +308,7 @@ export class ProjectRepo {
 
   delete(id: string) {
     this.db.query("DELETE FROM projects WHERE id = $id").run({ id });
+    this.pruneGroups();
   }
 
   /**
@@ -325,6 +332,9 @@ export class GroupNameTaken extends Error {
   }
 }
 
+/** The groups_name index refused the name (a clash the in-code check missed). */
+const isUniqueViolation = (err: unknown): boolean => (err as { code?: string } | null)?.code === "SQLITE_CONSTRAINT_UNIQUE";
+
 interface GroupRow {
   id: string;
   name: string;
@@ -335,8 +345,8 @@ const toGroup = (r: GroupRow): Group => ({ id: r.id, name: r.name, createdAt: r.
 
 /**
  * Project groups (DESIGN.md "Project groups"). A group's id never changes; its name is unique
- * without case. A row stays when its last project leaves, so what is keyed to the id survives.
- * Callers normalize names first (normalizeProjectGroup).
+ * without case. A group is deleted when its last project leaves (ProjectRepo), so a name it had is
+ * free again. Callers normalize names first (normalizeProjectGroup).
  */
 export class GroupRepo {
   constructor(private db: Database, private now: Clock = systemClock) {}
@@ -360,7 +370,12 @@ export class GroupRepo {
     const hit = this.findByName(name);
     if (hit) return hit;
     const id = newId();
-    this.db.query("INSERT INTO groups (id, name, created_at) VALUES ($id, $name, $t)").run({ id, name, t: this.now() });
+    try {
+      this.db.query("INSERT INTO groups (id, name, created_at) VALUES ($id, $name, $t)").run({ id, name, t: this.now() });
+    } catch (err) {
+      if (isUniqueViolation(err)) throw new GroupNameTaken(name);
+      throw err;
+    }
     return this.get(id)!;
   }
 
@@ -374,7 +389,12 @@ export class GroupRepo {
       if (!this.get(id)) return null;
       const clash = this.list().find((g) => g.id !== id && sameGroup(g.name, name));
       if (clash) throw new GroupNameTaken(name);
-      this.db.query("UPDATE groups SET name = $name WHERE id = $id").run({ id, name });
+      try {
+        this.db.query("UPDATE groups SET name = $name WHERE id = $id").run({ id, name });
+      } catch (err) {
+        if (isUniqueViolation(err)) throw new GroupNameTaken(name);
+        throw err;
+      }
       const projectIds = (this.db.query("SELECT id FROM projects WHERE group_id = $id ORDER BY created_at, key").all({ id }) as { id: string }[]).map((r) => r.id);
       this.db.query("UPDATE projects SET group_name = $name, updated_at = $t WHERE group_id = $id").run({ id, name, t: this.now() });
       return { group: this.get(id)!, projectIds };

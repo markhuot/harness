@@ -766,8 +766,8 @@ export const MIGRATIONS: string[] = [
   // 44: groups, the project groups as rows (DESIGN.md "Project groups"), and projects.group_id, the
   //     group a project is in (NULL: none). A group's name can change without its id changing, so
   //     whatever keys on the id survives a rename. The code creates a group per distinct
-  //     projects.group_name and sets group_id. group_name stays, mirrored with the group's name on
-  //     every write, so an older build still reads current names.
+  //     projects.group_name and sets group_id. group_name is no longer read; it is
+  //     still written with the group's name, but a build older than this migration isn't supported.
   `
   CREATE TABLE groups (
     id TEXT PRIMARY KEY,

@@ -240,7 +240,6 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
   add("PATCH", "/projects/:id", async ({ params, body }) => o.updateProject(params.id!, await body()));
   // Project groups (DESIGN.md "Project groups")
   add("GET", "/groups", () => o.listGroups());
-  add("POST", "/groups", async ({ body }) => o.createGroup(await body()));
   add("PATCH", "/groups/:id", async ({ params, body }) => o.renameGroup(params.id!, await body()));
   add("DELETE", "/projects/:id", async ({ params }) => (await o.deleteProject(params.id!), ok));
   add("GET", "/projects/:id/files", ({ params, url }) => o.projectFiles(params.id!, url.searchParams.get("q") ?? "", url.searchParams.get("limit"), fileSearch(url)));

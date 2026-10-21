@@ -1,6 +1,6 @@
 // Project groups: a human-readable name ("Work", "Personal") several projects share. Each group
 // gets its own board in the apps, like All projects but with only its projects. A project is in at
-// most one group; the name is all there is to a group, so it exists while a project carries it.
+// most one group; a group exists while a project carries it, and goes when its last one leaves.
 
 /** The longest group name the service stores. */
 export const PROJECT_GROUP_MAX = 60;
@@ -18,8 +18,8 @@ export function normalizeProjectGroup(value: unknown): string | null | undefined
   return name.length > PROJECT_GROUP_MAX ? undefined : name;
 }
 
-/** Group names compare without case, so "work" finds "Work". */
-export const sameGroup = (a: string, b: string): boolean => a.localeCompare(b, undefined, { sensitivity: "accent" }) === 0;
+/** Group names compare without case, so "work" finds "Work". Fixed to "en" so the machine's locale can't change which names clash. */
+export const sameGroup = (a: string, b: string): boolean => a.localeCompare(b, "en", { sensitivity: "accent" }) === 0;
 
 /**
  * The spelling a new group name should take: an existing group's when one matches it without case

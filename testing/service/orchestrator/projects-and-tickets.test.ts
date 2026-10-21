@@ -63,10 +63,29 @@ test("a group by id and the legacy group name reach the same group; null clears 
   expect(h.orch.updateProject(b.id, { group: "WORK" }).groupId).toBe(a.groupId!);
   expect(h.orch.updateProject(b.id, { groupId: null })).toMatchObject({ group: null, groupId: null });
   await status(() => h.orch.updateProject(b.id, { groupId: "nope" }), 400, /Unknown group/);
-  // A group left without projects stays, so what is keyed to its id survives; naming it again revives it.
+  // A group left without projects is deleted; naming it again makes a new one.
   h.orch.updateProject(a.id, { groupId: null });
-  expect(h.orch.listGroups()).toHaveLength(1);
-  expect(h.orch.updateProject(a.id, { group: "work" }).groupId).toBe(a.groupId!);
+  expect(h.orch.listGroups()).toHaveLength(0);
+  expect(h.orch.updateProject(a.id, { group: "work" }).groupId).not.toBe(a.groupId!);
+});
+
+test("a group can be renamed to the name an emptied group had", () => {
+  const h = makeOrchestrator();
+  const a = h.orch.createProject({ path: dir(h, "a"), key: "AAA", group: "Work" });
+  const b = h.orch.createProject({ path: dir(h, "b"), key: "BBB", group: "Play" });
+  h.orch.updateProject(a.id, { groupId: null });
+  expect(h.orch.renameGroup(b.groupId!, { name: "work" }).name).toBe("work");
+});
+
+test("a unique-name clash the in-code check misses is a 409 on rename and on a project's group name", async () => {
+  const h = makeOrchestrator();
+  h.orch.createProject({ path: dir(h, "a"), key: "AAA", group: "Work" });
+  const b = h.orch.createProject({ path: dir(h, "b"), key: "BBB", group: "Play" });
+  const groups = (h.orch as unknown as { store: { groups: { list: () => unknown[]; findByName: () => null } } }).store.groups;
+  groups.list = () => [{ id: b.groupId, name: "Play", createdAt: 0 }];
+  groups.findByName = () => null;
+  await status(() => h.orch.renameGroup(b.groupId!, { name: "WORK" }), 409, /already exists/);
+  await status(() => h.orch.updateProject(b.id, { group: "WORK" }), 409, /already exists/);
 });
 
 test("renaming a group announces each of its projects and keeps the board filter on the same id", () => {

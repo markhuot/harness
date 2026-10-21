@@ -90,18 +90,19 @@ work) per-group state uses the id. `Project.group` is the group's current name, 
 read, so display code needs no lookup. Names are unique without case (a unique index on
 `name COLLATE NOCASE`, and `sameGroup` in the service, since SQLite folds only ASCII). Migration 44
 creates a group per distinct `group_name`, merging names that differ only in case or spacing (the
-most common spelling wins, the first seen on a tie), and sets `group_id`. `group_name` stays and
-is mirrored with the group's name on every write, so an older build still shows current names.
+most common spelling wins, the first seen on a tie), and sets `group_id`. `group_name` is left
+in place but no longer read; running an older build against a migrated database isn't supported.
 
 `GroupRepo` (`service/src/store/projects.ts`) lists, finds by name, finds or creates, and renames.
 A rename changes the name only, in one transaction, and a name another group has is refused
 (`GroupNameTaken`, a 409 from the orchestrator), not merged. After the rename commits the service
 emits `project.upserted` for every member project, since clients learn a project's group from the
-project. A group whose last project leaves keeps its row, so what is keyed to its id survives;
-clients list only groups some project is in (`projectGroups(projects)` in
-`shared/src/projectGroups.ts` gives `{ id, name }` alphabetically), and nothing deletes a group yet.
+project. A group is deleted when its last project leaves it (the project moves out, is cleared, or is
+deleted), so a group only exists while some project is in it and its name is free again; clients
+list groups from their projects (`projectGroups(projects)` in `shared/src/projectGroups.ts` gives
+`{ id, name }` alphabetically). Whatever later keys on a group id must go with the group.
 
-HTTP: `GET /groups`, `POST /groups { name }` (finds or creates), `PATCH /groups/:id { name }`.
+HTTP: `GET /groups`, `PATCH /groups/:id { name }`. Groups are made by giving a project a group name.
 `POST`/`PATCH /projects` take `groupId` (null clears; an unknown id is a 400) or the older `group`
 as a name, which finds or creates the group (a name that matches in any case takes that group's
 spelling, so "work" joins "Work"). The name is trimmed, inner whitespace collapsed, at most 60

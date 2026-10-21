@@ -942,7 +942,13 @@ export class Orchestrator {
   /** The id of a group a body named, making the group when only its name was given. */
   private groupIdOf(ref: GroupRef | undefined): string | null | undefined {
     if (ref === undefined || ref === null) return ref;
-    return "id" in ref ? ref.id : this.store.groups.findOrCreate(ref.name).id;
+    if ("id" in ref) return ref.id;
+    try {
+      return this.store.groups.findOrCreate(ref.name).id;
+    } catch (err) {
+      if (err instanceof GroupNameTaken) throw conflict(err.message);
+      throw err;
+    }
   }
 
   /**
@@ -959,12 +965,6 @@ export class Orchestrator {
 
   listGroups(): Group[] {
     return this.store.groups.list();
-  }
-
-  createGroup(body: { name?: unknown }): Group {
-    const name = validProjectGroup(body?.name);
-    if (name === null) throw badRequest("name is required");
-    return this.store.groups.findOrCreate(name);
   }
 
   /**
