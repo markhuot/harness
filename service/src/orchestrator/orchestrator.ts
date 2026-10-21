@@ -3170,15 +3170,18 @@ export class Orchestrator {
   /** Dedupe (identical text from the same source is delivered once), then an event owned by the watcher's chief of staff. */
   ingest(input: IngestInput): CosEvent | null {
     const hash = createHash("sha256").update(input.output.text).digest("hex");
-    if (!this.store.seen.markSeen(input.sourceId, `sha256:${hash}`, null)) return null;
-    return this.cosEngine.addExternal({
-      sourceKind: "watcher",
-      sourceRef: `${input.sourceId}:sha256:${hash}`,
-      actor: `watcher:${input.source}`,
-      title: `${input.source}: ${outputTitle(input.output.text)}`,
-      body: input.output.text,
-      // A chief that is gone (its ticket deleted) no longer owns anything: the All chief takes the event.
-      ...(input.cosId && this.store.cos.get(input.cosId) ? { cosId: input.cosId } : {}),
+    // Seen and event commit together: an insert that throws leaves the output unseen, to be delivered again.
+    return this.store.transaction(() => {
+      if (!this.store.seen.markSeen(input.sourceId, `sha256:${hash}`, null)) return null;
+      return this.cosEngine.addExternal({
+        sourceKind: "watcher",
+        sourceRef: `${input.sourceId}:sha256:${hash}`,
+        actor: `watcher:${input.source}`,
+        title: `${input.source}: ${outputTitle(input.output.text)}`,
+        body: input.output.text,
+        // A chief that is gone (its ticket deleted) no longer owns anything: the All chief takes the event.
+        ...(input.cosId && this.store.cos.get(input.cosId) ? { cosId: input.cosId } : {}),
+      });
     });
   }
 

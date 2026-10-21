@@ -292,8 +292,12 @@ test("migration 49 gives existing watchers to the All chief and turns open TRIAG
     { id: "r1", status: "failed", error: "Triage was removed" },
     { id: "r2", status: "succeeded", error: null },
   ]);
-  // The old sessions are left in place, unread, since tickets and Activity still link to TRIAGE-n.
+  // The old sessions are left in place, since tickets and Activity still link to TRIAGE-n, but none is open any more.
   expect((db.query("SELECT COUNT(*) AS n FROM sessions WHERE kind = 'triage'").get() as { n: number }).n).toBe(4);
+  expect(db.query("SELECT key, triage_status AS status, outcome FROM sessions WHERE key = 'TRIAGE-1'").get()).toEqual({ key: "TRIAGE-1", status: "failed", outcome: "Moved to the chief of staff" });
+  expect((db.query("SELECT COUNT(*) AS n FROM sessions WHERE kind = 'triage' AND triage_status = 'triaging'").get() as { n: number }).n).toBe(0);
+  // Resolved ones keep their own outcome.
+  expect((db.query("SELECT outcome FROM sessions WHERE key = 'TRIAGE-3'").get() as { outcome: string }).outcome).toBe("Declined: not mine");
 });
 
 test("migration 49 with no All chief yet leaves the events unassigned, and replaying its code adds nothing", () => {

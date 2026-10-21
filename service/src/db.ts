@@ -950,6 +950,8 @@ function convertTriageItems(db: Database, paths: Required<MigrationPaths>) {
       updatedAt: r.updated_at,
     });
   }
+  // The converted items are events now; the old Inbox must stop listing them as open.
+  db.query("UPDATE sessions SET triage_status = 'failed', outcome = 'Moved to the chief of staff' WHERE kind = 'triage' AND (triage_status = 'triaging' OR triage_status IS NULL)").run();
 }
 
 /**

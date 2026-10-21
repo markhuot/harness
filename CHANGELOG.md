@@ -39,6 +39,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
+- A group chief of staff keeps its watchers' output: events from its watchers no longer move to the All chief when the inbox is re-sorted. Old Inbox items converted to events are no longer listed as open in the legacy Inbox, an older app saving settings with the removed triage prompts no longer gets an error, and watcher output is never marked seen without its event being saved.
 - On iPhone, the docked cards no longer drop for a moment and jump back up when you open a ticket, and they hold still while you swipe the board or drag a card to dock it. They always sit above the board's bottom bar.
 - On a new ticket draft, the "Close this draft?" dialog now has to be answered: ⌘↩ no longer starts the session behind it (and ⌘W and the other shortcuts wait too). ⌘↩ now saves the draft, and the button shows it; ↩ still works.
 

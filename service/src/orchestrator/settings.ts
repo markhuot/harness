@@ -133,6 +133,9 @@ function resolvePrompts(stored: unknown): Record<PromptId, string | null> {
   return out;
 }
 
+/** Prompt ids that no longer exist (the Inbox triage's); a PATCH naming one is ignored. */
+const REMOVED_PROMPT_IDS = new Set(["system.triage", "run.triage"]);
+
 /**
  * { promptId: template | null }. null / blank → the built-in. Unknown ids and invalid templates are
  * refused, except an override sent back exactly as `current` has it: clients may echo the whole
@@ -144,6 +147,8 @@ export function validatePrompts(value: unknown, current?: Settings["prompts"]): 
   for (const [sent, text] of Object.entries(value as Record<string, unknown>)) {
     // A renamed prompt's old id (an older client, a saved settings file) means its new one.
     const id = RENAMED_PROMPT_IDS[sent] ?? sent;
+    // Triage was removed: an older client echoing its prompts back isn't an error.
+    if (REMOVED_PROMPT_IDS.has(id)) continue;
     if (!isPromptId(id)) throw badRequest(`Unknown prompt: ${id} (GET /prompts lists them)`);
     if (text === null || (typeof text === "string" && !text.trim())) {
       out[id] = null;

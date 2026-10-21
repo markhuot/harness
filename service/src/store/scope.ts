@@ -106,17 +106,22 @@ export class ScopedStore {
    * a group's chief only the watchers it owns.
    */
   readonly watchers = {
-    list: (): Watcher[] => this.store.watchers.list().filter((w) => this.ownsWatcher(w)),
+    list: (): Watcher[] => {
+      const own = this.ownChief();
+      return this.store.watchers.list().filter((w) => this.ownsWatcher(w, own));
+    },
     get: (id: string): Watcher | null => {
       const w = this.store.watchers.get(id);
-      return w && this.ownsWatcher(w) ? w : OUT_OF_SCOPE;
+      return w && this.ownsWatcher(w, this.ownChief()) ? w : OUT_OF_SCOPE;
     },
   };
 
-  private ownsWatcher(w: Watcher): boolean {
-    if (this.scope === "all") return true;
-    const own = this.store.cos.getByScope(this.scope);
-    return !!own && w.cosId === own.ticketId;
+  private ownChief(): string | null {
+    return this.scope === "all" ? null : (this.store.cos.getByScope(this.scope)?.ticketId ?? null);
+  }
+
+  private ownsWatcher(w: Watcher, own: string | null): boolean {
+    return this.scope === "all" || (!!own && w.cosId === own);
   }
 
   /** Activity across the tickets this scope covers (a ticket outside it matches nothing). */

@@ -3,6 +3,7 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { Watcher } from "@harness/shared";
 import type { WatcherSupervisor } from "../../../service/src/orchestrator/orchestrator";
+import { validatePrompts } from "../../../service/src/orchestrator/settings";
 import { callTools, makeOrchestrator, stopAll } from "../orchestrator-harness";
 
 afterEach(stopAll);
@@ -74,6 +75,23 @@ test("identical output from the same watcher is delivered once, and injected out
   const first = await h.orch.injectOutput("pager", "page: db down");
   expect(first).toMatchObject({ cosId: all.ticketId, status: "pending" });
   expect(await h.orch.injectOutput("pager", "page: db down")).toBeNull();
+});
+
+test("rehoming keeps a group chief's watcher events with it, and sends inject: events and a deleted watcher's to All", async () => {
+  const { h, sup, work, all, mine } = await board();
+  await sup.ref.onOutput!(mine, out("deploy failed"));
+  await h.orch.injectOutput("pager", "page: db down");
+  await sup.ref.onOutput!({ ...mine, id: "gone-watcher", cosId: work.ticketId }, out("from a watcher deleted since"));
+  h.orch.cosEngine.rehome();
+  const owner = (needle: string) => watcherEvents(h).find((e) => e.title.includes(needle))!.cosId;
+  expect(owner("deploy failed")).toBe(work.ticketId);
+  expect(owner("db down")).toBe(all.ticketId);
+  expect(owner("deleted since")).toBe(all.ticketId);
+});
+
+test("a removed triage prompt id in a settings PATCH is ignored, not a 400", () => {
+  expect(validatePrompts({ "system.triage": "x", "run.triage": null })).toEqual({});
+  expect(() => validatePrompts({ "nope.nothing": "x" })).toThrow("Unknown prompt");
 });
 
 test("when a group's chief is gone its watcher hands over to the All chief, and output from a stale owner goes to All too", async () => {
