@@ -3,7 +3,7 @@ import { expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { builtinPhaseModels } from "@harness/shared";
-import { migrate, MIGRATIONS, openDb, SCHEMA_VERSION, ensureSearchIndex, hasSearchIndex } from "../../service/src/db";
+import { migrate, MIGRATION_CODE, MIGRATIONS, openDb, SCHEMA_VERSION, ensureSearchIndex, hasSearchIndex } from "../../service/src/db";
 import { Store } from "../../service/src/store";
 import { fakeClock } from "../builders/clock";
 import { tempDir } from "../builders/tmp";
@@ -42,8 +42,8 @@ test("a database from a newer service is refused rather than downgraded", () => 
 
 test("a failing migration rolls back whole and leaves the version where it was", () => {
   const db = dbAt(SCHEMA_VERSION - 1);
-  // Break the last migration's target: it creates a table that already exists.
-  db.exec("CREATE INDEX activity_created ON activity(id)");
+  // Break the last migration's target: it adds a column that already exists.
+  db.exec("ALTER TABLE watchers ADD COLUMN cos_id TEXT");
   expect(() => migrate(db, paths())).toThrow();
   expect(version(db)).toBe(SCHEMA_VERSION - 1);
 });
@@ -251,4 +251,70 @@ test("migration 46 seeds the event cursor at the end of existing activity, so th
   const base = { cosId: null, projectId: null, ticketId: null, sourceKind: "watcher" as const, sourceRef: "r", actor: "watcher:x", title: "t" };
   expect(store.cosEvents.insert(base)).not.toBeNull();
   expect(store.cosEvents.insert(base)).toBeNull();
+});
+
+/** An install at migration 48 with the All chief, a watcher and one TRIAGE session per outcome. */
+function triageInstall(withAllChief = true) {
+  const db = dbAt(48);
+  if (withAllChief) db.exec(`INSERT INTO cos (ticket_id, scope, group_id, enabled, created_at) VALUES ('chief', 'all', NULL, 1, 0)`);
+  db.exec(`INSERT INTO watchers (id, name, command, args, prompt, env, mode, interval_sec, enabled, models, created_at, updated_at)
+           VALUES ('w', 'jira', 'watch', '[]', '', '{}', 'loop', 60, 1, '{}', 0, 0)`);
+  const session = db.query(`INSERT INTO sessions (id, key, kind, driver, cwd, title, triage_status, outcome, meta, created_at, updated_at) VALUES ($key, $key, 'triage', 'dummy', '/', $title, $status, $outcome, $meta, $at, $at)`);
+  const meta = (text: string) => JSON.stringify({ source: "jira", text, prompt: "only mine" });
+  session.run({ key: "TRIAGE-1", title: "open one", status: "triaging", outcome: null, meta: meta("FOO-1 changed"), at: 10 });
+  session.run({ key: "TRIAGE-2", title: "sent on", status: "dispatched", outcome: "Dispatched to K-5 in K", meta: meta("FOO-2 assigned"), at: 20 });
+  session.run({ key: "TRIAGE-3", title: "turned down", status: "declined", outcome: "Declined: not mine", meta: meta("FOO-3 closed"), at: 30 });
+  db.exec(`INSERT INTO runs (id, session_id, kind, status, driver, prompt, created_at) VALUES ('r1', 'TRIAGE-1', 'triage', 'queued', 'dummy', 'p', 10), ('r2', 'TRIAGE-2', 'triage', 'succeeded', 'dummy', 'p', 20)`);
+  session.run({ key: "TRIAGE-4", title: "broke", status: "failed", outcome: "Triage failed: boom", meta: null, at: 40 });
+  return db;
+}
+const eventRows = (db: Database) =>
+  db.query("SELECT source_ref AS ref, cos_id AS cosId, status, verdict, reason, actor, payload FROM cos_events WHERE source_kind = 'watcher' ORDER BY created_at").all() as {
+    ref: string; cosId: string | null; status: string; verdict: string; reason: string | null; actor: string; payload: string;
+  }[];
+
+test("migration 49 gives existing watchers to the All chief and turns open TRIAGE items into pending events, resolved ones into consumed history", () => {
+  const db = triageInstall();
+  migrate(db, paths());
+  expect(version(db)).toBe(SCHEMA_VERSION);
+  expect((db.query("SELECT cos_id FROM watchers WHERE id = 'w'").get() as { cos_id: string | null }).cos_id).toBeNull();
+  const rows = eventRows(db);
+  expect(rows.map((r) => [r.ref, r.status, r.verdict, r.reason, r.cosId])).toEqual([
+    ["triage:TRIAGE-1", "pending", "pending", null, "chief"],
+    ["triage:TRIAGE-2", "handled", "escalate", "Dispatched to K-5 in K", "chief"],
+    ["triage:TRIAGE-3", "ignored", "ignore", "Declined: not mine", "chief"],
+    ["triage:TRIAGE-4", "ignored", "ignore", "Triage failed: boom", "chief"],
+  ]);
+  expect(rows[0]!.actor).toBe("watcher:jira");
+  expect(JSON.parse(rows[0]!.payload)).toMatchObject({ body: "FOO-1 changed", prompt: "only mine", triageKey: "TRIAGE-1" });
+  // A triage run still queued can no longer run, so it is failed; a finished one is left alone.
+  expect(db.query("SELECT id, status, error FROM runs ORDER BY id").all()).toEqual([
+    { id: "r1", status: "failed", error: "Triage was removed" },
+    { id: "r2", status: "succeeded", error: null },
+  ]);
+  // The old sessions are left in place, since tickets and Activity still link to TRIAGE-n, but none is open any more.
+  expect((db.query("SELECT COUNT(*) AS n FROM sessions WHERE kind = 'triage'").get() as { n: number }).n).toBe(4);
+  expect(db.query("SELECT key, triage_status AS status, outcome FROM sessions WHERE key = 'TRIAGE-1'").get()).toEqual({ key: "TRIAGE-1", status: "failed", outcome: "Moved to the chief of staff" });
+  expect((db.query("SELECT COUNT(*) AS n FROM sessions WHERE kind = 'triage' AND triage_status = 'triaging'").get() as { n: number }).n).toBe(0);
+  // Resolved ones keep their own outcome.
+  expect((db.query("SELECT outcome FROM sessions WHERE key = 'TRIAGE-3'").get() as { outcome: string }).outcome).toBe("Declined: not mine");
+});
+
+test("migration 49 with no All chief yet leaves the events unassigned, and replaying its code adds nothing", () => {
+  const db = triageInstall(false);
+  migrate(db, paths());
+  expect(eventRows(db).every((r) => r.cosId === null)).toBe(true);
+  const before = eventRows(db).length;
+  MIGRATION_CODE[49]!(db, paths());
+  expect(eventRows(db)).toHaveLength(before);
+});
+
+test("deleting a group's chief hands its watchers to All (cos_id goes NULL)", () => {
+  const db = triageInstall();
+  db.exec(`INSERT INTO cos (ticket_id, scope, group_id, enabled, created_at) VALUES ('g', 'group:x', 'x', 1, 0)`);
+  migrate(db, paths());
+  db.exec("PRAGMA foreign_keys = ON");
+  db.exec("UPDATE watchers SET cos_id = 'g'");
+  db.exec("DELETE FROM cos WHERE ticket_id = 'g'");
+  expect((db.query("SELECT cos_id FROM watchers WHERE id = 'w'").get() as { cos_id: string | null }).cos_id).toBeNull();
 });

@@ -101,26 +101,6 @@ test("without bullets a conductor makes two children, the second depending on th
   expect(second!.dependsOn).toEqual([first!.key]);
 });
 
-test("a triage run dispatches to the project the watcher's prompt names, with the remote key from the output", async () => {
-  const h = rig();
-  await h.orch.injectOutput("jira", "FOO-7 needs attention", "[dummy:project ACME]");
-  await h.settle();
-  const [ticket] = h.store.tickets.list();
-  expect(ticket).toMatchObject({ externalRef: { key: "FOO-7" } });
-  expect(h.store.sessions.list("triage")[0]!.triageStatus).toBe("dispatched");
-});
-
-test("triage declines output that names no project, and a dispatch-if rule decides by matching the output", async () => {
-  const h = rig();
-  await h.orch.injectOutput("jira", "something unscoped", "no project here");
-  await h.orch.injectOutput("alerts", "build FAILED on main", "[dummy:project ACME] [dummy:dispatch-if /FAILED/]");
-  await h.orch.injectOutput("alerts", "build passed", "[dummy:project ACME] [dummy:dispatch-if /FAILED/]");
-  await h.settle();
-  const by = Object.fromEntries(h.store.sessions.list("triage").map((s) => [s.title, s.triageStatus]));
-  expect(Object.values(by).sort()).toEqual(["declined", "declined", "dispatched"]);
-  expect(h.store.tickets.list()).toHaveLength(1);
-});
-
 test("an unknown model fails the run the way a real API rejects it", async () => {
   const h = rig();
   h.store.settings.set({ phaseModels: { work: { driver: "dummy", model: "not-a-model" }, plan: { driver: "dummy", model: null }, review: { driver: "dummy", model: null }, complete: { driver: "dummy", model: null }, adviser: { driver: "dummy", model: null } } });

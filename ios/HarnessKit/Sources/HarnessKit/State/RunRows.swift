@@ -26,13 +26,12 @@ public enum RunRows {
         return "$\(cents / 100).\(rest < 10 ? "0" : "")\(rest)"
     }
 
-    /// The phase a run kind's driver and model come from (nil: triage, which follows its watcher).
+    /// The phase a run kind's driver and model come from (a run of the retired "triage" kind reads as work).
     public static func runPhase(_ kind: RunKind) -> Phase? {
         switch kind {
         case .plan: .plan
         case .review: .review
         case .complete: .complete
-        case .triage: nil
         default: .work // work, conductor, chat, cos
         }
     }

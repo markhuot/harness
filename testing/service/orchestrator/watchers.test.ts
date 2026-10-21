@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { assertNoTimerLeaks, trackTimers } from "../leaks";
 import type { Watcher, WatcherLive } from "@harness/shared";
-import { findKeys, loginShell, MAX_OUTPUT_CHARS, toOutput, watcherArgv, WatcherRunner, type SpawnedProcess, type SpawnFn, type WatcherOutput } from "../../../service/src/orchestrator/watchers";
+import { loginShell, MAX_OUTPUT_CHARS, toOutput, watcherArgv, WatcherRunner, type SpawnedProcess, type SpawnFn, type WatcherOutput } from "../../../service/src/orchestrator/watchers";
 import { fakeClock } from "../../builders/clock";
 
 beforeEach(trackTimers);
@@ -14,12 +14,6 @@ test("toOutput trims, drops whitespace-only output and caps long output, marking
   expect(toOutput("ab   cdef", 5)).toEqual({ text: "ab", truncated: true });
   expect(toOutput("short", 100, true)).toEqual({ text: "short", truncated: true });
   expect(MAX_OUTPUT_CHARS).toBe(16_000);
-});
-
-test("findKeys lists upper-case keys once each in order of appearance, up to the max", () => {
-  expect(findKeys("see FOO-1, bar-2, FOO-1 and ABC_D-33, X-9")).toEqual(["FOO-1", "ABC_D-33", "X-9"]);
-  expect(findKeys("A-1 B-2 C-3", 2)).toEqual(["A-1", "B-2"]);
-  expect(findKeys("no keys here, FOO1 or foo-1")).toEqual([]);
 });
 
 test("a watcher with no args runs its command line in the login shell; one with args is spawned directly", () => {

@@ -63,58 +63,6 @@ function firstLine(text: string): string {
   return text.split("\n").map((l) => l.trim()).find(Boolean) ?? "";
 }
 
-/** Body of a `## <title…>` section of a prompt, up to the next `## ` heading. */
-function promptSection(prompt: string, title: string): string {
-  const start = prompt.indexOf(`\n## ${title}`);
-  if (start < 0) return "";
-  const body = prompt.slice(prompt.indexOf("\n", start + 1) + 1);
-  const end = body.search(/^## /m);
-  return end < 0 ? body : body.slice(0, end);
-}
-
-/** The watcher's output from a triage prompt, without its fence. */
-function watcherOutput(prompt: string): string {
-  const start = prompt.indexOf("\n## Output");
-  if (start < 0) return "";
-  const rest = prompt.slice(prompt.indexOf("\n", start + 1) + 1);
-  const fence = rest.match(/^`{3,}/)?.[0];
-  if (!fence) return "";
-  const body = rest.slice(fence.length + 1);
-  const end = body.indexOf(`\n${fence}`);
-  return end < 0 ? body : body.slice(0, end);
-}
-
-/** The `[dummy:project KEY]` a watcher's prompt names, if any. Only the watcher's prompt counts. */
-export function watcherProject(prompt: string): string | null {
-  return promptSection(prompt, "What the human wants").match(/\[dummy:project ([A-Za-z0-9_]+)\]/)?.[1] ?? null;
-}
-
-/**
- * The `[dummy:ticket KEY]` a watcher's prompt names, if any: the existing local ticket a dispatch
- * sends its update to (dispatch_ticket's ticket_key). Only the watcher's prompt counts, so a test
- * says which ticket it means; the output's key alone never picks one.
- */
-export function watcherTicket(prompt: string): string | null {
-  return promptSection(prompt, "What the human wants").match(/\[dummy:ticket ([A-Za-z][A-Za-z0-9_]*-\d+)\]/)?.[1]?.toUpperCase() ?? null;
-}
-
-/** The first external key (FOO-123) in the watcher's output: the remote ID a dispatch links. */
-export function outputKey(prompt: string): string | undefined {
-  return watcherOutput(prompt).match(/\b[A-Z][A-Z0-9_]*-\d+\b/)?.[0];
-}
-
-/** A `[dummy:dispatch-if /re/flags]` rule from the watcher's prompt. */
-function watcherRule(prompt: string): RegExp | null {
-  const wants = promptSection(prompt, "What the human wants");
-  const m = wants.match(/\[dummy:dispatch-if \/(.+?)\/([a-z]*)\]/);
-  if (!m) return null;
-  try {
-    return new RegExp(m[1]!, m[2]);
-  } catch {
-    return null;
-  }
-}
-
 const DIRECTIVE =/(?:^|\s)\/(block|fail|browse|bash|approve|tools|agents|bgtask|child)\b[ \t]*([^\n]*)/;
 /** conductorUpdatePrompt: the orchestrator telling a parent (of either kind) that children changed. */
 const CHILD_UPDATES = /^(Child ticket updates:|Check on your children)/;
@@ -536,49 +484,6 @@ export class DummyDriver implements Driver {
         break;
       }
 
-      case "triage": {
-        // The watcher's prompt names the project (`[dummy:project KEY]`); the output can't. The
-        // first external key in the output is the remote ID to link, and `[dummy:ticket KEY]` in
-        // the watcher's prompt names an existing ticket to send the update to instead.
-        const project = watcherProject(prompt);
-        const key = outputKey(prompt);
-        const ticketKey = watcherTicket(prompt);
-        const title = prompt.match(/^Inbox title:[ \t]*"(.+)"$/m)?.[1]?.trim() || firstLine(prompt) || "Untitled work item";
-        // A watcher prompt can also carry a rule: `[dummy:dispatch-if /regex/flags]`. Only the
-        // watcher's prompt sets it and only the output is matched.
-        const rule = watcherRule(prompt);
-        if (rule) {
-          if (!rule.test(watcherOutput(prompt))) {
-            yield* say("This output doesn't match the watcher's rule.");
-            yield* call("decline_work", { reason: "The output doesn't match the watcher's prompt.", title });
-          } else if (!project) {
-            yield* say("The output matches, but no project is named.");
-            yield* call("decline_work", { reason: "No project for this output.", title });
-          } else {
-            yield* say(`Dispatching to ${project}.`);
-            const input: Record<string, unknown> = { project_key: project, title, spec: `Dispatched by the dummy triager.\n\n${title}`, start: true };
-            if (key) input.key = key;
-            if (ticketKey) input.ticket_key = ticketKey;
-            yield* call("dispatch_ticket", input);
-          }
-        } else if (prompt.includes("[unscoped]")) {
-          yield* say("This item is not scoped well enough to work on.");
-          yield* call("decline_work", { reason: "The item is marked [unscoped]." });
-        } else if (!project) {
-          yield* say("No project matches this item.");
-          yield* call("decline_work", { reason: "The watcher's prompt names no project for this output." });
-        } else {
-          const big = prompt.includes("[big]");
-          yield* say(`Dispatching to ${project}${big ? " as a conductor ticket" : ""}.`);
-          const input: Record<string, unknown> = { project_key: project, title, spec: `Dispatched by the dummy triager.\n\n${title}` };
-          if (key) input.key = key;
-          if (ticketKey) input.ticket_key = ticketKey;
-          input.start = true;
-          if (big) input.conductor = true;
-          yield* call("dispatch_ticket", input);
-        }
-        break;
-      }
     }
 
     check();

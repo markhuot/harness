@@ -94,7 +94,7 @@ export function runHeader(
 function phaseOrKindLabel(kind: string): string {
   const phase = runPhase(kind as Run["kind"]);
   // runPhase maps every non-plan/review/complete kind to work, so name the kinds that aren't Work.
-  return phase && (kind === "work" || phase !== "work") ? PHASE_LABELS[phase] : kindLabel(kind);
+  return (kind === "work" || phase !== "work") ? PHASE_LABELS[phase] : kindLabel(kind);
 }
 
 /**

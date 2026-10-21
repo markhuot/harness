@@ -168,9 +168,9 @@ public enum TriageStatus: OpenEnum {
 /// chat: a human message to a blocked, review or done ticket, answered by its agent with the work
 /// tools (the agent moves the ticket itself).
 public enum RunKind: OpenEnum {
-    case plan, work, review, complete, conductor, triage, chat, compact, cos
+    case plan, work, review, complete, conductor, chat, compact, cos
     case unknown(String)
-    public static let allKnown: [Self] = [.plan, .work, .review, .complete, .conductor, .triage, .chat, .compact, .cos]
+    public static let allKnown: [Self] = [.plan, .work, .review, .complete, .conductor, .chat, .compact, .cos]
     public var rawValue: String {
         switch self {
         case .plan: "plan"
@@ -178,7 +178,6 @@ public enum RunKind: OpenEnum {
         case .review: "review"
         case .complete: "complete"
         case .conductor: "conductor"
-        case .triage: "triage"
         case .chat: "chat"
         case .compact: "compact"
         case .cos: "cos"
@@ -395,19 +394,19 @@ public enum WatcherLiveState: OpenEnum {
 public enum PromptId: OpenEnum {
     case systemIntro, systemSession, systemContext, systemLifecycle, systemPlan, systemWork, systemReview
     case systemCompleteMerge, systemCompletePr, systemCompleteCleanup, systemCompleteCustom, systemConductor, systemChat, systemCos
-    case systemTriage, systemChildren, systemBranches, systemFiles, systemTurns, systemSpec, systemNotes, systemFileLinks
+    case systemChildren, systemBranches, systemFiles, systemTurns, systemSpec, systemNotes, systemFileLinks
     case systemBoard, systemBoardChanges, systemConfig, systemApprovals, systemBrowser
     case runWorkStart, runConductorStart, runReview, runCompleteMerge, runCompletePr, runCompleteCleanup, runCompleteCustom
-    case runConductorUpdate, runChangesRequested, runReopen, runUnblock, runReplan, runTriage
+    case runConductorUpdate, runChangesRequested, runReopen, runUnblock, runReplan
     case unknown(String)
     /// PROMPT_IDS, in order
     public static let allKnown: [Self] = [
         .systemIntro, .systemSession, .systemContext, .systemLifecycle, .systemPlan, .systemWork, .systemReview,
         .systemCompleteMerge, .systemCompletePr, .systemCompleteCleanup, .systemCompleteCustom, .systemConductor, .systemChat, .systemCos,
-        .systemTriage, .systemChildren, .systemBranches, .systemFiles, .systemTurns, .systemSpec, .systemNotes, .systemFileLinks,
+        .systemChildren, .systemBranches, .systemFiles, .systemTurns, .systemSpec, .systemNotes, .systemFileLinks,
         .systemBoard, .systemBoardChanges, .systemConfig, .systemApprovals, .systemBrowser,
         .runWorkStart, .runConductorStart, .runReview, .runCompleteMerge, .runCompletePr, .runCompleteCleanup, .runCompleteCustom,
-        .runConductorUpdate, .runChangesRequested, .runReopen, .runUnblock, .runReplan, .runTriage,
+        .runConductorUpdate, .runChangesRequested, .runReopen, .runUnblock, .runReplan,
     ]
     public var rawValue: String {
         switch self {
@@ -425,7 +424,6 @@ public enum PromptId: OpenEnum {
         case .systemConductor: "system.conductor"
         case .systemChat: "system.chat"
         case .systemCos: "system.cos"
-        case .systemTriage: "system.triage"
         case .systemChildren: "system.children"
         case .systemBranches: "system.branches"
         case .systemFiles: "system.files"
@@ -450,7 +448,6 @@ public enum PromptId: OpenEnum {
         case .runReopen: "run.reopen"
         case .runUnblock: "run.unblock"
         case .runReplan: "run.replan"
-        case .runTriage: "run.triage"
         case let .unknown(r): r
         }
     }

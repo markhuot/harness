@@ -102,13 +102,27 @@ export class ScopedStore {
   };
 
   /**
-   * Watchers belong to no project and carry commands and environments, so only the all scope sees
-   * them.
+   * Watchers belong to no project and carry commands and environments: the all scope sees every one,
+   * a group's chief only the watchers it owns.
    */
   readonly watchers = {
-    list: (): Watcher[] => (this.scope === "all" ? this.store.watchers.list() : []),
-    get: (id: string): Watcher | null => (this.scope === "all" ? this.store.watchers.get(id) : OUT_OF_SCOPE),
+    list: (): Watcher[] => {
+      const own = this.ownChief();
+      return this.store.watchers.list().filter((w) => this.ownsWatcher(w, own));
+    },
+    get: (id: string): Watcher | null => {
+      const w = this.store.watchers.get(id);
+      return w && this.ownsWatcher(w, this.ownChief()) ? w : OUT_OF_SCOPE;
+    },
   };
+
+  private ownChief(): string | null {
+    return this.scope === "all" ? null : (this.store.cos.getByScope(this.scope)?.ticketId ?? null);
+  }
+
+  private ownsWatcher(w: Watcher, own: string | null): boolean {
+    return this.scope === "all" || (!!own && w.cosId === own);
+  }
 
   /** Activity across the tickets this scope covers (a ticket outside it matches nothing). */
   queryActivity(q: Omit<ActivityQuery, "groupId">): { hits: ActivityHit[]; nextCursor: string | null } {

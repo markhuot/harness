@@ -346,7 +346,7 @@ test("every operation that takes a key answers an out-of-scope key like a missin
   // Operations that take no reference to something with a scope of its own (or make something new).
   const unkeyed = [
     "postNote", "updateNotes", "wroteNotes", "statusLine", "readSpec", "editSpec", "updateSpec", "block", "unblock", "resumeWork", "returnToPlanning", "submitForReview", "updateBranch", "reviewDecision",
-    "listTickets", "searchTickets", "listProjects", "listInbox", "createTicket", "recordPullRequest", "dispatchTicket", "declineWork", "requestApproval", "checkPermission", "fileOutputScope",
+    "listTickets", "searchTickets", "listProjects", "listInbox", "createTicket", "recordPullRequest", "requestApproval", "checkPermission", "fileOutputScope",
     "listWatchers", "getSettings", "listPrompts", "listDrivers", "createWatcher", "createProject", "updateSettings", "scheduleCreate", "scheduleList", "scheduleCancel", "queryActivity", "readMemory", "updateMemorySection", "listTerminals", "readTerminal", "writeTerminal",
   ];
   expect(Object.keys(ops).sort()).toEqual([...Object.keys(keyed), ...unkeyed].sort());

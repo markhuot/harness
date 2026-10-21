@@ -62,7 +62,7 @@ const NOTIFIED_TASK = /<task-id>([^<]+)<\/task-id>/g;
  * Harness tools that finish a run. A turn that called one ends even if background tasks are
  * still running (a dev server started to check the UI never finishes on its own).
  */
-const FINISHING_TOOLS = new Set(["submit_for_review", "block", "review_decision", "dispatch_ticket", "decline_work"]);
+const FINISHING_TOOLS = new Set(["submit_for_review", "block", "review_decision"]);
 /**
  * Harness tools that take a finishing tool back: `unblock` after a `block` in the same turn, or
  * `resume_work` after a submit. The turn goes on, so its background tasks keep it open again.
@@ -102,7 +102,7 @@ export function cleanClaudeEnv(env: Record<string, string | undefined>): Record<
 /**
  * The environment for an agent run: claudeCliEnv plus MCP_CONNECTION_NONBLOCKING=0, unless the
  * user set it. With stream-json input the CLI starts the first turn while claude.ai connectors
- * (hc-jira, Rovo, ...) are still "pending", so a triage agent that answers in one turn never sees
+ * (hc-jira, Rovo, ...) are still "pending", so an agent that answers in one turn never sees
  * their tools and reports the MCP as unavailable, or as needing auth, since a plugin's duplicate
  * of a connector is listed as unauthenticated until the connector list arrives. "0" holds the
  * first turn until the connectors connect (up to MCP_CONNECT_TIMEOUT_MS; about a second).

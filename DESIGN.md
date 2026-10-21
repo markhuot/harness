@@ -28,7 +28,7 @@ outlives the app (see "Service supervision").
 | `service/src/config.ts` | Paths (`HARNESS_HOME`, default `~/.harness`), port (`HARNESS_PORT`, default 7717), token |
 | `service/src/db.ts`, `service/src/store/*` | SQLite schema + repositories |
 | `service/src/events.ts` | In-process event bus (`HarnessEvent`) |
-| `service/src/orchestrator/*` | State machine, run queue, scheduler, conductor, triage, watchers, prompts, worktrees |
+| `service/src/orchestrator/*` | State machine, run queue, scheduler, conductor, watchers, prompts, worktrees |
 | `service/src/drivers/*` | `Driver` implementations: `dummy`, `claude-code`, `anthropic-api`, `github-copilot` |
 | `service/src/tools/*` | Tool definitions + `toolsForRun()` |
 | `service/src/browser/*` | CDP client + `BrowserService` implementation |
@@ -45,7 +45,7 @@ outlives the app (see "Service supervision").
 ## Project keys
 
 A project key (`HEL`) prefixes its native ticket keys (`HEL-4`). Keys match
-`^[A-Z][A-Z0-9]{0,15}$` after upper-casing, and `TRIAGE` is reserved for triage sessions. An
+`^[A-Z][A-Z0-9]{0,15}$` after upper-casing, and `TRIAGE` is reserved for the old triage sessions (TRIAGE-n keys). An
 explicit key on `POST /projects` must be free (409 otherwise); a key derived from the folder
 name de-duplicates to `KEY2`, `KEY3`, ...
 
@@ -65,7 +65,7 @@ progress isn't disturbed. Transcript, spec and Activity text isn't rewritten.
 Old keys keep working. Each rename records `OLD-n → ticket id` in `ticket_key_aliases`
 (migration 5), so bookmarks (`#/…/ticket/OLD-2`), agents calling `get_ticket`, conductors calling
 `start_ticket` / `message_ticket` / `review_ticket` / `complete_ticket` with a key they
-learned earlier, `dependsOn` inputs, triage dispatch and the CLI all still find the ticket.
+learned earlier, `dependsOn` inputs and the CLI all still find the ticket.
 Aliases point at the ticket rather than at a key, so chained renames (`A → B → C`) resolve
 `A-n` and `B-n` alike. Resolution lives in one place, `TicketRepo.lookup` / `getByKey`: the
 current key first, then an alias, so a real ticket holding a key always wins. Rules:
@@ -152,7 +152,7 @@ place of the key.
   reviewed in three rounds can become three tickets. Migration 20 stores the remote ID in
   `tickets.external_key` (upper-cased, with a non-unique index), and `TicketRepo.create` and
   `setExternalRef` keep it in sync with `external_ref`.
-- **Keys.** Tickets that triage creates take the project's next native key, like any other
+- **Keys.** Tickets an agent creates take the project's next native key, like any other
   ticket. `CreateTicketBody.key` still exists, for imports and tests.
 - **Related tickets.** `TicketDetail.relatedTickets` (`RelatedTicket { key, title, status,
   projectId, externalKey }`, newest first) lists the other tickets whose remote ID equals the
@@ -540,7 +540,7 @@ While `draft` is set:
   and dependency auto-start skip it. Status moves, messages, reviews and completion get a 409.
 - Agents can read it but not act on it: `list_tickets` and `search_tickets` include drafts (flagged
   `draft: true`; `include_drafts: false` leaves them out) and `get_ticket` returns one by key. Every
-  write tool, `get_ticket_agent` and watcher triage's `ticket_key` refuse a draft ("is a draft"), and a
+  write tool, `get_ticket_agent` refuse a draft ("is a draft"), and a
   draft can't be a dependency.
 - `UpdateTicketBody` also takes `kind`, `useWorktree` and `projectId` (a 409 on any other
   ticket, since they're fixed once it launches). A `projectId` change moves the draft into that
@@ -635,7 +635,7 @@ worktree: …" naming the branch and path when the branch is already checked out
 worktree, or naming the base when the base branch doesn't exist. `requestedBranch` can change
 (HTTP, `update_ticket`) only while the ticket has no worktree on disk. `plannedBranch(ticket)` is
 what clients show: the branch it uses, or will use. A ticket whose branch *is* its base branch
-(both set to an existing pull request's head, as triage does for fixes on an open PR) works and
+(both set to an existing pull request's head, as for fixes on an open PR) works and
 pushes on that branch directly: `system.work` tells it so (`onBase`), and approving it only
 offers `cleanup` and `custom` (see "Completion"). `GET /projects/:id/branches?q=&limit=`
 (`BranchInfo[]`: name, lastCommitAt, checkedOutAt) feeds the new-session branch picker.
@@ -742,7 +742,7 @@ a ticket may do and what's preselected: a child on its parent's branch only merg
 offered actions (`cleanup` always among them in git, even for a worktree with no commits, when
 the work was a change outside git), less `merge` and `pr` when there's nothing to merge or open a
 pull request from (`nothingToLand`): the ticket's branch is its effective base branch
-(`worksOnBase`; triage makes such tickets with `dispatch_ticket { branch, base_branch }` for work
+(`worksOnBase`; a chief makes such tickets with `create_ticket { branch, base_branch }` for work
 on an existing pull request's branch), it has no branch of its own (`hasNoBranch`: `branch` is
 null, it ran in the project checkout), or its worktree has no changes (`Ticket.hasChanges` false).
 It preselects the ticket's earlier choice, then `cleanup` for a ticket that already has a
@@ -1009,12 +1009,19 @@ automatically; while any child isn't done, a run that ends without submitting le
 progress, and `submit_for_review` is refused (a parent in review or done would strand children
 whose reviews and merges are its job).
 
-### Watchers and triage
+### Watchers
 
-A watcher is **any command that prints text**, plus a **prompt** in the user's words saying what
-to do with that text ("If this event is assigned to me and has actionable next steps, dispatch
-it to an agent"). Nothing about the output's shape is required: JSON, log lines and prose all
-work. `watch-jira`'s NDJSON is just text now.
+A watcher is **any command that prints text**. Nothing about the output's shape is required: JSON,
+log lines and prose all work. Its output becomes an **event** (see "Chief of staff") owned by a chief
+of staff, which decides what to do with it.
+
+**Owner.** `watchers.cos_id` is the owning chief's ticket id (`Watcher.cosId`); NULL is the All
+chief, so every watcher from before chiefs existed belongs to All, a watcher the apps create with no
+owner is All's, and deleting a group's chief hands its watchers to All (`ON DELETE SET NULL`; an
+output from a stale owner goes to All too). Watchers carry commands and environments, so only a chief
+manages them (below). The old triage fields (`prompt`, `driver`, `models`, and
+`settings.watcherDriver` / `watcherModels`) are still accepted and stored, so shipped Mac and iPhone
+settings screens keep saving, but nothing reads them.
 
 **Command representation.** `command` + `args` (`Watcher` in `shared/src/protocol.ts`):
 
@@ -1026,10 +1033,9 @@ work. `watch-jira`'s NDJSON is just text now.
   form turns it into a shell command line (`watcherCommandLine` in `shared/src/watchers.ts`
   quotes the args).
 
-The prompt is read at delivery time, so editing it doesn't restart the process. Changing the
-command, args, cwd, env, mode or interval does.
+Changing the command, args, cwd, env, mode or interval restarts the process.
 
-**Output → Inbox items** (`WatcherRunner`, `service/src/orchestrator/watchers.ts`):
+**Output → events** (`WatcherRunner`, `service/src/orchestrator/watchers.ts`):
 
 * `mode: "interval"` runs the command every `intervalSec`. Each run's stdout is one item.
 * `mode: "loop"` re-runs the command as soon as it exits (for blocking or long-running
@@ -1039,53 +1045,41 @@ command, args, cwd, env, mode or interval does.
   max age while output is still streaming stops at the last complete line and carries the
   partial line into the next item.
 * Output is trimmed, and whitespace-only output is dropped. A chunk is cut at 16,000
-  characters and marked truncated, and the triage prompt says so.
-* Identical output from the same watcher is triaged once: `seen_items` records
+  characters and marked truncated.
+* Identical output from the same watcher is delivered once: `seen_items` records
   `(watcher id, sha256:<hash of the trimmed text>)`. Output that changes at all is a new item.
 * Supervision is unchanged: exit 0 = ok, 4 = nothing to report, anything else is a failure
   (`lastError` carries the stderr tail, and loop mode backs off exponentially).
 
-Each item starts an **ephemeral triage session** (`kind: "triage"`, key `TRIAGE-n`, visible in
-the app's Inbox, not on the board). Its title is the output's first line with letters or digits
-in it, cut at 80 characters. Triage replaces it with the dispatched ticket's title, or with
-`decline_work`'s `title`. The triage prompt carries, in order: the watcher's name and the
-provisional title, an instruction to pick the project from the user's prompt and the output (and
-to decline when that leaves it ambiguous), the user's prompt, the local tickets whose keys
-appear in the output, the raw output in a fence it can't close, and the project list. Triage
-works out the title, key, link and project, then calls `dispatch_ticket` (once per separate item in the
-output that qualifies) or `decline_work`. `dispatch_ticket`'s `key` is the item's remote ID
-("Remote IDs"), and `ticket_key` names an existing local ticket:
-
-- `key` without `ticket_key` always creates a **new** ticket with the project's next key, linked
-  to the remote ID (`externalRef`). It never picks an existing ticket by key: a local ticket whose
-  key happens to equal the remote ID isn't the same work. The outcome is
-  `Dispatched to MH-124 (MH-62) in MH`.
-- `ticket_key` (the current key or an alias; drafts don't count) posts the `spec` text to that
-  ticket as a message (`Sent update to existing MH-123`). A done ticket is re-opened with it
-  instead, as Re-open would, with the update as its prompt and a `reopened` entry by `system`
-  (`Re-opened MH-123 with the update`): triage
-  only dispatches work, so it re-opens up front rather than leaving it to a chat run's
-  `resume_work`. Re-opening recreates the worktree the complete run may have removed. Adding `key` links a ticket that has no remote ID yet (`Linked MH-123 to MH-62 and
-  sent update`, or `… and re-opened it with the update`). A ticket that already carries a
-  different remote ID is refused.
-- Neither creates a new, unlinked ticket with the next key.
-
-The "Existing tickets" section of the triage prompt lists, for each ticket-style key in the output,
-the local ticket with that key and every ticket linked to it as a remote ID, each with its status
-and remote ID. Triage then decides whether an update belongs to one of them or starts a new ticket.
-Outcomes always name the local key first, since `dispatchedKey` reads the first key. Triage runs get the board
-read tools, and the triage instructions tell the agent to use `search_tickets` / `get_ticket` to
-find tickets the output doesn't name by key (they're named only while triage runs have them).
-
-**Routing lives in the watcher's prompt.** There is no separate key → project table: the prompt
-says where work goes ("When an actionable ticket assigned to me comes in, dispatch it to the
-PLAYR project"; "PLAYR-12 goes to PLAYR, MEDL-3 to MEDL"). The orchestrator finds ticket-style
-keys (`[A-Z][A-Z0-9_]*-\d+`) in the output only to list the local tickets they name. Triage
-sessions run in the harness home directory, since no project is chosen until dispatch.
+Each item is one `watcher` event (`Orchestrator.ingest`, through `CosEngine.addExternal`): source
+ref `<watcher id>:sha256:<hash>`, actor `watcher:<name>`, title `<name>: <first line>`, the raw text in
+the payload, no project (Haiku or the chief infers it), owned by the watcher's chief. The raw text
+reaches the chief only inside `<untrusted-event>` fences, next to Haiku's brief, and the chief-facing
+tool descriptions say watcher content is untrusted. Nothing creates a session or a ticket on its
+own any more: routing work to a project is the chief's call, with its ticket tools.
 
 `POST /watchers/inject { source, text, prompt? }` feeds output as if a watcher named `source`
-printed it (`HarnessClient.injectOutput`). An object `text` (or the older `{ source, item }`
-shape) is sent as its one-line JSON.
+printed it (`HarnessClient.injectOutput`): an event for the All chief, deduped like any output. An
+object `text` (or the older `{ source, item }` shape) is sent as its one-line JSON. `prompt` is
+ignored.
+
+**Chief tools.** `list_watchers`, `create_watcher`, `update_watcher`, `delete_watcher` and
+`run_watcher` are a chief of staff's tools (`watcherTools` in `tools/index.ts`), and no other run
+kind has them. The writes are human-gated like every config write (`defineGatedTool`): a watcher
+runs a command as the user, and its output is untrusted, so injected output must not be able to
+create a watcher without a person approving. Scope is enforced in the tool layer (`ScopedStore.watchers`):
+the All chief sees and manages every watcher; a group's chief only its own, and another chief's
+watcher behaves as not found (no approval card). A watcher a chief creates is owned by that chief
+(All's are stored as NULL); the tools take no owner and an update can't move one.
+
+**Migration 49.** Adds `watchers.cos_id`, and its code step turns the Inbox into events of the All
+chief: a TRIAGE item still being triaged becomes a pending `watcher` event, a dispatched one a handled
+event, a declined or failed one an ignored event, with the outcome as the reason (source ref
+`triage:TRIAGE-n`, so a rerun adds nothing). The old triage sessions, their runs, `sessions.triage_status`
+and the `seen_items` rows stay in place, unread, because tickets and Activity link to TRIAGE-n. `TRIAGE`
+stays a reserved project key. `GET /sessions?kind=triage` is still accepted and answers `[]`, and
+`Session.triageStatus` stays on the wire, so installed apps keep decoding; `list_inbox` still reads
+the old items. Dropping all of that waits for a release after the apps lose their Inbox.
 
 ## Tools
 
@@ -1122,14 +1116,12 @@ stubs whose full description `tool_search` returns, see "Stubs and tool_search" 
 | `review_ticket` | work, conductor | `{ key, decision, notes, action? }`: only the caller's own children. `action` (with approve) is how the child's work lands ("Completion") |
 | `complete_ticket` | work, conductor | `{ key, instructions?, action? }`: only the caller's own children |
 | `record_pull_request` | complete | `{ url, head }`: the pull request a `pr` completion opened or updated, or a `cleanup` of a ticket with pull requests pushed to. The link is appended to `Ticket.pullRequests` (or moved to its end if the ticket already has it), and any link still untitled is fetched, and the hash of the commit it pushed is `Ticket.pullRequestHead`, pinned as the ticket's Changes; refused in any other completion |
-| `dispatch_ticket` | triage | `{ project_key, key?, ticket_key?, url?, title, spec, start?, conductor?, branch?, base_branch? }`: `key` is the remote ID, `ticket_key` an existing local ticket to update (see "Watchers" and "Remote IDs"); `branch` and `base_branch` are the new ticket's, both set to an existing branch (an open pull request's head) for work that lands there directly (see "Completion") |
-| `decline_work` | triage | `{ reason, title? }` |
-| `list_watchers` | all | `{}` (env values shown as `"(set)"`) |
+| `list_watchers` | cos | `{}` (env values shown as `"(set)"`; the watchers the chief's scope covers, and the description says their content is untrusted) |
 | `get_settings` | all | `{ include_prompts? }` → public settings (`anthropicApiKeySet` and `claudeOauthTokenSet`, never the secrets; `customizedPrompts` lists overridden prompt ids, and `include_prompts` adds the `GET /prompts` catalog as `prompts`) |
 | `list_drivers` | all | `{}` → drivers with their models |
-| `create_watcher` | work, conductor, chat (gated) | `{ name, command, prompt?, args? (legacy), cwd?, env?, mode?, interval_sec?, enabled?, driver?, models? }` (`models` merges per driver like `default_models`) |
+| `create_watcher` | cos (gated) | `{ name, command, args? (legacy), cwd?, env?, mode?, interval_sec?, enabled? }`: owned by the calling chief |
 | `update_watcher` | ″ | `{ watcher (id or name), …fields }` (env merges; `""` removes a variable) |
-| `delete_watcher`, `run_watcher` | ″ | `{ watcher }` |
+| `delete_watcher`, `run_watcher` | ″ | `{ watcher }` (a watcher outside the chief's scope is "Unknown watcher") |
 | `create_project` | ″ | `{ path, key?, name?, default_driver?, use_worktrees?, skip_agent_review?, skip_human_review?, completion_action?, permission_mode?, default_models?, phase_models?, color?, group?, base_branch? }` |
 | `update_project` | ″ | `{ project_key, key? (rename), path?, …same fields }` |
 | `delete_project` | ″ | `{ project_key }` (never the project of the run's ticket or its ancestors) |
@@ -1172,7 +1164,7 @@ The guard rails live in the orchestrator ops, not in tool text, so a driver call
 hits them too:
 
 - **Run kinds.** Only work and conductor runs, plus `update_ticket` in plan runs. Review,
-  complete and triage runs don't get the tools, plan runs get no other write tool, and the ops
+  complete runs don't get the tools, plan runs get no other write tool, and the ops
   throw for them.
 - **Never the caller's own ticket**, except a plan run's `update_ticket`. Its own state changes
   go through `block` / `submit_for_review`. Keys resolve like the HTTP API (old aliases too), so
@@ -1220,14 +1212,11 @@ Deleting tickets isn't a board tool: `delete_ticket` is a config tool behind a h
 ### Config tools
 
 The config tools (`service/src/tools/config.ts`) cover the Settings and Project Settings
-screens, so a ticket like "add a watcher that polls our events API every minute and dispatches
-anything assigned to me with next steps" can be done end to end. Watchers are generic (see
-"Watchers and triage"), so the tool descriptions don't teach an output format. `command` is a
-shell command line whose stdout text goes to the Inbox, `prompt` is the user's instructions to
-the triage agent, and `mode` is `loop` for long-running or self-looping commands (`while true; do
+screens, so a chief of staff asked to "watch our events API every minute and tell me about anything assigned to
+me" can do it end to end (the watcher tools are a chief's: see "Watchers"). Watchers are generic, so the tool descriptions don't
+teach an output format. `command` is a shell command line whose stdout text becomes events for the chief, and `mode` is `loop` for long-running or self-looping commands (`while true; do
 curl …; sleep 60; done`) or `interval`. A non-zero exit shows as the watcher's error. `args` is
-described as legacy only. The tools pass `prompt` straight through to
-`Orchestrator.createWatcher` / `updateWatcher`, which validate and store it like the HTTP API.
+described as legacy only. The tools call `Orchestrator.createWatcher` / `updateWatcher`, which validate and store like the HTTP API; they set the owner themselves.
 `list_watchers` shows it when set, and the approval summary includes it, since the prompt decides
 what happens to the output, including which project it goes to: the tool descriptions tell the
 agent to put the project the user names into the prompt. Approval cards show the command line as written (`commandLine` in
@@ -1289,8 +1278,8 @@ client state, not service state.
 | Board | delete a ticket | `delete_ticket` (gated) | never the caller's own ticket or an ancestor |
 | Board | approve a review choosing how it lands (merge, open PR, "Approve and…" with instructions, take no action), request changes, re-run the agent review, complete or mark done; open a ticket's pull request | parents only, for their own children: `review_ticket`, `complete_ticket` (`action`) | reviews and merges are the reviewers' and the human's; an agent can't sign off its own or a sibling's work |
 | Board | answer a tool approval (allow once, always allow, deny) | none | a human's decision by design; a message to a ticket waiting on one is refused |
-| Inbox | list triage items, open one, open its dispatched ticket | `list_inbox` (`include_output`), `get_ticket` | the apps have no Inbox actions beyond reading |
-| Watchers | create, edit (command line, prompt, cwd, driver, mode, interval), pause or resume, run now, delete | `create_watcher`, `update_watcher` (`enabled`), `run_watcher`, `delete_watcher` (all gated); `list_watchers` | `env` is tool-only (the forms don't edit it); values are never shown |
+| Inbox | list the old triage items, open one, open its dispatched ticket | `list_inbox` (`include_output`), `get_ticket` | the apps have no Inbox actions beyond reading |
+| Watchers | create, edit (command line, cwd, mode, interval), pause or resume, run now, delete | a chief's `create_watcher`, `update_watcher` (`enabled`), `run_watcher`, `delete_watcher` (all gated); `list_watchers` | `env` is tool-only (the forms don't edit it); values are never shown |
 | Projects | add, rename, change key or folder, default driver and models, permission mode, worktrees, base branch, review defaults, what approving does ("When approved"), color, group, remove | `create_project`, `update_project`, `delete_project` (gated); `list_projects` | reveal in Finder and "new session here" are Local |
 | Settings | default driver, concurrent runs, default and review models, permission mode, classifier, network listen mode, base branch | `update_settings` (gated), `get_settings` | |
 | Settings | prompts: read the built-in text and variables, override a prompt, reset it | `update_settings` (`prompts`, gated), `get_settings` (`include_prompts`) | |
@@ -1303,10 +1292,9 @@ client state, not service state.
 | Board | a ticket's sub-agents and their transcripts, and its background tasks and their output (Agents & tasks tab, filtered to agents or tasks) | `get_ticket` (`include_agents`), `get_ticket_agent` (a sub-agent's transcript tail, a task's output tail) | the filter is a client view |
 | Local | appearance and themes, layout (sidebar, panes), board project filter, show or hide children, last-used project | none | client preferences, not service state |
 
-The generic-watcher tests in `testing/service/orchestrator` walk the headline scenario with the
-dummy driver: a work run creates a looping `zsh -lc` watcher around a stand-in for `curl`
-against an events API after an approval, each event becomes an Inbox item carrying the
-watcher's prompt, and triage dispatches or declines it by that prompt.
+The watcher tests in `testing/service/orchestrator/watchers-cos.test.ts` walk the scenario with a fake
+supervisor: a chief creates a watcher after an approval, runs it, and its output lands as an event for
+that chief (and a group's chief reaches only its own watchers).
 
 Harness tools are advertised over MCP with `readOnlyHint: true`: Claude Code refuses
 non-read-only MCP tools in `--permission-mode plan`. That includes `tool_search` and the stubs.
@@ -1322,8 +1310,7 @@ advertised instead, in this order:
 - **Core tools**, with full descriptions and schemas, whichever of these the run kind has
   (`CORE_TOOL_NAMES`): `post_note`, `read_spec`, `edit_spec`, `update_spec`, `update_notes`, `submit_for_review`,
   `block`, `unblock`, `resume_work`, `review_decision`, `record_pull_request`,
-  `permission_prompt`, plus triage's `dispatch_ticket` and `decline_work` (every triage ends with
-  one of them, the way a work run ends with `submit_for_review`). Native tools (group `native`)
+  `permission_prompt`. Native tools (group `native`)
   are core too.
 - **`tool_search { query }`**: ranks the rest of the allowed set (browser, board reads and writes,
   config, conductor tools, `update_branch`, …) over names and descriptions: an exact name (several
@@ -1378,7 +1365,7 @@ Native tools (only for drivers with `hasBuiltinTools: false`): `bash {command, t
 `read_file {path, offset?, limit?}`, `write_file {path, content}`,
 `edit_file {path, old_string, new_string, replace_all?}`, `list_files {path?, pattern?}`.
 Paths resolve relative to the run cwd. Review, plan and conductor runs get read-only native
-tools (`read_file`, `list_files`, `bash`); triage gets none. Every native call first asks
+tools (`read_file`, `list_files`, `bash`); a chief of staff gets none. Every native call first asks
 `HarnessOps.checkPermission` (the PermissionGate, see "Permissions"); a deny becomes the tool's
 error result.
 
@@ -1394,7 +1381,7 @@ edits are fine; the section overrides that, because edits in the workdir are aut
 goes to a permission prompt or the classifier. Plan, review and conductor runs get only the read
 half. We don't reimplement the file tools for claude-code: the CLI's own are used as-is.
 
-File links: every ticket run (not triage) also gets a "File links" section (`system.file_links`)
+File links: every ticket run (not a chief of staff's) also gets a "File links" section (`system.file_links`)
 telling the model that every file it mentions (prose, lists, tables, not only quoted code) is a
 `[path:line](harness://file/path#Lline)` link, with a wrong/right example, and to put the same link
 before any code it quotes from the working directory.
@@ -1448,8 +1435,7 @@ Code's own prompt asks for bare `file_path:line_number` references; the section 
   result). `is_backgrounded` covers an agent that `SendMessage` resumes: claude 2.1.299 starts
   its task again under the SendMessage call, whose result is JSON (`"Resuming agent …"`), and
   before HARNESS-505 that result ended the task and the run with it. It also closes stdin when
-  the turn called a finishing tool (`submit_for_review`, `block`, `review_decision`,
-  `dispatch_ticket`, `decline_work`), so a dev server left running doesn't hold the run open,
+  the turn called a finishing tool (`submit_for_review`, `block`, `review_decision`), so a dev server left running doesn't hold the run open,
   and when the result is an error. A finishing call that errors doesn't count, and a later
   `unblock` or `resume_work` in the same turn takes it back (MEDL-25 blocked by mistake,
   unblocked, and ended its turn to wait for an Explore agent; the run was closed and the ticket
@@ -1587,7 +1573,7 @@ stands in when the endpoint can't be read, and a warning or rejection reads it a
 
 A ticket's **permission mode** is `ticket.permissionMode ?? project.permissionMode ??
 settings.permissionMode` (`resolvePermissionMode` in `shared/src/permissions.ts`; default
-`auto`). Null at a level means "inherit". Plan and triage runs are always read-only; chat
+`auto`). Null at a level means "inherit". Plan runs are always read-only; chat
 runs follow the ticket's mode, grants and approvals like work runs. A plan run's `ExitPlanMode`
 (Claude Code's plan mode asking to leave it) is denied with `PLAN_APPROVAL_MESSAGE`: the human
 approves the spec with Start.
@@ -1618,7 +1604,7 @@ claude-code, verified against claude 2.1.283 from a clean `env -i` shell:
   With stream-json input, claude 2.1.284 starts the first turn while claude.ai connectors are
   still `pending`, so the model sees none of their tools until a later turn. A plugin that ships
   its own copy of a connector (the `jira` plugin's `hc-jira`) is listed as needing auth until the
-  connector list dedupes it. A one-turn triage run then declined with "the Jira MCP isn't
+  connector list dedupes it. A one-turn run then declined with "the Jira MCP isn't
   available". With `0` the first turn waits for the connectors (about a second, capped at
   `MCP_CONNECT_TIMEOUT_MS`).
 
@@ -1641,13 +1627,13 @@ succeeded in the same run. When the run succeeds and a denial is left:
   card; the call gets a one-time grant and the run is resumed ("…the human allows Bash on this
   ticket. Retry it now"; a chat retries as a chat, where the ticket is), at most `MAX_AUTO_RETRIES` (3) times in a row before asking a human
   (a human answer or message resets the count).
-Not in read_only, not for review/plan/triage runs. allow_once / allow_tool / deny answer it like
+Not in read_only, not for review/plan runs. allow_once / allow_tool / deny answer it like
 any card; allow_tool on a classifier card also adds a one-time grant for the denied call, so
 the retry passes as an exact rule.
 
 **Human grants → the CLI.** Work/complete/conductor/chat runs get `RunRequest.grants` = `{ tools:
 ticket.allowedTools, once: the ticket's one-time grants }`; review runs don't (reviewers are
-independent and start fresh), nor plan/triage runs or read_only tickets. claude-code
+independent and start fresh), nor plan runs or read_only tickets. claude-code
 (`planGrants`) appends them to `--allowedTools` after `mcp__harness`, one argv entry per rule:
 - a tool grant → the bare name, only if it matches `^[A-Za-z][A-Za-z0-9_-]*$` (so a stored
   name can't be a pattern like `Bash(*)` or a second rule);
@@ -1802,17 +1788,9 @@ The legacy fields stay on the wire, derived on read: `ticket.driver` (resolved W
 `ticket.model` (its own Work model), `project.defaultDriver` / `defaultModels` and
 `settings.defaultDriver` / `defaultModels` / `reviewModels` from the Work (and Review) choices.
 Writing them sets Plan/Work/Review (or Review); a settings `defaultDriver` write also moves the
-Complete Haiku default to the new driver. Watchers fall back to the settings Work driver through
-`settings.defaultDriver`.
+Complete Haiku default to the new driver.
 
-Triage runs have no ticket or project, so they resolve through the watcher instead. The driver is
-fixed when the triage session is created: `watcher.driver`, else `settings.watcherDriver`, else
-`settings.defaultDriver` (injected output has no watcher and starts at `settings.watcherDriver`).
-The model is resolved when the run starts: `watcher.models[driver]`, then
-`settings.watcherModels[driver]`, then `settings.defaultModels[driver]`, else `null`
-(`watcherDriver` / `watcherModel` in `shared/src/watchers.ts`). The triage session's meta keeps the
-watcher id, so a model edit applies to the watcher's next run. `watcher.models` and
-`settings.watcherModels` PATCH-merge per driver like the other maps (migration 15 added the column).
+Watchers no longer start sessions, so no run follows `watcher.driver`, `watcher.models`, `settings.watcherDriver` or `settings.watcherModels`: the service stores them (shipped settings screens still write them) and reads none.
 
 ### Sub-agents
 
@@ -1986,7 +1964,7 @@ instructions, so migration 26 drops a saved `system.summaries` override instead 
 at startup the service logs a warning for each saved override that still names `update_plan` or
 `post_summary`.
 `prompts.ts` works out each template's variables from the run (child lists, the recent Activity lines,
-tool names and the fenced triage output are computed there), decides which sections a run gets,
+tool names are computed there), decides which sections a run gets,
 and joins them in order; none of that is overridable.
 
 `settings.prompts` maps id → template or null. Every id defaults to null, which means the
@@ -2023,7 +2001,6 @@ Directives are read from the run prompt:
 | chat | text `(dummy chat) You said: "<message>"` (without the blocked note); `[dummy:unblock]` → `unblock`, `[dummy:resume]` → `resume_work`, then `[dummy:block]` → `block` or `[dummy:submit]` → `submit_for_review` |
 | complete | text + `post_note("Completed.")`; a `pr` completion first calls `record_pull_request` with a made-up `https://github.com/example/dummy/pull/<n>` (or the ticket's existing URL) and its cwd's `HEAD`; a `merge` or `cleanup` completion of a worktree ticket first merges its branch (merge only) and removes the worktree and branch, so the service's cleanup check passes |
 | conductor | first run: creates one child per `- ` bullet in the prompt (default two, second depends on first); later runs: approve (`review_ticket`) children whose agent review approved (or was skipped) and human review pending, `complete_ticket` approved ones, `submit_for_review` when all done |
-| triage | the project is the `[dummy:project KEY]` in the watcher's prompt section (never the output); the key (remote ID) is the first `KEY-123` in the fenced output, and a `[dummy:ticket KEY]` in the prompt section passes `ticket_key`. A `[dummy:dispatch-if /re/flags]` rule in the watcher's prompt decides by itself: output matching the regex → `dispatch_ticket(start: true)` to the project, anything else → `decline_work`; only the fenced output is matched. Without a rule: `[unscoped]` in the output → `decline_work`; no project in the prompt → decline; `[big]` → `dispatch_ticket` with `conductor: true`; else `dispatch_ticket(start: true)` with the key, the project and the `Inbox title` |
 
 ## HTTP API
 
@@ -2495,7 +2472,7 @@ since its history lives in its revisions.
   `created_at`; unique on ticket + rev, ON DELETE CASCADE). `tickets.spec` and
   `tickets.spec_revision` cache the current one, and the wire has `Ticket.spec`, `specRevision`
   and `specBaselineRevision`. Creating a ticket (`POST /tickets`, `create_ticket`,
-  `dispatch_ticket`, triage) writes revision 1 (`system`, "Created") with it, in
+  a chief's tools) writes revision 1 (`system`, "Created") with it, in
   `TicketRepo.create`. Every revision after creation goes through `Orchestrator.reviseSpec`:
   `PATCH /tickets/:key { spec, baseRevision }`, `update_spec`, `edit_spec` and
   `update_ticket { spec, base_revision }`, each naming the revision it replaces, so no write
@@ -2526,7 +2503,7 @@ since its history lives in its revisions.
   the base revision's line numbers (`applySpecEdits`); `update_spec` replaces the whole text and
   can retitle the ticket. Plan, work, chat, conductor and complete runs get all three; review runs
   get `read_spec` and `edit_spec`, to record what the review found under Open questions (the ops
-  refuse `update_spec` from review, and every write from triage); triage gets none.
+  refuse `update_spec` from review, and every write from a chief of staff, which has no spec tools).
   `submit_for_review` takes `spec_is_up_to_date`, which must be `true`, so a submit is a
   confirmation that the spec already describes the finished work. See "Tools".
 - **Prompts.** `system.spec` ("Spec and Activity", every ticket run) names the current revision
@@ -2889,7 +2866,7 @@ when a notification is tapped or clicked, and report what they have on screen.
 `activity.added` fires, with no delay or batching, so nothing ever has to be taken back. An entry
 is skipped when any of these is true:
 
-- it has no ticket (a triage session)
+- it has no ticket (an old triage session)
 - its author is `human`, which covers everything the human does in any client, the API or the CLI
 - `settings.notifications.enabled` is off, or its kind's category is (`ACTIVITY_CATEGORY` in
   `shared/src/notifications.ts` maps every `ActivityKind` to one of status, review, notes, spec and

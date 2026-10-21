@@ -6,8 +6,6 @@
 // decides which system prompt sections a run gets, and joins them in order.
 //
 // Two constraints from the dummy driver (DESIGN.md → "Dummy driver script"):
-//  * The triage prompt puts the watcher's prompt under a `## What the human wants` heading and
-//    the output in a fenced `## Output` section; dummy triage reads its markers from the former.
 //  * Run prompts never contain `- ` bullets or slash directives of our own; the dummy
 //    conductor turns `- ` bullets into child tickets and the dummy work run reacts to
 //    slash-prefixed directives. System prompts use `*` bullets for the same reason.
@@ -111,12 +109,6 @@ function ticketLabel(t: Pick<Ticket, "key" | "title"> & { externalRef?: Ticket["
   return local ? `${displayKey(t)} (local ${local}) ${quote(t.title)}` : `${t.key} ${quote(t.title)}`;
 }
 
-/** An "Existing tickets" line for triage: the local key first (what ticket_key takes), then its remote ID. */
-function existingTicketLine(t: Ticket): string {
-  const remote = t.externalRef?.key ? `, remote ID ${t.externalRef.key}` : ", no remote ID";
-  return `* ${t.key} ${quote(t.title)}, status ${t.status}${remote}`;
-}
-
 function join(...parts: (string | null | undefined | false)[]): string {
   return parts.filter((p): p is string => typeof p === "string" && p.trim() !== "").join("\n\n");
 }
@@ -171,9 +163,6 @@ function contextSection(info: PromptInfo, o: PromptOverrides | null | undefined)
       ticket: ticket ? ticketLabel(ticket) : "",
       ticketKind: ticket?.kind ?? "",
       ticketStatus: ticket?.status ?? "",
-      triage: !ticket && info.kind === "triage",
-      sessionKey: session.key,
-      sessionTitle: session.title ? quote(session.title) : "",
       project: project ? (project.name === project.key ? project.key : `${project.name} (${project.key})`) : "",
       projectPath: project?.path ?? "",
       workdir: ticket?.workdir ?? session.cwd ?? project?.path ?? "(unknown)",
@@ -199,13 +188,6 @@ function childLine(t: Ticket): string {
   const reviews = t.status === "review" ? `, agent review ${t.agentReview}, your review ${t.humanReview}` : skips ? `, skips ${skips}` : "";
   const blocked = t.status === "blocked" && t.blockedReason ? `, asks: ${quote(t.blockedReason)}` : "";
   return `* ${ticketLabel(t)}: ${t.status}${reviews}${deps}${blocked}`;
-}
-
-/** Ticket lookup tools, named only when triage runs actually have them. */
-function triageLookupTools(): string {
-  const triageTools = toolsForRun("triage", { hasBuiltinTools: true, usesPermissionPromptTool: false });
-  const lookup = ["search_tickets", "get_ticket"].filter((n) => triageTools.some((t) => t.name === n)).map((n) => `\`${n}\``);
-  return lookup.join(" or ");
 }
 
 /** The adviser block's variables: on only when the run has a model for it and a driver tool to launch it with. */
@@ -334,8 +316,6 @@ function instructionsSection(info: PromptInfo, o: PromptOverrides | null | undef
       return ""; // its instructions are the same every run, so they sit in the system prompt (systemPrompt)
     case "compact":
       return ""; // a compact run sends no instructions
-    case "triage":
-      return renderPrompt("system.triage", { lookupTools: triageLookupTools() }, o);
     case "chat": {
       const status = ticket?.status;
       return renderPrompt(
@@ -458,8 +438,6 @@ function sessionSection(info: PromptInfo, o: PromptOverrides | null | undefined)
     {
       ticket: ticket?.key ?? "",
       ticketKind: ticket?.kind ?? "",
-      triage: !ticket && info.kind === "triage",
-      sessionKey: session.key,
       project: project ? (project.name === project.key ? project.key : `${project.name} (${project.key})`) : "",
       projectPath: project?.path ?? "",
       workdir: ticket?.workdir ?? session.cwd ?? project?.path ?? "(unknown)",
@@ -484,7 +462,7 @@ export function systemPrompt(info: PromptInfo): string {
   const o = info.overrides;
   // A chief of staff is a ticket for the machinery, but has no lifecycle, files or spec to talk about.
   const cos = kind === "cos";
-  const ticketRun = kind !== "triage" && !cos;
+  const ticketRun = !cos;
   const browser = kind === "plan" || kind === "work" || kind === "review" || kind === "conductor";
   const changes = kind === "work" || kind === "conductor";
   const conductor = kind === "conductor";
@@ -519,7 +497,7 @@ export function systemPrompt(info: PromptInfo): string {
 export function runContext(info: PromptInfo): string {
   const { kind, ticket } = info;
   const o = info.overrides;
-  const ticketRun = kind !== "triage" && kind !== "cos";
+  const ticketRun = kind !== "cos";
   const browser = kind === "plan" || kind === "work" || kind === "review" || kind === "conductor" || kind === "chat";
   const changes = kind === "work" || kind === "conductor" || kind === "chat";
   return join(
@@ -718,38 +696,6 @@ export function replanPrompt(ticket: Ticket, reason: string, humanMessage: strin
   );
 }
 
-export function triagePrompt(
-  input: {
-    source: string;
-    /** Inbox title derived from the output */
-    title: string;
-    text: string;
-    truncated: boolean;
-    /** The watcher's prompt ("" → none) */
-    prompt: string;
-    projects: Project[];
-    /** Local tickets a key in the output names: by local key (or alias), or linked to it as a remote ID */
-    existingTickets: Ticket[];
-  },
-  overrides?: PromptOverrides | null,
-): string {
-  const { source, title, text, truncated, prompt, projects, existingTickets } = input;
-  const fence = fenceFor(text);
-  return renderPrompt(
-    "run.triage",
-    {
-      source: oneLine(source),
-      title: oneLine(title),
-      prompt: prompt.trim(),
-      existingTickets: existingTickets.map(existingTicketLine).join("\n"),
-      output: `${fence}\n${text}\n${fence}`,
-      truncated,
-      projects: projects.map((p) => `* ${p.key}: ${p.name} (${p.path})`).join("\n"),
-    },
-    overrides,
-  );
-}
-
 /** The prompt builders with the user's overrides bound, for callers that have the settings. */
 export function promptsWith(overrides: PromptOverrides | null | undefined) {
   return {
@@ -764,6 +710,5 @@ export function promptsWith(overrides: PromptOverrides | null | undefined) {
     reopenPrompt: (ticket: Ticket, notes: string, base?: string) => reopenPrompt(ticket, notes, base, overrides),
     unblockPrompt: (ticket: Ticket, notes: string) => unblockPrompt(ticket, notes, overrides),
     replanPrompt: (ticket: Ticket, reason: string, humanMessage: string, startAfterPlan: boolean) => replanPrompt(ticket, reason, humanMessage, startAfterPlan, overrides),
-    triagePrompt: (input: Parameters<typeof triagePrompt>[0]) => triagePrompt(input, overrides),
   };
 }

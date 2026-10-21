@@ -54,7 +54,7 @@ export const EXCLUSIONS: Exclusion[] = [
   { file: "service/src/tools/types.ts", reason: "Interfaces (ToolDefinition, ToolContext, HarnessOps) with no runtime logic", layer: "L1 (type-checked)" },
 
   // -- Harness tools: run for real, as an agent's call, through the orchestrator --
-  ...["board", "board-write", "conductor", "config", "memory", "permission", "schedules", "ticket", "triage"].map((f) => ({
+  ...["board", "board-write", "conductor", "config", "memory", "permission", "schedules", "ticket"].map((f) => ({
     file: `service/src/tools/${f}.ts`,
     reason: "Each tool is called the way an agent calls it (a scripted run through toolsForRun and the run's own context) in testing/service/tools and orchestrator/*; its schema is checked with the rest of the run's tool set",
     layer: "L1 (through tools/index.ts)",

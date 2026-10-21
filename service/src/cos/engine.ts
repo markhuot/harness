@@ -235,7 +235,9 @@ export class CosEngine {
       const project = e.projectId ? store.projects.get(e.projectId) : null;
       // A schedule's wake belongs to the chief that made it, wherever its project sits.
       const schedule = e.sourceKind === "schedule" ? store.schedules.get(e.sourceRef.split(":")[0]!) : null;
-      const owner = schedule ? schedule.cosId : this.ownerFor(project, chiefs);
+      // A watcher's output belongs to the chief that owns the watcher (the All chief when it has none, is gone, or the ref is an inject:/triage: one).
+      const watcher = e.sourceKind === "watcher" ? store.watchers.get(e.sourceRef.split(":")[0]!) : null;
+      const owner = schedule ? schedule.cosId : watcher?.cosId ? watcher.cosId : this.ownerFor(project, chiefs);
       // Off means nothing queues: a wake its chief hasn't picked up is dropped, not held for when it is switched back on.
       if (schedule && !store.cos.get(schedule.cosId)?.enabled) {
         this.ignoreScheduleEvent(e.id, "its chief is switched off");

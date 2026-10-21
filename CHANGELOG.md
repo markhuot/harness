@@ -21,10 +21,16 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
+- Watchers now belong to a chief of staff and feed it instead of the Inbox's triage. A watcher's output becomes an event for its owner (the All chief unless a group's chief made it), summarized by the cheap triage read and shown to the chief as untrusted text; a chief decides whether it becomes a ticket, using its own ticket tools. Your existing watchers belong to the All chief, and nothing is re-delivered after the upgrade. A chief creates, edits, deletes and runs watchers with its own tools (`list_watchers`, `create_watcher`, `update_watcher`, `delete_watcher`, `run_watcher`), and you still approve each change; a group's chief only sees and changes its own watchers, the All chief any. Work and conductor runs no longer have the watcher tools. Open Inbox items become pending events and resolved ones become handled history. A watcher's prompt, driver and models, and the watcher driver and models settings, are still saved but nothing reads them. Until the Mac and iPhone apps drop their Inbox, the old Inbox screens are empty; a release shouldn't go out in between.
 - Renaming a project group is now safe. Groups are real entries with their own ids, so a group's board, your saved board and layout, and anything later tied to the group keep following it when its name changes. Two groups can't share a name (case aside); renaming onto an existing name is refused. Existing groups, saved boards and links that name a group carry over. The iPhone, iPad and Mac project settings have a Group name row that renames the group for all of its projects. A group goes away when its last project leaves it, so its name is free to use again. Agents can still set a project's `group` by name, and can pass `group_id`.
 - The end-to-end walkthrough now opens a project's settings on the Mac and checks the Group name row, so a break there fails the gate.
 - Internal: the auto-mode classifier and the chief-of-staff triage now share one stateless structured model call (`permissions/structured.ts`), so claude-code users with no API key still get both.
 - Internal: tests now check that a ticket outside a chief of staff's scope can't be told apart from one that doesn't exist, on every tool that takes a ticket key, and fail for a new tool nobody has classified.
+
+### Removed
+
+- Triage is gone. Watcher output no longer starts a triage agent, so the `dispatch_ticket` and `decline_work` tools, new TRIAGE items, and the triage run's instructions are removed (a chief of staff decides instead). A customised "Triage run instructions" or "Watcher output" prompt is no longer used. Old TRIAGE-n tickets and Activity still resolve and `list_inbox` still reads the old items; `GET /sessions?kind=triage` now answers an empty list.
+- Internal: the dummy driver's triage script and its `[dummy:project]`, `[dummy:ticket]` and `[dummy:dispatch-if]` markers are removed, with the tests that used them.
 
 ## [app-20261020.2300](https://github.com/markhuot/harness/releases/tag/app-20261020.2300) - 2026-10-20
 
@@ -34,6 +40,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
+- A group chief of staff keeps its watchers' output: events from its watchers no longer move to the All chief when the inbox is re-sorted. Old Inbox items converted to events are no longer listed as open in the legacy Inbox, an older app saving settings with the removed triage prompts no longer gets an error, and watcher output is never marked seen without its event being saved.
 - On iPhone, the docked cards no longer drop for a moment and jump back up when you open a ticket, and they hold still while you swipe the board or drag a card to dock it. They always sit above the board's bottom bar.
 - On a new ticket draft, the "Close this draft?" dialog now has to be answered: ⌘↩ no longer starts the session behind it (and ⌘W and the other shortcuts wait too). ⌘↩ now saves the draft, and the button shows it; ↩ still works.
 

@@ -524,11 +524,11 @@ export interface Session {
 export type TriageStatus = "triaging" | "dispatched" | "declined" | "failed";
 
 /** chat: a human message to a blocked, review or done ticket, answered by its agent with the work tools (the agent moves the ticket itself). */
-export type RunKind = "plan" | "work" | "review" | "complete" | "conductor" | "triage" | "chat" | "compact" | "cos";
+export type RunKind = "plan" | "work" | "review" | "complete" | "conductor" | "chat" | "compact" | "cos";
 
 /**
- * The phases a driver + model is chosen for (DESIGN.md "Model selection"). Conductor and chat
- * runs use the work choice; triage runs follow their watcher. The adviser isn't a run kind: planning
+ * The phases a driver + model is chosen for (DESIGN.md "Model selection"). Conductor, chat
+ * and chief-of-staff runs use the work choice. The adviser isn't a run kind: planning
  * and review runs launch it as a subagent with that phase's model.
  */
 export const PHASES = ["plan", "work", "review", "adviser", "complete"] as const;
@@ -894,6 +894,11 @@ export interface Watcher {
   createdAt: number;
   updatedAt: number;
   /**
+   * The chief of staff (its ticket id) that owns the watcher and receives its output as events.
+   * null: the All chief. Optional so clients tolerate an older service without it.
+   */
+  cosId?: string | null;
+  /**
    * What the watcher's process is doing right now. Not stored: the service fills it in from its
    * supervisor. Absent from services that don't report it (older builds, watchers switched off).
    */
@@ -1096,7 +1101,6 @@ export const PROMPT_IDS = [
   "system.conductor",
   "system.chat",
   "system.cos",
-  "system.triage",
   "system.children",
   "system.branches",
   "system.files",
@@ -1121,7 +1125,6 @@ export const PROMPT_IDS = [
   "run.reopen",
   "run.unblock",
   "run.replan",
-  "run.triage",
 ] as const;
 export type PromptId = (typeof PROMPT_IDS)[number];
 
