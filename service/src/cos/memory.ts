@@ -20,6 +20,11 @@ interface Chunk {
 
 /** The lines of `text` that are headings, ignoring any inside a fenced code block. */
 function split(text: string): Chunk[] {
+  return scan(text).chunks;
+}
+
+/** The sections of `text`, and whether a code fence is still open at its end. */
+function scan(text: string): { chunks: Chunk[]; open: boolean } {
   const chunks: Chunk[] = [{ name: null, lines: [] }];
   let fence: string | null = null;
   for (const line of text.split("\n")) {
@@ -31,7 +36,7 @@ function split(text: string): Chunk[] {
     if (h) chunks.push({ name: h[2]!, lines: [line] });
     else chunks[chunks.length - 1]!.lines.push(line);
   }
-  return chunks.filter((c) => c.name !== null || c.lines.length);
+  return { chunks: chunks.filter((c) => c.name !== null || c.lines.length), open: fence !== null };
 }
 
 const same = (a: string | null, b: string) => a !== null && a.trim().toLowerCase() === b.trim().toLowerCase();
@@ -63,6 +68,8 @@ export function replaceMemorySection(text: string, name: string, body: string): 
   const title = name.trim();
   if (!title || /[\r\n]/.test(title) || title.startsWith("#")) throw new MemoryError("section must be a one-line name without a leading #");
   const clean = body.replace(/\r\n/g, "\n").trim();
+  if (/#$/.test(title)) throw new MemoryError("section name can't end in #: a heading drops trailing #s");
+  if (scan(clean).open) throw new MemoryError("body has a code fence that is never closed: it would swallow the sections after it. Close it with ``` on its own line.");
   if (hasSectionHeading(clean)) throw new MemoryError("body can't contain a # or ## heading outside a code block: it would start another section. Use ### for sub-headings.");
   const isGuidance = same(title, TRIAGE_GUIDANCE);
   if (isGuidance && clean.length > GUIDANCE_MAX_CHARS) throw new MemoryError(`${TRIAGE_GUIDANCE} is ${clean.length} characters; keep it under ${GUIDANCE_MAX_CHARS}. Say it more briefly.`);
@@ -81,14 +88,23 @@ export function replaceMemorySection(text: string, name: string, body: string): 
     chunks[at] = { name: chunks[at]!.name, lines: [heading, ...(clean ? ["", ...clean.split("\n")] : []), ""] };
     next = chunks.map((c) => c.lines.join("\n")).join("\n");
   }
+  const expected = memorySections(text);
+  const index = expected.findIndex((n) => same(n, title));
+  if (index < 0) {
+    if (clean || isGuidance) expected.push(title);
+  } else if (!clean && !isGuidance) expected.splice(index, 1);
+  if (memorySections(next).join("\n") !== expected.join("\n")) throw new MemoryError("That edit would change the other sections of the memory; nothing was saved.");
   if (next.length > MEMORY_MAX_CHARS) throw new MemoryError(`The memory would be ${next.length} characters; keep it under ${MEMORY_MAX_CHARS}. Trim a section first.`);
   return next;
 }
 
-/** A whole document a human saved: only the size cap applies. */
+/** A whole document a human saved: the size cap applies, and a document with text keeps an (empty, if need be) Triage guidance heading. */
 export function checkMemory(text: string): string {
-  if (text.length > MEMORY_MAX_CHARS) throw new MemoryError(`The memory is ${text.length} characters; the limit is ${MEMORY_MAX_CHARS}.`);
-  return text;
+  const doc = text.replace(/\r\n/g, "\n");
+  if (!doc.trim()) return "";
+  const kept = memorySections(doc).some((n) => same(n, TRIAGE_GUIDANCE)) ? doc : `${doc.replace(/\s+$/, "")}\n\n## ${TRIAGE_GUIDANCE}\n`;
+  if (kept.length > MEMORY_MAX_CHARS) throw new MemoryError(`The memory is ${kept.length} characters; the limit is ${MEMORY_MAX_CHARS}.`);
+  return kept;
 }
 
 /** What a write is checked against: changes whenever the text does, so a stale write is caught. */

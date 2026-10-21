@@ -548,7 +548,7 @@ export function runContext(info: PromptInfo): string {
 function memorySection(notes: string | null | undefined): string {
   const memory = notes?.trim();
   return memory
-    ? `## Your memory\nThis is your memory as this run started; \`read_memory\` shows it now.\n<memory>\n${memory}\n</memory>`
+    ? `## Your memory\nThis is your memory as this run started; \`read_memory\` shows it now.\n<memory>\n${memory.replace(/<\/memory/gi, "<\\/memory")}\n</memory>`
     : "## Your memory\nYour memory is empty. Start it with `update_memory_section` when you learn something a later run needs.";
 }
 

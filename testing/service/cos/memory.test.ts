@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { GUIDANCE_MAX_CHARS, MEMORY_MAX_CHARS, MemoryError, memoryRevision, memorySection, memorySections, replaceMemorySection } from "../../../service/src/cos/memory";
+import { checkMemory, GUIDANCE_MAX_CHARS, MEMORY_MAX_CHARS, MemoryError, memoryRevision, memorySection, memorySections, replaceMemorySection } from "../../../service/src/cos/memory";
 
 const DOC = "Preamble line.\n\n## Triage guidance\n\nIgnore bots.\n\n## Preferences\n\nShort.\n\n### Sub\n\nkept inside\n\n## Watching\n\nSHOP-4\n";
 
@@ -37,6 +37,14 @@ test("a body that would split the section, a bad name, or an overflow is refused
   expect(() => replaceMemorySection(DOC, "Two\nlines", "x")).toThrow(MemoryError);
   expect(() => replaceMemorySection(DOC, "Triage guidance", "z".repeat(GUIDANCE_MAX_CHARS + 1))).toThrow(/Triage guidance/);
   expect(() => replaceMemorySection(DOC, "Big", "z".repeat(MEMORY_MAX_CHARS))).toThrow(MemoryError);
+});
+
+test("an unclosed fence, a name ending in #, and the human's save without a guidance heading", () => {
+  expect(() => replaceMemorySection(DOC, "Preferences", "```js\nfoo")).toThrow(/never closed/);
+  expect(() => replaceMemorySection(DOC, "C#", "x")).toThrow(MemoryError);
+  expect(checkMemory("## Notes\n\nhi\r\n")).toBe("## Notes\n\nhi\n\n## Triage guidance\n");
+  expect(checkMemory("## Triage guidance\n\nx\n")).toBe("## Triage guidance\n\nx\n");
+  expect(checkMemory("  \n")).toBe("");
 });
 
 test("the revision changes with the text, and a missing document has the revision of an empty one", () => {

@@ -917,13 +917,14 @@ compaction loses chat. The `## Triage guidance` section is the one the triage la
 `update_notes`; it has `read_memory` and `update_memory_section { section, body }`, which replace one
 section against the text as it is when the call runs and return every other byte unchanged (an empty
 body removes a section but leaves the guidance heading). A body can't contain a `#`/`##` heading
-outside a code fence, the guidance is capped at 4,000 characters and the whole document at 16,000.
+outside a code fence or leave a code fence open, and an edit that would change the list of sections
+beyond the one named is refused. A `###` heading is a sub-heading by design, so `### Triage guidance` is not the guidance. The guidance is capped at 4,000 characters and the whole document at 16,000.
 Haiku never writes memory, and there is no version history. The memory is shown under "Your memory" in
 the run's first message (`runContext`), never in the system prompt, so the prompt prefix is the same
 on every wake. The human reads and edits it over HTTP: `GET /tickets/:key/memory` → `{ text, revision }`
 and `PUT /tickets/:key/memory { text, baseRevision }` replace the whole document, and answer 409
 with a `MemoryConflict` when the revision (a hash of the text) is no longer current, so a human's save
-never overwrites the chief's edit unseen (409 for a ticket that isn't a chief).
+never overwrites the chief's edit unseen (409 for a ticket that isn't a chief). A save with text always keeps a `## Triage guidance` heading (an empty one is added), and a whitespace-only save stores nothing and returns the empty revision. The memory block in `runContext` escapes a `</memory` inside it.
 
 `query_activity` answers "what did I work on yesterday" and "how did the human answer this last time".
 It reads `activity` across the tickets the chief covers (`ActivityRepo.query`, reached through
@@ -933,9 +934,11 @@ It reads `activity` across the tickets the chief covers (`ActivityRepo.query`, r
 cut at 600 characters). Scope, project and ticket sit in one `WHERE` over the ticket's own row, so a
 ticket outside the scope returns an empty page, the same as one that doesn't exist; entries with no
 ticket, a chief's own ticket and the internal project are never returned, even to All. A `blocked`
-entry carries what it asked and the human's replies (`replies`): a human's message to a blocked ticket
-and the notes it is unblocked with are recorded as `answered` entries whose `meta.answers` is the id of
-the `blocked` entry they answer (nothing before that change has replies).
+entry carries what it asked and the replies (`replies`, each with its author): a message to a blocked
+ticket (a human's, or an agent's through `message_ticket`) and the notes it is unblocked with are recorded
+as `answered` entries, authored by whoever sent them, whose `meta.answers` is the id of the `blocked`
+entry they answer (nothing before that change has replies). The text of every entry and reply is
+fenced `<untrusted-event>` like the triage path's, since ticket agents write it.
 
 #### Schedules
 

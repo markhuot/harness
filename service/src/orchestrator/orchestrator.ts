@@ -1376,9 +1376,10 @@ export class Orchestrator {
   }
 
   private writeMemory(t: Ticket, text: string): CosMemory {
-    const updated = this.store.tickets.update(t.id, { agentNotes: text.trim() ? text : null })!;
+    const stored = text.trim() ? text : "";
+    const updated = this.store.tickets.update(t.id, { agentNotes: stored || null })!;
     this.bus.emit({ kind: "ticket.upserted", ticket: updated });
-    return { text, revision: memoryRevision(text) };
+    return { text: stored, revision: memoryRevision(stored) };
   }
 
   private readMemory_(ctx: ToolContext): CosMemory {
@@ -2409,7 +2410,7 @@ export class Orchestrator {
    * review ticket back to in progress, or re-opens a done one, before the run starts. Today's apps
    * move a ticket with Request changes and Re-open instead.
    */
-  async sendMessage(key: string, text: string, opts: { move?: boolean; attachments?: unknown; fromApp?: boolean } = {}): Promise<Ticket> {
+  async sendMessage(key: string, text: string, opts: { move?: boolean; attachments?: unknown; fromApp?: boolean; author?: ActivityAuthor } = {}): Promise<Ticket> {
     const sent = await this.deliverMessage(key, text, opts);
     // The human's message went: the draft they wrote it in is used up, on every device. An
     // agent's message_ticket leaves the human's draft alone.
@@ -2447,7 +2448,7 @@ export class Orchestrator {
     return t;
   }
 
-  private async deliverMessage(key: string, text: string, opts: { move?: boolean; attachments?: unknown }): Promise<Ticket> {
+  private async deliverMessage(key: string, text: string, opts: { move?: boolean; attachments?: unknown; author?: ActivityAuthor }): Promise<Ticket> {
     if (text !== undefined && typeof text !== "string") throw badRequest("text must be a string");
     text = text ?? "";
     const ticket = this.requireTicket(key);
@@ -2495,17 +2496,17 @@ export class Orchestrator {
         } else await this.chat(ticket, sent);
         break;
       case "blocked":
-        this.recordAnswer(ticket, text);
+        this.recordAnswer(ticket, text, opts.author ?? "human");
         await this.chat(ticket, sent);
         break;
     }
     return this.store.tickets.get(ticket.id)!;
   }
 
-  /** A human's reply to a blocked ticket, in Activity beside the question it answers (what a chief of staff's query_activity reads). */
-  private recordAnswer(ticket: Pick<Ticket, "id" | "sessionId">, reply: string) {
+  /** A reply to a blocked ticket, in Activity beside the question it answers, by whoever sent it (what a chief of staff's query_activity reads). */
+  private recordAnswer(ticket: Pick<Ticket, "id" | "sessionId">, reply: string, author: ActivityAuthor) {
     const question = this.store.activity.latestOfKind(ticket.sessionId, "blocked");
-    if (question && reply.trim()) this.addActivityLine(ticket, "answered", "human", reply, { answers: question.id });
+    if (question && reply.trim()) this.addActivityLine(ticket, "answered", author, reply, { answers: question.id });
   }
 
   /**
@@ -2626,7 +2627,7 @@ export class Orchestrator {
     if (ticket.busy) throw conflict(`${ticket.key} is running; unblock it once the run ends`);
     const notes = typeof body?.notes === "string" ? body.notes.trim() : "";
     this.autoRetries.delete(ticket.id);
-    this.recordAnswer(ticket, notes);
+    this.recordAnswer(ticket, notes, "human");
     if (ticket.blockedRunKind === "complete") {
       if (!(await this.resumeCompletion(ticket, notes, "human"))) throw conflict(`${ticket.key} is already being unblocked`);
       return this.store.tickets.get(ticket.id)!;
@@ -4163,7 +4164,7 @@ ${numberLines(r.body)}`;
     const { actor, target } = this.boardTarget(ctx, key, "message_ticket");
     this.noPendingApproval(target);
     this.notLooserThanCaller(actor, target);
-    await this.asTool(() => this.sendMessage(target.key, text));
+    await this.asTool(() => this.sendMessage(target.key, text, { author: "agent" }));
     this.cosNote(actor, target, "sent it a message");
   }
 
@@ -4312,7 +4313,7 @@ ${numberLines(r.body)}`;
         this.resetRejections(existing);
         this.addActivity(existing, "reopened", "system", `Re-opened by an update from ${meta.source}`, this.moveMeta(existing, "in_progress"));
         await this.reopen(existing, body, `Re-opened by an update from ${meta.source}`);
-      } else await this.sendMessage(existing.key, body);
+      } else await this.sendMessage(existing.key, body, { author: "system" });
       const sent = reopened ? "re-opened it with the update" : "sent update";
       this.finishTriage(
         session.id,

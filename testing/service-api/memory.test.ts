@@ -35,6 +35,14 @@ test("a chief's own edit moves the revision, so a human's save from before it is
   expect((await rig.call("PUT", path, { text: "mine", baseRevision: now.revision })).status).toBe(200);
 });
 
+test("a whitespace-only save stores nothing and returns the revision of the empty memory, so the next save isn't refused", async () => {
+  const { rig, path } = await chief();
+  const empty = await rig.ok<CosMemory>("GET", path);
+  const saved = await rig.ok<CosMemory>("PUT", path, { text: "  \n", baseRevision: empty.revision });
+  expect(saved).toEqual({ text: "", revision: empty.revision });
+  expect((await rig.call("PUT", path, { text: "## A\n\nx", baseRevision: saved.revision })).status).toBe(200);
+});
+
 test("the memory routes refuse a missing baseRevision, a non-string or oversize text, and a ticket that isn't a chief", async () => {
   const { rig, path } = await chief();
   const { revision } = await rig.ok<CosMemory>("GET", path);
