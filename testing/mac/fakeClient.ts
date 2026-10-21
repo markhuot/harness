@@ -32,6 +32,8 @@ const ok = <T>(v: T) => v;
 export class FakeClient extends HarnessClient {
   /** `${method} ${path}` of every request, in order. */
   readonly requests: string[] = [];
+  /** The body of every request that sent one, with its `${method} ${path}`. */
+  readonly bodies: { request: string; body: unknown }[] = [];
   /** Requests no route answered: tests assert this is empty so a missing route is loud. */
   readonly unrouted: string[] = [];
   /** Route overrides for one test (a failing endpoint, an empty list), checked before the world's. */
@@ -47,8 +49,9 @@ export class FakeClient extends HarnessClient {
     this.world = structuredClone(world);
   }
 
-  override async request<T>(method: string, path: string, _body?: unknown): Promise<T> {
+  override async request<T>(method: string, path: string, body?: unknown): Promise<T> {
     this.requests.push(`${method} ${path}`);
+    if (body !== undefined) this.bodies.push({ request: `${method} ${path}`, body });
     this.inflight++;
     try {
       await Promise.resolve();
