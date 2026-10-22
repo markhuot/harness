@@ -18,3 +18,4 @@ export * from "./projectGroups";
 export * from "./notifications";
 export * from "./viewOptions";
 export * from "./cos";
+export * from "./panes";

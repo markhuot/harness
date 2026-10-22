@@ -17,6 +17,7 @@ import { VERSION } from "../config";
 import { parsePresence, type PresenceRegistry } from "../notifications/presence";
 import { HarnessError } from "../orchestrator/errors";
 import type { TerminalRegistry } from "../terminals/registry";
+import type { MacRequests } from "./mac-requests";
 
 export interface WsData {
   id: string;
@@ -41,9 +42,30 @@ function send(ws: ServerWebSocket<WsData>, msg: ServerMessage) {
   } catch {}
 }
 
-export function createWsHandlers(opts: { bus: EventBus; browser: BrowserService; presence?: PresenceRegistry; terminals?: TerminalRegistry }) {
-  const { bus, browser, presence, terminals } = opts;
+export function createWsHandlers(opts: { bus: EventBus; browser: BrowserService; presence?: PresenceRegistry; terminals?: TerminalRegistry; macRequests?: MacRequests }) {
+  const { bus, browser, presence, terminals, macRequests } = opts;
   const sockets = new Set<ServerWebSocket<WsData>>();
+
+  /** One socket per Mac device (windows of one app share a device id), the visible one when there is one, and only sockets connected right now. */
+  const macSockets = (): ServerWebSocket<WsData>[] => {
+    const byDevice = new Map<string, ServerWebSocket<WsData>>();
+    for (const ws of sockets) {
+      const p = presence?.get(ws.data.id);
+      if (!p || p.platform !== "mac") continue;
+      const best = byDevice.get(p.deviceId);
+      if (!best || (p.visible && !presence?.get(best.data.id)?.visible)) byDevice.set(p.deviceId, ws);
+    }
+    return [...byDevice.values()];
+  };
+
+  // A request goes to one Mac: the visible one, else the first. Nothing is queued for a Mac that isn't connected.
+  macRequests?.bind((id, request) => {
+    const macs = macSockets();
+    const ws = macs.find((w) => presence?.get(w.data.id)?.visible) ?? macs[0];
+    if (!ws) return null;
+    send(ws, { type: "app.request", id, request });
+    return ws.data.id;
+  });
 
   const unsubscribe = (ws: ServerWebSocket<WsData>, sessionId: string, viewerId: string) => {
     const viewers = ws.data.subs.get(sessionId);
@@ -86,6 +108,9 @@ export function createWsHandlers(opts: { bus: EventBus; browser: BrowserService;
           terminals?.setPresence(ws.data.id, p);
           return;
         }
+        case "app.reply":
+          if (typeof msg.id === "string" && msg.reply && typeof msg.reply === "object") macRequests?.reply(ws.data.id, msg.id, msg.reply);
+          return;
         case "terminal.attach": {
           if (!terminals || typeof msg.id !== "string") return;
           try {
@@ -168,6 +193,7 @@ export function createWsHandlers(opts: { bus: EventBus; browser: BrowserService;
       sockets.delete(ws);
       presence?.drop(ws.data.id);
       terminals?.dropClient(ws.data.id);
+      macRequests?.socketClosed(ws.data.id);
       ws.data.off?.();
       ws.data.off = null;
       for (const [sid, viewers] of [...ws.data.subs]) for (const v of [...viewers]) unsubscribe(ws, sid, v);
@@ -195,15 +221,9 @@ export function createWsHandlers(opts: { bus: EventBus; browser: BrowserService;
      * is queued for a Mac that isn't. Returns how many sockets were asked.
      */
     openOnMac(terminal: { id: string; projectId: string | null }): number {
-      const byDevice = new Map<string, ServerWebSocket<WsData>>();
-      for (const ws of sockets) {
-        const p = presence?.get(ws.data.id);
-        if (!p || p.platform !== "mac") continue;
-        const best = byDevice.get(p.deviceId);
-        if (!best || (p.visible && !presence?.get(best.data.id)?.visible)) byDevice.set(p.deviceId, ws);
-      }
-      for (const ws of byDevice.values()) send(ws, { type: "terminal.open", id: terminal.id, projectId: terminal.projectId });
-      return byDevice.size;
+      const macs = macSockets();
+      for (const ws of macs) send(ws, { type: "terminal.open", id: terminal.id, projectId: terminal.projectId });
+      return macs.length;
     },
     newData: (): WsData => ({ id: randomUUID(), subs: new Map(), off: null }),
     /** Close every open socket (token rotation: they authenticated with the old token). */

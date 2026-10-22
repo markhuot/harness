@@ -62,7 +62,8 @@ import type {
   WatcherLive,
   Group,
 } from "@harness/shared";
-import type { TerminalInfo } from "@harness/shared";
+import { mapPaneRefs, type PaneArrangeResult, type PaneOp, type TerminalInfo } from "@harness/shared";
+import type { MacRequests } from "../api/mac-requests";
 import type { BaseBranchSource, BranchInfo, CompletionAction, MessageDraft, MessageDraftBody, PlanUsageReport, PromptEntry, SessionActionBody } from "@harness/shared";
 import {
   checkProjectKey,
@@ -271,6 +272,8 @@ export interface OrchestratorOptions {
   fetchPullRequestTitle?: (url: string) => Promise<string | null>;
   /** The service's terminals, for a chief of staff's terminal tools (none: they find no terminals) */
   terminals?: TerminalAccess;
+  /** Requests to the Mac app, for a chief of staff's arrange_panes (none: it finds no Mac) */
+  macRequests?: MacRequests;
 }
 
 /** What the orchestrator needs of the terminal registry (service/src/terminals/registry.ts). */
@@ -603,6 +606,7 @@ export class Orchestrator {
   /** The chief-of-staff event pipeline (DESIGN.md "Events") */
   readonly cosEngine: CosEngine;
   private readonly terminalAccess: TerminalAccess | undefined;
+  private readonly macRequests: MacRequests | undefined;
   private cosOpts: Pick<OrchestratorOptions, "cosTriage">;
   private cosOff: (() => void)[] = [];
   /** Who caused the activity written in this async context ("cos:<ticket id>" inside a chief's run) */
@@ -637,6 +641,7 @@ export class Orchestrator {
     this.browser = opts.browser;
     this.paths = opts.paths;
     this.terminalAccess = opts.terminals;
+    this.macRequests = opts.macRequests;
     for (const d of opts.drivers) this.drivers.set(d.id, d);
     this.tools = opts.tools ?? toolsForRun;
     this.baseUrl = opts.baseUrl ?? (() => "http://127.0.0.1:0");
@@ -1593,6 +1598,34 @@ export class Orchestrator {
     this.terminalAccess!.writeAgent(id, data);
     // What was typed stays out of Activity: it may be a password.
     if (ctx.ticket) this.addActivityLine(ctx.ticket, "system", "agent", `Typed ${data.length} character${data.length === 1 ? "" : "s"} into terminal ${id} (${found.ticket.key})`);
+  }
+
+  // --- panes (chief of staff) ---
+
+  /**
+   * One change to the Mac's window splits. The refs are checked here against what the chief covers
+   * (a ticket outside it, a terminal outside its worktrees and a missing one read the same) and the
+   * covered set goes along, so the Mac refuses anything else and its layout names nothing else.
+   * Ticket keys are sent as the board knows them.
+   */
+  private async arrangePanes_(ctx: ToolContext, op: PaneOp): Promise<PaneArrangeResult> {
+    if (ctx.runKind !== "cos" && ctx.ticket?.kind !== "cos") throw new Error("Panes are for a chief of staff.");
+    if (!this.macRequests) throw new Error("No Mac app is connected, so there is no window to arrange. Nothing was changed.");
+    const sc = this.scopeOf(ctx);
+    const terminals = (await this.terminalsInScope(ctx)).map((t) => t.info.id);
+    const tickets = sc.tickets.list().filter((t) => !t.draft).map((t) => t.key);
+    const checked = mapPaneRefs(op, (ref) => {
+      if ("ticket" in ref) {
+        const found = this.agentLookup(sc, ref.ticket)?.ticket;
+        if (!found) throw new Error(`Unknown ticket: ${ref.ticket}`);
+        return { ...ref, ticket: found.key };
+      }
+      if ("terminal" in ref && !terminals.includes(ref.terminal)) throw new Error(`Unknown terminal: ${ref.terminal}. Use list_terminals for the valid ids.`);
+      return ref;
+    });
+    const reply = await this.macRequests.request({ kind: "panes.arrange", op: checked, allowed: { tickets, terminals } });
+    if (!reply.ok) throw new Error(reply.error);
+    return reply.result;
   }
 
   /** The ticket an agent (tool) names, or null. Drafts are left out unless `drafts: true` (agents can read them, never act on them). */
@@ -5918,6 +5951,7 @@ ${numberLines(r.body)}`;
       listTerminals: (c) => this.listTerminals_(c),
       readTerminal: (c, id, n) => this.readTerminal_(c, id, n),
       writeTerminal: (c, id, d) => this.writeTerminal_(c, id, d),
+      arrangePanes: (c, op) => this.arrangePanes_(c, op),
       readMemory: async (c) => this.readMemory_(c),
       updateMemorySection: async (c, s, b) => this.updateMemorySection_(c, s, b),
       // --- schedules ---

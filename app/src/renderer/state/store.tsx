@@ -1,7 +1,7 @@
 // React wiring for the store: connection → HarnessClient + HarnessSocket → reducer.
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
-import { HarnessClient, projectGroups, resolveGroupKey, type ClientEvent, type FileLink, type HarnessSocket, type ServerMessage, type TerminalInfo } from "@harness/shared";
+import { HarnessClient, projectGroups, type AppReply, type AppRequest, resolveGroupKey, type ClientEvent, type FileLink, type HarnessSocket, type ServerMessage, type TerminalInfo } from "@harness/shared";
 import {
   canLoadMoreDone,
   canLoadMoreSearch,
@@ -49,6 +49,7 @@ import {
   type FileContent,
 } from "./panes";
 import { confirmLeave } from "../components/draftClose";
+import { arrangeOnBoard } from "./arrangeRequest";
 import { applyTerminalEvent, terminalCwd, terminalOpenScope, terminalScope } from "./terminal";
 import { fileContentFor, type FileLinkContext } from "./fileOpen";
 import type { HarnessBridge } from "../../main/types";
@@ -305,11 +306,15 @@ export function StoreProvider({
   /** terminal.open from the service: filled in below, once the pane operations exist. */
   const openFromService = useRef<(id: string) => void>(() => {});
 
+  /** app.request from the service (a chief of staff arranging panes): filled in below, once the terminals are known. */
+  const arrangeFromService = useRef<(id: string, request: AppRequest) => void>(() => {});
+
   const socket = useMemo(() => {
     let first = true;
     return client.connect({
       onMessage: (msg) => {
         if (msg.type === "terminal.open") openFromService.current(msg.id);
+        else if (msg.type === "app.request") arrangeFromService.current(msg.id, msg.request);
         else for (const fn of terminalListeners.current) fn(msg);
       },
       onEvent: (e) => {
@@ -543,6 +548,29 @@ export function StoreProvider({
     void (async () => {
       const info = terminalsRef.current.find((t) => t.id === id) ?? (await client.terminals().catch(() => [] as TerminalInfo[])).find((t) => t.id === id);
       if (info) openTerminalIn(info, terminalOpenScope(info, stateRef.current.projects), true);
+    })();
+  };
+
+  // A chief of staff arranging panes: apply it to the board on screen, answer with the layout (or why not).
+  arrangeFromService.current = (id, request) => {
+    void (async () => {
+      let reply: AppReply;
+      try {
+        if (request.kind !== "panes.arrange") reply = { ok: false, error: `This app doesn't know the request ${String((request as { kind?: unknown }).kind)}.` };
+        else {
+          let known = terminalsRef.current;
+          // A terminal this window hasn't heard of yet (made a moment ago) is looked up, so opening it works.
+          const pane = (request.op as { pane?: object }).pane;
+          if (pane && "terminal" in pane) known = await client.terminals().catch(() => known);
+          const scope = terminalScope(parseRoute(location.hash), scopeRef.current);
+          const el = document.querySelector<HTMLElement>(".pane-workspace");
+          const area = { width: el?.clientWidth || window.innerWidth, height: el?.clientHeight || window.innerHeight };
+          reply = arrangeOnBoard(request, scope, area, (tid) => known.find((t) => t.id === tid));
+        }
+      } catch (e) {
+        reply = { ok: false, error: `The Mac couldn't apply that: ${(e as Error).message}` };
+      }
+      socket.send({ type: "app.reply", id, reply });
     })();
   };
 

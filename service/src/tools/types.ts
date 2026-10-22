@@ -8,6 +8,8 @@ import type {
   ActivityMeta,
   CompletionAction,
   CosMemory,
+  PaneArrangeResult,
+  PaneOp,
   CreateProjectBody,
   DriverInfo,
   DriverModels,
@@ -385,6 +387,8 @@ export interface HarnessOps {
   readTerminal(ctx: ToolContext, id: string, lines?: number): Promise<{ terminal: TerminalView; text: string; lines: number; truncated: boolean }>;
   /** Type into a running terminal, logging it to the caller's Activity. The tool asks for approval first; this does not. */
   writeTerminal(ctx: ToolContext, id: string, data: string): Promise<void>;
+  /** Rearrange the visible Mac window's panes, one op; throws with no Mac, for an unknown or out-of-scope ref, on a refusal by the Mac and on a timeout (outcome unknown). */
+  arrangePanes(ctx: ToolContext, op: PaneOp): Promise<PaneArrangeResult>;
 
   // --- schedules: chief of staff runs (DESIGN.md "Schedules") ---
   // Each acts on the calling chief's own schedules only; another chief's behave as not found.

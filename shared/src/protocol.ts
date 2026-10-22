@@ -1,6 +1,7 @@
 // Shared wire protocol between the harness service and its clients (desktop app, future iOS app).
 // Everything here is plain JSON-serializable data. Timestamps are epoch milliseconds.
 
+import type { AppReply, AppRequest } from "./panes";
 import type { NotificationSettings, NotificationSettingsPatch, Presence } from "./notifications";
 
 export const DEFAULT_PORT = 7717;
@@ -1591,6 +1592,8 @@ export type ClientMessage =
   | { type: "terminal.detach"; id: string }
   | { type: "terminal.resize"; id: string; cols: number; rows: number }
   | { type: "terminal.write"; id: string; data: string }
+  /** The Mac's answer to an app.request, by its id; ignored from any socket the request wasn't sent to. */
+  | { type: "app.reply"; id: string; reply: AppReply }
   | { type: "ping" };
 
 export type BrowserInput =
@@ -1651,7 +1654,9 @@ export type ServerMessage =
   /** The shell ended. */
   | { type: "terminal.exit"; id: string; exitCode: number | null }
   /** Open a pane for this terminal: sent once, only to Mac clients connected right now. */
-  | { type: "terminal.open"; id: string; projectId: string | null };
+  | { type: "terminal.open"; id: string; projectId: string | null }
+  /** Ask this Mac to do something in the app (a chief of staff's arrange_panes) and answer with app.reply, same id. Sent to one Mac, the visible one. */
+  | { type: "app.request"; id: string; request: AppRequest };
 
 // ---------------------------------------------------------------------------
 // REST API request bodies (responses are the entities above, wrapped as { data })

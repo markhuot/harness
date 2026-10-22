@@ -196,6 +196,8 @@ public enum ClientMessage: Codable, Sendable, Equatable {
     case terminalDetach(id: String)
     case terminalResize(id: String, cols: Int, rows: Int)
     case terminalWrite(id: String, data: String)
+    /// A Mac's answer to an `app.request` (the payload is the Mac app's business: iOS never sends one).
+    case appReply(id: String, reply: JSONValue)
     case ping
     case unknown(type: String, raw: JSONValue)
 
@@ -210,6 +212,7 @@ public enum ClientMessage: Codable, Sendable, Equatable {
         case .terminalDetach: "terminal.detach"
         case .terminalResize: "terminal.resize"
         case .terminalWrite: "terminal.write"
+        case .appReply: "app.reply"
         case .ping: "ping"
         case let .unknown(type, _): type
         }
@@ -237,6 +240,7 @@ public enum ClientMessage: Codable, Sendable, Equatable {
         case "terminal.detach": self = .terminalDetach(id: try c.decode(String.self, forKey: "id"))
         case "terminal.resize": self = .terminalResize(id: try c.decode(String.self, forKey: "id"), cols: try c.decode(Int.self, forKey: "cols"), rows: try c.decode(Int.self, forKey: "rows"))
         case "terminal.write": self = .terminalWrite(id: try c.decode(String.self, forKey: "id"), data: try c.decode(String.self, forKey: "data"))
+        case "app.reply": self = .appReply(id: try c.decode(String.self, forKey: "id"), reply: try c.decode(JSONValue.self, forKey: "reply"))
         case "ping": self = .ping
         default: self = .unknown(type: type, raw: try JSONValue(from: decoder))
         }
@@ -279,6 +283,9 @@ public enum ClientMessage: Codable, Sendable, Equatable {
         case let .terminalWrite(id, data):
             try c.encode(id, forKey: "id")
             try c.encode(data, forKey: "data")
+        case let .appReply(id, reply):
+            try c.encode(id, forKey: "id")
+            try c.encode(reply, forKey: "reply")
         case .presence, .ping, .unknown: break
         }
     }
@@ -297,6 +304,8 @@ public enum ServerMessage: Codable, Sendable, Equatable {
     case terminalExit(id: String, exitCode: Int?)
     /// Open a pane for this terminal (sent once, only to Mac clients).
     case terminalOpen(id: String, projectId: String?)
+    /// Ask this Mac to do something in the app and answer with `app.reply` (the request is the Mac app's business: iOS ignores it).
+    case appRequest(id: String, request: JSONValue)
     case unknown(type: String, raw: JSONValue)
 
     public var type: String {
@@ -309,6 +318,7 @@ public enum ServerMessage: Codable, Sendable, Equatable {
         case .terminalOutput: "terminal.output"
         case .terminalExit: "terminal.exit"
         case .terminalOpen: "terminal.open"
+        case .appRequest: "app.request"
         case let .unknown(type, _): type
         }
     }
@@ -329,6 +339,7 @@ public enum ServerMessage: Codable, Sendable, Equatable {
             self = .terminalOutput(id: try c.decode(String.self, forKey: "id"), data: try c.decode(String.self, forKey: "data"), offset: try c.decode(Int.self, forKey: "offset"))
         case "terminal.exit": self = .terminalExit(id: try c.decode(String.self, forKey: "id"), exitCode: try c.decodeIfPresent(Int.self, forKey: "exitCode"))
         case "terminal.open": self = .terminalOpen(id: try c.decode(String.self, forKey: "id"), projectId: try c.decodeIfPresent(String.self, forKey: "projectId"))
+        case "app.request": self = .appRequest(id: try c.decode(String.self, forKey: "id"), request: try c.decode(JSONValue.self, forKey: "request"))
         default: self = .unknown(type: type, raw: try JSONValue(from: decoder))
         }
     }
@@ -358,6 +369,9 @@ public enum ServerMessage: Codable, Sendable, Equatable {
         case let .terminalOpen(id, projectId):
             try c.encode(id, forKey: "id")
             if let projectId { try c.encode(projectId, forKey: "projectId") } else { try c.encodeNil(forKey: "projectId") }
+        case let .appRequest(id, request):
+            try c.encode(id, forKey: "id")
+            try c.encode(request, forKey: "request")
         case .pong, .unknown: break
         }
     }

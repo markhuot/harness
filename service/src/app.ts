@@ -21,6 +21,7 @@ import { systemClock, type Clock } from "./clock";
 import { PresenceRegistry } from "./notifications/presence";
 import { NotificationService } from "./notifications/dispatcher";
 import { Scheduler } from "./cos/scheduler";
+import { MacRequests } from "./api/mac-requests";
 import { TerminalRegistry } from "./terminals/registry";
 import { spawnBunPty, type SpawnPty } from "./terminals/pty";
 import { ApnsClient, ApnsTokens, Http2Transport, type ApnsTransport } from "./notifications/apns";
@@ -87,6 +88,8 @@ export interface Harness {
   notifications: NotificationService;
   scheduler: Scheduler;
   terminals: TerminalRegistry;
+  /** Requests to the Mac app that wait for its answer (a chief of staff's arrange_panes). */
+  macRequests: MacRequests;
   stop(): Promise<void>;
 }
 
@@ -118,6 +121,7 @@ export async function createHarness(opts: CreateHarnessOptions): Promise<Harness
   const terminals = new TerminalRegistry({ bus, spawn: opts.spawnPty ?? spawnBunPty, log: opts.log });
   terminals.start();
 
+  const macRequests = new MacRequests();
   let baseUrl = "";
   const orchestrator = new Orchestrator({
     store,
@@ -131,6 +135,7 @@ export async function createHarness(opts: CreateHarnessOptions): Promise<Harness
     log: opts.log,
     now,
     terminals,
+    macRequests,
   });
   orchestrator.start();
 
@@ -208,6 +213,7 @@ export async function createHarness(opts: CreateHarnessOptions): Promise<Harness
     presence,
     notifications,
     terminals,
+    macRequests,
   });
   orchestrator.planUsage.start(() => http.connectedClients() > 0);
   try {
@@ -242,6 +248,7 @@ export async function createHarness(opts: CreateHarnessOptions): Promise<Harness
     notifications,
     scheduler,
     terminals,
+    macRequests,
     async stop() {
       if (stopped) return;
       stopped = true;

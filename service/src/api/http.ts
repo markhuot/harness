@@ -7,6 +7,7 @@ import { HarnessError } from "../orchestrator/errors";
 import type { BrowserService } from "../browser/types";
 import type { EventBus } from "../events";
 import { VERSION } from "../config";
+import type { MacRequests } from "./mac-requests";
 import { createWsHandlers, type WsData } from "./ws";
 import { MAX_UPLOAD_BYTES } from "../attachment-lists";
 import type { PluginHost } from "../plugins/host";
@@ -48,6 +49,8 @@ export interface HttpServerOptions {
   notifications?: NotificationService;
   /** The shells the service hosts; enables /terminals and terminal.* over the WebSocket. */
   terminals?: TerminalRegistry;
+  /** Requests a chief of staff makes of the Mac app and the answers (shared with the orchestrator). */
+  macRequests?: MacRequests;
 }
 
 export interface HttpHandler {
@@ -527,7 +530,7 @@ function fromLoopback(req: Request, server: Server<WsData>): boolean {
 
 /** One fetch/websocket pair shared by every listener (loopback, Tailscale, custom, 0.0.0.0). */
 export function createHttpHandler(opts: HttpServerOptions): HttpHandler {
-  const ws = createWsHandlers({ bus: opts.bus, browser: opts.browser, presence: opts.presence, terminals: opts.terminals });
+  const ws = createWsHandlers({ bus: opts.bus, browser: opts.browser, presence: opts.presence, terminals: opts.terminals, macRequests: opts.macRequests });
   const routes = buildRoutes(opts.orchestrator, opts.browser, {
     terminals: opts.terminals,
     openOnMac: (t) => ws.openOnMac(t),

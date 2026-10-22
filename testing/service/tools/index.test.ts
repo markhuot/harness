@@ -130,3 +130,10 @@ test("only a chief of staff gets the terminal tools", () => {
 test("an unknown run kind still throws", () => {
   expect(() => toolsForRun("nope" as RunKind, { hasBuiltinTools: true, usesPermissionPromptTool: false })).toThrow(/Unknown run kind/);
 });
+
+test("only a chief of staff can arrange the Mac's panes, whatever the run kind on its ticket", () => {
+  const has = (kind: RunKind, ticket: { kind: "task" | "conductor" | "cos" } | null = null) => names(kind, undefined, ticket).includes("arrange_panes");
+  expect(RUN_KINDS.filter((k) => has(k))).toEqual(["cos"]);
+  expect(has("chat", { kind: "cos" })).toBe(true);
+  expect(has("work", { kind: "task" })).toBe(false);
+});
