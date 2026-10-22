@@ -9,6 +9,11 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Changed
+
+- The chief of staff now only messages you when something changed that you'd care about, something needs your attention or a decision, or something has been stalled for a long time. A wake with nothing to say ends silently: no reply and no event card in the chat, while its triage, hand-offs and notes still happen.
+- A blocked ticket or review the chief of staff already told you about is no longer repeated on every wake. A stall is reported once it has sat four hours, again after a day, or sooner if its status or blocked reason changes, and a stall on an otherwise quiet board now wakes the chief by itself.
+
 ## [app-20261022.1246](https://github.com/markhuot/harness/releases/tag/app-20261022.1246) - 2026-10-22
 
 ### Added

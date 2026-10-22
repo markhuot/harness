@@ -888,8 +888,8 @@ rules: what is worth waking for is the prompt's call; code keeps only the invari
 calls of 20 events (at most 100 a pass, oldest first), each failing open on its own.
 
 **Hand-off.** Escalated events become one wake: `steerOrEnqueue` into the CoS session with the briefs,
-the raw events (untrusted), a one-line digest of what was ignored since the last wake, and the open
-conditions. A CoS runs one run at a time, so a wake steers into a running run or queues the next. At
+the raw events (untrusted), a one-line digest of what was ignored since the last wake, and the stalled
+items not yet reported (below). A CoS runs one run at a time, so a wake steers into a running run or queues the next. At
 most 6 wakes an hour per CoS (`nextWakeAllowedAt`); fail-open escalations count, and the overflow
 waits and goes in one later wake. A wake holds at most 40 events with bodies clipped to 2000
 characters, and says how many more wait. It is recorded (cap, chat) only once the chief took it. Events
@@ -897,6 +897,21 @@ are `handling` with the run that took them and `handled` when it succeeds; a run
 cancelled, or is gone after a restart, puts them back to `escalated`, while one still queued or running
 keeps them. Ignored, filtered and handled events are pruned after 30 days. `cos_wakes` logs each wake and
 triage call (tokens, model) for the cap and the token log.
+
+**Quiet by default.** A wake messages the user only for a change they would care about, an item that needs
+their attention or a decision, or a newly reported stall; every wake prompt says so, forbids narration between
+tool calls, and tells the chief to reply exactly `[quiet]` otherwise. Housekeeping (hand-offs, notes, tickets)
+happens either way. `isSilentReply` (`cos/chat.ts`) treats an empty or `[quiet]` reply as silent: the live
+`cos.transcript.appended` emit and `cosChat()` both leave it out (the raw transcript keeps it). The wake's
+`event_batch` card is emitted when its run ends (`settleWake`) and only if the run said something; `cos_wakes.outcome`
+(`spoke`, `quiet`, `failed`) hides a quiet wake's card from history, and a failed run still shows it. A **stall** is a
+blocked ticket or waiting review that has sat `COS_STALL_AFTER_MS` (4h, counted from its move into the status, not its
+last edit) in the chief's scope. It rides the next wake once, recorded as `cos_wakes.reported` (ticket id → status plus a
+hash of the blocked reason) when the wake is handed over, and is reported again only after `COS_STALL_REPEAT_MS` (24h) or
+when that fingerprint changes. A wake whose run failed doesn't count as a report. Wakes come only from events, so
+the engine's timer also arms for the next stall due and wakes the chief with just that stall (at most once per
+`COS_STALL_RETRY_MS`, 15 min); it counts against the 6-an-hour cap. Triage still sees every blocked or waiting
+ticket past `OPEN_CONDITION_AFTER_MS` (2h) as context.
 
 **Wire contract** (`shared/src/cos.ts`; the Mac and iOS Inbox and chat build on it):
 `CosEvent`, `CosChatEntry` (`message`, `ticket_created`, `ticket_moved`, `event_batch`). `GET

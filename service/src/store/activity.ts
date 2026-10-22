@@ -165,4 +165,10 @@ export class ActivityRepo {
         .all({ actor, bt: before?.createdAt ?? null, bid: before?.id ?? "", limit }) as ActivityRow[]
     ).map(toEntry);
   }
+
+  /** When the ticket last moved into `status`, or null if the activity has no such move. */
+  lastMoveInto(ticketId: string, status: string): number | null {
+    const r = this.db.query("SELECT created_at FROM activity WHERE ticket_id = $ticketId AND kind = 'moved' AND json_extract(meta, '$.to') = $status ORDER BY created_at DESC LIMIT 1").get({ ticketId, status }) as { created_at: number } | null;
+    return r?.created_at ?? null;
+  }
 }

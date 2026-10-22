@@ -200,7 +200,7 @@ import { AnthropicApiClassifier, ClaudeCliClassifier, type Classifier } from "..
 import { AutoModeRulesProvider } from "../permissions/rules";
 import { anthropicStructured, claudeCliStructured } from "../permissions/structured";
 import { CosEngine, wire as wireCosEvent, type Timers as CosTimers } from "../cos/engine";
-import { cosChat, WAKE_PROMPT_PREFIX } from "../cos/chat";
+import { cosChat, isSilentReply, WAKE_PROMPT_PREFIX } from "../cos/chat";
 import { LlmTriage, type CosTriage } from "../cos/triage";
 import { claudeCliEnv, resolveClaudeBin } from "../drivers/claude-code";
 import { DEFAULT_ANTHROPIC_MODEL } from "../drivers/anthropic-api";
@@ -682,6 +682,7 @@ export class Orchestrator {
       triage: () => this.cosTriage(),
       deliver: (cosTicketId, text) => this.wakeCos(cosTicketId, text),
       runStatus: (runId) => this.store.runs.get(runId)?.status ?? null,
+      runReplies: (runId, since) => this.store.transcript.assistantTexts(runId, since),
       log: this.log,
       timers: opts.cosTimers,
     });
@@ -709,6 +710,7 @@ export class Orchestrator {
       this.bus.onKind("transcript.appended", (e) => {
         const m = e.entry;
         if (m.subagentId || (m.role !== "user" && m.role !== "assistant") || m.content.type !== "text" || m.content.text.startsWith(WAKE_PROMPT_PREFIX)) return;
+        if (m.role === "assistant" && isSilentReply(m.content.text)) return;
         const cosId = this.store.sessions.get(m.sessionId)?.ticketId;
         if (!cosId || !this.store.cos.get(cosId)) return;
         this.bus.emit({ kind: "cos.transcript.appended", cosId, entry: { id: m.id, cosId, createdAt: m.createdAt, kind: "message", role: m.role, text: m.content.text } });

@@ -122,7 +122,13 @@ export interface WakeLog {
   model?: string | null;
   tokensIn?: number | null;
   tokensOut?: number | null;
+  /** The run the wake went to */
+  runId?: string | null;
+  /** The stalled items it carried: ticket id → fingerprint */
+  reported?: Record<string, string>;
 }
+
+export type WakeOutcome = "spoke" | "quiet" | "failed";
 
 /** The chief-of-staff Inbox (DESIGN.md "Events"): every event with its one owner, verdict and status. */
 export class CosEventRepo {
@@ -266,9 +272,45 @@ export class CosEventRepo {
   addWake(log: WakeLog): string {
     const id = newId();
     this.db
-      .query("INSERT INTO cos_wakes (id, cos_id, kind, started_at, event_count, digest, model, tokens_in, tokens_out) VALUES ($id, $cosId, $kind, $t, $n, $digest, $model, $tin, $tout)")
-      .run({ id, cosId: log.cosId, kind: log.kind, t: this.now(), n: log.eventCount, digest: log.digest ?? null, model: log.model ?? null, tin: log.tokensIn ?? null, tout: log.tokensOut ?? null });
+      .query("INSERT INTO cos_wakes (id, cos_id, kind, started_at, event_count, digest, model, tokens_in, tokens_out, run_id, reported) VALUES ($id, $cosId, $kind, $t, $n, $digest, $model, $tin, $tout, $runId, $reported)")
+      .run({
+        id,
+        cosId: log.cosId,
+        kind: log.kind,
+        t: this.now(),
+        n: log.eventCount,
+        digest: log.digest ?? null,
+        model: log.model ?? null,
+        tin: log.tokensIn ?? null,
+        tout: log.tokensOut ?? null,
+        runId: log.runId ?? null,
+        reported: log.reported && Object.keys(log.reported).length ? JSON.stringify(log.reported) : null,
+      });
     return id;
+  }
+
+  /** Full wakes whose run hasn't been seen to end. */
+  openWakes(): { id: string; cosId: string; runId: string | null; startedAt: number; eventCount: number; digest: string }[] {
+    return (this.db.query("SELECT id, cos_id, run_id, started_at, event_count, digest FROM cos_wakes WHERE kind = 'wake' AND outcome IS NULL").all() as { id: string; cos_id: string; run_id: string | null; started_at: number; event_count: number; digest: string | null }[]).map((r) => ({
+      id: r.id,
+      cosId: r.cos_id,
+      runId: r.run_id,
+      startedAt: r.started_at,
+      eventCount: r.event_count,
+      digest: r.digest ?? "",
+    }));
+  }
+
+  setWakeOutcome(id: string, outcome: WakeOutcome) {
+    this.db.query("UPDATE cos_wakes SET outcome = $outcome WHERE id = $id").run({ id, outcome });
+  }
+
+  /** Per stalled ticket, the fingerprint and time of its latest report: wakes that carried it and didn't fail (one still running counts, so it isn't sent twice). */
+  reportedStalls(cosId: string): Map<string, { fingerprint: string; at: number }> {
+    const out = new Map<string, { fingerprint: string; at: number }>();
+    const rows = this.db.query("SELECT started_at, reported FROM cos_wakes WHERE cos_id = $cosId AND kind = 'wake' AND reported IS NOT NULL AND (outcome IS NULL OR outcome <> 'failed') ORDER BY started_at").all({ cosId }) as { started_at: number; reported: string }[];
+    for (const r of rows) for (const [key, fingerprint] of Object.entries(fromJson<Record<string, string>>(r.reported, {}))) out.set(key, { fingerprint, at: r.started_at });
+    return out;
   }
 
   /** Token counts of a full wake, known once its run reports them. */
@@ -307,7 +349,7 @@ export class CosEventRepo {
     return (
       this.db
         .query(
-          `SELECT id, started_at, digest FROM cos_wakes WHERE cos_id = $cosId AND kind = 'wake'
+          `SELECT id, started_at, digest FROM cos_wakes WHERE cos_id = $cosId AND kind = 'wake' AND event_count > 0 AND (outcome IS NULL OR outcome <> 'quiet')
            AND ($bt IS NULL OR started_at < $bt OR (started_at = $bt AND ('wake:' || id) < $bid)) ORDER BY started_at DESC, id DESC LIMIT $limit`,
         )
         .all({ cosId, bt: before?.createdAt ?? null, bid: before?.id ?? "", limit }) as { id: string; started_at: number; digest: string | null }[]
