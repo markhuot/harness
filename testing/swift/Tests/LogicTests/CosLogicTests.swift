@@ -200,7 +200,7 @@ private func project(_ id: String, group: String?) -> Project {
         let app = PhaseChoice(driver: "copilot", model: "gpt")
         let own = PhaseChoice(driver: "claude-code", model: "haiku")
         func settings(cosModel: PhaseChoice?) -> PublicSettings {
-            PublicSettings(phaseModels: PhaseModels(work: work), defaultDriver: "claude-code", maxConcurrentRuns: 4, permissionMode: .auto, classifier: .claudeCli, anthropicApiKeySet: false, cosModel: cosModel)
+            PublicSettings(phaseModels: PhaseModels(work: work), defaultDriver: "claude-code", maxConcurrentRuns: 4, permissionMode: .auto, classifier: .claudeCli, anthropicApiKeySet: false, cosModel: Patch(cosModel))
         }
         #expect(CosSettings.appModel(settings(cosModel: nil)) == work, "an install that never chose one runs on Work")
         #expect(CosSettings.appModel(settings(cosModel: app)) == app)

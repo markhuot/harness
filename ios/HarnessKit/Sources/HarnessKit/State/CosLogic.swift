@@ -141,7 +141,7 @@ public enum CosSettings {
     /// The driver and model a chief of staff runs on when its wake isn't about a project that chose one (resolveCosChoice):
     /// the app's CoS choice, else the app's Work choice.
     public static func appModel(_ settings: PublicSettings?) -> PhaseChoice {
-        settings?.cosModel ?? Phases.settingsPhaseChoice(settings?.phaseModels, .work)
+        settings?.cosModel.optional ?? Phases.settingsPhaseChoice(settings?.phaseModels, .work)
     }
 
     /// The chief's model for a wake about `project` alone (resolveCosChoice): its own, else the app's.
