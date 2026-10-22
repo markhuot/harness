@@ -254,7 +254,8 @@ export class CosEventRepo {
 
   /** Delete unowned events still waiting (pending, escalated) that are older than `before`, and all but the newest `keep` of the rest. */
   pruneUnassigned(before: number, keep: number): number {
-    const open = "cos_id IS NULL AND status IN ('pending', 'escalated')";
+    // Open items converted from the old Inbox (migration 49) wait for the All chief; they are never pruned.
+    const open = "cos_id IS NULL AND status IN ('pending', 'escalated') AND source_ref NOT LIKE 'triage:%'";
     const old = this.db.query(`DELETE FROM cos_events WHERE ${open} AND created_at < $before`).run({ before }).changes;
     const over = this.db
       .query(`DELETE FROM cos_events WHERE ${open} AND id IN (SELECT id FROM cos_events WHERE ${open} ORDER BY created_at DESC, rowid DESC LIMIT -1 OFFSET $keep)`)

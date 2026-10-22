@@ -104,11 +104,12 @@ export function buildTriagePrompt(input: TriageInput): { system: string; user: s
   lines.push("## Projects");
   lines.push(...(input.projects.length ? input.projects.map((p) => `- ${p.key} — ${p.name}${p.description.trim() ? `: ${clip(p.description.trim().replace(/\s+/g, " "), 200)}` : ""}`) : ["(none)"]), "");
   lines.push("## Open conditions (context, not events)");
-  lines.push(...(input.openConditions.length ? input.openConditions.map((c) => `- ${c}`) : ["(none)"]), "");
+  // Ticket titles and blocked reasons are written by agents and people: data, so they sit in a fence.
+  lines.push(...(input.openConditions.length ? [fenceUntrusted("open-conditions", input.openConditions.map((c) => `- ${clip(c, 300)}`).join("\n"))] : ["(none)"]), "");
   lines.push("## Events");
   for (const e of input.events) {
     // The title and actor come from outside too (a watcher names its own output), so they sit in the fence with the body.
-    lines.push(`id: ${e.id} | source: ${e.source} | project: ${e.project ?? "(none)"} | ticket: ${e.ticket ?? "(none)"}`, fenceUntrusted(e.id, `actor: ${clip(e.actor, 200)}\ntitle: ${clip(e.title, 200)}\n\n${clip(e.body, MAX_BODY)}`), "");
+    lines.push(`id: ${e.id} | source: ${e.source} | project: ${e.project ?? "(none)"}`, fenceUntrusted(e.id, `actor: ${clip(e.actor, 200)}\nticket: ${clip(e.ticket ?? "(none)", 300)}\ntitle: ${clip(e.title, 200)}\n\n${clip(e.body, MAX_BODY)}`), "");
   }
   return { system: TRIAGE_SYSTEM, user: lines.join("\n") };
 }

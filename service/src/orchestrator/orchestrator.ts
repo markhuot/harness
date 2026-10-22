@@ -371,7 +371,8 @@ const AGENT_RUNS = new Set<RunKind>(["work", "conductor", "chat", "cos"]);
  */
 const FRESH_RUN_KINDS = new Set<RunKind>(["review", "complete"]);
 /** Runs that carry a human's words (the brief, a message, a chat question) and get their @-mentioned files attached. */
-const MENTION_RUN_KINDS = new Set<RunKind>(["plan", "work", "conductor", "chat", "cos"]);
+// "cos" is left out: its prompts carry watcher output and agent text, and its cwd is the service home (tokens, other groups' worktrees).
+const MENTION_RUN_KINDS = new Set<RunKind>(["plan", "work", "conductor", "chat"]);
 /**
  * Runs a human message can steer while they're going (DESIGN.md "Steering"): the ones a message
  * would otherwise queue. Review and complete runs never take one (a message moves those tickets).

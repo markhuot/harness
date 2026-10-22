@@ -38,6 +38,9 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
+- Text from outside (watcher output, ticket titles, and the triage model's own brief, reason and digest) now always sits inside the "untrusted" fence in a chief of staff's wake and in its triage read, including when triage failed and the wake falls back to the raw event.
+- A chief of staff's wake no longer expands `@file` mentions found in watcher output or agent notes, so they can't pull in the service's tokens or another group's files.
+- Triage can only route an event to a project the chief can see, and is only told about those; two overlapping wakes no longer hand a chief the same events twice; Inbox items carried over from the old triage are kept until the All chief takes them; a chief whose run keeps failing is woken for the same event three times at most.
 - A watcher's title and name no longer sit outside the "untrusted" fence in the text a chief of staff and its triage read get, so a watcher can't print a line that reads as the harness's own. The all-sessions list no longer includes the Inbox's old triage items.
 - A chief of staff made on another device now shows its count on the Mac and the iPhone and iPad as soon as it has something waiting. The title-bar button used to read nothing for it until the app reloaded.
 - Internal: the Inbox injection call (`POST /watchers/inject`) no longer accepts a `prompt` it ignored, the unused watcher driver and model picker helpers on Mac, iPhone and iPad are gone, and the agents' board instructions no longer point them at the old Inbox.
