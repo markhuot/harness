@@ -68,7 +68,7 @@ public struct Settings: Codable, Sendable, Equatable {
     /// Whether a chief of staff may unblock tickets (projects may override it). nil → `CosSettings.defaultCanUnblock`.
     public var cosCanUnblock: Bool?
     /// The driver and model every chief of staff runs on (projects may override it). nil → the Work choice.
-    public var cosModel: PhaseChoice?
+    @Nullable public var cosModel: PhaseChoice?
 
     public init(
         phaseModels: PhaseModels? = nil, defaultDriver: String, maxConcurrentRuns: Int, permissionMode: PermissionMode, classifier: ClassifierBackend,
@@ -140,7 +140,7 @@ public struct PublicSettings: Codable, Sendable, Equatable {
     public var cosEnabled: Bool?
     public var cosCanUnblock: Bool?
     /// Settings.cosModel; nil when none is chosen (and from an older service).
-    public var cosModel: PhaseChoice?
+    @Nullable public var cosModel: PhaseChoice?
     /// Whether an API key for the anthropic-api driver is stored
     public var anthropicApiKeySet: Bool
     /// Whether a long-lived Claude token for the claude-code driver is stored. Services from before

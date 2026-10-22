@@ -97,7 +97,7 @@ export interface Project {
   /** Whether a chief of staff may answer this project's blocked tickets. null → inherit settings.cosCanUnblock. */
   cosCanUnblock?: boolean | null;
   /** The driver and model a chief of staff runs on when woken for this project's events alone. null → inherit settings.cosModel. */
-  cosModel?: PhaseChoice | null;
+  cosModel: PhaseChoice | null;
   createdAt: number;
   updatedAt: number;
 }
