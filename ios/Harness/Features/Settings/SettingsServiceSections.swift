@@ -181,7 +181,7 @@ struct SettingsCosSection: View {
             }
             SettingsRow(label: "CoS model", hint: "The model every chief of staff runs on. A project can choose its own. Applies to the next run, not one in progress.") {
                 DriverModelPicker(
-                    value: CosSettings.pickerChoice(settings.cosModel),
+                    value: CosSettings.pickerChoice(settings.cosModel.optional),
                     resolved: CosSettings.pickerChoice(Phases.settingsPhaseChoice(settings.phaseModels, .work)),
                     title: "CoS model",
                     defaultLabel: "Use Work model"
