@@ -17,7 +17,7 @@ public enum Listeners {
 
     private static let secretWord = "(?:token|secret|password|passwd|pass|pwd|key|apikey|auth|authorization|credential|cookie)s?"
     /// A name that holds a secret word as a whole segment (`api-key`, `GH_TOKEN`), so `--passive` and `--bypass` don't count.
-    private static let secretName = #"(?:\w+[-_])*\#(secretWord)(?:[-_]\w+)*"#
+    private static let secretName = #"(?:[A-Za-z0-9]+[-_]+)*\#(secretWord)(?:[-_]+[A-Za-z0-9]+)*"#
     /// One shell word: quoted runs, backslash escapes and bare text joined, so `'pa'\''ss'` is one value.
     private static let value = #"(?:"(?:[^"\\]|\\.)*"|'[^']*'|\\.|[^\s"'\\])+"#
     private static let mask = "***"
@@ -38,7 +38,7 @@ public enum Listeners {
         s = replace(s, #"((?:^|\s)(?:-u|--user|--proxy-user)(?:=|\s+)["']?[^\s:"']*:)[^\s"']+"#, "$1\(mask)")
         s = replace(s, #"(\b\#(secretName)\s*:\s*)[^"'\n]+"#, "$1\(mask)")
         s = replace(s, #"(\\?"\#(secretName)\\?"\s*:\s*)(?:\\?"[^"\\]*\\?"|[^\s,}"'\\]+)"#, "$1\(mask)")
-        s = replace(s, #"(--?(?:[\w-]*[-_])?\#(secretWord)(?:[-_][\w-]*)?)(=|\s+(?!-))\#(value)"#, "$1$2\(mask)")
+        s = replace(s, #"(--?(?:[A-Za-z0-9]+[-_]+)*\#(secretWord)(?:[-_]+[A-Za-z0-9]+)*)(=|\s+(?!-))\#(value)"#, "$1$2\(mask)")
         s = replace(s, #"(\b\#(secretName)=)\#(value)"#, "$1\(mask)")
         s = replace(s, #"\b(bearer|basic)\s+[^\s"']+"#, "$1 \(mask)")
         return replace(s, bareToken, mask)

@@ -13,7 +13,8 @@ export function chiefListeners(watchers: readonly Watcher[], chief: Pick<Cos, "t
 
 const SECRET_WORD = "(?:token|secret|password|passwd|pass|pwd|key|apikey|auth|authorization|credential|cookie)s?";
 // A name that holds a secret word as a whole segment (`api-key`, `GH_TOKEN`), so `--passive` and `--bypass` don't count.
-const SECRET_NAME = `(?:\\w+[-_])*${SECRET_WORD}(?:[-_]\\w+)*`;
+// Segments are alphanumeric runs split by `-`/`_`, so each string splits one way and matching stays linear.
+const SECRET_NAME = `(?:[A-Za-z0-9]+[-_]+)*${SECRET_WORD}(?:[-_]+[A-Za-z0-9]+)*`;
 // One shell word: quoted runs, backslash escapes and bare text joined, so `'pa'\''ss'` is one value.
 const VALUE = `(?:"(?:[^"\\\\]|\\\\.)*"|'[^']*'|\\\\.|[^\\s"'\\\\])+`;
 const MASK = "***";
@@ -31,7 +32,7 @@ export function maskSecrets(line: string): string {
     .replace(/((?:^|\s)(?:-u|--user|--proxy-user)(?:=|\s+)["']?[^\s:"']*:)[^\s"']+/g, `$1${MASK}`)
     .replace(new RegExp(`(\\b${SECRET_NAME}\\s*:\\s*)[^"'\\n]+`, "gi"), `$1${MASK}`)
     .replace(new RegExp(`(\\\\?"${SECRET_NAME}\\\\?"\\s*:\\s*)(?:\\\\?"[^"\\\\]*\\\\?"|[^\\s,}"'\\\\]+)`, "gi"), `$1${MASK}`)
-    .replace(new RegExp(`(--?(?:[\\w-]*[-_])?${SECRET_WORD}(?:[-_][\\w-]*)?)(=|\\s+(?!-))${VALUE}`, "gi"), `$1$2${MASK}`)
+    .replace(new RegExp(`(--?(?:[A-Za-z0-9]+[-_]+)*${SECRET_WORD}(?:[-_]+[A-Za-z0-9]+)*)(=|\\s+(?!-))${VALUE}`, "gi"), `$1$2${MASK}`)
     .replace(new RegExp(`(\\b${SECRET_NAME}=)${VALUE}`, "gi"), `$1${MASK}`)
     .replace(/\b(bearer|basic)\s+[^\s"']+/gi, `$1 ${MASK}`)
     .replace(BARE_TOKEN, MASK);

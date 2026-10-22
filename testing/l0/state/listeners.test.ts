@@ -24,6 +24,14 @@ describe("chiefListeners", () => {
 });
 
 describe("listenerCommand", () => {
+  test("a long underscore-joined word masks in linear time", () => {
+    for (const cmd of ["x_".repeat(60) + "!", "run " + "a-".repeat(60) + "!", "--" + "a_".repeat(60) + "!"]) {
+      const t = performance.now();
+      listenerCommand({ command: cmd, args: [] });
+      expect(performance.now() - t).toBeLessThan(50);
+    }
+    expect(listenerCommand({ command: "run --my_api_key=abc " + "a_".repeat(60) + ": z", args: [] })).toContain("--my_api_key=***");
+  });
   test("drops leading VAR=value assignments and never shows env", () => {
     expect(listenerCommand({ command: 'TOKEN=abc FOO="a b" watch-jira --project FOO', args: [] })).toBe("watch-jira --project FOO");
   });

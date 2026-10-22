@@ -51,6 +51,15 @@ private let work = Cos(ticketId: "cos-work", key: "COS-2", scope: "group:g1", gr
         #expect(Listeners.command(watcher("a", command: #"cli --password "a \"b c" --name ok"#)) == "cli --password *** --name ok")
     }
 
+    @Test func aLongUnderscoreJoinedWordMasksQuickly() {
+        let start = Date()
+        for cmd in [String(repeating: "x_", count: 60) + "!", "run " + String(repeating: "a-", count: 60) + "!", "--" + String(repeating: "a_", count: 60) + "!"] {
+            _ = Listeners.command(watcher("a", command: cmd))
+        }
+        #expect(Date().timeIntervalSince(start) < 0.05)
+        #expect(Listeners.command(watcher("a", command: "run --my_api_key=abc")) == "run --my_api_key=***")
+    }
+
     @Test func passDoesNotMatchPassiveOrBypass() {
         #expect(Listeners.command(watcher("a", command: "cli --passive foo --bypass bar --token --verbose")) == "cli --passive foo --bypass bar --token --verbose")
         #expect(Listeners.command(watcher("a", command: "cli --pass hunter2 --db-password=x")) == "cli --pass *** --db-password=***")
