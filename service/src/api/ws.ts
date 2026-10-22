@@ -109,7 +109,7 @@ export function createWsHandlers(opts: { bus: EventBus; browser: BrowserService;
           return;
         }
         case "app.reply":
-          if (typeof msg.id === "string" && msg.reply && typeof msg.reply === "object") macRequests?.reply(ws.data.id, msg.id, msg.reply);
+          if (typeof msg.id === "string" && msg.reply && typeof msg.reply === "object" && typeof msg.reply.ok === "boolean" && (msg.reply.ok ? msg.reply.result !== undefined : typeof msg.reply.error === "string")) macRequests?.reply(ws.data.id, msg.id, msg.reply);
           return;
         case "terminal.attach": {
           if (!terminals || typeof msg.id !== "string") return;

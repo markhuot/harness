@@ -29,7 +29,8 @@ describe("refs", () => {
     const s = st(row("r", [board("B"), ticket("a", "A-1"), torn("x", "A-1", "transcript")]));
     expect(resolveRef(s, { ticket: "A-1" })!.id).toBe("a");
     expect(resolveRef(s, { ticket: "A-1", tab: "transcript" })!.id).toBe("x");
-    expect(resolveRef(s, { ticket: "A-1", tab: "details" })!.id).toBe("a");
+    expect(resolveRef(s, { ticket: "A-1", tab: "spec" })!.id).toBe("a");
+    expect(resolveRef(s, { ticket: "A-1", tab: "details" })).toBeNull();
     expect(resolveRef(s, { ticket: "A-9" })).toBeNull();
   });
 });
@@ -99,6 +100,45 @@ describe("close", () => {
     const gone = apply(closed.state, { op: "close", pane: { ticket: "A-1" } }) as { outcome: string; message: string };
     expect(gone).toMatchObject({ outcome: "unchanged", message: expect.stringContaining("wasn't open") });
     expect(applyPaneOp(s, { op: "close", pane: { board: true } }, env())).toEqual({ error: "The board can't be closed." });
+  });
+});
+
+describe("tab refs", () => {
+  test("close with a tab the ticket isn't showing is a no-op, not closing the whole pane", () => {
+    const s = st(row("r", [board("B"), ticket("a", "A-1")]), "a");
+    const r = apply(s, { op: "close", pane: { ticket: "A-1", tab: "activity" } }) as { state: PaneState; outcome: string; message: string };
+    expect(r).toMatchObject({ outcome: "unchanged", message: expect.stringContaining("wasn't open") });
+    expect(open(r.state)).toEqual(["board", "A-1"]);
+    const hit = apply(s, { op: "close", pane: { ticket: "A-1", tab: "spec" } }) as { state: PaneState };
+    expect(open(hit.state)).toEqual(["board"]);
+  });
+
+  test("split of a ticket beside its own pane with another tab is refused", () => {
+    const s = st(row("r", [board("B"), ticket("a", "A-1")]), "a");
+    expect(applyPaneOp(s, { op: "split", pane: { ticket: "A-1", tab: "activity" }, target: { ticket: "A-1" }, zone: "left" }, env())).toEqual({ error: expect.stringMatching(/beside itself/) });
+  });
+
+  test("split of an already-open ticket without a tab keeps the tab it was showing", () => {
+    const s = st(row("r", [board("B"), ticket("a", "A-1", "transcript"), ticket("b", "A-2")]), "a");
+    const r = apply(s, { op: "split", pane: { ticket: "A-1" }, target: { ticket: "A-2" }, zone: "right" }) as { state: PaneState };
+    expect(open(r.state)).toEqual(["board", "A-2", "A-1"]);
+    const moved = leaves(r.state.root).find((l) => l.content.kind === "ticket" && l.content.ticketKey === "A-1")!;
+    expect(moved.content).toMatchObject({ tab: "transcript" });
+  });
+
+  test("a torn-off browser tab is counted, not named, in the layout", () => {
+    const s = st(row("r", [board("B"), torn("x", "A-1", "browser", 0), torn("y", "A-1", "browser", 1)]));
+    const layout = describeLayout(s, allowed, area);
+    expect(layout.panes.map((p) => p.pane)).toEqual([{ board: true }]);
+    expect(layout.others).toBe(2);
+  });
+
+  test("resize to the width a pane already has still says what happened", () => {
+    const s = st(row("r", [board("B"), ticket("a", "A-1"), ticket("b", "A-2")]), "b");
+    const w = widthOf(s, "A-1") / area.width;
+    const r = apply(s, { op: "resize", pane: { ticket: "A-1" }, width: w }) as { outcome: string; message: string };
+    expect(r.outcome).toBe("applied");
+    expect(r.message).toContain("already that wide");
   });
 });
 

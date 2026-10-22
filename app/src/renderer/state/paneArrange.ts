@@ -49,11 +49,11 @@ const WIDTH_TOLERANCE_PX = 3;
 
 const describeRef = (ref: PaneRef): string => ("ticket" in ref ? `ticket ${ref.ticket}` : "terminal" in ref ? `terminal ${ref.terminal}` : "the board");
 
-/** The ref a leaf's content answers to, or null for content a chief never names (files, New sessions, chief panes) and a ticket tab it can't resolve. */
+/** The ref a leaf's content answers to, or null for content a chief never names (files, New sessions, chief panes, a torn-off browser tab). */
 export function refOf(content: PaneContent): PaneRef | null {
   if (content.kind === "board") return { board: true };
   if (content.kind === "ticket") return { ticket: content.ticketKey, tab: content.tab };
-  if (content.kind === "ticketTab") return { ticket: content.ticketKey, tab: content.tab };
+  if (content.kind === "ticketTab") return content.browserTab === undefined ? { ticket: content.ticketKey, tab: content.tab } : null;
   if (content.kind === "terminal") return { terminal: content.sessionId };
   return null;
 }
@@ -66,12 +66,15 @@ function covered(content: PaneContent, allowed: PaneAllowed): boolean {
   return false;
 }
 
-/** The pane showing `ref`, or null. A ticket named with a tab finds that tab's pane when it was torn off, else the ticket's pane. */
+/** The pane showing `ref`, or null. A ticket named with a tab finds that tab's torn-off pane, else the ticket's pane only while it shows that tab; without a tab, the ticket's pane. */
 export function resolveRef(state: PaneState, ref: PaneRef): PaneLeaf | null {
   if ("board" in ref) return boardLeaf(state.root);
   if ("terminal" in ref) return terminalLeafBySession(state.root, ref.terminal);
-  const torn = ref.tab ? leaves(state.root).find((l) => l.content.kind === "ticketTab" && l.content.ticketKey === ref.ticket && l.content.tab === ref.tab && l.content.browserTab === undefined) : null;
-  return torn ?? ticketLeafByKey(state.root, ref.ticket);
+  if (!ref.tab) return ticketLeafByKey(state.root, ref.ticket);
+  const torn = leaves(state.root).find((l) => l.content.kind === "ticketTab" && l.content.ticketKey === ref.ticket && l.content.tab === ref.tab && l.content.browserTab === undefined);
+  if (torn) return torn;
+  const main = ticketLeafByKey(state.root, ref.ticket);
+  return main && main.content.kind === "ticket" && main.content.tab === ref.tab ? main : null;
 }
 
 /** Why this ref can't be used: it names content outside the chief's cover (indistinguishable from content that doesn't exist), or a tab that doesn't exist. */
@@ -141,7 +144,9 @@ export function applyPaneOp(state: PaneState, op: PaneOp, env: ArrangeEnv): Arra
     case "move": {
       const target = resolveRef(state, op.target);
       if (!target) return { error: `${describeRef(op.target)} isn't open, so there's nothing to place ${name} beside.` };
-      if (leaf?.id === target.id) return { error: `A pane can't be placed beside itself (${name}).` };
+      // The pane split would move: for a ticket, the one already showing it (whatever its tab), so the self-check and the drop agree.
+      const keep = leaf ?? ("ticket" in op.pane ? ticketLeafByKey(state.root, op.pane.ticket) : null);
+      if (keep?.id === target.id) return { error: `A pane can't be placed beside itself (${name}).` };
       if (op.op === "move") {
         if (!leaf) return { error: `${name} isn't open. Use split to show it beside ${describeRef(op.target)}.` };
         if (leaf.content.kind === "board") return { error: "The board can't be moved." };
@@ -150,7 +155,7 @@ export function applyPaneOp(state: PaneState, op: PaneOp, env: ArrangeEnv): Arra
       if ("board" in op.pane) return { error: "The board is always open; use move to place it." };
       const made = contentFor(op.pane, env);
       if ("error" in made) return made;
-      const next = dropContent(state, target.id, ZONES[op.zone], made.content);
+      const next = dropContent(state, target.id, ZONES[op.zone], keep && (!("ticket" in op.pane) || !op.pane.tab || keep.content.kind === "ticketTab") ? keep.content : made.content);
       return done(next, `Put ${name} ${op.zone} of ${describeRef(op.target)}.`, `${name} is already there.`);
     }
     case "resize": {
@@ -160,7 +165,7 @@ export function applyPaneOp(state: PaneState, op: PaneOp, env: ArrangeEnv): Arra
       const px = op.width * area.width;
       const focused = focusPane(state, leaf.id);
       const have = layoutPanes(focused, area).leaves.find((l) => l.leaf.id === leaf.id)!.rect.w * area.width;
-      if (Math.abs(have - px) < WIDTH_TOLERANCE_PX) return done(focused, "", `${name} is already that wide.`);
+      if (Math.abs(have - px) < WIDTH_TOLERANCE_PX) return done(focused, `Focused ${name}; it is already that wide.`, `${name} is already that wide.`);
       const next = setPaneWidth(focused, area, px);
       if (next === focused) return { error: `${name} can't be ${Math.round(op.width * 100)}% wide: the board or a neighbour would drop below its minimum, or nothing beside it can give the room (zoomed, or stacked with the board).` };
       return { state: next, outcome: "applied", message: `${name} is now ${Math.round(op.width * 100)}% of the window wide.` };
