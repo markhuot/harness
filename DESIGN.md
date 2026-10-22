@@ -825,6 +825,14 @@ the app's values; a project's `cosEnabled` / `cosCanUnblock` are nullable overri
 PATCH `null` resets). `resolveCosSetting` in `shared/src/cos.ts` is the one place that resolves
 project-else-app-else-default.
 
+**Model.** A CoS run has its own `{ driver, model }` choice, not a fifth phase: `settings.cosModel`
+for every chief, and a project's nullable `cosModel` (the `projects.cos_model` column) for a wake whose
+events all belong to that project (the engine passes the project key to `wakeCos`; a chat message, or
+a wake spanning projects, has none). `resolveCosChoice` in `shared/src/cos.ts` is the one place that
+resolves project, then `settings.cosModel`, then the Work choice, so an install that never chose one
+runs as before. `runDriver` fixes the driver when a run is queued and `runModel` resolves the model
+when it starts, as for ticket runs; a change applies to the next run.
+
 **Scope is enforced once, in the store.** A scope is `"all"` or `{ group }` (`store/scope.ts`). The
 service resolves it from the CoS ticket's `cos` row on every operation (`scopeOf(ctx)`: never a tool
 argument, never kept from when the run started, so moving a project between groups applies at once;

@@ -11,6 +11,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Added
 
+- You can choose which model the chief of staff runs on. Settings → Chief of staff has a model picker for every project (it starts on the Work model), and each project's settings has one too, with "Use app default" to clear it. The project's model is used when a chief is woken for that project's events alone; a change applies to the next run, not one in progress. The iPhone and iPad apps have the same two pickers.
 - Triage of a chief of staff's events now looks things up before it decides. It runs as a read-only agent (Haiku by default) that can read a pull request with `gh`, a Jira item through your Jira MCP, and the board, so an event that is only a pointer (a review comment on a pull request, a thread that changed) is judged by what actually changed and who changed it. The brief it passes the chief says what it found and names the ticket the event belongs to. It can't write anything: `gh` mutations, Jira writes and other changes are refused. If it can't tell, or a lookup fails, the event wakes the chief.
 - A watcher's prompt (what its lines mean and how to look them up) is used again: triage reads it as guidance for that watcher's events.
 - Each Inbox row can open the triage run's transcript, to see what it looked up.
