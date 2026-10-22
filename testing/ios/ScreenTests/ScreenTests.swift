@@ -95,11 +95,18 @@ final class ScreenTests: ScreenTestCase {
         try await screen("cos-memory") { CosMemorySheet(chief: chief) }
     }
 
-    /// A project whose chief of staff is switched off: its own choice, with the app's value beside Inherit.
-    func testProjectSettingsCos() async throws {
-        let router = Router()
-        router.push(.project(id: "project-NOTES"))
-        try await screen("project-settings-cos", router: router) { RootView() }
+    /// The chief of staff's switches: the app's two, and a project that switched its chief off
+    /// (its own choice, with the app's value beside Inherit on the other).
+    func testCosSettings() async throws {
+        let settings = try XCTUnwrap(world.store.state.settings)
+        let notes = try XCTUnwrap(world.store.state.projects["project-NOTES"])
+        try await screen("cos-settings") {
+            Form {
+                SettingsCosSection(settings: settings)
+                ProjectCosSection(project: notes, settings: settings) { _ in }
+            }
+            .settingsFormStyle(Palette(world.app.resolvedTheme(systemDark: false)))
+        }
     }
 
     func testSettings() async throws {
