@@ -2,8 +2,8 @@ import Foundation
 import Testing
 import HarnessKit
 
-private func event(_ id: String, cos: String? = "c1", status: CosEventStatus = .pending, verdict: CosEventVerdict = .pending, at: Double = 0, reason: String? = nil) -> CosEvent {
-    CosEvent(id: id, cosId: cos, title: id, status: status, verdict: verdict, reason: reason, createdAt: at)
+private func event(_ id: String, cos: String? = "c1", status: CosEventStatus = .pending, verdict: CosEventVerdict = .pending, at: Double = 0, reason: String? = nil, source: CosEventSource = .activity) -> CosEvent {
+    CosEvent(id: id, cosId: cos, sourceKind: source, title: id, status: status, verdict: verdict, reason: reason, createdAt: at)
 }
 
 private func message(_ id: String, at: Double, text: String = "hi", role: String = "assistant") -> CosChatEntry {
@@ -44,8 +44,9 @@ private func project(_ id: String, group: String?) -> Project {
         state.mergeEvents([
             event("old", at: 1), event("new", at: 3), event("unassigned", cos: nil, at: 2),
             event("other", cos: "c2", at: 9), event("dropped", verdict: .filtered, at: 8),
+            event("reminder", verdict: .filtered, at: 4, source: .schedule),
         ])
-        #expect(state.inbox("c1").map(\.id) == ["new", "unassigned", "old"])
+        #expect(state.inbox("c1").map(\.id) == ["reminder", "new", "unassigned", "old"], "a reminder is filtered from triage but is for the person, so it shows")
     }
 
     @Test func aRowReadsAsItsVerdictAndOnlyIgnoredRowsEscalate() {

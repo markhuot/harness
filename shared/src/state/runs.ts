@@ -26,7 +26,7 @@ export function formatCost(usd: number): string {
 /**
  * What a ticket's run of this kind uses unless something else was chosen for it: the choice its
  * phase inherits from the project and Settings (so a ticket-level override shows on its runs).
- * null for triage, which has no phase, and for a run outside a ticket (pass hasTicket false).
+ * null for a chief of staff run, which has no phase, and for a run outside a ticket (pass hasTicket false).
  */
 export function runPhaseDefault(
   kind: RunKind,

@@ -184,13 +184,14 @@ describe("Inbox", () => {
   test("events nobody owns yet show, another chief's and the chief's own filtered ones don't", async () => {
     const client = new FakeClient();
     const base = client.cos.events[0]!;
-    client.cos.events.push({ ...base, id: "ev-nobody", cosId: null, title: "Unassigned" }, { ...base, id: "ev-other", cosId: "cos-work", title: "Other chief" }, { ...base, id: "ev-filtered", verdict: "filtered", status: "ignored", title: "Own move" });
+    client.cos.events.push({ ...base, id: "ev-nobody", cosId: null, title: "Unassigned" }, { ...base, id: "ev-other", cosId: "cos-work", title: "Other chief" }, { ...base, id: "ev-filtered", verdict: "filtered", status: "ignored", title: "Own move" }, { ...base, id: "ev-reminder", verdict: "filtered", status: "ignored", sourceKind: "schedule", reason: "reminder: posted to the human, no run", title: "Reminder: stand-up" });
     const m = await open("#/cos/all/inbox", client);
     await m.until("the rows", () => events(m).length > 0);
     const ids = events(m).map((e) => e.dataset.event);
     expect(ids).toContain("ev-nobody");
     expect(ids).not.toContain("ev-other");
     expect(ids).not.toContain("ev-filtered");
+    expect(ids).toContain("ev-reminder"); // a reminder is filtered from triage but is for the person, so it shows
   });
 
   test("an empty Inbox says so", async () => {

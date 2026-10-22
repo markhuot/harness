@@ -443,7 +443,7 @@ export interface HarnessOps {
    * Allows when the human already granted it (ticket.allowedTools, or a one-time grant for this
    * exact toolName+input, which is consumed). Otherwise records ticket.pendingApproval, moves the
    * ticket to blocked, and denies with a message telling the agent to stop and wait.
-   * Review/plan/triage runs are denied outright with guidance (no human in that loop).
+   * Review and plan runs are denied outright with guidance (no human in that loop).
    */
   requestApproval(
     ctx: ToolContext,
@@ -467,12 +467,12 @@ export interface HarnessOps {
   /**
    * Where a tool that saves an output file (browser_screenshot save_to) may write: the run's
    * harness-owned scratch folder, and the working directory unless the run is read-only (a
-   * plan/review/triage/chat run, or read_only as the effective mode).
+   * plan/review/chat run, or read_only as the effective mode).
    */
   fileOutputScope(ctx: ToolContext): Promise<{ scratchDir: string; readOnly: boolean }>;
 
   // --- config (Settings / Project Settings; DESIGN.md "Config tools") ---
-  // Reads work in every ticket run and triage. Mutations are for work and conductor runs only
+  // Reads work in every ticket run and for a chief of staff. Mutations are for work and conductor runs only
   // and throw otherwise; their tools ask a human first (defineGatedTool). `dryRun` runs the same
   // validation (and throws the same errors) without changing anything, so a tool can reject a bad
   // call before it puts an approval card in front of the human.

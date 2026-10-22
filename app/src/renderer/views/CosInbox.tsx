@@ -12,11 +12,11 @@ import { useAction, useStore } from "../state/store";
 
 const PAGE = 50;
 
-/** The rows a chief's Inbox shows: its own events and the unassigned ones, newest first. Rows its own rules dropped (filtered) stay out. */
+/** The rows a chief's Inbox shows: its own events and the unassigned ones, newest first. Rows its own rules dropped (filtered) stay out, except a reminder: it went to you, so it shows. */
 export function inboxRows(events: Record<string, CosEvent>, cosId: string): CosEvent[] {
   return mergeEvents(
     [],
-    Object.values(events).filter((e) => (e.cosId === cosId || e.cosId === null) && e.verdict !== "filtered"),
+    Object.values(events).filter((e) => (e.cosId === cosId || e.cosId === null) && (e.verdict !== "filtered" || e.sourceKind === "schedule")),
   );
 }
 
@@ -109,7 +109,7 @@ function EventRow({ event: e }: { event: CosEvent }) {
         <span className={`cos-pill cos-pill-${st}`} data-testid="cos-verdict">
           {STATE_LABEL[st]}
         </span>
-        {st === "ignored" && e.reason && (
+        {(st === "ignored" || st === "filtered") && e.reason && (
           <span className="cos-reason dim" data-testid="cos-reason">
             {e.reason}
           </span>

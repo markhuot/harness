@@ -1,22 +1,11 @@
 import Foundation
 
 // Port of shared/src/watchers.ts: watcher command lines, Inbox titles for raw output, and the
-// driver/model a watcher's triage sessions use (the combined Model select and what it saves).
+// driver/model pick the Model select uses (`TriageChoice`) and what it saves.
 //
 // JS semantics kept: `||` skips nil *and* "" (`nonEmpty`); SAFE_WORD and the line split work on
 // code units / scalars, not Swift Characters ("\r\n" is one Character); `\p{L}\p{N}` (with the `u`
 // flag) is a general-category test on scalars; `.length`/`.slice` count UTF-16 code units.
-
-/// The settings fields watcher triage reads. `Settings` and `PublicSettings` both conform.
-public protocol WatcherTriageSettings {
-    var defaultDriver: String { get }
-    var watcherDriver: Patch<String> { get }
-    var defaultModels: [String: String?] { get }
-    var watcherModels: [String: String?]? { get }
-}
-
-extension Settings: WatcherTriageSettings {}
-extension PublicSettings: WatcherTriageSettings {}
 
 public enum Watchers {
     // MARK: Command lines
@@ -107,32 +96,6 @@ public enum Watchers {
         return String(String.UnicodeScalarView(scalars))
     }
 
-    // MARK: Triage driver and model
-
-    /// The driver a watcher's triage sessions run on: its own, else settings.watcherDriver, else
-    /// settings.defaultDriver.
-    public static func watcherDriver(_ driver: String?, watcherDriver: String?, defaultDriver: String) -> String {
-        nonEmpty(driver) ?? nonEmpty(watcherDriver) ?? defaultDriver
-    }
-
-    public static func watcherDriver(_ w: Watcher?, settings: some WatcherTriageSettings) -> String {
-        watcherDriver(w?.driver, watcherDriver: settings.watcherDriver.optional, defaultDriver: settings.defaultDriver)
-    }
-
-    /// The model a watcher's triage sessions use on `driver`. First set wins: the watcher's
-    /// models[driver], settings.watcherModels[driver], settings.defaultModels[driver]; nil → the
-    /// driver's own default. Pass `models: nil` for what a watcher without its own model falls back
-    /// to (and for injected output, which has no watcher).
-    public static func watcherModel(
-        _ driver: String, models: [String: String?]?, watcherModels: [String: String?]?, defaultModels: [String: String?]?
-    ) -> String? {
-        nonEmpty(models?[driver] ?? nil) ?? nonEmpty(watcherModels?[driver] ?? nil) ?? nonEmpty(defaultModels?[driver] ?? nil)
-    }
-
-    public static func watcherModel(_ driver: String, watcher: Watcher?, settings: (any WatcherTriageSettings)?) -> String? {
-        watcherModel(driver, models: watcher?.models.map(optionalValues), watcherModels: settings?.watcherModels, defaultModels: settings?.defaultModels)
-    }
-
     // MARK: The Model select
 
     /// One pick from the combined Model select: a driver plus a model on it. `driver: nil` is the
@@ -149,24 +112,6 @@ public enum Watchers {
     /// DEFAULT_TRIAGE_CHOICE.
     public static let defaultTriageChoice = TriageChoice(driver: nil, model: nil)
 
-    /// What a watcher's Model select shows as picked. A watcher with its own driver shows that
-    /// driver and its model there. One without a driver but with a model for the default watcher
-    /// driver (set through the tools) shows that pick; otherwise Default. No watcher at all is
-    /// `driver: nil, models: nil`, which is Default too.
-    public static func watcherChoice(driver: String?, models: [String: String?]?, watcherDriver settingsDriver: String?, defaultDriver: String) -> TriageChoice {
-        if let own = nonEmpty(driver) { return TriageChoice(driver: own, model: nonEmpty(models?[own] ?? nil)) }
-        let fallback = watcherDriver(nil, watcherDriver: settingsDriver, defaultDriver: defaultDriver)
-        guard let model = nonEmpty(models?[fallback] ?? nil) else { return defaultTriageChoice }
-        return TriageChoice(driver: fallback, model: model)
-    }
-
-    public static func watcherChoice(_ w: Watcher?, settings: some WatcherTriageSettings) -> TriageChoice {
-        watcherChoice(
-            driver: w?.driver, models: w?.models.map(optionalValues), watcherDriver: settings.watcherDriver.optional,
-            defaultDriver: settings.defaultDriver
-        )
-    }
-
     /// A PATCH body for a per-driver models map: every stored driver gets nil (cleared), then
     /// `keep` sets one (its model may be nil: that driver's own default).
     public static func replaceModels(_ current: [String: String?]?, keep: TriageChoice) -> [String: String?] {
@@ -175,41 +120,6 @@ public enum Watchers {
         // (a literal `out[driver] = nil` would remove the key instead).
         if let driver = nonEmpty(keep.driver) { out[driver] = .some(keep.model) }
         return out
-    }
-
-    /// The driver and models fields that save a pick on a watcher. The pick replaces whatever the
-    /// watcher had: other drivers' models are cleared, so Default really inherits both and a
-    /// pinned driver has exactly one model entry.
-    public static func watcherChoiceBody(_ choice: TriageChoice, currentModels: [String: String?]?) -> WatcherBody {
-        WatcherBody(driver: Patch(choice.driver), models: replaceModels(currentModels, keep: choice))
-    }
-
-    public static func watcherChoiceBody(_ choice: TriageChoice, current: Watcher?) -> WatcherBody {
-        watcherChoiceBody(choice, currentModels: current?.models.map(optionalValues))
-    }
-
-    /// What the settings-level watcher Model select shows as picked (Default follows
-    /// defaultDriver/defaultModels).
-    public static func settingsWatcherChoice(watcherDriver settingsDriver: String?, defaultDriver: String, watcherModels: [String: String?]?) -> TriageChoice {
-        let driver = nonEmpty(settingsDriver) ?? defaultDriver
-        let model = nonEmpty(watcherModels?[driver] ?? nil)
-        if nonEmpty(settingsDriver) != nil { return TriageChoice(driver: driver, model: model) }
-        guard let model else { return defaultTriageChoice }
-        return TriageChoice(driver: driver, model: model)
-    }
-
-    public static func settingsWatcherChoice(_ settings: some WatcherTriageSettings) -> TriageChoice {
-        settingsWatcherChoice(watcherDriver: settings.watcherDriver.optional, defaultDriver: settings.defaultDriver, watcherModels: settings.watcherModels)
-    }
-
-    /// The PATCH /settings body that saves a pick as the default for watchers (other drivers'
-    /// entries cleared).
-    public static func settingsWatcherChoicePatch(_ choice: TriageChoice, watcherModels: [String: String?]?) -> SettingsPatch {
-        SettingsPatch(watcherDriver: Patch(choice.driver), watcherModels: replaceModels(watcherModels, keep: choice))
-    }
-
-    public static func settingsWatcherChoicePatch(_ choice: TriageChoice, settings: some WatcherTriageSettings) -> SettingsPatch {
-        settingsWatcherChoicePatch(choice, watcherModels: settings.watcherModels)
     }
 
     // MARK: Helpers

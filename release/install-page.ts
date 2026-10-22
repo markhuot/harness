@@ -126,7 +126,7 @@ export const features: { img: string; w: number; h: number; size: "hero" | "full
     h: 500,
     size: "wide",
     title: "Watchers turn a feed into tickets",
-    body: "A watcher is any shell command that prints text (a Jira or Sentry poller, for example) plus a prompt that says what you want done with it. A triage agent reads each new item and either opens a ticket in the right project or declines it, and the Inbox shows every decision.",
+    body: "A watcher is any shell command that prints text (a Jira or Sentry poller, for example) plus a prompt that says what you want done with it. Its output reaches your chief of staff, which reads each new item and either opens a ticket in the right project or lets it go, and its Inbox shows every decision.",
   },
   {
     img: "conductor",

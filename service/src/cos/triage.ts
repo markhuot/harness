@@ -107,7 +107,8 @@ export function buildTriagePrompt(input: TriageInput): { system: string; user: s
   lines.push(...(input.openConditions.length ? input.openConditions.map((c) => `- ${c}`) : ["(none)"]), "");
   lines.push("## Events");
   for (const e of input.events) {
-    lines.push(`id: ${e.id} | source: ${e.source} | actor: ${e.actor} | project: ${e.project ?? "(none)"} | ticket: ${e.ticket ?? "(none)"}`, `title: ${clip(e.title, 200)}`, fenceUntrusted(e.id, clip(e.body, MAX_BODY)), "");
+    // The title and actor come from outside too (a watcher names its own output), so they sit in the fence with the body.
+    lines.push(`id: ${e.id} | source: ${e.source} | project: ${e.project ?? "(none)"} | ticket: ${e.ticket ?? "(none)"}`, fenceUntrusted(e.id, `actor: ${clip(e.actor, 200)}\ntitle: ${clip(e.title, 200)}\n\n${clip(e.body, MAX_BODY)}`), "");
   }
   return { system: TRIAGE_SYSTEM, user: lines.join("\n") };
 }

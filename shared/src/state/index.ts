@@ -20,7 +20,6 @@ export * from "./specDiff";
 export * from "./icons";
 export * from "./stickToBottom";
 export * from "./browserZoom";
-export * from "./watchers";
 export * from "./cos";
 export * from "./attachments";
 export * from "./promptAttachments";
