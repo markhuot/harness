@@ -9,6 +9,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- A chief of staff's chat now shows the cards for tickets it creates or moves as soon as it does, on the Mac, iPhone and iPad. Before, they appeared only when the chat was reloaded (after you sent a message from that device, or reopened the pane), so tickets a chief made on a wake, or after a message from another device, had no card.
+
 ### Changed
 
 - Internal: the end-to-end walkthrough is down from sixteen steps to nine, each one something only the real apps together can show, and it no longer types into the Mac app (except the file palette's query) or sleeps; the Mac app it drives isn't throttled when a simulator covers it, and a timed-out wait prints the page's focus and visibility. What the removed steps checked is now covered by Mac views and service tests (the New Ticket form, saving a file and a failed save, the spec's Source view, wrap, and the file routes over HTTP), and the iPad's live dock-glow test scores each frame against the moment the card drew it and skips, rather than fails, when the host is too loaded to judge, so `bun run testing` stops failing on a slow Mac.
