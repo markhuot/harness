@@ -86,13 +86,13 @@ export class Cdp {
     await this.send("Target.setDiscoverTargets", { discover: true });
   }
 
-  send<T = Record<string, unknown>>(method: string, params: Record<string, unknown> = {}, sessionId?: string): Promise<T> {
+  send<T = Record<string, unknown>>(method: string, params: Record<string, unknown> = {}, sessionId?: string, deadlineMs = this.sendDeadlineMs): Promise<T> {
     const id = this.nextId++;
     const p = deferred<unknown>();
     this.pending.set(id, { method, resolve: p.resolve, reject: p.reject });
     this.ws.send(JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) }));
     // A renderer or browser that stops answering with its socket still open would hang every caller, teardown included.
-    return withDeadline(`the DevTools answer to ${method}`, this.sendDeadlineMs, p.promise as Promise<T>, () => "no answer").catch((e) => {
+    return withDeadline(`the DevTools answer to ${method}`, deadlineMs, p.promise as Promise<T>, () => "no answer").catch((e) => {
       this.pending.delete(id);
       throw e;
     });
@@ -140,13 +140,13 @@ export class Page {
 
   constructor(readonly cdp: Cdp, readonly sessionId: string, readonly target: TargetInfo) {}
 
-  send<T = Record<string, unknown>>(method: string, params: Record<string, unknown> = {}) {
-    return this.cdp.send<T>(method, params, this.sessionId);
+  send<T = Record<string, unknown>>(method: string, params: Record<string, unknown> = {}, deadlineMs?: number) {
+    return this.cdp.send<T>(method, params, this.sessionId, deadlineMs);
   }
 
   /** Evaluate in the page; a promise is awaited. A thrown error becomes a rejection with its message. */
-  async evaluate<T = unknown>(expression: string): Promise<T> {
-    const r = await this.send<{ result: { value?: T }; exceptionDetails?: { text: string; exception?: { description?: string } } }>("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true });
+  async evaluate<T = unknown>(expression: string, deadlineMs?: number): Promise<T> {
+    const r = await this.send<{ result: { value?: T }; exceptionDetails?: { text: string; exception?: { description?: string } } }>("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true }, deadlineMs);
     if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description ?? r.exceptionDetails.text);
     return r.result.value as T;
   }
@@ -177,7 +177,8 @@ export class Page {
     const run = (async () => {
       while (!abandoned) {
         try {
-          return await this.evaluate<{ ok: boolean; v: T }>(script);
+          // The in-page wait answers when it's met: its own deadline below is the one that names the step.
+          return await this.evaluate<{ ok: boolean; v: T }>(script, ms + 10_000);
         } catch (e) {
           if (!(e instanceof Error && lost.test(e.message))) throw e;
           await new Promise<void>((res) => setTimeout(res, 50));

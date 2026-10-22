@@ -200,7 +200,7 @@ import { AnthropicApiClassifier, ClaudeCliClassifier, type Classifier } from "..
 import { AutoModeRulesProvider } from "../permissions/rules";
 import { anthropicStructured, claudeCliStructured } from "../permissions/structured";
 import { CosEngine, wire as wireCosEvent, type Timers as CosTimers } from "../cos/engine";
-import { cosChat, WAKE_PROMPT_PREFIX } from "../cos/chat";
+import { chatEntryOf, cosChat, WAKE_PROMPT_PREFIX } from "../cos/chat";
 import { LlmTriage, type CosTriage } from "../cos/triage";
 import { claudeCliEnv, resolveClaudeBin } from "../drivers/claude-code";
 import { DEFAULT_ANTHROPIC_MODEL } from "../drivers/anthropic-api";
@@ -6011,8 +6011,13 @@ ${numberLines(r.body)}`;
 
   /** Add an entry to the ticket's Activity (DESIGN.md "Activity") and broadcast it. */
   private addActivity(ticket: Pick<Ticket, "id" | "sessionId">, kind: ActivityKind, author: ActivityAuthor, body: string, meta: ActivityMeta = {}): ActivityEntry {
-    const entry = this.store.activity.add({ sessionId: ticket.sessionId, ticketId: ticket.id, kind, author, body, meta, actor: this.actorContext.getStore() ?? null });
+    const actor = this.actorContext.getStore() ?? null;
+    const entry = this.store.activity.add({ sessionId: ticket.sessionId, ticketId: ticket.id, kind, author, body, meta, actor });
     this.bus.emit({ kind: "activity.added", entry });
+    // A ticket a chief made or moved is a card in its chat: an open chat gets it now, not on its next reload.
+    const cosId = actor?.startsWith("cos:") ? actor.slice("cos:".length) : null;
+    const card = cosId && this.store.cos.get(cosId) ? chatEntryOf(this.store, cosId, entry) : null;
+    if (cosId && card) this.bus.emit({ kind: "cos.transcript.appended", cosId, entry: card });
     if (meta.to && kind !== "moved") this.movesRecorded.set(ticket.id, { to: meta.to, entryId: entry.id });
     return entry;
   }

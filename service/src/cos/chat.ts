@@ -2,7 +2,7 @@
 // session's messages, the board changes it made (activity stamped with its actor) and the event
 // batches that woke it. Newest first, so older entries load as the reader scrolls up.
 
-import type { CosChatEntry, CosChatPage } from "@harness/shared";
+import type { ActivityEntry, CosChatEntry, CosChatPage } from "@harness/shared";
 import type { Store } from "../store";
 
 /** The prompt Harness hands a chief on a wake starts like this; the chat shows it as an event batch instead. */
@@ -19,6 +19,15 @@ function parseCursor(raw: string | null): { createdAt: number; id: string } | nu
   return i > 0 && Number.isFinite(createdAt) ? { createdAt, id: raw.slice(i + 1) } : null;
 }
 
+/** A board change a chief made (an Activity row with its actor), as its chat shows it: a ticket card, or null for a row the chat leaves out. */
+export function chatEntryOf(store: Store, cosId: string, a: ActivityEntry): CosChatEntry | null {
+  const t = a.ticketId ? store.tickets.get(a.ticketId) : null;
+  if (!t) return null;
+  if (a.kind === "moved" && a.meta.from && a.meta.to) return { id: a.id, cosId, createdAt: a.createdAt, kind: "ticket_moved", key: t.key, title: t.title, from: a.meta.from, to: a.meta.to };
+  if (a.kind === "note" && CREATED_NOTE.test(a.body)) return { id: a.id, cosId, createdAt: a.createdAt, kind: "ticket_created", key: t.key, title: t.title, status: t.status };
+  return null;
+}
+
 export function cosChat(store: Store, cosId: string, rawCursor: string | null, limit: number): CosChatPage {
   const cos = store.cos.get(cosId);
   const ticket = cos ? store.tickets.get(cos.ticketId) : null;
@@ -33,10 +42,8 @@ export function cosChat(store: Store, cosId: string, rawCursor: string | null, l
   }
 
   for (const a of store.activity.listByActor(`cos:${cosId}`, cursor, fetch)) {
-    const t = a.ticketId ? store.tickets.get(a.ticketId) : null;
-    if (!t) continue;
-    if (a.kind === "moved" && a.meta.from && a.meta.to) found.push({ id: a.id, cosId, createdAt: a.createdAt, kind: "ticket_moved", key: t.key, title: t.title, from: a.meta.from, to: a.meta.to });
-    else if (a.kind === "note" && CREATED_NOTE.test(a.body)) found.push({ id: a.id, cosId, createdAt: a.createdAt, kind: "ticket_created", key: t.key, title: t.title, status: t.status });
+    const entry = chatEntryOf(store, cosId, a);
+    if (entry) found.push(entry);
   }
 
   for (const w of store.cosEvents.wakesBefore(cosId, cursor, fetch)) {

@@ -597,12 +597,15 @@ test("chat shows the chief's messages, its board changes and the event batches, 
   await s.after(MIN);
 
   const appended = s.h.events.flatMap((e) => (e.kind === "cos.transcript.appended" ? [e.entry] : []));
-  expect(appended.map((e) => e.kind)).toEqual(expect.arrayContaining(["message", "event_batch"]));
+  expect(appended.map((e) => e.kind)).toEqual(expect.arrayContaining(["message", "event_batch", "ticket_created"]));
+  // The card that arrives live is the one a reload of the chat shows.
+  const card = appended.find((e) => e.kind === "ticket_created")!;
+  expect(card).toMatchObject({ cosId: s.chief.ticketId, title: "Chief's ticket" });
   expect(appended.some((e) => e.kind === "message" && e.text.startsWith(WAKE_PROMPT_PREFIX))).toBe(false);
   const page = s.h.orch.cosTranscript(s.chief.ticketId, { limit: "100" });
   const kinds = page.entries.map((e) => e.kind);
   expect(kinds).toContain("event_batch");
-  expect(kinds).toContain("ticket_created");
+  expect(page.entries.find((e) => e.kind === "ticket_created")).toEqual(card);
   expect(page.entries.filter((e) => e.kind === "message").map((e) => (e as { text: string }).text)).toEqual(expect.arrayContaining(["make one", "Made it"]));
   // The wake prompt isn't shown as a message: the batch stands in for it.
   expect(page.entries.some((e) => e.kind === "message" && e.text.startsWith(WAKE_PROMPT_PREFIX))).toBe(false);
