@@ -1114,6 +1114,29 @@ test("a triage that brings its own limits gets batches of that size and that lon
   expect(t.eventOf("marker-slow").reason).toBe("triage timed out");
 });
 
+test("an escalation the human makes while an earlier chunk is out for triage is not overwritten by a later chunk", async () => {
+  let s!: Awaited<ReturnType<typeof quiet>>;
+  let call = 0;
+  const agent: CosTriage = {
+    backend: "fake",
+    model: "m",
+    limits: { chunk: 1, perPass: 30, timeoutMs: 240_000 },
+    triage: async (input) => {
+      // While the first chunk is out, the human escalates an event that waits in a later one.
+      if (call++ === 0) expect(s.engine.escalate(s.eventOf("marker-later").id)).toHaveProperty("event");
+      return { verdicts: input.events.map((e) => ({ id: e.id, verdict: "ignore" as const, reason: "noise", brief: null, project: null })), model: "m", tokensIn: 0, tokensOut: 0 };
+    },
+  };
+  s = await quiet({ triage: agent });
+  s.happen(s.t, "marker-first");
+  s.happen(s.t, "marker-later");
+  await s.after(MIN);
+  expect(s.eventOf("marker-first").status).toBe("ignored");
+  expect(s.eventOf("marker-later").verdict).toBe("escalate");
+  expect(s.eventOf("marker-later").reason).toMatch(/^Escalated by you/);
+  expect(call).toBe(1);
+});
+
 test("an event keeps the session of the triage run that judged it, ignored or escalated", async () => {
   const agent = new AgentLike();
   agent.answers.push(escalating("marker-esc", "Copilot review on PR #1297; owning ticket ACME-1"));

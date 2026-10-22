@@ -34,6 +34,9 @@ test("a triage run reads: Bash only, the user's MCP servers loaded, no sub-agent
   expect(a).not.toContain("--strict-mcp-config"); // Jira and the rest must load
   expect(listAfter(a, "--disallowedTools")).toEqual(["Agent", "Task", "WebFetch", "WebSearch"]);
   expect(a[a.indexOf("--max-turns") + 1]).toBe("40");
+  // The user's allow rules and hooks must not answer before the harness's gate does.
+  expect(a[a.indexOf("--setting-sources") + 1]).toBe("");
+  expect(args("work")).not.toContain("--setting-sources");
   expect(a[a.indexOf("--permission-mode") + 1]).toBe("default");
   expect(a[a.indexOf("--permission-prompt-tool") + 1]).toMatch(/permission_prompt$/);
   // Runs that set no limit pass none.

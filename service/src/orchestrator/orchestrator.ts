@@ -1294,7 +1294,6 @@ export class Orchestrator {
    */
   async runTriage(req: AgentTriageRequest, signal: AbortSignal): Promise<AgentTriageRun> {
     // An empty folder to work in: the service's own checkout and settings never reach the agent.
-    mkdirSync(this.paths.scratchDir, { recursive: true });
     const cwd = mkdtempSync(join(tmpdir(), "harness-triage-"));
     const session = this.store.sessions.create({
       key: `TRIAGE-${this.store.counters.next("triage")}`,
@@ -1309,16 +1308,22 @@ export class Orchestrator {
     try {
       const run = this.enqueueRun(session.id, "triage", req.prompt, undefined, { skipTranscript: false });
       const finished = await new Promise<Run>((resolve, reject) => {
+        // The run's own time limit starts when it does: a run waiting for a slot isn't timed out.
+        let timer: ReturnType<typeof setTimeout> | null = null;
         const off = this.bus.onKind("run.upserted", (e) => {
-          if (e.run.id !== run.id || !["succeeded", "failed", "cancelled"].includes(e.run.status)) return;
+          if (e.run.id !== run.id) return;
+          if (e.run.status === "running" && !timer) timer = setTimeout(() => stop(new Error("triage timed out")), req.timeoutMs);
+          if (!["succeeded", "failed", "cancelled"].includes(e.run.status)) return;
           off();
+          if (timer) clearTimeout(timer);
           signal.removeEventListener("abort", stop);
           resolve(e.run);
         });
-        const stop = () => {
+        const stop = (why?: unknown) => {
           off();
+          if (timer) clearTimeout(timer);
           void this.cancelSession(session.id, false);
-          reject(new Error("triage was cancelled"));
+          reject(why instanceof Error ? why : new Error("triage was cancelled"));
         };
         if (signal.aborted) stop();
         else signal.addEventListener("abort", stop, { once: true });
@@ -1344,6 +1349,8 @@ export class Orchestrator {
     if (!state) throw new Error("triage_verdict is for triage runs.");
     const [verdict] = parseTriage({ verdicts: [input] }, state.ids);
     if (!verdict) throw new Error(`Not recorded: id must be one of ${state.ids.join(", ")}, and verdict "ignore" or "escalate".`);
+    // The first verdict per event is final: a later call (from injected text in tool output) can't flip it.
+    if (state.verdicts.has(verdict.id)) return `${verdict.id} already has a verdict; it stands.`;
     state.verdicts.set(verdict.id, verdict);
     const left = state.ids.filter((id) => !state.verdicts.has(id));
     return left.length ? `Recorded. Still without a verdict: ${left.join(", ")}.` : "Recorded. Every event has a verdict: stop now.";
@@ -3885,7 +3892,7 @@ ${numberLines(r.body)}`;
       const related = requested ? this.relatedTickets(sc, requested, null) : [];
       if (!related.length) {
         // The Inbox isn't any project's: a group scope can't tell an item's key from a missing ticket's.
-        const item = requested && sc.scope === "all" ? this.store.sessions.list("triage").find((s) => s.key.toUpperCase() === requested) : undefined;
+        const item = requested && sc.scope === "all" ? this.store.sessions.list("triage").find((s) => s.triageStatus !== null && s.key.toUpperCase() === requested) : undefined;
         if (item) {
           const routed = item.outcome ? ` (${item.outcome})` : "";
           throw new Error(`${item.key} is an Inbox item${routed}, not a ticket. Read it with list_inbox { key: "${item.key}", include_output: true }.`);
@@ -3980,6 +3987,8 @@ ${numberLines(r.body)}`;
     const key = filter.key?.trim().toUpperCase();
     const matches = this.store.sessions
       .list("triage")
+      // A legacy Inbox item always has a triage status (the migration settled the open ones); a triage agent run has none.
+      .filter((s) => s.triageStatus !== null)
       .map((s) => ({ s, meta: this.store.sessions.getMeta<LegacyTriageMeta>(s.id) }))
       .filter(({ s, meta }) => {
         if (key && s.key.toUpperCase() !== key) return false;

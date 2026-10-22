@@ -111,6 +111,9 @@ const MAX_BODY = 2000;
 /** A brief reaches a chief that can act, so it is short (the wake prompt fences it too). */
 export const MAX_BRIEF = 600;
 const clipBrief = (s: string | null) => (s && s.length > MAX_BRIEF ? `${s.slice(0, MAX_BRIEF)}…` : s);
+/** The Inbox and the digest show a reason as it is stored. */
+export const MAX_REASON = 300;
+const clipReason = (s: string) => (s.length > MAX_REASON ? `${s.slice(0, MAX_REASON)}…` : s);
 const clip = (s: string, max: number) => (s.length > max ? `${s.slice(0, max)}… [${s.length - max} more chars]` : s);
 
 /**
@@ -175,7 +178,7 @@ export function parseTriage(raw: unknown, ids: readonly string[]): TriageVerdict
     out.set(id, {
       id,
       verdict: o.verdict,
-      reason: str(o.reason) ?? "(no reason given)",
+      reason: clipReason(str(o.reason) ?? "(no reason given)"),
       brief: o.verdict === "escalate" ? clipBrief(str(o.brief)) : null,
       project: o.verdict === "escalate" ? str(o.project) : null,
     });
@@ -252,6 +255,8 @@ export interface AgentTriageRequest {
   model: string;
   /** Ids the run must give a verdict for */
   ids: string[];
+  /** How long the run may take once it starts; time waiting for a run slot doesn't count */
+  timeoutMs: number;
 }
 
 export interface AgentTriageRun {
@@ -267,8 +272,13 @@ export interface AgentTriageRun {
  * are judged, the rest escalate. The run's session stays, so the Inbox can show what it looked up.
  */
 export class AgentTriage implements CosTriage {
-  /** Small batches, so one timeout escalates a few events, not twenty; a few minutes for the lookups. */
-  readonly limits = { chunk: 5, perPass: 30, timeoutMs: 4 * 60_000 };
+  /**
+   * Small batches, so one timeout escalates a few events, not twenty; a few minutes for the lookups,
+   * counted from when the run starts. The engine's own timer is only a backstop for a run that never
+   * gets a slot, so a busy board doesn't escalate a batch as "timed out" while it waits.
+   */
+  readonly runMs = 4 * 60_000;
+  readonly limits = { chunk: 5, perPass: 30, timeoutMs: 4 * 60_000 + 15 * 60_000 };
 
   constructor(
     readonly backend: string,
@@ -283,7 +293,7 @@ export class AgentTriage implements CosTriage {
   async triage(input: TriageInput, signal: AbortSignal): Promise<TriageResult> {
     const { system, user } = buildTriagePrompt(input, TRIAGE_AGENT_SYSTEM);
     const model = this.model;
-    const res = await this.run({ system, prompt: user, cosId: input.cosId, model, ids: input.events.map((e) => e.id) }, signal);
+    const res = await this.run({ system, prompt: user, cosId: input.cosId, model, ids: input.events.map((e) => e.id), timeoutMs: this.runMs }, signal);
     return { verdicts: res.verdicts, model, tokensIn: res.tokensIn, tokensOut: res.tokensOut, sessionId: res.sessionId };
   }
 }

@@ -15,7 +15,7 @@ async function rig() {
   mkdirSync(dir, { recursive: true });
   h.orch.createProject({ path: dir, name: "Group", key: "GR", useWorktrees: false });
   const chief = h.orch.openCos("all");
-  const request = (ids: string[], over: Partial<AgentTriageRequest> = {}): AgentTriageRequest => ({ system: TRIAGE_AGENT_SYSTEM, prompt: "events", cosId: chief.ticketId, model: "haiku", ids, ...over });
+  const request = (ids: string[], over: Partial<AgentTriageRequest> = {}): AgentTriageRequest => ({ system: TRIAGE_AGENT_SYSTEM, prompt: "events", cosId: chief.ticketId, model: "haiku", ids, timeoutMs: 60_000, ...over });
   return { h, driver, chief, request };
 }
 
@@ -110,6 +110,40 @@ test("aborting the call (the engine's timeout) cancels the run and keeps the ver
   expect(err.verdicts.map((v: { id: string }) => v.id)).toEqual(["e1"]);
   await h.settle();
   expect(driver.aborted).toHaveLength(1);
+});
+
+test("the first verdict for an event is final: a later call can't flip it", async () => {
+  const { h, driver, request } = await rig();
+  const seen: string[] = [];
+  const call = (verdict: "ignore" | "escalate") => toolCall("triage_verdict", { id: "e1", verdict, reason: verdict }, (r) => seen.push((r.content[0] as { text: string }).text));
+  driver.script([...call("escalate"), ...call("ignore")]);
+  const res = await h.orch.runTriage(request(["e1"]), new AbortController().signal);
+  expect(res.verdicts.map((v) => v.verdict)).toEqual(["escalate"]);
+  expect(seen[1]).toMatch(/already has a verdict/);
+});
+
+test("the run's own time limit counts from when it starts, and cuts it off keeping what it recorded", async () => {
+  const { h, driver, request } = await rig();
+  const stuck = { wait: { wait: (signal: AbortSignal) => new Promise<void>((_, reject) => signal.addEventListener("abort", () => reject(new Error("aborted")))) } } as unknown as Step;
+  driver.script([...verdictCall("e1", "ignore"), stuck]);
+  const err = await h.orch.runTriage(request(["e1", "e2"], { timeoutMs: 100 }), new AbortController().signal).catch((e) => e);
+  expect(err).toBeInstanceOf(TriageIncomplete);
+  expect(err.message).toMatch(/timed out/);
+  expect(err.verdicts.map((v: { id: string }) => v.id)).toEqual(["e1"]);
+});
+
+test("a triage run's session isn't a legacy Inbox item: list_inbox and get_ticket don't show it", async () => {
+  const { h, driver, request } = await rig();
+  let inbox = "";
+  let ticket = "";
+  driver.script([
+    ...toolCall("list_inbox", {}, (r) => (inbox = (r.content[0] as { text: string }).text)),
+    ...toolCall("get_ticket", { key: "TRIAGE-1" }, (r) => (ticket = (r.content[0] as { text: string }).text)),
+    ...verdictCall("e1", "ignore"),
+  ]);
+  await h.orch.runTriage(request(["e1"]), new AbortController().signal);
+  expect(inbox).not.toMatch(/TRIAGE-1/);
+  expect(ticket).toMatch(/Unknown ticket/);
 });
 
 test("a triage run reads only what its chief covers: with no chief behind it, the board tools refuse", async () => {

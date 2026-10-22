@@ -358,7 +358,9 @@ export function buildClaudeArgs(
     ...(req.kind === "cos" ? ["--tools", ""] : []),
     // Triage reads: Bash (the harness lets read-only gh and plain reads through), the board tools and
     // the user's MCP servers (no --strict-mcp-config: Jira and the rest load). No sub-agents, no web.
-    ...(req.kind === "triage" ? ["--disallowedTools", ...ADVISER_TOOLS, "WebFetch", "WebSearch", "--tools", "Bash"] : []),
+    // --setting-sources "": the user's allow rules and hooks (~/.claude/settings.json) would answer a
+    // tool call before the permission prompt tool is asked, so the harness's gate wouldn't see it.
+    ...(req.kind === "triage" ? ["--disallowedTools", ...ADVISER_TOOLS, "WebFetch", "WebSearch", "--tools", "Bash", "--setting-sources", ""] : []),
     ...(req.maxTurns ? ["--max-turns", String(req.maxTurns)] : []),
     "--permission-mode",
     permissionMode,

@@ -56,7 +56,7 @@ const DRAIN_PAGE = 500;
 export const COS_UNASSIGNED_RETENTION_MS = 24 * 60 * 60_000;
 export const COS_UNASSIGNED_MAX = 200;
 /** A reason from a call that judged from the event text alone says so: the human can tell it from one that looked. */
-const withdraw = (reason: string, lookup: boolean) => (lookup ? reason : `${reason} (triaged without lookup)`);
+const noteLookup = (reason: string, lookup: boolean) => (lookup ? reason : `${reason} (triaged without lookup)`);
 
 /** Events per one-shot triage call (a larger batch overruns the model's answer), and per batch pass; the rest wait for the next. An agent run sets its own (CosTriage.limits). */
 export const TRIAGE_CHUNK = 20;
@@ -368,9 +368,13 @@ export class CosEngine {
       this.triaging.delete(cosId);
     }
     if (this.stopped) return;
-    // The batch may have escalated for this chief or (after a project proposal, or a chief switched off meanwhile) another.
+    await this.handOff();
+  }
+
+  /** The batch may have escalated for this chief or (after a project proposal, or a chief switched off meanwhile) another: wake whoever has escalations. */
+  private async handOff() {
     this.rehome();
-    for (const id of new Set(store.cosEvents.byStatus("escalated").flatMap((e) => (e.cosId ? [e.cosId] : [])))) await this.deliver(id);
+    for (const id of new Set(this.d.store.cosEvents.byStatus("escalated").flatMap((e) => (e.cosId ? [e.cosId] : [])))) await this.deliver(id);
   }
 
   /** The batch sizes and time budget of the triage layer in use (an agent run has smaller batches and more time than a one-shot call). */
@@ -380,8 +384,12 @@ export class CosEngine {
   }
 
   /** One triage call over `batch` and its verdicts applied. A failure of the call escalates just these events. */
-  private async triageChunk(cosId: string, batch: StoredCosEvent[]) {
+  private async triageChunk(cosId: string, queued: StoredCosEvent[]) {
     const { store } = this.d;
+    // Chunks run one after another: re-read each event, since the human may have escalated or
+    // ignored one while an earlier chunk ran, and the payload may have changed.
+    const batch = queued.map((e) => store.cosEvents.get(e.id)).filter((e): e is StoredCosEvent => !!e && e.status === "pending");
+    if (!batch.length) return;
     const batchId = store.cosEvents.addWake({ cosId, kind: "triage", eventCount: batch.length });
     for (const e of batch) this.patch(e.id, { status: "triaging", wakeId: batchId });
     this.emitBadge();
@@ -426,11 +434,11 @@ export class CosEngine {
     for (const e of batch) {
       const v = verdicts.get(e.id);
       if (v?.verdict === "ignore") {
-        this.patch(e.id, { status: "ignored", verdict: "ignore", reason: withdraw(v.reason, lookup), model, wakeId: null, ...(session ? { payload: { ...e.payload, triageSession: session } } : {}) });
+        this.patch(e.id, { status: "ignored", verdict: "ignore", reason: noteLookup(v.reason, lookup), model, wakeId: null, ...(session ? { payload: { ...e.payload, triageSession: session } } : {}) });
         continue;
       }
       // Fail-open: an error, a timeout, garbage, or an event the answer left out escalates.
-      const reason = v ? withdraw(v.reason, lookup) : (failure ?? "triage gave no verdict for this event");
+      const reason = v ? noteLookup(v.reason, lookup) : (failure ?? "triage gave no verdict for this event");
       const patch: Parameters<Store["cosEvents"]["update"]>[1] = { status: "escalated", verdict: "escalate", reason, model: v ? model : null, wakeId: null };
       if (v?.brief || session) patch.payload = { ...e.payload, ...(v?.brief ? { brief: v.brief } : {}), ...(session ? { triageSession: session } : {}) };
       // An event with no project goes to the owner of the project triage proposes.
