@@ -243,6 +243,38 @@ export class CosEngine {
     return wire(ev);
   }
 
+  /**
+   * A ticket (or a whole project) was deleted. Its Activity goes with it, so nothing in the feed says
+   * so: the delete records the event itself, after draining what was already written about the
+   * ticket. `what` names it ("HARNESS-12" or "project Harness"); the event points at no live ticket,
+   * and the owner is fixed now because the project may be gone by the next rehome. A delete a chief
+   * caused is recorded as ignored.
+   */
+  addDeleted(input: { what: "ticket" | "project"; id: string; label: string; title: string; actor: string; project: Project | null; keepsProject?: boolean; internal?: boolean }): CosEvent | null {
+    const { store } = this.d;
+    let filtered: string | undefined;
+    if (input.actor.startsWith("cos:")) filtered = "caused by a chief of staff";
+    const body = `${input.label} was deleted${input.title ? `: ${input.title}` : ""}. It no longer exists, so there is nothing to open. This matters only if you were tracking it.`;
+    const ev = store.cosEvents.insert({
+      cosId: filtered ? null : this.ownerFor(input.project),
+      filtered,
+      projectId: input.keepsProject ? (input.project?.id ?? null) : null,
+      ticketId: null,
+      sourceKind: "activity",
+      sourceRef: `deleted:${input.what}:${input.id}`,
+      kind: "deleted",
+      actor: input.actor,
+      title: firstLine(`${input.label} deleted${input.title ? `: ${input.title}` : ""}`, 120),
+      summary: firstLine(body),
+      payload: { body, kind: "deleted", key: input.label, title: input.title },
+    });
+    if (!ev) return null;
+    this.d.emit({ kind: "cos.event.upserted", event: wire(ev) });
+    this.emitBadge();
+    this.arm();
+    return wire(ev);
+  }
+
   private ignoreScheduleEvent(id: string, reason: string) {
     this.patch(id, { status: "ignored", verdict: "filtered", reason, wakeId: null });
   }

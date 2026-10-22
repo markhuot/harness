@@ -1204,7 +1204,12 @@ export class Orchestrator {
 
   async deleteProject(id: string) {
     if (!this.store.projects.get(id) || this.store.projects.isInternal(id)) throw notFound(`Unknown project: ${id}`);
-    for (const t of this.store.tickets.list({ projectId: id })) await this.deleteTicket(t.key);
+    const project = this.store.projects.get(id)!;
+    const tickets = this.store.tickets.list({ projectId: id });
+    this.cosEngine.drain(); // what was written about its tickets is read before it cascades away
+    for (const t of tickets) await this.deleteTicket(t.key, true);
+    // One event for the whole project, not one per ticket; its owner is fixed now, as the project is about to go.
+    this.cosEngine.addDeleted({ what: "project", id, label: project.key, title: `${project.name} and its ${tickets.length} ticket${tickets.length === 1 ? "" : "s"}`, actor: this.actorContext.getStore() ?? "human", project });
     this.store.projects.delete(id);
     this.bus.emit({ kind: "project.deleted", id });
     await this.pruneCos();
@@ -2449,10 +2454,17 @@ export class Orchestrator {
     return this.store.tickets.get(ticket.id)!;
   }
 
-  async deleteTicket(key: string) {
+  /**
+   * Delete a ticket. The chiefs of staff hear of it (the ticket's Activity goes with it, so the delete
+   * records the event itself) unless `quiet`: a project delete records one event for all its tickets.
+   */
+  async deleteTicket(key: string, quiet = false) {
     const ticket = this.requireTicket(key);
     if (ticket.kind === "cos") throw conflict(`${ticket.key} is a chief of staff, not a board ticket: switch it off (PATCH /cos/${ticket.id}) instead of deleting it`);
+    const project = this.store.projects.get(ticket.projectId);
+    if (!quiet) this.cosEngine.drain(); // what was written about it is read before the delete cascades it away
     await this.removeTicket(ticket);
+    if (!quiet) this.cosEngine.addDeleted({ what: "ticket", id: ticket.id, label: ticket.key, title: ticket.title, actor: this.actorContext.getStore() ?? "human", project, keepsProject: true });
   }
 
   private pruning: Promise<void> = Promise.resolve();

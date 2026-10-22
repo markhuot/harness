@@ -89,3 +89,13 @@ test("watcher output injected over the API is a pending event for the All chief,
   expect(page.items.find((e) => e.id === first.id)).toMatchObject({ actor: "watcher:github", title: "github: PR 12 has review feedback" });
   expect((await rig.ok<CosBadge>("GET", "/cos/events/badge")).byCos[cos.ticketId]).toBe(page.items.length);
 });
+
+test("DELETE /tickets/:key puts the deletion in the chief's Inbox with the ticket's key and title", async () => {
+  const { rig, made, cos } = await inbox(1);
+  const doomed = made[0]!;
+  await rig.ok("DELETE", `/tickets/${doomed.key}`);
+  const page = await rig.ok<CosEventPage>("GET", `/cos/${cos.ticketId}/events?limit=200`);
+  const ev = page.items.find((e) => e.title.includes(`${doomed.key} deleted`));
+  expect(ev).toMatchObject({ cosId: cos.ticketId, sourceKind: "activity", ticketKey: null, projectKey: "ACME", actor: "human", status: "pending" });
+  expect(ev!.title).toContain(doomed.title);
+});

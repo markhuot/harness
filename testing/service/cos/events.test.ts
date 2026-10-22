@@ -1199,3 +1199,49 @@ test("the watcher's prompt reaches triage with the events it printed, and only t
   expect(input.find((e) => e.title === "marker-with-prompt")!.watcher).toEqual({ name: "gh-notifications", prompt: expect.stringContaining("read the PR") });
   expect(input.find((e) => e.title === "marker-without-prompt")!.watcher).toEqual({ name: "no-prompt", prompt: "" });
 });
+
+// ---------------------------------------------------------------------------
+// Deleted tickets
+// ---------------------------------------------------------------------------
+
+test("deleting a ticket tells its chief, with the key and title, after reading the activity not yet drained", async () => {
+  const s = await quiet();
+  const doomed = await s.ticket(s.h.project.id, "A doomed ticket");
+  s.happen(doomed, "marker-last-words");
+  await s.h.orch.deleteTicket(doomed.key);
+  // The activity written just before the delete wasn't read yet, and went with the ticket: it is an event anyway.
+  expect(s.eventOf("marker-last-words")).toMatchObject({ verdict: "pending" });
+  const ev = s.eventOf(`${doomed.key} deleted`);
+  expect(ev).toMatchObject({ kind: "deleted", ticketId: null, ticketKey: null, cosId: s.chief.ticketId, verdict: "pending", status: "pending", actor: "human" });
+  expect(ev.title).toContain(doomed.title);
+  expect(ev.payload).toMatchObject({ key: doomed.key, title: doomed.title });
+  // It goes to triage like any event, and a re-read of the feed makes no second one.
+  s.engine.drain();
+  expect(s.events().filter((e) => e.title.includes(`${doomed.key} deleted`))).toHaveLength(1);
+  await s.after(MIN);
+  expect(s.scripted!.calls.flatMap((c) => c.events).some((e) => e.title.includes(`${doomed.key} deleted`))).toBe(true);
+});
+
+test("a deletion a chief caused is recorded as ignored and never triaged", async () => {
+  const s = await quiet();
+  s.engine.addDeleted({ what: "ticket", id: "gone-1", label: "ACME-99", title: "Chief's doomed ticket", actor: `cos:${s.chief.ticketId}`, project: s.h.project, keepsProject: true });
+  expect(s.eventOf("ACME-99 deleted")).toMatchObject({ verdict: "filtered", status: "ignored", reason: "caused by a chief of staff" });
+  await s.after(10 * MIN);
+  expect(s.scripted!.calls.flatMap((c) => c.events).some((e) => e.title.includes("ACME-99 deleted"))).toBe(false);
+});
+
+test("deleting a project makes one event, not one per ticket", async () => {
+  const s = await quiet();
+  const p = await s.project("GONE");
+  await s.ticket(p.id, "first");
+  await s.ticket(p.id, "second");
+  await s.h.orch.deleteProject(p.id);
+  const deleted = s.events().filter((e) => e.kind === "deleted");
+  expect(deleted).toHaveLength(1);
+  expect(deleted[0]).toMatchObject({ ticketId: null, verdict: "pending" });
+  expect(deleted[0]!.title).toContain("GONE");
+  expect(deleted[0]!.title).toContain("2 tickets");
+  // The owner survives the project: a rehome keeps it with a live chief.
+  s.engine.rehome();
+  expect(s.events().find((e) => e.kind === "deleted")!.cosId).toBe(s.chief.ticketId);
+});
