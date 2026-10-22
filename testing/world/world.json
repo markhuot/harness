@@ -1228,6 +1228,7 @@
       "updatedAt": 1773327600000,
       "name": "jira",
       "command": "watch-jira",
+      "cosId": "cos-all",
       "live": {
         "state": "waiting",
         "since": 1773498600000,
@@ -1268,6 +1269,7 @@
       "updatedAt": 1773327600000,
       "name": "sentry",
       "command": "watch-sentry",
+      "cosId": "cos-all",
       "live": {
         "state": "stopped",
         "since": 1773495000000,

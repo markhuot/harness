@@ -86,6 +86,16 @@ final class ScreenTests: ScreenTestCase {
         try await screen("cos-empty") { NavigationStack { CosScreen(scope: "group:group-work", tab: .inbox) } }
     }
 
+    /// The All chief's Listeners tab: an active listener with its next run, a paused loop and one whose last run failed.
+    func testCosListeners() async throws {
+        try await screen("cos-listeners") { NavigationStack { CosScreen(scope: "all", tab: .listeners) } }
+    }
+
+    /// The Work group's chief owns no watchers yet: the tab says so.
+    func testCosListenersEmpty() async throws {
+        try await screen("cos-listeners-empty") { NavigationStack { CosScreen(scope: "group:group-work", tab: .listeners) } }
+    }
+
     /// The chiefs' bus events reach the store through the socket, which delivers them as events
     /// HarnessEvent doesn't know: the badge and a chat entry land in the CoS state.
     func testCosEventsFromTheSocketReachTheStore() async throws {

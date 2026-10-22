@@ -82,11 +82,17 @@ public struct CosState: Equatable, Sendable {
     }
 }
 
-/// A chief's pane has these two tabs and no others (no Spec, Activity or Tickets).
+/// A chief's pane has these three tabs and no others (no Spec, Activity or Tickets).
 public enum CosTab: String, CaseIterable, Sendable, Hashable {
-    case chat, inbox
+    case chat, inbox, listeners
 
-    public var label: String { self == .chat ? "Chat" : "Inbox" }
+    public var label: String {
+        switch self {
+        case .chat: "Chat"
+        case .inbox: "Inbox"
+        case .listeners: "Listeners"
+        }
+    }
 }
 
 /// What an Inbox row says happened to the event, in a word.

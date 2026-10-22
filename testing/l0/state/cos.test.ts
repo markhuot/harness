@@ -25,8 +25,8 @@ const event = (id: string, patch: Partial<CosEvent> = {}): CosEvent => ({
 });
 
 describe("tabs", () => {
-  test("a chief has Chat and Inbox only", () => {
-    expect([...COS_TABS]).toEqual(["chat", "inbox"]);
+  test("a chief has Chat, Inbox and Listeners only", () => {
+    expect([...COS_TABS]).toEqual(["chat", "inbox", "listeners"]);
     expect(isCosTab("inbox")).toBe(true);
     for (const t of ["spec", "activity", "children", "", undefined]) expect(isCosTab(t)).toBe(false);
   });

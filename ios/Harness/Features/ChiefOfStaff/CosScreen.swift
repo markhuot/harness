@@ -1,7 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-// A chief of staff's pane: the Chat and Inbox tabs and the memory sheet. It is a card of the ticket
+// A chief of staff's pane: the Chat, Inbox and Listeners tabs and the memory sheet. It is a card of the ticket
 // sheets (`TicketSheet.Root.cos`): a sheet on the iPhone, the side panel on the iPad and Duo.
 
 /// What the board's Chief of Staff button does: opens the chief of the board's scope, making the
@@ -45,6 +45,7 @@ struct CosScreen: View {
                 switch tab {
                 case .chat: CosChatView(chief: chief)
                 case .inbox: CosInboxView(chief: chief, onChat: { tab = .chat })
+                case .listeners: CosListenersView(chief: chief, onChat: { tab = .chat })
                 }
             } else if let openFailure {
                 Spacer()

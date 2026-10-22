@@ -4,14 +4,14 @@
 import type { Cos, CosBadge, CosChatEntry, CosEvent } from "../cos";
 import { COS_OPEN_STATUSES } from "../cos";
 
-/** A chief's pane has these two tabs and no others (no Spec, Activity or Tickets). */
-export const COS_TABS = ["chat", "inbox"] as const;
+/** A chief's pane has these three tabs and no others (no Spec, Activity or Tickets). */
+export const COS_TABS = ["chat", "inbox", "listeners"] as const;
 export type CosTab = (typeof COS_TABS)[number];
 
-export const COS_TAB_LABEL: Record<CosTab, string> = { chat: "Chat", inbox: "Inbox" };
+export const COS_TAB_LABEL: Record<CosTab, string> = { chat: "Chat", inbox: "Inbox", listeners: "Listeners" };
 
 export function isCosTab(v: unknown): v is CosTab {
-  return v === "chat" || v === "inbox";
+  return v === "chat" || v === "inbox" || v === "listeners";
 }
 
 /** Events awaiting a verdict or being handled by one chief (0 when the badge hasn't loaded or names nobody). */
