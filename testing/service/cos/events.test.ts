@@ -85,7 +85,7 @@ async function setup(opts: { triage?: CosTriage | { unavailable: string }; drive
     return t;
   };
   /** Something happened on a ticket (an activity row, as the orchestrator writes them). */
-  const happen = (t: { id: string; sessionId: string }, body: string, extra: { kind?: "note" | "moved" | "blocked"; actor?: string; from?: string; to?: string } = {}) =>
+  const happen = (t: { id: string; sessionId: string }, body: string, extra: { kind?: "note" | "moved" | "blocked" | "review_approved" | "approved" | "failed"; actor?: string; from?: string; to?: string } = {}) =>
     h.store.activity.add({ sessionId: t.sessionId, ticketId: t.id, kind: extra.kind ?? "note", author: "agent", body, actor: extra.actor, meta: extra.from ? { from: extra.from as never, to: extra.to as never } : {} });
   const events = () => h.store.cosEvents.list({ limit: 500 }).reverse();
   const eventOf = (marker: string): StoredCosEvent => {
@@ -996,4 +996,88 @@ test("a chief whose runs keep failing isn't woken for the same event forever", a
   for (let i = 0; i < 5; i++) await s.after(COS_HOUR_MS / COS_WAKES_PER_HOUR);
   expect(s.h.driver.requests.filter((r) => r.prompt.includes("marker-doomed"))).toHaveLength(WAKE_MAX_ATTEMPTS);
   expect(s.eventOf("marker-doomed")).toMatchObject({ status: "ignored", reason: expect.stringContaining("failed 3 times") });
+});
+
+// ---------------------------------------------------------------------------
+// Outcomes and routine activity
+// ---------------------------------------------------------------------------
+
+/** A wake whose scripted run records `outcomes` for the events whose titles hold each marker (ids are known only once the wake is made). */
+function recording(s: Awaited<ReturnType<typeof quiet>>, entries: [marker: string, kind: string, text: string][], opts: { fail?: boolean } = {}) {
+  const input = { outcomes: [] as { event_id: string; kind: string; text: string }[] };
+  const { steps, results } = callTools([["record_event_outcomes", input]]);
+  s.h.driver.script([{ run: () => void (input.outcomes = entries.map(([m, kind, text]) => ({ event_id: m.startsWith("ev:") ? m.slice(3) : s.eventOf(m).id, kind, text }))) }, ...steps, ...(opts.fail ? [{ throw: new Error("boom") }] : replyScript("done"))]);
+  return results;
+}
+
+test("the chief's recorded outcome is stored on each event it was woken for and sent on the wire; an event it recorded nothing for has none", async () => {
+  const s = await quiet();
+  const results = recording(s, [
+    ["marker-a", "acted", "Moved the ticket back to planning."],
+    ["marker-b", "no_action", "The agent review approved it; it already waits for you."],
+    ["marker-c", "needs_user", "Pick the release tag."],
+    ["ev:not-an-event", "acted", "invented"],
+  ]);
+  s.scripted!.answers.push((i) => i.events.map((e) => verdict(e.id, "escalate")));
+  for (const m of ["marker-a", "marker-b", "marker-c", "marker-d"]) s.happen(s.t, m);
+  await s.after(MIN);
+  expect(results[0]!.text).toContain("Recorded 3 of 4 outcomes.");
+  expect(results[0]!.text).toContain("not-an-event");
+  const wire = (m: string) => s.h.orch.cosEvents(s.chief.ticketId, {}).items.find((e) => e.id === s.eventOf(m).id)!;
+  expect(wire("marker-a")).toMatchObject({ status: "handled", outcome: { kind: "acted", text: "Moved the ticket back to planning." } });
+  expect(wire("marker-b").outcome).toEqual({ kind: "no_action", text: "The agent review approved it; it already waits for you." });
+  expect(wire("marker-c").outcome?.kind).toBe("needs_user");
+  expect(wire("marker-d")).toMatchObject({ status: "handled", outcome: null });
+  expect(JSON.stringify(wire("marker-a"))).not.toContain("payload");
+});
+
+test("an outcome is refused for an event another run was given, a bad kind or empty text, and the rest are kept", async () => {
+  const s = await quiet();
+  // An escalated event nobody is handling yet can't be recorded against.
+  s.scripted!.answers.push(escalating("marker-mine"));
+  const idle = s.engine.addExternal({ sourceKind: "watcher", sourceRef: "w:1", actor: "watcher:x", title: "marker-foreign", body: "x" })!;
+  const results = recording(s, [
+    ["marker-mine", "acted", "ok"],
+    [`ev:${idle.id}`, "acted", "not mine"],
+    ["marker-mine", "bogus", "bad kind"],
+    ["marker-mine", "acted", "   "],
+  ]);
+  s.happen(s.t, "marker-mine");
+  await s.after(MIN);
+  expect(results[0]!.text).toContain("Recorded 1 of 4 outcomes.");
+  expect(s.eventOf("marker-mine").outcome).toEqual({ kind: "acted", text: "ok" });
+  expect(s.eventOf("marker-foreign").outcome).toBeNull();
+});
+
+test("a failed run leaves no outcome behind, so the next successful run can't inherit it", async () => {
+  const s = await quiet();
+  recording(s, [["marker-f", "acted", "Did a thing"]], { fail: true });
+  s.scripted!.answers.push(escalating("marker-f"));
+  s.happen(s.t, "marker-f");
+  await s.after(MIN);
+  expect(s.eventOf("marker-f")).toMatchObject({ status: "escalated", outcome: null });
+  await s.after(COS_HOUR_MS / COS_WAKES_PER_HOUR);
+  expect(s.eventOf("marker-f")).toMatchObject({ status: "handled", outcome: null });
+});
+
+test("routine activity is filtered before triage: an agent review's approval of a ticket waiting on a human, and a ticket that completed as planned; real changes still reach triage", async () => {
+  const s = await quiet();
+  s.h.store.tickets.update(s.t.id, { status: "review" });
+  s.happen(s.t, "marker-approved-review", { kind: "review_approved" });
+  s.happen(s.t, "marker-done", { kind: "moved", from: "review", to: "done" });
+  s.happen(s.t, "marker-human-approved", { kind: "approved" });
+  s.happen(s.t, "marker-blocked", { kind: "blocked" });
+  s.happen(s.t, "marker-failed", { kind: "failed" });
+  s.happen(s.t, "marker-to-blocked", { kind: "moved", from: "in_progress", to: "blocked" });
+  await s.after(MIN);
+  for (const m of ["marker-approved-review", "marker-done", "marker-human-approved"]) expect(s.eventOf(m)).toMatchObject({ status: "ignored", verdict: "filtered" });
+  expect(s.eventOf("marker-approved-review").reason).toContain("agent review approved");
+  const asked = s.scripted!.calls.flatMap((c) => c.events.map((e) => e.title));
+  expect(asked.filter((t) => /marker-(blocked|failed|to-blocked)/.test(t))).toHaveLength(3);
+  expect(asked.some((t) => t.includes("marker-approved-review") || t.includes("marker-done"))).toBe(false);
+  // An approval of a ticket that isn't waiting on a human (a stale or reopened one) goes to triage.
+  s.h.store.tickets.update(s.t.id, { status: "in_progress" });
+  s.happen(s.t, "marker-approved-elsewhere", { kind: "review_approved" });
+  await s.after(MIN);
+  expect(s.eventOf("marker-approved-elsewhere").verdict).not.toBe("filtered");
 });

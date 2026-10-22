@@ -61,11 +61,23 @@ private func project(_ id: String, group: String?) -> Project {
         }
     }
 
-    @Test func aRowSaysWhyItWasIgnoredOrEscalatedAndThatAHandledOneWasDealtWith() {
+    @Test func aHandledRowShowsTheChiefsOutcomeAndOneWithoutIsOnlyReviewed() {
+        func handled(_ kind: CosOutcomeKind?) -> CosEvent {
+            CosEvent(id: "a", cosId: "c1", title: "a", status: .handled, verdict: .escalate, outcome: kind.map { CosOutcome(kind: $0, text: "text for \($0.rawValue)") }, createdAt: 0)
+        }
+        #expect(CosLogic.inboxState(handled(.acted)) == .acted)
+        #expect(CosLogic.inboxState(handled(.noAction)) == .noAction)
+        #expect(CosLogic.inboxState(handled(.needsUser)) == .needsUser)
+        #expect(CosLogic.inboxState(handled(nil)) == .reviewed)
+        #expect(CosLogic.verdictLine(handled(.needsUser)) == "text for needs_user")
+        #expect(CosLogic.verdictLine(handled(nil)) == nil)
+        #expect(CosInboxState.reviewed.label == "Reviewed, no outcome recorded")
+    }
+
+    @Test func aRowSaysWhyItWasIgnoredOrEscalated() {
         #expect(CosLogic.verdictLine(event("a", status: .ignored, verdict: .ignore, reason: "Routine move")) == "Routine move")
         #expect(CosLogic.verdictLine(event("a", status: .escalated, verdict: .escalate, reason: "A customer is waiting")) == "A customer is waiting")
         #expect(CosLogic.verdictLine(event("a", status: .ignored, verdict: .ignore, reason: "")) == nil)
-        #expect(CosLogic.verdictLine(event("a", status: .handled, verdict: .escalate)) == "The chief of staff dealt with it")
         #expect(CosLogic.verdictLine(event("a", status: .pending)) == nil)
     }
 

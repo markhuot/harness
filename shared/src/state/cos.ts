@@ -56,9 +56,10 @@ export function mergeEvents(existing: readonly CosEvent[], incoming: readonly Co
 }
 
 /** What an Inbox row says happened to the event, in a word. */
-export type InboxState = "waiting" | "ignored" | "escalated" | "handling" | "handled" | "filtered";
+export type InboxState = "waiting" | "ignored" | "escalated" | "handling" | "acted" | "no_action" | "needs_user" | "reviewed" | "filtered";
 
-export function inboxState(e: Pick<CosEvent, "status" | "verdict">): InboxState {
+/** A handled event shows what the chief recorded for it; one it recorded nothing for is only "reviewed" (its run ended, nothing says it did anything). */
+export function inboxState(e: Pick<CosEvent, "status" | "verdict" | "outcome">): InboxState {
   if (e.verdict === "filtered") return "filtered";
   switch (e.status) {
     case "pending":
@@ -71,7 +72,7 @@ export function inboxState(e: Pick<CosEvent, "status" | "verdict">): InboxState 
     case "handling":
       return "handling";
     case "handled":
-      return "handled";
+      return e.outcome?.kind ?? "reviewed";
   }
 }
 

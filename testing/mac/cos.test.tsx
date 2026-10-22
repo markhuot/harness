@@ -148,14 +148,21 @@ describe("Inbox", () => {
   test("lists the chief's events newest first, with their verdicts", async () => {
     const m = await inbox();
     await m.until("the rows", () => events(m).length > 0);
-    expect(events(m).map((e) => e.dataset.event)).toEqual(["ev-waiting", "ev-handling", "ev-ignored", "ev-escalated", "ev-handled", "ev-schedule"]);
-    expect(events(m).map((e) => e.dataset.state)).toEqual(["waiting", "handling", "ignored", "escalated", "handled", "handled"]);
+    expect(events(m).map((e) => e.dataset.event)).toEqual(["ev-waiting", "ev-handling", "ev-ignored", "ev-escalated", "ev-handled", "ev-needs-user", "ev-no-action", "ev-schedule"]);
+    expect(events(m).map((e) => e.dataset.state)).toEqual(["waiting", "handling", "ignored", "escalated", "acted", "needs_user", "no_action", "reviewed"]);
     const ignored = text(eventRow(m, "ev-ignored"));
     expect(ignored).toContain("Ignored");
     expect(ignored).toContain("Routine move; the agent review is already running");
     expect(text(eventRow(m, "ev-escalated"))).toContain("Watcher");
     expect(text(eventRow(m, "ev-schedule"))).toContain("Schedule");
-    expect(text(eventRow(m, "ev-handled"))).toContain("The chief of staff dealt with it");
+    expect(text(eventRow(m, "ev-handled"))).toContain("Posted the summary to the chat");
+    expect(text(eventRow(m, "ev-needs-user"))).toContain("Pick the release tag");
+    expect(text(eventRow(m, "ev-no-action"))).toContain("nothing to do");
+    // A handled event the chief recorded nothing for is not claimed as handled.
+    const reviewed = text(eventRow(m, "ev-schedule"));
+    expect(reviewed).toContain("Reviewed, no outcome recorded");
+    expect(reviewed).not.toContain("dealt with it");
+    expect(reviewed).not.toContain("Handled");
   });
 
   test("only ignored rows offer Escalate anyway, and it escalates that one event", async () => {
@@ -178,7 +185,7 @@ describe("Inbox", () => {
     expect(text(eventRow(m, "ev-waiting"))).toContain("Not worth a wake");
     await m.settle(() => m.client.push({ kind: "cos.event.upserted", event: { ...waiting, id: "ev-new", title: "Brand new", createdAt: waiting.createdAt + 1 } }));
     expect(events(m)[0]!.dataset.event).toBe("ev-new");
-    expect(events(m)).toHaveLength(7);
+    expect(events(m)).toHaveLength(9);
   });
 
   test("events nobody owns yet show, another chief's and the chief's own filtered ones don't", async () => {

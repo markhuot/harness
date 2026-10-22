@@ -7,7 +7,7 @@
 // events left mid-flight, catches the activity cursor up and re-arms the timer from the rows.
 
 import type { CosBadge, CosBusEvent, CosEvent, CosEventStatus, CosChief, Project, Settings, Ticket } from "@harness/shared";
-import { COS_HOUR_MS, COS_STALL_AFTER_MS, COS_STALL_REPEAT_MS, COS_STALL_RETRY_MS, collapseMoves, nextWakeAllowedAt, nextWakeAt, ownerOf } from "@harness/shared";
+import { COS_HOUR_MS, COS_OUTCOME_KINDS, routineActivityReason, COS_STALL_AFTER_MS, COS_STALL_REPEAT_MS, COS_STALL_RETRY_MS, collapseMoves, nextWakeAllowedAt, nextWakeAt, ownerOf } from "@harness/shared";
 import { isSilentReply, QUIET_REPLY } from "./chat";
 import { memorySection, TRIAGE_GUIDANCE } from "./memory";
 import type { Store } from "../store";
@@ -80,8 +80,11 @@ export interface OpenCondition {
 export const WAKE_RULES = [
   "Message the user only when something changed that they would care about, something needs their attention or a decision, or a stalled item is listed below as not yet reported.",
   "Do the housekeeping (hand-offs, notes, tickets) regardless, but don't narrate it: write no text between tool calls.",
+  "Before you finish, call record_event_outcomes once for the events below, one entry each: acted (what you did), no_action (why nothing was needed) or needs_user (what the user must do). The Inbox shows it, so it is the place to say that nothing was needed.",
   `If there is nothing to tell the user, reply with exactly ${QUIET_REPLY} and nothing else.`,
 ].join(" ");
+
+const OUTCOME_TEXT_MAX = 400;
 
 const firstLine = (s: string, max = 200) => {
   const line = s.trim().split("\n")[0] ?? "";
@@ -172,6 +175,7 @@ export class CosEngine {
           if (!ticket || !project) filtered = "not about a ticket on the board";
           else if (actor?.startsWith("cos:")) filtered = "caused by a chief of staff";
           else if (ticket.kind === "cos" || store.projects.isInternal(project.id)) filtered = "a chief of staff's own ticket";
+          else filtered = routineActivityReason({ kind: entry.kind, from: entry.meta.from ?? null, to: entry.meta.to ?? null }, ticket.status) ?? undefined;
           const ev = store.cosEvents.insert({
             cosId: filtered ? null : this.ownerFor(project, chiefs),
             projectId: project?.id ?? null,
@@ -587,7 +591,29 @@ export class CosEngine {
     this.d.emit({ kind: "cos.transcript.appended", cosId: w.cosId, entry: { id: `wake:${w.id}`, cosId: w.cosId, createdAt: w.startedAt, kind: "event_batch", wakeId: w.id, eventIds, digest: w.digest } });
   }
 
+  /**
+   * The chief's account of the events its run was woken for (record_event_outcomes). Each item stands alone: one that names an event
+   * this run wasn't given, or one already settled, is refused with the reason and the rest are kept.
+   */
+  recordOutcomes(runId: string, items: { eventId: string; kind: string; text: string }[]): { eventId: string; error: string | null }[] {
+    return items.map(({ eventId, kind, text }) => {
+      const e = this.d.store.cosEvents.get(eventId);
+      // An event of another run can't be told from one that doesn't exist.
+      if (!e || e.consumingRunId !== runId || e.status !== "handling") return { eventId, error: `Unknown event for this wake: ${eventId}` };
+      if (!(COS_OUTCOME_KINDS as readonly string[]).includes(kind)) return { eventId, error: `kind must be one of ${COS_OUTCOME_KINDS.join(", ")}` };
+      const clean = text.replace(/\s+/g, " ").trim();
+      if (!clean) return { eventId, error: "text is empty: say what you did, why nothing was needed, or what the user must do" };
+      this.patch(e.id, { payload: { ...e.payload, outcome: { kind, text: clip(clean, OUTCOME_TEXT_MAX) } } });
+      return { eventId, error: null };
+    });
+  }
+
   private settle(e: StoredCosEvent, runStatus: string) {
+    // An outcome belongs to the run that recorded it: a run that failed or was cancelled leaves none for the next one to inherit.
+    if (runStatus !== "succeeded" && e.payload.outcome !== undefined) {
+      const { outcome: _o, ...rest } = e.payload;
+      e = { ...e, payload: rest };
+    }
     if (runStatus === "succeeded") this.patch(e.id, { status: "handled" });
     else {
       // A chief whose runs keep failing isn't woken forever: after a few tries the event is closed with the reason.

@@ -25,6 +25,7 @@ import { configReadTools, configWriteTools, listWatchers, watcherWriteTools } fr
 import { completeTicket, reviewTicket } from "./conductor";
 import { nativeTools, readOnlyNativeTools } from "./native";
 import { permissionPrompt } from "./permission";
+import { outcomeTools } from "./outcomes";
 import { scheduleTools } from "./schedules";
 import { block, editSpec, postNote, readSpec, recordPullRequest, resumeWork, returnToPlanning, reviewDecision, submitForReview, unblock, updateBranch, updateNotes, updateSpec } from "./ticket";
 import { memoryTools } from "./memory";
@@ -145,7 +146,7 @@ const RUN_TOOLS: Record<Exclude<RunKind, "chat" | "compact">, { harness: ToolDef
   // has no spec or ticket lifecycle tools (it never submits or blocks), no project or settings writes (its watcher tools are human-gated), no
   // sub-agents (drivers/claude-code.ts keeps Agent and Task off it) and no files or shell of its own (it can read
   // and, with approval, type into the terminals of tickets it covers): deeper work goes to tickets it creates. Everything it reads or changes is scoped (store/scope.ts).
-  cos: { harness: [postNote, ...memoryTools, ...scheduleTools, ...terminalTools, ...paneTools, ...watcherTools, ...boardTools, ...boardWriteTools, ...configReadTools], native: "none" },
+  cos: { harness: [postNote, ...memoryTools, ...scheduleTools, ...terminalTools, ...paneTools, ...watcherTools, ...boardTools, ...boardWriteTools, ...configReadTools, ...outcomeTools], native: "none" },
 };
 
 /**

@@ -9,7 +9,14 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- The chief of staff now records what it did about each event it was woken for, with a new `record_event_outcomes` tool: it acted (and what it did), needed no action (and why), or needs you to do something (and what). The Inbox on the Mac, iPhone, iPad and iPhone Duo shows that text on the row. An event the chief's run finished without recording anything for reads "Reviewed, no outcome recorded".
+
 ### Changed
+
+- The Inbox no longer says "Handled: the chief of staff dealt with it" for an event whose wake run merely finished. Rows show the chief's recorded outcome instead (Acted, No action needed, Needs you), and older handled rows without one read "Reviewed, no outcome recorded".
+- The chief of staff isn't woken for routine events any more: an agent review's approval of a ticket that waits for you, and a ticket that completed as planned. They stay in the Inbox as Filtered with the reason. Triage now also leaves out reviews that approved work waiting for you, and still escalates blocks, failures, questions and requested changes.
 
 - The chief of staff now only messages you when something changed that you'd care about, something needs your attention or a decision, or something has been stalled for a long time. A wake with nothing to say ends silently: no reply and no event card in the chat, while its triage, hand-offs and notes still happen.
 - A blocked ticket or review the chief of staff already told you about is no longer repeated on every wake. A stall is reported once it has sat four hours, again after a day, or sooner if its status or blocked reason changes, and a stall on an otherwise quiet board now wakes the chief by itself.

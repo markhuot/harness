@@ -5957,6 +5957,10 @@ ${numberLines(r.body)}`;
       arrangePanes: (c, op) => this.arrangePanes_(c, op),
       readMemory: async (c) => this.readMemory_(c),
       updateMemorySection: async (c, s, b) => this.updateMemorySection_(c, s, b),
+      recordEventOutcomes: async (c, items) => {
+        this.scheduleOwner(c);
+        return this.cosEngine.recordOutcomes(c.runId, items);
+      },
       // --- schedules ---
       scheduleCreate: async (c, i) => this.scheduleCreate_(c, i),
       scheduleList: async (c, o) => this.store.schedules.list({ cosId: this.scheduleOwner(c).ticketId, all: o.all }),

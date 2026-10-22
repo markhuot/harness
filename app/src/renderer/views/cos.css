@@ -152,11 +152,12 @@
   color: var(--text-2);
 }
 .cos-pill-escalated,
-.cos-pill-handling {
+.cos-pill-handling,
+.cos-pill-needs_user {
   background: var(--accent-soft);
   color: var(--accent);
 }
-.cos-pill-handled {
+.cos-pill-acted {
   background: var(--green-soft);
   color: var(--green);
 }

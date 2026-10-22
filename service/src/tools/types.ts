@@ -380,6 +380,13 @@ export interface HarnessOps {
   /** Replace one section of the caller's memory; throws when the body is too long or would start another section. */
   updateMemorySection(ctx: ToolContext, section: string, body: string): Promise<CosMemory>;
 
+  // --- events: chief of staff runs ---
+  /**
+   * Record the outcome of events the calling run was woken for, each checked alone (an event another run was given is refused as
+   * unknown); returns each item's error or null. Throws for a run that isn't a chief of staff's.
+   */
+  recordEventOutcomes(ctx: ToolContext, items: { eventId: string; kind: string; text: string }[]): Promise<{ eventId: string; error: string | null }[]>;
+
   // --- terminals: chief of staff runs (DESIGN.md "Chief of staff terminals") ---
   // Only terminals inside the worktree of a ticket the caller covers; any other id behaves as not found.
   listTerminals(ctx: ToolContext): Promise<TerminalView[]>;

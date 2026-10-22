@@ -24,6 +24,7 @@ const event = (id: string, patch: Partial<CosEvent>): CosEvent => ({
   ticketKey: null,
   wakeId: null,
   handledBy: null,
+  outcome: null,
   createdAt: minutesAgo(10),
   ...patch,
 });
@@ -34,7 +35,9 @@ export const cosEvents: CosEvent[] = [
   event("ev-handling", { title: "HARNESS-202 is blocked", summary: "Needs a decision on the migration order", ticketKey: "HARNESS-202", status: "handling", verdict: "escalate", reason: "A blocked ticket waiting on the human", model: "claude-haiku-5-5", wakeId: "wake-2", createdAt: minutesAgo(4) }),
   event("ev-ignored", { title: "HARNESS-203 moved to review", summary: "An agent finished its work", ticketKey: "HARNESS-203", status: "ignored", verdict: "ignore", reason: "Routine move; the agent review is already running", model: "claude-haiku-5-5", createdAt: minutesAgo(12) }),
   event("ev-escalated", { title: "New comment on FOO-17", sourceKind: "watcher", actor: "watcher:jira", projectKey: null, status: "escalated", verdict: "escalate", reason: "A customer is waiting on an answer", model: "claude-haiku-5-5", createdAt: minutesAgo(20) }),
-  event("ev-handled", { title: "HARNESS-190 landed on main", ticketKey: "HARNESS-190", status: "handled", verdict: "escalate", reason: "Done tickets are worth a summary", model: "claude-haiku-5-5", wakeId: "wake-1", handledBy: "run-9", createdAt: minutesAgo(90) }),
+  event("ev-handled", { title: "HARNESS-190 landed on main", ticketKey: "HARNESS-190", status: "handled", verdict: "escalate", reason: "Done tickets are worth a summary", model: "claude-haiku-5-5", wakeId: "wake-1", handledBy: "run-9", outcome: { kind: "acted", text: "Posted the summary to the chat and moved HARNESS-205 to planning." }, createdAt: minutesAgo(90) }),
+  event("ev-needs-user", { title: "HARNESS-206 needs a decision on the release tag", ticketKey: "HARNESS-206", status: "handled", verdict: "escalate", reason: "A blocked ticket waiting on the human", model: "claude-haiku-5-5", wakeId: "wake-1", handledBy: "run-9", outcome: { kind: "needs_user", text: "Pick the release tag: the ticket is blocked until you answer." }, createdAt: minutesAgo(95) }),
+  event("ev-no-action", { title: "HARNESS-207 review approved", ticketKey: "HARNESS-207", status: "handled", verdict: "escalate", reason: "A review decision", model: "claude-haiku-5-5", wakeId: "wake-1", handledBy: "run-9", outcome: { kind: "no_action", text: "The agent review approved it and it already waits for you; nothing to do." }, createdAt: minutesAgo(97) }),
   event("ev-schedule", { title: "Friday review of open tickets", sourceKind: "schedule", actor: "system", projectKey: null, status: "handled", verdict: "escalate", reason: "A schedule the chief set", wakeId: "wake-1", handledBy: "run-9", createdAt: minutesAgo(100) }),
 ];
 

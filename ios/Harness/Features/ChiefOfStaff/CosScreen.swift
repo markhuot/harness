@@ -509,7 +509,7 @@ struct CosEventRow: View {
             }
             if let line = CosLogic.verdictLine(e) {
                 Text(line).font(.scaled(size: 13)).foregroundStyle(c.text2).frame(maxWidth: .infinity, alignment: .leading)
-                    .accessibilityIdentifier(st == .handled ? "cos-handled" : "cos-reason")
+                    .accessibilityIdentifier(st == .acted || st == .noAction || st == .needsUser ? "cos-outcome" : "cos-reason")
             }
             HStack {
                 Text("\(e.actor) · ").font(.scaled(size: 12)).foregroundStyle(c.text3) + Text(Format.relativeTime(e.createdAt, now: Date().timeIntervalSince1970 * 1000)).font(.scaled(size: 12)).foregroundStyle(c.text3)
@@ -531,9 +531,9 @@ struct CosEventRow: View {
 
     private func tone(_ s: CosInboxState) -> Tone {
         switch s {
-        case .waiting, .escalated, .handling: .amber
-        case .handled: .green
-        case .ignored, .filtered: .neutral
+        case .waiting, .escalated, .handling, .needsUser: .amber
+        case .acted: .green
+        case .ignored, .filtered, .noAction, .reviewed: .neutral
         }
     }
 }

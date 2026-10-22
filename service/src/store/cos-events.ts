@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
-import type { CosBadge, CosEvent, CosEventSource, CosEventStatus, CosEventVerdict } from "@harness/shared";
-import { COS_OPEN_STATUSES } from "@harness/shared";
+import type { CosBadge, CosEvent, CosOutcome, CosEventSource, CosEventStatus, CosEventVerdict } from "@harness/shared";
+import { COS_OPEN_STATUSES, COS_OUTCOME_KINDS } from "@harness/shared";
 import { fromJson, newId } from "./util";
 import { type Clock, systemClock } from "../clock";
 
@@ -45,30 +45,40 @@ interface Row {
 const SELECT = `SELECT e.*, p.key AS project_key, t.key AS ticket_key FROM cos_events e
   LEFT JOIN projects p ON p.id = e.project_id LEFT JOIN tickets t ON t.id = e.ticket_id`;
 
-const toEvent = (r: Row): StoredCosEvent => ({
-  id: r.id,
-  cosId: r.cos_id,
-  projectKey: r.project_key,
-  sourceKind: r.source_kind as CosEventSource,
-  title: r.title,
-  summary: r.summary,
-  actor: r.actor,
-  status: r.status as CosEventStatus,
-  verdict: r.verdict as CosEventVerdict,
-  reason: r.reason,
-  model: r.model,
-  ticketKey: r.ticket_key,
-  wakeId: r.wake_id,
-  handledBy: r.status === "handled" ? r.consuming_run_id : null,
-  createdAt: r.created_at,
-  projectId: r.project_id,
-  ticketId: r.ticket_id,
-  kind: r.kind,
-  sourceRef: r.source_ref,
-  payload: fromJson<Record<string, unknown>>(r.payload, {}),
-  consumingRunId: r.consuming_run_id,
-  updatedAt: r.updated_at,
-});
+/** The outcome kept in a handled event's payload; anything else there reads as none. */
+const outcomeOf = (payload: Record<string, unknown>): CosOutcome | null => {
+  const o = payload.outcome as Partial<CosOutcome> | undefined;
+  return o && (COS_OUTCOME_KINDS as readonly unknown[]).includes(o.kind) && typeof o.text === "string" ? { kind: o.kind!, text: o.text } : null;
+};
+
+const toEvent = (r: Row): StoredCosEvent => {
+  const payload = fromJson<Record<string, unknown>>(r.payload, {});
+  return {
+    id: r.id,
+    cosId: r.cos_id,
+    projectKey: r.project_key,
+    sourceKind: r.source_kind as CosEventSource,
+    title: r.title,
+    summary: r.summary,
+    actor: r.actor,
+    status: r.status as CosEventStatus,
+    verdict: r.verdict as CosEventVerdict,
+    reason: r.reason,
+    model: r.model,
+    ticketKey: r.ticket_key,
+    wakeId: r.wake_id,
+    handledBy: r.status === "handled" ? r.consuming_run_id : null,
+    createdAt: r.created_at,
+    projectId: r.project_id,
+    ticketId: r.ticket_id,
+    kind: r.kind,
+    sourceRef: r.source_ref,
+    outcome: outcomeOf(payload),
+    payload,
+    consumingRunId: r.consuming_run_id,
+    updatedAt: r.updated_at,
+  };
+};
 
 export interface NewCosEvent {
   cosId: string | null;

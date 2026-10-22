@@ -19,6 +19,7 @@ const event = (id: string, patch: Partial<CosEvent> = {}): CosEvent => ({
   ticketKey: null,
   wakeId: null,
   handledBy: null,
+  outcome: null,
   createdAt: 1,
   ...patch,
 });
@@ -77,7 +78,9 @@ describe("Inbox", () => {
     expect(inboxState(event("e", { status: "ignored", verdict: "ignore" }))).toBe("ignored");
     expect(inboxState(event("e", { status: "escalated", verdict: "escalate" }))).toBe("escalated");
     expect(inboxState(event("e", { status: "handling", verdict: "escalate" }))).toBe("handling");
-    expect(inboxState(event("e", { status: "handled", verdict: "escalate" }))).toBe("handled");
+    expect(inboxState(event("e", { status: "handled", verdict: "escalate" }))).toBe("reviewed");
+    for (const kind of ["acted", "no_action", "needs_user"] as const) expect(inboxState(event("e", { status: "handled", verdict: "escalate", outcome: { kind, text: "x" } }))).toBe(kind);
+    expect(inboxState(event("e", { status: "escalated", verdict: "escalate", outcome: { kind: "acted", text: "stale" } }))).toBe("escalated");
     expect(inboxState(event("e", { status: "ignored", verdict: "filtered" }))).toBe("filtered");
   });
   test("only an ignored event can be escalated, never a filtered one", () => {

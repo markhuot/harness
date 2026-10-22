@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { COS_CEILING_MS, COS_HOUR_MS, COS_QUIET_MS, collapseMoves, nextWakeAllowedAt, nextWakeAt, ownerOf, type CosChief } from "../../../shared/src/cos";
+import { COS_CEILING_MS, COS_HOUR_MS, COS_QUIET_MS, collapseMoves, nextWakeAllowedAt, nextWakeAt, ownerOf, routineActivityReason, type CosChief } from "../../../shared/src/cos";
 
 const chief = (ticketId: string, scope: CosChief["scope"], enabled = true): CosChief => ({ ticketId, scope, groupId: scope === "all" ? null : scope.slice(6), enabled });
 const all = chief("all-1", "all");
@@ -91,5 +91,22 @@ describe("collapseMoves", () => {
 
   test("a single move stays as it is", () => {
     expect(collapseMoves([mv("a", "T1", "planning", "in_progress", 1)])).toEqual({ dropped: [], net: new Map() });
+  });
+});
+
+describe("routineActivityReason", () => {
+  const act = (kind: string, from: string | null = null, to: string | null = null) => ({ kind, from, to });
+  test("an agent review's approval is routine only while the ticket waits on a human", () => {
+    expect(routineActivityReason(act("review_approved"), "review")).toContain("waits for a human");
+    expect(routineActivityReason(act("review_approved"), "in_progress")).toBeNull();
+  });
+  test("a ticket that completed as planned is routine; one that moved to done from anywhere else is not", () => {
+    expect(routineActivityReason(act("approved"), "done")).toContain("completed as planned");
+    expect(routineActivityReason(act("moved", "review", "done"), "done")).toContain("completed as planned");
+    expect(routineActivityReason(act("moved", "in_progress", "done"), "done")).toBeNull();
+  });
+  test("blocks, failures, answers, requested changes and ordinary moves are never routine", () => {
+    for (const kind of ["blocked", "failed", "answered", "answer", "changes_requested", "message", "reopened", "system", "permission", "submitted"]) expect(routineActivityReason(act(kind), "review")).toBeNull();
+    expect(routineActivityReason(act("moved", "in_progress", "blocked"), "blocked")).toBeNull();
   });
 });

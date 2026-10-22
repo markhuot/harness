@@ -64,6 +64,16 @@ export type CosEventVerdict = "pending" | "ignore" | "escalate" | "filtered";
 /** Statuses that count toward the Inbox badge (an event somebody still has to see to). */
 export const COS_OPEN_STATUSES: readonly CosEventStatus[] = ["pending", "triaging", "escalated", "handling"];
 
+/** What the chief did about an event it was woken for: acted, found nothing to do, or needs the user to do something. */
+export const COS_OUTCOME_KINDS = ["acted", "no_action", "needs_user"] as const;
+export type CosOutcomeKind = (typeof COS_OUTCOME_KINDS)[number];
+
+/** The chief's own account of one event, recorded with record_event_outcomes. */
+export interface CosOutcome {
+  kind: CosOutcomeKind;
+  text: string;
+}
+
 /** One row of a chief of staff's Inbox (GET /cos/:id/events). */
 export interface CosEvent {
   id: string;
@@ -84,6 +94,8 @@ export interface CosEvent {
   wakeId: string | null;
   /** The run that handled it */
   handledBy: string | null;
+  /** What the chief recorded for it; null when its run ended without recording one (and for events handled before outcomes existed) */
+  outcome: CosOutcome | null;
   createdAt: number;
 }
 
@@ -272,4 +284,15 @@ export interface PutCosMemoryBody {
 export interface MemoryConflict {
   currentRevision: string;
   text: string;
+}
+
+/**
+ * Activity that never needs a chief, so it is recorded as filtered instead of sent to triage: an agent review's approval of a
+ * ticket that still waits on a human, and a ticket that completed as planned (a human's approval, or a move into done from review).
+ * Blocks, failures, answers, conflicts and requested changes are not here: they stay with triage.
+ */
+export function routineActivityReason(e: { kind: string; to: string | null; from: string | null }, ticketStatus: string): string | null {
+  if (e.kind === "review_approved" && ticketStatus === "review") return "routine: the agent review approved it and it waits for a human";
+  if (e.kind === "approved" || (e.kind === "moved" && e.to === "done" && e.from === "review")) return "routine: it completed as planned";
+  return null;
 }
