@@ -44,6 +44,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - A watcher's title and name no longer sit outside the "untrusted" fence in the text a chief of staff and its triage read get, so a watcher can't print a line that reads as the harness's own. The all-sessions list no longer includes the Inbox's old triage items.
 - A chief of staff made on another device now shows its count on the Mac and the iPhone and iPad as soon as it has something waiting. The title-bar button used to read nothing for it until the app reloaded.
 - Internal: the Inbox injection call (`POST /watchers/inject`) no longer accepts a `prompt` it ignored, the unused watcher driver and model picker helpers on Mac, iPhone and iPad are gone, and the agents' board instructions no longer point them at the old Inbox.
+- On the iPad, docked ticket cards now stack above the board's bottom bar instead of covering its search and New session buttons.
 
 ### Removed
 

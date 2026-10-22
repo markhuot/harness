@@ -35,6 +35,15 @@ final class ScreenTests: ScreenTestCase {
         try await screen("board-docked", router: router) { RootView() }
     }
 
+    /// The iPad: the docked card stack sits above the bottom bar's search and New session buttons.
+    func testBoardDockedPad() async throws {
+        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "the phone's card floats over its bar")
+        let router = Router()
+        router.openTicket(key: "HARNESS-4", tab: .spec)
+        router.dockSheet()
+        try await screen("board-docked-pad", router: router) { RootView() }
+    }
+
     /// A ticket open with another one docked: the composer sits above the card.
     func testTicketWithDockedCard() async throws {
         try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .pad, "the iPad's cards are a corner stack beside its panel")
