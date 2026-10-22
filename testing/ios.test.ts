@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tempDir } from "./builders/tmp";
-import { currentBuild, failureLines, parseArgs } from "./ios";
+import { currentBuild, failureLines, parseArgs, testCount } from "./ios";
 
 describe("the build stamp", () => {
   const stamp = (dir: string, hash: string, xctestrun: string) => {
@@ -67,5 +67,18 @@ describe("failure output", () => {
   test("keeps the lines that say what differs and where the images are", () => {
     const output = ["Test Suite 'All tests' started", "x.swift:1: error: board: 12 of 100 pixels differ", "  actual:    /tmp/board.actual.png", "noise", "  diff:      /tmp/board.diff.png"].join("\n");
     expect(failureLines(output)).toEqual(["x.swift:1: error: board: 12 of 100 pixels differ", "  actual:    /tmp/board.actual.png", "  diff:      /tmp/board.diff.png"]);
+  });
+});
+
+describe("the test count", () => {
+  test("is the run's total, the last Executed line, not the first suite's", () => {
+    const out = ["\t Executed 6 tests, with 0 failures (0 unexpected) in 26.1 (26.1) seconds", "\t Executed 34 tests, with 0 failures (0 unexpected) in 132.9 (132.9) seconds"].join("\n");
+    expect(testCount(out)).toBe("34");
+  });
+
+  test("names the skips, and is unknown when xcodebuild printed no total", () => {
+    expect(testCount("\t Executed 34 tests, with 4 tests skipped and 0 failures (0 unexpected) in 1 (1) seconds")).toBe("34 (4 skipped)");
+    expect(testCount("\t Executed 1 test, with 1 test skipped and 0 failures (0 unexpected) in 1 (1) seconds")).toBe("1 (1 skipped)");
+    expect(testCount("** TEST FAILED **")).toBe("?");
   });
 });

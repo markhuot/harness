@@ -166,14 +166,23 @@ export async function ios(argv: string[]): Promise<number> {
     const output = r.out + r.err;
     writeFileSync(join(BUILD_DIR, `test-${device}.log`), output);
     const seconds = ((performance.now() - t0) / 1000).toFixed(1);
-    const tests = output.match(/Executed (\d+) tests?, with (\d+) failures?/)?.slice(1).map(Number);
+    const tests = testCount(output);
     if (r.code !== 0) {
       failed = true;
       console.log(`✗ ios ${device} [${seconds}s]\n${failureLines(output).join("\n") || output.split("\n").slice(-40).join("\n")}\n  full log: testing/.build/test-${device}.log`);
-    } else console.log(`✓ ios ${device}: ${tests?.[0] ?? "?"} tests ${o.record ? "recorded" : "match their references"} [${seconds}s]`);
+    } else console.log(`✓ ios ${device}: ${tests} tests ${o.record ? "recorded" : "match their references"} [${seconds}s]`);
   }
   console.log(`ios ${failed ? "failed" : "passes"} [${lap()}]`);
   return failed ? 1 : 0;
+}
+
+/**
+ * How many tests xcodebuild ran, with its skips ("34 (4 skipped)"), or "?". It prints an "Executed" line
+ * per suite and the run's total last; a skip matters (a test that can't judge on a loaded host skips).
+ */
+export function testCount(output: string): string {
+  const total = [...output.matchAll(/Executed (\d+) tests?, with (?:(\d+) tests? skipped and )?\d+ failures?/g)].pop();
+  return total ? `${total[1]}${total[2] ? ` (${total[2]} skipped)` : ""}` : "?";
 }
 
 if (import.meta.main) process.exit(await ios(process.argv.slice(2)));
