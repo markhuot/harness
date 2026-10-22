@@ -61,7 +61,6 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 ### Fixed
 
 - The chief of staff's own ticket (COS-1, and each group's chief) no longer shows up as a card on the board, in a group, or in the counts and done totals on the Mac, iPhone, iPad and iPhone Duo. The Chief of Staff button, chat and Inbox work as before.
-
 - Deleting a ticket now reaches the chief of staff: its Inbox gets an event with the ticket's key and title (from the app, the API or an agent's `delete_ticket`), and activity written just before the delete is no longer lost. Triage ignores a deletion unless the chief was tracking the ticket. Deleting a project makes one event for the whole project instead of one per ticket.
 - Text from outside (watcher output, ticket titles, and the triage model's own brief, reason and digest) now always sits inside the "untrusted" fence in a chief of staff's wake and in its triage read, including when triage failed and the wake falls back to the raw event.
 - A chief of staff's wake no longer expands `@file` mentions found in watcher output or agent notes, so they can't pull in the service's tokens or another group's files.
