@@ -45,7 +45,7 @@ outlives the app (see "Service supervision").
 ## Project keys
 
 A project key (`HEL`) prefixes its native ticket keys (`HEL-4`). Keys match
-`^[A-Z][A-Z0-9]{0,15}$` after upper-casing, and `TRIAGE` is reserved for the old triage sessions (TRIAGE-n keys). An
+`^[A-Z][A-Z0-9]{0,15}$` after upper-casing, and `TRIAGE` stays reserved because the old Inbox's items keep their TRIAGE-n keys. An
 explicit key on `POST /projects` must be free (409 otherwise); a key derived from the folder
 name de-duplicates to `KEY2`, `KEY3`, ...
 
@@ -335,7 +335,7 @@ plan`; the `mcp__harness` allow rule keeps `update_spec`, `edit_spec`, `update_t
 | Conductor → done with children in review it approved but didn't complete | each child's `humanReview` back to `pending` ("<conductor> is done: approve to land this ticket"): the human has the child back (`managingConductor` is null) and approving lands it |
 | `POST /complete {action?, instructions?}` | 409 while a complete run is already queued or running; otherwise enqueue **complete** run with the completion action's prompts (the request's action, else the one chosen at approval, else the project default; see "Completion"); on success → `done`, except a `pr` completion that recorded no pull request, a `merge` completion whose branch tip (recorded when it was enqueued) isn't in the base branch, or a `cleanup` that left its worktree or branch → `blocked`. `skipAgent` ("Approve and take no action") → `done` immediately with no run; on a ticket in review it also sets `humanReview=approved` (status "Approved, no action taken"). While the complete run is queued or running, messages and `request_changes` get a 409: the work run they queue would start after the merge, in the removed worktree |
 | Move to done | `done` without an agent run |
-| `POST /reopen {notes}` on a done ticket | 409 unless `done`, 400 without notes; a `reopened` entry with the notes; status `in_progress`, both reviews reset to pending, enqueue work run: "re-opened" + notes. A human message with `move: true` to a done ticket (older apps only), a triage update to it, or a move back to in_progress re-opens it the same way (with the message / the spec). If the ticket's worktree is gone (removed by the complete run), it is recreated on its branch (`requestedBranch`, else `harness/<key>`) first, from the base branch when the branch was deleted |
+| `POST /reopen {notes}` on a done ticket | 409 unless `done`, 400 without notes; a `reopened` entry with the notes; status `in_progress`, both reviews reset to pending, enqueue work run: "re-opened" + notes. A human message with `move: true` to a done ticket (older apps only), an update to it from a chief of staff, or a move back to in_progress re-opens it the same way (with the message / the spec). If the ticket's worktree is gone (removed by the complete run), it is recreated on its branch (`requestedBranch`, else `harness/<key>`) first, from the base branch when the branch was deleted |
 | `POST /session {action}` | `compact` or `new`: what to do with the saved session, on the next run; 409 while a run is going; see "Context gauge" |
 | `POST /cancel` | abort active run (run status `cancelled`), ticket status unchanged (a cancelled complete run reopens the human review, above) |
 | Ticket → done | scheduler starts dependents that have `autoStart` and all deps done; parent conductor notified |
@@ -881,7 +881,7 @@ stateless, tool-less Haiku call (`cos/triage.ts`) on the classifier's backend (`
 `anthropic-api`, via the shared `permissions/structured.ts`; model `HAIKU_MODELS`, overridable with
 `settings.cosTriageModel`). Input: the CoS's "Triage guidance" note section, the projects, open
 conditions (tickets blocked, reviews waiting past 2 hours, owned by this CoS) and the events with their
-bodies fenced `<untrusted-event>`. Output per event: ignore or escalate, a reason, and for an
+bodies fenced `<untrusted-event>`, with each event's actor and title inside the fence too, since a watcher names its own output. Output per event: ignore or escalate, a reason, and for an
 escalation a brief and the project. An error, timeout, garbage, an id the answer left out, or no
 backend at all escalates (fail-open); `Cos.triageUnavailable` says why when none can run. Prompt over
 rules: what is worth waking for is the prompt's call; code keeps only the invariants. A batch goes in
@@ -909,21 +909,29 @@ attachments? }` → `{ entryId }`. Bus events `cos.event.upserted`, `cos.badge`,
 
 #### The Mac
 
-A chief opens at `#/cos/<scope>[/<tab>]` (scope `all` or `group:<id>`; tab `chat` or `inbox`), a route
-of its own rather than a pane: its ticket is in no ticket list, and `TicketDetail` assumes a work
-ticket, so `views/Cos.tsx` reuses only the chrome (header, tab strip). The sidebar has a row per
-scope under "Chiefs of staff", before the chief exists too (opening or switching it on makes it,
-`POST /cos`), each with its own switch (`PATCH /cos/:id`) and a badge from `GET /cos/events/badge`
-kept live by `cos.badge`. The store holds `chiefs`, `cosEvents` (by id, so a pushed event replaces its
-row), `cosChat` (oldest first, merged by id so a page and a live push never show an entry twice) and
-`cosBadge`; the pure rules (tab set, merges, inbox states, the tri-state of a project's override,
-the scroll anchor kept when an older page loads) are in `shared/src/state/cos.ts`. Chat pages in as
-the reader nears the top and keeps what they were reading under their eye; the Inbox is a plain
-list that never needs the chief running, and its **+** sends the chief a message in chat, because the
-chief creates listeners with its own tools. Memory is a sheet from the header, saved against the
-revision it opened. The app's two switches are in Settings → Chief of staff; a project's are
-Inherit/On/Off selects (`null` clears the override). The old watcher Inbox, its ⌘2 binding and the
-watcher forms are gone; `#/inbox` links open the board.
+A chief is entered from the board it belongs to, never from the sidebar and with no route of its
+own: every board's title bar has a regular **Chief of Staff** button (`CosCallout`, `data-testid=
+cos-callout`) with a pill counting the events still waiting for a verdict or being handled, from
+`GET /cos/events/badge` kept live by `cos.badge`. The button's scope is `boardCosScope`: All projects
+opens the All chief, a group's board its group's chief, a project's board its group's chief, or the
+All chief when the project has no group. A click makes the chief if it doesn't exist yet
+(`POST /cos`) and opens it as a pane of kind `cos` beside the board (`openCos` in
+`state/paneModel.ts`; one chief pane at a time, so another scope replaces it and the same one comes
+forward). The pane has the header (title, Memory, close) and a **Chat** and an **Inbox** tab, and no
+on/off switch: a chief is switched on or off in Settings (app-wide) and a project's settings
+(per project), which is also where "can unblock" lives. The store holds `chiefs`, `cosEvents` (by
+id, so a pushed event replaces its row), `cosChat` (oldest first, merged by id so a page and a live
+push never show an entry twice) and `cosBadge`; the pure rules (tab set, merges, inbox states, the
+tri-state of a project's override, the scroll anchor kept when an older page loads) are in
+`shared/src/state/cos.ts`. Chat pages in as the reader nears the top and keeps what they were
+reading under their eye; the Inbox is a plain list that never needs the chief running (a reminder is
+the one filtered event it shows, since it went to you), and its **+** sends the chief a message in
+chat, because the chief creates listeners with its own tools. Memory is a sheet from the header,
+saved against the revision it opened. The app's two switches are in Settings → Chief of staff; a
+project's are Inherit/On/Off selects (`null` clears the override). The old watcher Inbox, its ⌘2
+binding and the watcher forms are gone; `#/inbox` links open the board. The iPhone and iPad have the
+same button in the board's bottom bar and open the chief as a sheet (iPhone) or a panel beside the
+board (iPad, iPhone Duo); `harness://cos` and `harness://cos/<group id>` open one.
 
 #### Memory and activity query
 
@@ -1129,12 +1137,12 @@ stubs whose full description `tool_search` returns, see "Stubs and tool_search" 
 | `create_ticket` | work, conductor | `{ title, spec, project_key?, depends_on?: string[], start?, auto_start?, conductor?, child?, driver?, model?, phase_models?, use_worktree?, base_branch?, branch?, skip_agent_review?, skip_human_review?, remote_id?, remote_url?, attachments?: string[] }`. `attachments` sets `promptAttachments` (paths that exist now, relative ones against the run's cwd; see "Prompt attachments"). `remote_id` / `remote_url` link the new ticket to a remote ID ("Remote IDs": validated like the PATCH, source `"manual"`; `remote_url` without `remote_id` is refused). `base_branch` / `branch` set `baseBranch` / `requestedBranch` ("Branches"); `skip_agent_review` / `skip_human_review` set `skipAgentReview` / `skipHumanReview` (omitted: the project's defaults, "Review defaults"). `child` (default true for a `kind: "conductor"` caller, false otherwise): a child (`parentId` = the caller, `auto_start` default true, the caller's driver/model by default). Otherwise: a top-level ticket in the run's project or `project_key` (`start` default false → planning with a plan run; driver defaults like `POST /tickets`). depends_on takes keys, e.g. from earlier create_ticket calls; `model: ""` means the driver default. `use_worktree` sets the new ticket's `useWorktree` (false: the project checkout); omitted, it follows the project's `useWorktrees`, a conductor's children included |
 | `update_ticket` | plan (own ticket only), work and chat (other tickets; its own ticket with `pull_request_urls` alone), conductor | `{ key, title?, spec?, base_revision?, driver?, model?, phase_models?, permission_mode?: "auto"\|"ask"\|"read_only"\|"inherit", depends_on?, base_branch?, branch?, skip_agent_review?, skip_human_review?, remote_id?, remote_url?, pull_request_urls? }` → `Orchestrator.updateTicket` (same validation as `PATCH /tickets/:key`; `pull_request_urls` replaces the ticket's whole pull request list, `[]` clears it, and each added link's title is fetched ("Pull requests"); `spec` is a new revision, author `agent`, note "Rewritten with update_ticket"; it needs `base_revision`, the `specRevision` from `get_ticket`, and a spec that changed since is refused with the current revision, like `edit_spec`). `remote_id` / `remote_url` become `externalRef`: `remote_id: ""` unlinks, a remote ID alone keeps the link of the one the ticket already carries (a different one starts with none), `remote_url` alone re-links the current remote ID (`""` clears the link) and is refused on an unlinked ticket. `branch` only while the ticket has no worktree; after that the error says to ask its agent (`update_branch`) |
 | `move_ticket` | work, conductor | `{ key, status, position? }`: moves a card on the board (`updateTicket` with status/position) to planning, blocked or done; never to in_progress (`start_ticket` starts work) or review. Agents move cards; the Mac board has no manual moves. `position` is the 0-based slot in the target column, turned into a sort key with `positionForDrop` like the iPhone app's move menu; the same status with a position reorders |
-| `list_tickets` | all | `{ scope?: "children"\|"project"\|"all", project_key?, status?: TicketStatus[], limit?, include_drafts? (default true) }`, each ticket flagged `draft`. Default scope: a ticket with children (or a conductor) → children, other ticket runs → the ticket's project (or `project_key`), triage → all. Board order (done newest-completed first), capped at `limit` (default 50, max 200) with a "Showing n of total" note |
+| `list_tickets` | all | `{ scope?: "children"\|"project"\|"all", project_key?, status?: TicketStatus[], limit?, include_drafts? (default true) }`, each ticket flagged `draft`. Default scope: a ticket with children (or a conductor) → children, other ticket runs → the ticket's project (or `project_key`), a chief of staff → its own scope. Board order (done newest-completed first), capped at `limit` (default 50, max 200) with a "Showing n of total" note |
 | `get_ticket` | all | `{ key, include_transcript?: 1..50, include_agents? }`: any project, drafts included (`draft: true`), old keys resolve (`resolvedFrom`), remote IDs never do: a key only tickets carry as their remote ID returns `{ ticket: null, requested, relatedTickets }`, and a found ticket carries `externalKey`, `externalUrl` and `relatedTickets` ("Remote IDs"). Spec, `specRevision`, `specBaselineRevision`, `agentNotes` (see "Agent notes"; `list_tickets` and `search_tickets` leave them out), status, reviews, blocked reason, parent/children keys, dependsOn, driver/model, branches (`branch`, `requestedBranch`, `baseBranch`, `effectiveBaseBranch` + `baseBranchSource`), `activity` (kind, author, body, meta, createdAt), `attachments` (id, name, kind and stored file `path`), `promptAttachments` (name, path, `missing`); with include_transcript the last N text/status/error transcript entries, each clipped to 2000 chars; with include_agents `agents`, its sub-agents and background tasks oldest first (id, kind, description, agentType, model, status, parentId, command, result clipped to 500 chars, startedAt, endedAt) |
 | `get_ticket_agent` | all | `{ key, id, include_transcript?: 1..50 }` → one sub-agent or task of that ticket's session (`Orchestrator.getTicketAgent_`): its `agent` fields plus `prompt`, prompt and result clipped to 8000 chars; a sub-agent's own last N (default 20) text/status/error `transcript` entries, or a task's `output` (its last 8000 chars, `truncated`, `done`, `available`; a task with no output file reads as unavailable). An unknown id fails pointing at `get_ticket`'s include_agents |
 | `search_tickets` | all | `{ query, project_key?, limit?, cursor?, include_drafts? (default true) }` → `{ total, hits: [{ key, title, status, draft, project, snippet }], nextCursor }`. Same matching, ranking and cursors as `GET /tickets/search` ("Paging and search"); default limit 20 |
 | `list_projects` | all | `{}` → each project's key, name, path and settings, with `completionAction`, the offered `completionActions` and `pullRequestHost` |
-| `list_inbox` | all | `{ status?: TriageStatus[], source?, key?, limit?, include_output? }` (`key` picks one item, e.g. `TRIAGE-12`; `get_ticket` on an Inbox key fails pointing here) → Inbox items (triage sessions) newest first: key, title, source (watcher name), status, outcome, the watcher prompt, and with include_output the output (clipped to 2000 chars). Default limit 20, max 100, with a "Showing n of total" note |
+| `list_inbox` | all (a legacy read; its prompt text no longer points agents at it) | `{ status?: TriageStatus[], source?, key?, limit?, include_output? }` (`key` picks one item, e.g. `TRIAGE-12`; `get_ticket` on an Inbox key fails pointing here) → Inbox items (triage sessions) newest first: key, title, source (watcher name), status, outcome, the watcher prompt, and with include_output the output (clipped to 2000 chars). Default limit 20, max 100, with a "Showing n of total" note |
 | `start_ticket` | work, conductor | `{ key }` → `startTicket` (any ticket, not only children). While the ticket's planning run is going it approves the plan instead and the work starts when the run ends |
 | `message_ticket` | work, conductor, chat | `{ key, text }` → `sendMessage`, as a human message (never with `move`: the ticket stays in its column and its agent moves it) |
 | `cancel_ticket` | work, conductor | `{ key }` → `cancelTicket` (abort the active run, drop queued runs) |
@@ -1151,7 +1159,7 @@ stubs whose full description `tool_search` returns, see "Stubs and tool_search" 
 | `create_project` | ″ | `{ path, key?, name?, default_driver?, use_worktrees?, skip_agent_review?, skip_human_review?, completion_action?, permission_mode?, default_models?, phase_models?, color?, group?, base_branch? }` |
 | `update_project` | ″ | `{ project_key, key? (rename), path?, …same fields }` |
 | `delete_project` | ″ | `{ project_key }` (never the project of the run's ticket or its ancestors) |
-| `update_settings` | ″ | `{ default_driver?, max_concurrent_runs?, permission_mode?, classifier?, default_models?, review_models?, phase_models?, watcher_driver?, watcher_models?, listen?, base_branch?, prompts? }` (`prompts` merges per id; null resets one) |
+| `update_settings` | ″ | `{ default_driver?, max_concurrent_runs?, permission_mode?, classifier?, default_models?, review_models?, phase_models?, listen?, base_branch?, prompts? }` (`prompts` merges per id; null resets one) |
 | `delete_ticket` | ″ | `{ key }` (never the run's own ticket or an ancestor) |
 | `browser_open` | plan, work, review, conductor, chat | `{ url, tab?, new_tab?, device?, width?, height?, wait_for? }` → names the tab and its size; `tab` with `new_tab` is refused; the size is set before the page loads. See "Browser tabs" |
 | `browser_tabs` | ″ | `{ tab? }` → one line per tab: number, title, URL, mode and size, and its failed-request and console-error counts; with `tab`, that tab in full (state, size, scroll, requests failed-first, console). A suspended tab isn't reopened |
@@ -1304,7 +1312,8 @@ client state, not service state.
 | Board | delete a ticket | `delete_ticket` (gated) | never the caller's own ticket or an ancestor |
 | Board | approve a review choosing how it lands (merge, open PR, "Approve and…" with instructions, take no action), request changes, re-run the agent review, complete or mark done; open a ticket's pull request | parents only, for their own children: `review_ticket`, `complete_ticket` (`action`) | reviews and merges are the reviewers' and the human's; an agent can't sign off its own or a sibling's work |
 | Board | answer a tool approval (allow once, always allow, deny) | none | a human's decision by design; a message to a ticket waiting on one is refused |
-| Inbox | list the old triage items, open one, open its dispatched ticket | `list_inbox` (`include_output`), `get_ticket` | the apps have no Inbox actions beyond reading |
+| Chief of staff | open a board's chief, read its Chat and Inbox, escalate an ignored event, edit its memory | the chief's own tools (`list_tickets`, `query_activity`, `read_memory`, `update_memory_section`, `schedule_*`); a ticket agent has no CoS tool | the apps have no screen for schedules yet |
+| Inbox (legacy) | list the old triage items | `list_inbox` (`include_output`), `get_ticket` | the apps have no Inbox actions beyond reading |
 | Watchers | create, edit (command line, cwd, mode, interval), pause or resume, run now, delete | a chief's `create_watcher`, `update_watcher` (`enabled`), `run_watcher`, `delete_watcher` (all gated); `list_watchers` | `env` is tool-only (the forms don't edit it); values are never shown |
 | Projects | add, rename, change key or folder, default driver and models, permission mode, worktrees, base branch, review defaults, what approving does ("When approved"), color, group, remove | `create_project`, `update_project`, `delete_project` (gated); `list_projects` | reveal in Finder and "new session here" are Local |
 | Settings | default driver, concurrent runs, default and review models, permission mode, classifier, network listen mode, base branch | `update_settings` (gated), `get_settings` | |
@@ -1776,7 +1785,7 @@ cost as a per-turn delta, so the sum is the run's cost; anthropic-api reports to
 reports nothing. The ticket's Runs list (`runRowInfo` in `shared/src/state/runs.ts`, ported to
 `RunRows.swift`) shows the driver and model only when they differ from the run's **phase default**:
 what the ticket inherits for that phase from the project and settings (`inheritedPhaseModels`). A
-ticket-level override therefore shows on its runs. Triage runs (no phase) and runs outside a ticket
+ticket-level override therefore shows on its runs. Chief-of-staff runs (they follow the work phase) and runs outside a ticket
 have no default and always show both. The default is resolved when the list is drawn, so a later
 settings change can add or drop chips on old runs; the stored driver and model stay accurate.
 
@@ -1981,8 +1990,7 @@ session, context, lifecycle, the per-run-kind instructions, children, branches, 
 file links, board, board changes, config, approvals, browser; context, the per-run-kind
 instructions, children, branches, spec and notes render in the run context, the rest in the system
 prompt) and `run.*` for the message that starts a run (work
-and conductor start, review, the three completions, conductor update, changes requested, reopen,
-triage). `system.complete` and `run.complete` were renamed `system.complete_merge` and
+and conductor start, review, the three completions, conductor update, changes requested, reopen). `system.complete` and `run.complete` were renamed `system.complete_merge` and
 `run.complete_merge` when the pull request and custom completions arrived (`RENAMED_PROMPT_IDS`):
 migration 18 moves stored overrides to the new ids, and settings read or sent under an old id apply
 to the new one. `system.summaries` became `system.spec` ("Spec and Activity") with different
@@ -2025,6 +2033,7 @@ Directives are read from the run prompt:
 | work | text `Hello from the dummy driver! You said: "<prompt>"`; then: `/block <q>` → `block`; `/fail <msg>` → error; `/browse <url>` → `browser_open` + `browser_content`; `/bash <cmd>` → `bash` if present (through the PermissionGate, so the permission flow runs offline; tests inject a fake classifier); `/tools [{"name":…,"input":{…}},…]` → calls those harness tools in order, stops at the first error and keeps the rest in driver state; a later prompt with "Retry it now" (an answered approval) repeats from the failed call, then `submit_for_review`; `/agents [n]` → n sub-agents (default 2, at most 5; from three on, the last is started by the one before it), each an `Agent` call, `subagent` reports and tagged text + a `Read` call, then `submit_for_review`; `/bgtask [n]` → a background `Bash` call (`run_in_background`) with its "Command running in background" result and a `bash` task report whose output file (under `/tmp/claude-<uid>/harness-dummy/<run>/`) gets `line 1`…`line n` (default 20, at most 500), one every 20× the word delay, every fifth in color, then the task's `succeeded` report and `submit_for_review`; `/child <title>` → `create_ticket` with `child: true`, then the run ends without submitting; a `conductorUpdatePrompt` ("Child ticket updates:…") steers like a later conductor run; `/approve <tool> [json input]` → `permission_prompt` (→ `requestApproval`, the same path claude-code uses; the dummy driver has `usesPermissionPromptTool`), then on allow text `Approved <tool>` + `submit_for_review`, on deny the run just ends; otherwise `post_note` + submit. Every submit here first calls `read_spec` and `edit_spec`, replacing the body of `## Status` (up to the next heading, with `expected` set to it) with one `* <note>` line, or adding the section when the spec has none; a run started by requested changes notes "addressed the review notes", then `submit_for_review` with `spec_is_up_to_date: true` |
 | review | calls `review_decision` approve, or request_changes when the prompt contains `[dummy:reject]`, or `[dummy:reject-once]` on round 1 only (a prompt without "Earlier review rounds") |
 | chat | text `(dummy chat) You said: "<message>"` (without the blocked note); `[dummy:unblock]` → `unblock`, `[dummy:resume]` → `resume_work`, then `[dummy:block]` → `block` or `[dummy:submit]` → `submit_for_review` |
+| cos | a chief of staff's turn: `/tools [{"name","input"}]` in the message calls those tools in order and reports a refusal in words (it has no `submit_for_review`, so the turn just ends); any other message is answered `(dummy chief) Noted: <first line>` |
 | complete | text + `post_note("Completed.")`; a `pr` completion first calls `record_pull_request` with a made-up `https://github.com/example/dummy/pull/<n>` (or the ticket's existing URL) and its cwd's `HEAD`; a `merge` or `cleanup` completion of a worktree ticket first merges its branch (merge only) and removes the worktree and branch, so the service's cleanup check passes |
 | conductor | first run: creates one child per `- ` bullet in the prompt (default two, second depends on first); later runs: approve (`review_ticket`) children whose agent review approved (or was skipped) and human review pending, `complete_ticket` approved ones, `submit_for_review` when all done |
 
@@ -2827,8 +2836,8 @@ file typed in full (`.env`) stays in the list, first.
   typing doesn't re-run git on each key.
 - **Attaching.** `Orchestrator.execute()` passes plan, work, conductor and chat prompts
   through `attachMentions` with the run's cwd before the driver sees them; review, complete and
-  triage prompts are left alone (review and complete runs work from the spec and the branch,
-  whose files the earlier runs already had, and triage prompts are watcher output). Each mention that resolves to a file or folder inside the cwd is appended in a
+  chief-of-staff wakes are left alone (review and complete runs work from the spec and the branch,
+  whose files the earlier runs already had, and a wake carries watcher output). Each mention that resolves to a file or folder inside the cwd is appended in a
   `<mentioned-files>` block: `<file path="…">` with the contents, or `<directory path="…/">` with
   a one-level listing. Mentions that aren't paths (`@someone`) are ignored. Paths that resolve
   outside the cwd, symlinks included, are refused; binary files (a NUL in the first 8 KB) are
@@ -2892,7 +2901,7 @@ when a notification is tapped or clicked, and report what they have on screen.
 `activity.added` fires, with no delay or batching, so nothing ever has to be taken back. An entry
 is skipped when any of these is true:
 
-- it has no ticket (an old triage session)
+- it has no ticket (an old Inbox item)
 - its author is `human`, which covers everything the human does in any client, the API or the CLI
 - `settings.notifications.enabled` is off, or its kind's category is (`ACTIVITY_CATEGORY` in
   `shared/src/notifications.ts` maps every `ActivityKind` to one of status, review, notes, spec and
@@ -3847,7 +3856,7 @@ the conventions, and ios/README.md the build and test commands.
   mailto and other schemes open outside the app, and a file link (`harness://file/…`, or a bare
   relative or absolute path) pushes the file viewer with `path`, `ticket` or `project`, `start`
   and `end`. A relative link resolves in the ticket or project the markdown belongs to, unless the
-  link carries its own `?ticket=`/`?project=`. A triage session (the iPhone's old Inbox) has no folder, so its
+  link carries its own `?ticket=`/`?project=`. An old Inbox item has no folder, so its
   outcome and transcript resolve in the project of the ticket it dispatched.
   When that ticket isn't loaded, they use its key instead. A session that dispatched nothing has
   no scope, and a relative link from it plays the error haptic. `FileViewerScreen` loads `FileView` and,

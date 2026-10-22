@@ -56,10 +56,21 @@ socket (`WorldSocket`) replaced. A request the world has no route for fails the 
 
 One journey through the real apps, last in the gate: the service (dummy driver, port 0, a temp
 home), the built Mac app, and the iPhone and iPad apps from the same build-for-testing as L4 iOS.
-Seven steps, each building on the last: launch the Mac app; pair both phones by link; create a
-ticket on the Mac and see it on both phones; approve its plan and watch the dummy session arrive on
-all three; rename a project group in its settings; edit and save a file; open a terminal and pop it out into its own window (the
-renderer↔main IPC the L4 layers can't reach); relaunch each app and check the state survived.
+Fifteen steps, each building on the last. Steps 1 to 7 are the app's basics: launch the Mac app;
+pair both phones by link; create a ticket on the Mac and see it on both phones; approve its plan
+and watch the dummy session arrive on all three; rename a project group in its settings; edit and
+save a file; open a terminal and pop it out into its own window (the renderer↔main IPC the L4
+layers can't reach); relaunch each app and check the state survived. Steps 8a to 8e are the chief
+of staff, with the classifier off so its triage escalates instead of calling a model, and the dummy
+driver playing the chief (`/tools [...]` in a message makes it call those tools): the board's
+title-bar button opens the group's chief, which creates a spike and a build ticket (cards in the
+chat on all three); a watcher's output lands in the All chief's Inbox with the title-bar count pill
+agreeing with the service on Mac, iPhone and iPad; the chief answers a blocked ticket where
+can-unblock is on, and is refused where it is off or the ticket is in another group; a reminder
+fires on time and is handled by no run; a chief turned off hands its pending events to the next
+owner, and turning chiefs off in Settings leaves them unowned and starts no run. The rules behind
+these (scope, can-unblock, hand-off, schedules, badge counts) are tested at the service layer; the
+steps only prove they hold through the real apps.
 
 - Data for the journey is `testing/world/walk.ts` (a checkout, the ticket, the dummy driver's
   markers), seeded through the real API.

@@ -1,19 +1,40 @@
-// The walkthrough's journey: one daemon, the Mac app, an iPhone and an iPad, seven steps that each
-// build on the last. It runs inside both simulator locks (walk/run.ts takes them), with the two
+// The walkthrough's journey: one daemon, the Mac app, an iPhone and an iPad, a dozen steps that each
+// build on the last: the app's basics (1 to 7), then the chief of staff (8a to 8e). It runs inside both simulator locks (walk/run.ts takes them), with the two
 // UDIDs in WALK_IPHONE_UDID and WALK_IPAD_UDID. Every step waits on something observable (a /ws
 // event, a DOM change, an accessibility label, a process's output) and every wait has a deadline.
 
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { Cos, CosEvent, CosEventPage, Ticket } from "@harness/shared";
 import { buildPairUrl } from "../../shared/src/pairing";
 import { MOD } from "../lib/cdp";
 import { startDaemon, type Daemon, type Socket } from "../lib/daemon";
-import { columnCount, keyboardClearance, phone, type Phone } from "../lib/ios";
+import { columnCount, keyboardClearance, phone, screenState, type Phone } from "../lib/ios";
 import { launchMac, type MacApp } from "../lib/mac";
 import { killRecords, RunFile } from "../lib/procs";
 import { until } from "../lib/wait";
-import { EDIT_TEXT, EDITED_FILE, DUMMY_DONE_NOTE, DUMMY_HELLO, TERMINAL_ANSWER, TERMINAL_COMMAND, WALK_FILES, WALK_PROJECT, WALK_TICKET } from "../world/walk";
+import {
+  COS_AWAY_GROUP,
+  COS_AWAY_PROJECT,
+  COS_BLOCKED_SPEC,
+  COS_BUILD_TITLE,
+  COS_GROUP,
+  COS_OFF_PROJECT,
+  COS_REMINDER_TITLE,
+  COS_SPIKE_TITLE,
+  COS_WATCHER_SOURCE,
+  COS_WATCHER_TEXT,
+  EDIT_TEXT,
+  EDITED_FILE,
+  DUMMY_DONE_NOTE,
+  DUMMY_HELLO,
+  TERMINAL_ANSWER,
+  TERMINAL_COMMAND,
+  WALK_FILES,
+  WALK_PROJECT,
+  WALK_TICKET,
+} from "../world/walk";
 
 export interface Ctx {
   dir: string;
@@ -27,6 +48,8 @@ export interface Ctx {
   projectId: string;
   /** The terminal's id, once step 6 opened it. */
   terminalId: string;
+  /** Step 8a's world: the blocked tickets by project key, and the ids the later chief steps use. */
+  cos: { blocked: Record<string, string>; groupId: string; groupChief: Cos | null; allChief: Cos | null };
 }
 
 export interface Step {
@@ -74,13 +97,15 @@ export async function begin(start: Start, runs: RunFile): Promise<Ctx> {
     phones: start.phones.map((p) => phone(p.name, p.udid)),
     projectId: "",
     terminalId: "",
+    cos: { blocked: {}, groupId: "", groupChief: null, allChief: null },
   };
   try {
     ctx.repo = seedRepo(dir);
     ctx.daemon = await startDaemon(runs, join(dir, "home"));
     // Every phase of every run goes to the dummy driver; the default would be a real agent.
     const phase = { driver: "dummy", model: null };
-    await ctx.daemon.call("PATCH", "/settings", { phaseModels: { plan: phase, work: phase, review: phase, adviser: phase, complete: phase } });
+    // The classifier is off so the chiefs' triage has no model to call: a batch of events escalates to its chief, which the dummy driver plays.
+    await ctx.daemon.call("PATCH", "/settings", { classifier: "off", phaseModels: { plan: phase, work: phase, review: phase, adviser: phase, complete: phase } });
     const project = await ctx.daemon.call<{ id: string }>("POST", "/projects", { path: ctx.repo, key: WALK_PROJECT.key, name: WALK_PROJECT.name, skipAgentReview: true });
     ctx.projectId = project.id;
     ctx.ws = await ctx.daemon.socket();
@@ -337,6 +362,206 @@ export function steps(start: Start, built: { app: string }): Step[] {
           await p.see("the ticket open on its Transcript tab without pairing again", (l) => l.some((x) => x.includes(DUMMY_HELLO)), 60_000);
         });
         await phoneShots(ctx, "07-relaunched");
+      },
+    },
+    {
+      name: "8a. a project board's Chief of Staff button opens its group's chief; asked for a spike and a build ticket, it makes both",
+      async run(ctx) {
+        const main = ctx.mac.main;
+        const d = ctx.daemon;
+        // The world the chief steps share: a second project in the walk's group where the chief may not unblock, a project in another
+        // group, and a blocked ticket in each of the three (the dummy driver blocks on `/block`).
+        const project = async (key: string, name: string, group: string, cosCanUnblock: boolean) => {
+          const path = join(ctx.dir, name);
+          mkdirSync(path, { recursive: true });
+          const p = await d.call<{ id: string }>("POST", "/projects", { path, key, name, group, useWorktrees: false, skipAgentReview: true });
+          await d.call("PATCH", `/projects/${p.id}`, { cosCanUnblock });
+          return p;
+        };
+        const off = await project(COS_OFF_PROJECT.key, COS_OFF_PROJECT.name, COS_GROUP, false);
+        const away = await project(COS_AWAY_PROJECT.key, COS_AWAY_PROJECT.name, COS_AWAY_GROUP, true);
+        await d.call("PATCH", `/projects/${ctx.projectId}`, { cosCanUnblock: true });
+        for (const [key, id, what] of [[WALK_PROJECT.key, ctx.projectId, "cache"], [COS_OFF_PROJECT.key, off.id, "queue"], [COS_AWAY_PROJECT.key, away.id, "database"]] as const) {
+          const t = await d.call<Ticket>("POST", "/tickets", { projectId: id, spec: COS_BLOCKED_SPEC(what), skipAgentReview: true });
+          ctx.cos.blocked[key] = t.key;
+        }
+        await until("the three tickets to be blocked on a question", 60_000, async () => {
+          const all = await Promise.all(Object.values(ctx.cos.blocked).map((k) => d.call<{ ticket: Ticket }>("GET", `/tickets/${k}`)));
+          return all.every((x) => x.ticket.status === "blocked") ? true : undefined;
+        });
+        ctx.cos.groupId = (await d.call<{ id: string; name: string }[]>("GET", "/groups")).find((g) => g.name === COS_GROUP)!.id;
+
+        // From the project's board, the title-bar button is its group's chief.
+        await main.evaluate(`location.hash = '#/board/${ctx.projectId}'`);
+        await main.waitFor("the Chief of Staff button, scoped to the group", `document.querySelector('[data-testid="cos-callout"]')?.dataset.scope === 'group:${ctx.cos.groupId}'`);
+        await shot(ctx, "08a-mac-board-title-bar");
+        await main.click("[data-testid=cos-callout]");
+        await main.waitFor("the chief's pane with its composer", `document.querySelector('[data-testid="cos-view"] [data-testid="cos-composer-input"]')`);
+        const create = (title: string, spec: string) => ({ name: "create_ticket", input: { title, spec, project_key: WALK_PROJECT.key, start: false } });
+        const calls = [create(COS_SPIKE_TITLE, "Compare two caches and report which fits."), create(COS_BUILD_TITLE, "Build the cache layer the spike picks.")];
+        await main.focus("[data-testid=cos-composer-input]");
+        await main.type(`/tools ${JSON.stringify(calls)}`);
+        await main.click("[data-testid=cos-send]");
+        await main.waitFor("a card in the chat for each ticket the chief made", `document.querySelectorAll('[data-testid="cos-view"] [data-testid="cos-ticket-card"]').length >= 2`);
+        await shot(ctx, "08a-mac-chat");
+
+        // The tickets are the chief's, in Planning, and their Activity says who made them.
+        ctx.cos.groupChief = (await d.call<Cos[]>("GET", "/cos")).find((c) => c.scope === `group:${ctx.cos.groupId}`)!;
+        const tickets = await d.call<Ticket[]>("GET", `/tickets?projectId=${ctx.projectId}`);
+        const made = [COS_SPIKE_TITLE, COS_BUILD_TITLE].map((title) => tickets.find((t) => t.title === title));
+        if (made.some((t) => !t || t.status !== "planning")) throw new Error(`the chief's tickets aren't both in Planning: ${JSON.stringify(made.map((t) => t && [t.key, t.status]))}`);
+        const activity = await d.call<{ body: string }[]>("GET", `/tickets/${made[0]!.key}/activity`);
+        if (!activity.some((a) => a.body === `Chief of staff (${ctx.cos.groupChief!.key}) created it`)) throw new Error(`the spike's Activity doesn't name the chief: ${JSON.stringify(activity.map((a) => a.body))}`);
+
+        // The same chief on the phones: the link opens its chat, with a card for each ticket.
+        await eachPhone(ctx, async (p) => {
+          await p.open(`harness://cos/${ctx.cos.groupId}`, "the chief's chat with a card for each ticket", (l) => made.every((t) => l.some((x) => x.startsWith(`${t!.key}, ${t!.title}`))));
+        });
+        await phoneShots(ctx, "08a-chat");
+      },
+    },
+    {
+      name: "8b. a watcher's output lands in the All chief's Inbox, and the title-bar count pill shows on all three",
+      async run(ctx) {
+        const main = ctx.mac.main;
+        const d = ctx.daemon;
+        await main.evaluate(`location.hash = '#/board/all'`);
+        await main.waitFor("the All projects board's Chief of Staff button", `document.querySelector('[data-testid="cos-callout"]')?.dataset.scope === 'all'`);
+        await main.click("[data-testid=cos-callout]");
+        await main.waitFor("the All chief's pane", `document.querySelector('[data-testid="cos-view"][data-scope="all"]')`);
+        ctx.cos.allChief = (await d.call<Cos[]>("GET", "/cos")).find((c) => c.scope === "all")!;
+        const event = await d.call<CosEvent | null>("POST", "/watchers/inject", { source: COS_WATCHER_SOURCE, text: COS_WATCHER_TEXT });
+        if (!event || event.cosId !== ctx.cos.allChief.ticketId) throw new Error(`the injected output isn't an event of the All chief: ${JSON.stringify(event)}`);
+
+        // The pill is what the service counts for the chief; wait for both to agree, on a count of at least the new event.
+        const pending = async () => (await d.call<{ byCos: Record<string, number> }>("GET", "/cos/events/badge")).byCos[ctx.cos.allChief!.ticketId] ?? 0;
+        const macPill = () => ctx.mac.main.evaluate<string | null>(`document.querySelector('[data-testid="cos-callout-badge"]')?.textContent?.trim() ?? null`);
+        await until("the Mac's pill to show what the service counts", 30_000, async () => {
+          const n = await pending();
+          return n >= 1 && (await macPill()) === String(n) ? n : undefined;
+        });
+        await main.click("[role=tab][data-tab=inbox]");
+        await main.waitFor("the watcher's item in the Inbox", `[...document.querySelectorAll('[data-testid="cos-event"]')].some((r) => r.innerText.includes('Watcher') && r.innerText.includes(${JSON.stringify(COS_WATCHER_TEXT)}))`);
+        await shot(ctx, "08b-mac-inbox");
+
+        // The phones' board: the same button with the same count, then the Inbox tab with the item.
+        await eachPhone(ctx, async (p) => {
+          await p.open("harness://board", "the board", (l) => screenState(l) === "board");
+          await p.seeValue("the Chief of Staff button's count", "Chief of Staff", (v) => v !== null && /^\d+ waiting$/.test(v));
+          await p.tap("Chief of Staff", { what: "the chief's tabs", match: (l) => l.includes("Chat") && l.some((x) => x.startsWith("Inbox")) });
+          const tab = (await p.labels()).find((x) => x.startsWith("Inbox"))!;
+          await p.tap(tab, { what: "the watcher's item in the Inbox", match: (l) => l.some((x) => x.includes(COS_WATCHER_TEXT)) });
+        });
+        await phoneShots(ctx, "08b-inbox");
+      },
+    },
+    {
+      name: "8c. the chief answers a blocked ticket where can-unblock is on, and is refused where it is off or the ticket is in another group",
+      async run(ctx) {
+        const main = ctx.mac.main;
+        const d = ctx.daemon;
+        const { blocked, groupChief } = ctx.cos;
+        const ask = (key: string, text: string) => ({ name: "message_ticket", input: { key, text } });
+        // [dummy:unblock] makes the ticket's own chat run pick the work back up once the chief has answered.
+        const calls = [ask(blocked[WALK_PROJECT.key]!, "Use Redis [dummy:unblock]"), ask(blocked[COS_OFF_PROJECT.key]!, "Use SQS [dummy:unblock]"), ask(blocked[COS_AWAY_PROJECT.key]!, "Use Postgres [dummy:unblock]")];
+        await main.evaluate(`location.hash = '#/board/${ctx.projectId}'`);
+        await main.waitFor("the group's Chief of Staff button", `document.querySelector('[data-testid="cos-callout"]')?.dataset.scope === 'group:${ctx.cos.groupId}'`);
+        await main.click("[data-testid=cos-callout]");
+        await main.waitFor("the chief's composer", `document.querySelector('[data-testid="cos-view"][data-scope="group:${ctx.cos.groupId}"] [data-testid="cos-composer-input"]')`);
+        await main.click("[role=tab][data-tab=chat]");
+        await main.focus("[data-testid=cos-composer-input]");
+        await main.type(`/tools ${JSON.stringify(calls)}`);
+        await main.click("[data-testid=cos-send]");
+        await until("the walk project's ticket to leave Blocked", 60_000, async () => {
+          const t = await d.call<{ ticket: Ticket }>("GET", `/tickets/${blocked[WALK_PROJECT.key]}`);
+          return t.ticket.status !== "blocked" ? true : undefined;
+        });
+        await main.waitFor("the chief to say the other two were refused", `[...document.querySelectorAll('[data-testid="cos-view"] [data-testid="cos-msg-assistant"]')].filter((m) => m.innerText.includes('was refused')).length >= 2`);
+        await shot(ctx, "08c-mac-unblock");
+
+        // What the chief changed is on the ticket's Activity under its name; the other two stayed blocked and untouched.
+        const bodies = async (key: string) => (await d.call<{ body: string }[]>("GET", `/tickets/${key}/activity`)).map((a) => a.body);
+        if (!(await bodies(blocked[WALK_PROJECT.key]!)).includes(`Chief of staff (${groupChief!.key}) sent it a message`)) throw new Error("the answered ticket's Activity doesn't name the chief");
+        for (const key of [COS_OFF_PROJECT.key, COS_AWAY_PROJECT.key]) {
+          const t = (await d.call<{ ticket: Ticket }>("GET", `/tickets/${blocked[key]}`)).ticket;
+          if (t.status !== "blocked") throw new Error(`${t.key} left Blocked, but the chief isn't allowed to answer it`);
+          if ((await bodies(t.key)).some((b) => b.startsWith("Chief of staff"))) throw new Error(`${t.key}'s Activity shows the chief acted on it`);
+        }
+      },
+    },
+    {
+      name: "8d. a reminder the chief sets fires on time: it is in the Inbox, handled by no run",
+      async run(ctx) {
+        const main = ctx.mac.main;
+        const d = ctx.daemon;
+        const { groupChief } = ctx.cos;
+        // A few seconds from now, in the Mac's own time zone (the service reads a bare time that way); the scheduler ticks every 30 seconds.
+        const at = new Date(Date.now() + 10_000);
+        const pad = (n: number) => String(n).padStart(2, "0");
+        const when = `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}T${pad(at.getHours())}:${pad(at.getMinutes())}:${pad(at.getSeconds())}`;
+        const call = { name: "schedule_create", input: { kind: "reminder", title: COS_REMINDER_TITLE, at: when } };
+        await main.focus("[data-testid=cos-composer-input]");
+        await main.type(`/tools ${JSON.stringify([call])}`);
+        await main.click("[data-testid=cos-send]");
+        const fired = await until("the reminder to fire", 90_000, async () => {
+          const page = await d.call<CosEventPage>("GET", `/cos/${groupChief!.ticketId}/events?limit=200`);
+          return page.items.find((e) => e.sourceKind === "schedule" && e.title.includes(COS_REMINDER_TITLE));
+        });
+        if (fired.handledBy !== null || fired.wakeId !== null) throw new Error(`the reminder started a run: ${JSON.stringify(fired)}`);
+        await main.click("[role=tab][data-tab=inbox]");
+        await main.waitFor("the reminder in the Inbox", `[...document.querySelectorAll('[data-testid="cos-event"]')].some((r) => r.innerText.includes('Schedule') && r.innerText.includes(${JSON.stringify(COS_REMINDER_TITLE)}))`);
+        await shot(ctx, "08d-mac-reminder");
+      },
+    },
+    {
+      name: "8e. turning a chief off hands its pending events to the next owner; turning chiefs off in Settings stops events and runs",
+      async run(ctx) {
+        const main = ctx.mac.main;
+        const d = ctx.daemon;
+        const { groupChief, allChief, blocked } = ctx.cos;
+        const cosRunsSince = (from: number) => ctx.ws.messages.slice(from).filter((m) => m.type === "event" && m.event.kind === "run.upserted" && m.event.run.kind === "cos").length;
+        const owner = async (title: string) => {
+          const page = await d.call<CosEventPage>("GET", `/cos/${groupChief!.ticketId}/events?limit=200`);
+          return page.items.find((e) => e.title.includes(title));
+        };
+        // A change on a walk-project ticket is a pending event of its group's chief.
+        const marker = "Renamed in step 8e";
+        await d.call("PATCH", `/tickets/${blocked[WALK_PROJECT.key]}`, { title: marker });
+        const pending = await until("the chief's pending event", 15_000, async () => {
+          const e = await owner(marker);
+          return e && e.status === "pending" ? e : undefined;
+        });
+        if (pending.cosId !== groupChief!.ticketId) throw new Error(`the event isn't the group chief's: ${JSON.stringify(pending)}`);
+        const seen = ctx.ws.messages.length;
+
+        // The group's chief goes off: its pending event is the All chief's now, and no run starts for either.
+        await d.call("PATCH", `/cos/${groupChief!.ticketId}`, { enabled: false });
+        const moved = await until("the event to move to the All chief", 15_000, async () => {
+          const page = await d.call<CosEventPage>("GET", `/cos/${allChief!.ticketId}/events?limit=200`);
+          return page.items.find((e) => e.id === pending.id && e.cosId === allChief!.ticketId);
+        });
+        if (moved.status !== "pending") throw new Error(`the moved event isn't pending: ${moved.status}`);
+
+        // The app setting off: nobody owns it, and the chief's pane says nothing is triaged or run.
+        await main.evaluate(`location.hash = '#/settings/cos'`);
+        const toggle = `input[role=switch][aria-label="Chief of staff enabled"]`;
+        await main.waitFor("the Chief of staff enabled switch, on", `document.querySelector(${JSON.stringify(toggle)})?.checked === true`);
+        await main.click(toggle);
+        await main.waitFor("the switch off", `document.querySelector(${JSON.stringify(toggle)})?.checked === false`);
+        await shot(ctx, "08e-mac-settings-cos");
+        const unowned = await until("the event to have no owner", 15_000, async () => {
+          const page = await d.call<CosEventPage>("GET", `/cos/${allChief!.ticketId}/events?limit=200`);
+          return page.items.find((e) => e.id === pending.id && e.cosId === null);
+        });
+        if (unowned.status !== "pending") throw new Error(`the unowned event isn't pending: ${unowned.status}`);
+        await Bun.sleep(1500);
+        if (cosRunsSince(seen) > 0) throw new Error("a chief of staff run started while chiefs were off");
+        // Back on: the event is the All chief's again (the group chief is still off).
+        await main.click(toggle);
+        await until("the event to be the All chief's again", 15_000, async () => {
+          const page = await d.call<CosEventPage>("GET", `/cos/${allChief!.ticketId}/events?limit=200`);
+          return page.items.find((e) => e.id === pending.id && e.cosId === allChief!.ticketId);
+        });
       },
     },
   ];
