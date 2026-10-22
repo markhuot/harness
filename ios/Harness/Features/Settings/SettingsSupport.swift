@@ -2,7 +2,7 @@ import HarnessKit
 import SafariServices
 import SwiftUI
 
-// Shared by Settings, Project settings, the watcher form and Prompts: grouped
+// Shared by Settings, Project settings and Prompts: grouped
 // settings rows, as Form idioms.
 
 extension View {
@@ -81,7 +81,7 @@ private struct SettingsOptionalLabel: ViewModifier {
 }
 
 /// A Section header with a trailing icon button: "Refresh drivers",
-/// "Add watcher", "Add project".
+/// "Add project".
 struct SettingsSectionHeader: View {
     let title: String
     let icon: String

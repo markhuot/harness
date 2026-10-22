@@ -1,7 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-// Settings sections that list things: Prompts (a summary row), Watchers and Projects.
+// Settings sections that list things: Prompts (a summary row), Projects.
 
 /// The prompt catalog's summary ("2 customized · 1 broken"), opening Prompts.
 struct SettingsPromptsSection: View {

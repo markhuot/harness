@@ -365,23 +365,6 @@ public enum Format {
         case amber, green, neutral, red
     }
 
-    public struct TriageLabel: Codable, Sendable, Equatable {
-        public var label: String
-        public var tone: Tone
-        public init(label: String, tone: Tone) {
-            self.label = label
-            self.tone = tone
-        }
-    }
-
-    /// TRIAGE_LABEL
-    public static let triageLabel: [TriageStatus: TriageLabel] = [
-        .triaging: TriageLabel(label: "Triaging", tone: .amber),
-        .dispatched: TriageLabel(label: "Dispatched", tone: .green),
-        .declined: TriageLabel(label: "Declined", tone: .neutral),
-        .failed: TriageLabel(label: "Failed", tone: .red),
-    ]
-
     /// "Dispatched to FOO-123" → "FOO-123" (the ticket a triage outcome names).
     public static func dispatchedKey(_ session: Session) -> String? {
         dispatchedKey(outcome: session.outcome)
