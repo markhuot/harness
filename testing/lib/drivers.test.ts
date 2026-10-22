@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { daemonEnv } from "./daemon";
-import { columnCount, keyboardClearance, labelCenter, parseLabels, screenState } from "./ios";
+import { columnCount, keyboardClearance, labelCenter, labelValue, parseLabels, screenState } from "./ios";
 import { macEnv } from "./mac";
 
 test("the daemon starts on port 0 with the dummy driver in the run's home, whatever the host's own Harness settings say", () => {
@@ -31,6 +31,14 @@ test("the open-link prompt is told from the board, and a column chip's count is 
   expect(columnCount(labels, "Review")).toBe(2);
   expect(columnCount(labels, "In progress")).toBe(10);
   expect(columnCount(labels, "Done")).toBeUndefined();
+});
+
+test("a label's value is the AXValue of its element, null when it has none or the label is absent", () => {
+  const tree = JSON.stringify([{ AXLabel: "Harness", children: [{ AXLabel: "Chief of Staff", AXValue: "3 waiting" }, { AXLabel: "Projects", AXValue: "" }] }]);
+  expect(labelValue(tree, "Chief of Staff")).toBe("3 waiting");
+  expect(labelValue(tree, "Projects")).toBeNull();
+  expect(labelValue(tree, "Nope")).toBeNull();
+  expect(labelValue("not json", "Chief of Staff")).toBeNull();
 });
 
 test("a label's centre comes from its frame, and is null when it's absent or laid out off the screen", () => {

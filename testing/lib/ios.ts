@@ -16,6 +16,30 @@ export function parseLabels(describeUi: string): string[] {
   return [...describeUi.matchAll(/"AXLabel" : "([^"]*)"/g)].map((m) => m[1]!.replace(/\\\//g, "/"));
 }
 
+/** The AXValue of the first element labelled `label` ("3 waiting" on the Chief of Staff button), or null when it has none or isn't on screen. */
+export function labelValue(describeUi: string, label: string): string | null {
+  let tree: unknown;
+  try {
+    tree = JSON.parse(describeUi);
+  } catch {
+    return null;
+  }
+  const visit = (node: unknown): string | null => {
+    if (Array.isArray(node)) {
+      for (const n of node) {
+        const hit = visit(n);
+        if (hit !== null) return hit;
+      }
+      return null;
+    }
+    if (node === null || typeof node !== "object") return null;
+    const o = node as { AXLabel?: unknown; AXValue?: unknown; children?: unknown };
+    if (o.AXLabel === label && typeof o.AXValue === "string" && o.AXValue !== "") return o.AXValue;
+    return visit(o.children);
+  };
+  return visit(tree);
+}
+
 /** Whether the app's preferences file (as JSON, from `plutil -convert json`) holds a restorable state saved at or after `sinceSeconds` (Unix time): its JSON carries `savedAt` in seconds. */
 export function savedAfter(defaultsRead: string, sinceSeconds: number): boolean {
   return [...defaultsRead.matchAll(/savedAt\\*"\s*:\s*([0-9]+(?:\.[0-9]+)?)/g)].some((m) => Number(m[1]) >= sinceSeconds);
@@ -126,6 +150,10 @@ export interface Phone {
   install(app: string): Promise<void>;
   /** Open the pair link and tap through SpringBoard's open-link prompt if it appears; resolves on the board. */
   pair(link: string): Promise<string[]>;
+  /** Open an app link (harness://…), tapping through SpringBoard's open-link prompt if it appears; resolves when `match` holds of the screen. */
+  open(link: string, what: string, match: (labels: string[]) => boolean): Promise<string[]>;
+  /** Wait until the element labelled `label` has an accessibility value `match` accepts; resolves with it. */
+  seeValue(what: string, label: string, match: (value: string | null) => boolean, ms?: number): Promise<string | null>;
   /** Every accessibility label on screen. */
   labels(): Promise<string[]>;
   /** Wait until `match` is true of the screen's labels; fails naming `what` and the labels last seen. */
@@ -197,6 +225,24 @@ export function phone(name: string, udid: string): Phone {
       throw new Error(`${(e as Error).message.replace(/last seen: .*$/, "")}on screen: ${last.slice(0, 25).join(" | ") || "(nothing)"}`);
     }
   };
+  /** Opens the link and taps through SpringBoard's open-link prompt if it appears; resolves when `match` holds. */
+  const openLink = async (link: string, what: string, match: (l: string[]) => boolean) => {
+    await simctl("openurl", udid, link);
+    let tapping = false;
+    let lastTap = 0;
+    return see(what, (l) => {
+      // The prompt can be in the tree before it takes touches, so a tap that lands too early is
+      // tried again while the prompt is still up two seconds later.
+      if (!tapping && screenState(l) === "prompt" && Date.now() - lastTap > 2000) {
+        tapping = true;
+        void tapLabel("Open").then((out) => {
+          if (out !== null) lastTap = Date.now();
+          tapping = false;
+        });
+      }
+      return screenState(l) !== "prompt" && match(l);
+    });
+  };
   return {
     name,
     udid,
@@ -210,22 +256,16 @@ export function phone(name: string, udid: string): Phone {
       // The app asks for notification permission at launch and that alert would cover the screens under test.
       await simctl("spawn", udid, "defaults", "write", BUNDLE_ID, "HarnessSkipNotificationPrompt", "-bool", "YES");
     },
-    async pair(link) {
-      await simctl("openurl", udid, link);
-      let tapping = false;
-      let lastTap = 0;
-      return see("the board after pairing", (l) => {
-        // The prompt can be in the tree before it takes touches, so a tap that lands too early is
-        // tried again while the prompt is still up two seconds later.
-        if (!tapping && screenState(l) === "prompt" && Date.now() - lastTap > 2000) {
-          tapping = true;
-          void tapLabel("Open").then((out) => {
-            if (out !== null) lastTap = Date.now();
-            tapping = false;
-          });
-        }
-        return screenState(l) === "board";
+    pair: (link) => openLink(link, "the board after pairing", (l) => screenState(l) === "board"),
+    open: (link, what, match) => openLink(link, what, match),
+    async seeValue(what, label, match, ms = 30_000) {
+      const found = await until(`${name}: ${what}`, ms, async () => {
+        const out = await axe("describe-ui");
+        if (out === null) return undefined;
+        const value = labelValue(out, label);
+        return match(value) ? { value } : undefined;
       });
+      return found.value;
     },
     async tap(label, then) {
       for (let attempt = 1; ; attempt++) {

@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useRef, type Ref } from "react";
-import { cosScopeKey, projectGroups, type CosScopeKey, type Project } from "@harness/shared";
+import { projectGroups, type Project } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
-import { cosBadgeCount, sortedProjects } from "@harness/shared/state";
+import { sortedProjects } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import { MenuButton, MOD, Switch } from "../components/bits";
 import { ProjectKey } from "../components/ProjectKey";

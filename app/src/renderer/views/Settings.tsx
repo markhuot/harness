@@ -209,7 +209,7 @@ function CosSection({ settings }: { settings: PublicSettings }) {
   const { client } = useStore();
   const act = useAction();
   return (
-    <Section id="cos" title="Chief of staff" desc="A chief of staff triages what happens on a board and acts on it. Each group, and All projects, has its own, switched on or off from the switch in its pane. A project can override these two.">
+    <Section id="cos" title="Chief of staff" desc="A chief of staff triages what happens on a board and acts on it. These switches apply to every chief; a project can override each of them.">
       <div className="card-surface settings-card">
         {COS_SWITCHES.map((s) => (
           <Row key={s.key} title={s.title} sub={s.sub}>

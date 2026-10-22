@@ -184,13 +184,14 @@ describe("Inbox", () => {
   test("events nobody owns yet show, another chief's and the chief's own filtered ones don't", async () => {
     const client = new FakeClient();
     const base = client.cos.events[0]!;
-    client.cos.events.push({ ...base, id: "ev-nobody", cosId: null, title: "Unassigned" }, { ...base, id: "ev-other", cosId: "cos-work", title: "Other chief" }, { ...base, id: "ev-filtered", verdict: "filtered", status: "ignored", title: "Own move" });
+    client.cos.events.push({ ...base, id: "ev-nobody", cosId: null, title: "Unassigned" }, { ...base, id: "ev-other", cosId: "cos-work", title: "Other chief" }, { ...base, id: "ev-filtered", verdict: "filtered", status: "ignored", title: "Own move" }, { ...base, id: "ev-reminder", verdict: "filtered", status: "ignored", sourceKind: "schedule", reason: "reminder: posted to the human, no run", title: "Reminder: stand-up" });
     const m = await open("#/cos/all/inbox", client);
     await m.until("the rows", () => events(m).length > 0);
     const ids = events(m).map((e) => e.dataset.event);
     expect(ids).toContain("ev-nobody");
     expect(ids).not.toContain("ev-other");
     expect(ids).not.toContain("ev-filtered");
+    expect(ids).toContain("ev-reminder"); // a reminder is filtered from triage but is for the person, so it shows
   });
 
   test("an empty Inbox says so", async () => {
@@ -324,6 +325,19 @@ describe("the board's callout", () => {
     expect(text(byId(m, "cos-callout-badge"))).toBe("3");
     await m.settle(() => m.client.push({ kind: "cos.badge", total: 5, byCos: { "cos-all": 4, "cos-work": 2 } }));
     expect(text(byId(m, "cos-callout-badge"))).toBe("4");
+  });
+
+  test("a chief another device made shows its count as soon as a badge names it, without a reload", async () => {
+    updatePanes("*", () => defaultPanes("B"));
+    const client = new FakeClient();
+    const work = client.cos.chiefs.find((c) => c.ticketId === "cos-work")!;
+    client.cos.chiefs = client.cos.chiefs.filter((c) => c !== work);
+    const m = await mount(<BoardPane />, { hash: "#/board/group/group-work", client });
+    await m.until("the callout", () => !!byId(m, "cos-callout"));
+    expect(byId(m, "cos-callout-badge")).toBeNull();
+    client.cos.chiefs.push(work);
+    await m.settle(() => m.client.push({ kind: "cos.badge", total: 2, byCos: { "cos-work": 2 } }));
+    await m.until("the count", () => text(byId(m, "cos-callout-badge")) === "2");
   });
 
   test("a group's board shows its group's chief, and a project's board its group's", async () => {

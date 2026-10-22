@@ -329,7 +329,16 @@ public final class BoardStore {
     }
 
     private func receive(_ event: HarnessEvent) {
-        if let bus = CosBusEvent(event: event) { cos.apply(bus) }
+        if let bus = CosBusEvent(event: event) {
+            cos.apply(bus)
+            // A chief another device made isn't in the list yet: its count would read as nothing until the next refresh.
+            if case let .badge(b) = bus, b.byCos.keys.contains(where: { cos.chiefs[$0] == nil }) {
+                let client = client
+                Task { [weak self] in
+                    if let list = try? await client.listCos() { self?.cos.setChiefs(list) }
+                }
+            }
+        }
         switch event {
         case .usageUpdated(let u): usage = u
         case .terminalCreated, .terminalUpdated, .terminalRemoved: terminals = TerminalList.apply(terminals, event)

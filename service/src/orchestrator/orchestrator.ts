@@ -1,5 +1,5 @@
 // The orchestrator: ticket state machine, run queue/executor, scheduler, conductor
-// notifications and triage. Implements HarnessOps for tools.
+// notifications and the chief of staff. Implements HarnessOps for tools.
 
 import { AsyncLocalStorage } from "node:async_hooks";
 import { existsSync, rmSync, statSync } from "node:fs";
@@ -3118,7 +3118,8 @@ export class Orchestrator {
     if (kind === "triage") return [];
     // A chief of staff's conversation isn't on the board: it is read through /cos.
     const chiefs = new Set(this.store.cos.list().map((c) => c.ticketId));
-    return this.store.sessions.list(kind).filter((s) => !(s.ticketId && chiefs.has(s.ticketId)));
+    // Old triage sessions (kept only for list_inbox) are not a list any app shows.
+    return this.store.sessions.list(kind).filter((s) => s.kind !== "triage" && !(s.ticketId && chiefs.has(s.ticketId)));
   }
 
   getSession(id: string): Session {
@@ -3283,9 +3284,8 @@ export class Orchestrator {
    * Feed output as if a watcher named `source` printed `text` (an object is taken as its JSON): an
    * event for the All chief of staff. Null when deduped or when the text is only whitespace.
    */
-  async injectOutput(source: string, text: unknown, prompt?: unknown): Promise<CosEvent | null> {
+  async injectOutput(source: string, text: unknown): Promise<CosEvent | null> {
     if (typeof source !== "string" || !source.trim()) throw badRequest("source is required");
-    if (prompt !== undefined && prompt !== null && typeof prompt !== "string") throw badRequest("prompt must be a string");
     const raw = typeof text === "string" ? text : text === undefined || text === null ? "" : JSON.stringify(text);
     const output = toOutput(raw);
     if (!output) throw badRequest("text is required");
@@ -3448,7 +3448,7 @@ ${numberLines(r.body)}`;
    * update_spec, edit_spec, update_ticket. Adds the next revision (none when the body didn't
    * change), records it in Activity (spec_revised, the note as its line), broadcasts spec.revised
    * and the ticket. A stale `baseRevision` throws 409 carrying
-   * SpecConflict. Ticket creation (create_ticket, dispatch_ticket, triage, POST /tickets) writes
+   * SpecConflict. Ticket creation (create_ticket, a chief of staff, POST /tickets) writes
    * revision 1 with the ticket itself.
    */
   reviseSpec(ticket: Ticket, w: { body: string; baseRevision?: number; note: string } & SpecAuthorship): SpecRevisionInfo | null {
@@ -5916,7 +5916,7 @@ ${numberLines(r.body)}`;
     this.flushConductor(ticket.id);
   }
 
-  /** HarnessOps facade handed to tools (maps conductor/triage op names onto internals). */
+  /** HarnessOps facade handed to tools (maps conductor and chief of staff op names onto internals). */
   private get opsFacade(): HarnessOps {
     return this._ops ?? (this._ops = this.buildOps());
   }

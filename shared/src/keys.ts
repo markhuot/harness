@@ -70,7 +70,7 @@ export function keyLabel(t: Keyed): string {
 }
 
 /**
- * A ticket created before remote IDs had their own field: triage gave it its remote ID as its
+ * A ticket created before remote IDs had their own field: a watcher gave it its remote ID as its
  * key. It keeps that key through project renames (it isn't the project's numbering).
  */
 export function isLegacyMirror(t: Keyed): boolean {

@@ -180,6 +180,33 @@ test("with can-unblock off a chief refuses to touch a blocked ticket but still r
   expect((await asCos("all", [["update_ticket", { key: planning.key, title: "Fine" }]]))[0]!.isError).toBe(false);
 });
 
+test("an unblock by a chief shows in the ticket's Activity as the chief, and only where its project allows it", async () => {
+  const { h, asCos, a, w, groupOf } = await board();
+  const key = () => h.orch.listCos()[0]!.key;
+  const block = (t: { id: string }, why: string) => h.store.tickets.update(t.id, { status: "blocked", blockedReason: why });
+  const bodies = (t: { key: string }) => h.store.activity.listBySession(h.ticket(t.key).sessionId).map((e) => e.body);
+  // ACME turns it on for itself, the app default stays off: WORK1's blocked ticket is not touched.
+  h.orch.updateProject(h.project.id, { cosCanUnblock: true });
+  block(a, "Which database?");
+  block(w, "Which cache?");
+  const r = await asCos("all", [["message_ticket", { key: a.key, text: "Postgres" }], ["message_ticket", { key: w.key, text: "Redis" }], ["move_ticket", { key: w.key, status: "planning" }]]);
+  expect(r.map((x) => x.isError)).toEqual([false, true, true]);
+  expect(h.ticket(w.key).status).toBe("blocked");
+  expect(bodies(w).some((b) => b.startsWith("Chief of staff"))).toBe(false);
+  expect(bodies(a)).toContain(`Chief of staff (${key()}) sent it a message`);
+  // Moving it out of blocked is attributed too.
+  block(a, "Again?");
+  await asCos("all", [["move_ticket", { key: a.key, status: "planning" }]]);
+  expect(h.ticket(a.key).status).toBe("planning");
+  expect(bodies(a)).toContain(`Chief of staff (${key()}) moved it to planning`);
+  // A group's chief can't reach another group's blocked ticket even where the app allows unblocking.
+  h.orch.updateSettings({ cosCanUnblock: true });
+  block(w, "Which queue?");
+  const scoped = await asCos({ group: groupOf("Home") }, [["message_ticket", { key: w.key, text: "SQS" }]]);
+  expect(scoped[0]!.isError).toBe(true);
+  expect(h.ticket(w.key).status).toBe("blocked");
+});
+
 test("a chief's changes to a ticket are on that ticket's Activity under its name", async () => {
   const { h, asCos, a } = await board();
   await asCos("all", [["update_ticket", { key: a.key, title: "Renamed" }], ["message_ticket", { key: a.key, text: "ping" }]]);

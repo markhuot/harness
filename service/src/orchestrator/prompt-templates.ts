@@ -514,7 +514,7 @@ Every file you mention in a message, note or the spec is a markdown link to the 
     variables: {},
     template: `## Board
 Harness tools named from here on are listed by name only: before first calling one, call \`tool_search\` { query } with its name or a keyword (a family at once, e.g. "browser") for its parameters.
-For context (how a similar change was made, what another agent decided), read the board with \`search_tickets\`, \`list_tickets\`, \`get_ticket\`, \`list_projects\` and \`list_inbox\` (the old Inbox: watcher output and what triage did with it, before watchers fed the chief of staff). Old Inbox items are keyed TRIAGE-n and aren't tickets: read them with \`list_inbox\`, not \`get_ticket\`.
+For context (how a similar change was made, what another agent decided), read the board with \`search_tickets\`, \`list_tickets\`, \`get_ticket\` and \`list_projects\`.
 A ticket has a local key (e.g. WEB-12) and may carry a remote ID, the external item's key (e.g. Jira FOO-123), which the board shows instead. Tools, depends_on and links take the local key; several tickets can share a remote ID. Write a ticket with a remote ID as a link like \`[FOO-123](WEB-12)\`, and one without by its local key.`,
   },
 

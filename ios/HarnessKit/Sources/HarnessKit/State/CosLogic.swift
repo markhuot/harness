@@ -76,9 +76,9 @@ public struct CosState: Equatable, Sendable {
     }
 
     /// The rows a chief's Inbox shows: its own events and the unassigned ones, newest first. Rows its
-    /// own rules dropped (filtered) stay out.
+    /// own rules dropped (filtered) stay out, except a reminder: it went to the person, so it shows.
     public func inbox(_ cosId: String) -> [CosEvent] {
-        CosLogic.mergeEvents([], events.values.filter { ($0.cosId == cosId || $0.cosId == nil) && $0.verdict != .filtered })
+        CosLogic.mergeEvents([], events.values.filter { ($0.cosId == cosId || $0.cosId == nil) && ($0.verdict != .filtered || $0.sourceKind == .schedule) })
     }
 }
 

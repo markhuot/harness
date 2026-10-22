@@ -56,7 +56,7 @@ logs, worktrees and the Chrome profile. Set `HARNESS_HOME` to use a different lo
 ## iPhone and iPad app
 
 `ios/` is a native SwiftUI app for iPhone and iPad (one universal build, iOS 26 and later) with
-the desktop's board, ticket tabs (including the live browser and plugin tabs), approvals, Inbox and
+the desktop's board, ticket tabs (including the live browser and plugin tabs), approvals, chief of staff (Chat and Inbox) and
 settings. It's an XcodeGen project (`ios/project.yml`) plus the `HarnessKit` Swift package, which
 holds the protocol types, the HTTP and WebSocket client, and the app's logic and state. HarnessKit
 is checked against `shared/` with JSON fixtures that `shared/` generates, so the phone and the
@@ -187,6 +187,16 @@ instead of showing a stale bar.
   conductor's branch and merge back into it, so the goal lands in one piece when you approve the
   conductor. A child's Approve button stays off while its conductor runs, because the conductor
   approves and lands it.
+- A **chief of staff** is an always-on chat with the board's tools. Each board's title bar has a
+  **Chief of Staff** button with a count of what still waits: All projects opens the All chief, a
+  group's board opens its group's chief, and a project's board opens its group's chief (or the All
+  chief when the project has no group). It opens as **Chat** (one continuous conversation) and
+  **Inbox** (what it has seen, with a verdict on each) beside the board on the Mac, and as the same
+  screens on iPhone and iPad. A group's chief only sees and changes tickets in its group. A cheap
+  model reads each event first and wakes the chief only for what needs it. A chief can create and
+  start tickets, remind you or wake itself on a schedule, keep a memory you can edit, look at
+  terminals in the tickets it covers, and, only where **CoS can unblock** is on, answer blocked
+  tickets. Chiefs of staff and **CoS can unblock** are set in Settings, with a per-project override.
 - **Watchers** are any command that prints text. The command runs in your login shell, so a
   `watch-jira` poller works, and so does a loop like `while true; do curl -s …/events; sleep 60; done`.
   Examples are in `service/examples/watchers/`. In interval mode, each run's output becomes an
