@@ -436,6 +436,33 @@ export class DummyDriver implements Driver {
         break;
       }
 
+      case "cos": {
+        // A chief of staff turn: a message from the human or a wake. `/tools [{"name":…,"input":…}]`
+        // calls tools in order (a refused call is reported, not retried); anything else is answered
+        // in words. A chief has no submit_for_review, so it just ends the turn.
+        const m = prompt.match(DIRECTIVE);
+        if (m?.[1] === "tools") {
+          let calls: { name: string; input: Record<string, unknown> }[] = [];
+          try {
+            const parsed = JSON.parse((m[2] ?? "").trim());
+            if (Array.isArray(parsed)) calls = parsed.filter((c) => c && typeof c.name === "string");
+          } catch {}
+          if (!calls.length) {
+            yield* say("The /tools directive needs a JSON array of {name, input}.");
+            break;
+          }
+          for (const c of calls) {
+            const out: { result?: ToolResult } = {};
+            yield* call(c.name, c.input ?? {}, out);
+            if (out.result?.isError) yield* say(`${c.name} was refused: ${resultText(out.result)}`);
+          }
+          yield* say(`Ran ${calls.map((c) => c.name).join(", ")}.`);
+        } else {
+          yield* say(`(dummy chief) Noted: ${firstLine(prompt).slice(0, 200)}`);
+        }
+        break;
+      }
+
       case "complete": {
         yield* say("Finalizing the ticket.");
         // A pull request completion only finishes once one is recorded; the dummy makes one up.

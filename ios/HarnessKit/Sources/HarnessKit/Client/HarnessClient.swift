@@ -416,10 +416,10 @@ public final class HarnessClient: Sendable {
     }
 
     /// Feed output directly, as if a watcher named `source` printed `text` (objects are sent as JSON
-    /// text). `prompt` plays the watcher's prompt. nil when the same text was already seen.
-    /// Useful for testing triage.
-    public func injectOutput(source: String, text: JSONValue, prompt: String? = nil) async throws -> Session? {
-        try await request("POST", "/watchers/inject", body: InjectOutputBody(source: source, text: text, prompt: prompt))
+    /// text). The event it becomes is for the All chief of staff; nil when the same text was
+    /// already seen.
+    public func injectOutput(source: String, text: JSONValue) async throws -> CosEvent? {
+        try await request("POST", "/watchers/inject", body: InjectOutputBody(source: source, text: text))
     }
 
     // MARK: Chiefs of staff

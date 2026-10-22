@@ -3283,9 +3283,8 @@ export class Orchestrator {
    * Feed output as if a watcher named `source` printed `text` (an object is taken as its JSON): an
    * event for the All chief of staff. Null when deduped or when the text is only whitespace.
    */
-  async injectOutput(source: string, text: unknown, prompt?: unknown): Promise<CosEvent | null> {
+  async injectOutput(source: string, text: unknown): Promise<CosEvent | null> {
     if (typeof source !== "string" || !source.trim()) throw badRequest("source is required");
-    if (prompt !== undefined && prompt !== null && typeof prompt !== "string") throw badRequest("prompt must be a string");
     const raw = typeof text === "string" ? text : text === undefined || text === null ? "" : JSON.stringify(text);
     const output = toOutput(raw);
     if (!output) throw badRequest("text is required");

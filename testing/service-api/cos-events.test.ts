@@ -78,3 +78,13 @@ test("POST /cos/:id/messages answers with the new transcript entry, which GET /c
   expect(page.entries.find((e) => e.id === entryId)).toMatchObject({ kind: "message", role: "user", text: "good morning", cosId: cos.ticketId });
   expect(await rig.call("GET", "/cos/missing/transcript")).toMatchObject({ status: 404 });
 });
+
+test("watcher output injected over the API is a pending event for the All chief, deduped, and in its Inbox with the watcher as the actor", async () => {
+  const { rig, cos } = await inbox(0);
+  const first = await rig.ok<CosEvent>("POST", "/watchers/inject", { source: "github", text: "PR 12 has review feedback" });
+  expect(first).toMatchObject({ sourceKind: "watcher", actor: "watcher:github", cosId: cos.ticketId, status: "pending" });
+  expect(await rig.ok("POST", "/watchers/inject", { source: "github", text: "PR 12 has review feedback" })).toBeNull();
+  const page = await rig.ok<CosEventPage>("GET", `/cos/${cos.ticketId}/events?limit=200`);
+  expect(page.items.find((e) => e.id === first.id)).toMatchObject({ actor: "watcher:github", title: "github: PR 12 has review feedback" });
+  expect((await rig.ok<CosBadge>("GET", "/cos/events/badge")).byCos[cos.ticketId]).toBe(page.items.length);
+});

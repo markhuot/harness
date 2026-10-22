@@ -161,6 +161,28 @@ test("an event for a project whose chiefs are off isn't owned, so nothing is tri
   expect(s.h.store.cosEvents.badge().total).toBeGreaterThan(0); // unassigned events still count: nothing hides them
 });
 
+test("switching chiefs off in the app's settings stops triage and runs, and switching back on hands the events over again", async () => {
+  const s = await setup();
+  const all = s.h.orch.openCos("all");
+  const t = await s.ticket(s.h.project.id, "a ticket");
+  await s.after(6 * MIN);
+  s.scripted!.calls.splice(0);
+  s.h.driver.requests.splice(0);
+  s.scripted!.answers.push(escalating("marker-app"));
+
+  s.h.orch.updateSettings({ cosEnabled: false });
+  s.happen(t, "marker-app");
+  await s.after(10 * MIN);
+  expect(s.eventOf("marker-app")).toMatchObject({ cosId: null, status: "pending" });
+  expect(s.scripted!.calls).toHaveLength(0);
+  expect(s.h.driver.requests).toHaveLength(0);
+
+  s.h.orch.updateSettings({ cosEnabled: true });
+  expect(s.eventOf("marker-app").cosId).toBe(all.ticketId);
+  await s.after(6 * MIN);
+  expect(s.h.driver.requests.at(-1)!.prompt).toContain("marker-app");
+});
+
 test("pending events are re-homed with a batch in flight: the one being triaged stays put, the next one moves", async () => {
   const s = await setup();
   const groupId = (s.project("WORK1", "Work"), s.h.store.groups.findByName("Work")!.id);

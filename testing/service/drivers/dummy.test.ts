@@ -72,6 +72,27 @@ test("a chat answers in its own voice, and the directives in the message change 
   expect(h.store.activity.listBySession(t.sessionId).map((a) => a.kind)).toContain("unblocked");
 });
 
+test("a chief of staff run answers in words, and /tools in its message creates tickets under its name", async () => {
+  const h = rig();
+  const cos = h.orch.openCos("all");
+  const sessionId = h.ticket(cos.key).sessionId;
+  await h.orch.sendMessage(cos.key, "good morning");
+  await h.settle();
+  expect(texts(h, sessionId).some((x) => x.startsWith("(dummy chief) Noted: good morning"))).toBe(true);
+  const calls = [
+    { name: "create_ticket", input: { title: "Spike: pick a queue", spec: "Compare two queues", project_key: h.project.key, start: false } },
+    { name: "create_ticket", input: { title: "Build: the queue", spec: "Wire it up", project_key: h.project.key, start: false } },
+  ];
+  await h.orch.sendMessage(cos.key, `/tools ${JSON.stringify(calls)}`);
+  await h.settle();
+  const made = h.store.tickets.list({ projectId: h.project.id }).filter((t) => t.title.startsWith("Spike:") || t.title.startsWith("Build:"));
+  expect(made.map((t) => t.status)).toEqual(["planning", "planning"]);
+  expect(h.store.activity.listBySession(made[0]!.sessionId).map((e) => e.body)).toContain(`Chief of staff (${cos.key}) created it`);
+  // A chief has no submit_for_review, so the run ends in words and the ticket stays a chief.
+  expect(h.ticket(cos.key).kind).toBe("cos");
+  expect(texts(h, sessionId).some((x) => x === "Ran create_ticket, create_ticket.")).toBe(true);
+});
+
 test("/approve goes through the same approval path claude-code uses: a card on the ticket, then the work goes on when allowed", async () => {
   const h = rig();
   h.store.settings.set({ permissionMode: "ask" });

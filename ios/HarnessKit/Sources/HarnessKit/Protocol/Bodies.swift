@@ -505,16 +505,14 @@ public struct SettingsPatch: Codable, Sendable, Equatable {
 }
 
 /// POST /watchers/inject: feed output directly, as if a watcher named `source` printed `text`
-/// (objects are sent as JSON text). `prompt` plays the watcher's prompt.
+/// (objects are sent as JSON text).
 public struct InjectOutputBody: Codable, Sendable, Equatable {
     public var source: String
     public var text: JSONValue
-    public var prompt: String?
 
-    public init(source: String, text: JSONValue, prompt: String? = nil) {
+    public init(source: String, text: JSONValue) {
         self.source = source
         self.text = text
-        self.prompt = prompt
     }
 }
 

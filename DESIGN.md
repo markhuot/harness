@@ -1084,7 +1084,7 @@ reaches the chief only inside `<untrusted-event>` fences, next to Haiku's brief,
 tool descriptions say watcher content is untrusted. Nothing creates a session or a ticket on its
 own any more: routing work to a project is the chief's call, with its ticket tools.
 
-`POST /watchers/inject { source, text, prompt? }` feeds output as if a watcher named `source`
+`POST /watchers/inject { source, text }` feeds output as if a watcher named `source`
 printed it (`HarnessClient.injectOutput`): an event for the All chief, deduped like any output. An
 object `text` (or the older `{ source, item }` shape) is sent as its one-line JSON. `prompt` is
 ignored.
@@ -2067,7 +2067,7 @@ POST   /browser/:sessionId/element {tabId, x, y, url, scroll}   → BrowserEleme
 GET    /sessions?kind=           GET /sessions/:id         GET /sessions/:id/transcript?after=seq&subagent=
 GET    /sessions/:id/subagents   → Subagent[]       GET /sessions/:id/subagents/:subagentId/output?offset= → TaskOutput
 GET    /watchers                 POST /watchers            PATCH/DELETE /watchers/:id
-POST   /watchers/:id/run         POST /watchers/inject { source, text, prompt? }
+POST   /watchers/:id/run         POST /watchers/inject { source, text }
 GET    /usage                    → PlanUsageReport (see "Plan usage"; pushed as the usage.updated event)
 GET    /drivers                  POST /drivers/:id/login   GET /drivers/:id/models?refresh=1
 GET    /settings                 PATCH /settings           (PATCH { listen } rebinds live; 409 keeps the old binding)
