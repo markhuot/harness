@@ -11,17 +11,30 @@ export function chiefListeners(watchers: readonly Watcher[], chief: Pick<Cos, "t
   return [...own].sort((a, b) => Number(b.enabled) - Number(a.enabled) || a.name.localeCompare(b.name) || (a.id < b.id ? -1 : 1));
 }
 
-const SECRET_WORD = "(?:token|secret|password|passwd|pass|pwd|key|auth|credential|cookie)";
+const SECRET_WORD = "(?:token|secret|password|passwd|pass|pwd|key|apikey|auth|authorization|credential|cookie)s?";
+// A name that holds a secret word as a whole segment (`api-key`, `GH_TOKEN`), so `--passive` and `--bypass` don't count.
+const SECRET_NAME = `(?:\\w+[-_])*${SECRET_WORD}(?:[-_]\\w+)*`;
+// One shell word: quoted runs, backslash escapes and bare text joined, so `'pa'\''ss'` is one value.
+const VALUE = `(?:"(?:[^"\\\\]|\\\\.)*"|'[^']*'|\\\\.|[^\\s"'\\\\])+`;
 const MASK = "***";
+const BARE_TOKEN = /\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_\w{20,}|sk-[A-Za-z0-9_-]{16,}|xox[bpas]-[A-Za-z0-9-]{10,}|glpat-[\w-]{10,}|AKIA[0-9A-Z]{16})/gi;
 
-/** Masks what looks like a credential in one line of text: inline headers, `--token x` flags, `FOO_KEY=x` assignments and URL passwords. Best effort, not a guarantee. */
+/**
+ * Masks what looks like a credential in one line of text: `Name: value` headers, `--token x` flags,
+ * `FOO_KEY=x` assignments, JSON `"token":"x"` fields, `curl -u user:pass`, URL passwords, webhook URL
+ * paths, and well-known token shapes (`ghp_`, `github_pat_`, `sk-`, `xoxb-`, `glpat-`, `AKIA`). Best effort, not a guarantee.
+ */
 export function maskSecrets(line: string): string {
   return line
-    .replace(/(authorization\s*[:=]\s*)[^"'\n]+/gi, `$1${MASK}`)
+    .replace(/(:\/\/[^\s/:@]*:)[^\s/@]+@/g, `$1${MASK}@`)
+    .replace(/(hooks\.slack\.com\/(?:services|triggers|workflows)\/|\/api\/webhooks\/)[^\s"'?#]+/gi, `$1${MASK}`)
+    .replace(/((?:^|\s)(?:-u|--user|--proxy-user)(?:=|\s+)["']?[^\s:"']*:)[^\s"']+/g, `$1${MASK}`)
+    .replace(new RegExp(`(\\b${SECRET_NAME}\\s*:\\s*)[^"'\\n]+`, "gi"), `$1${MASK}`)
+    .replace(new RegExp(`(\\\\?"${SECRET_NAME}\\\\?"\\s*:\\s*)(?:\\\\?"[^"\\\\]*\\\\?"|[^\\s,}"'\\\\]+)`, "gi"), `$1${MASK}`)
+    .replace(new RegExp(`(--?(?:[\\w-]*[-_])?${SECRET_WORD}(?:[-_][\\w-]*)?)(=|\\s+(?!-))${VALUE}`, "gi"), `$1$2${MASK}`)
+    .replace(new RegExp(`(\\b${SECRET_NAME}=)${VALUE}`, "gi"), `$1${MASK}`)
     .replace(/\b(bearer|basic)\s+[^\s"']+/gi, `$1 ${MASK}`)
-    .replace(new RegExp(`(--?[\\w-]*${SECRET_WORD}[\\w-]*)(=|\\s+)("[^"]*"|'[^']*'|[^\\s"']+)`, "gi"), `$1$2${MASK}`)
-    .replace(new RegExp(`(\\b[\\w]*${SECRET_WORD}[\\w]*=)("[^"]*"|'[^']*'|[^\\s"']+)`, "gi"), `$1${MASK}`)
-    .replace(/(:\/\/[^\s/:@]*:)[^\s/@]+@/g, `$1${MASK}@`);
+    .replace(BARE_TOKEN, MASK);
 }
 
 function clip(text: string, max: number): string {
@@ -50,13 +63,14 @@ export type ListenerStatus = "paused" | "running" | "error" | "active";
 export function listenerStatus(w: Pick<Watcher, "enabled" | "lastError" | "live">): ListenerStatus {
   if (!w.enabled) return "paused";
   if (w.live?.state === "running") return "running";
-  if (w.lastError) return "error";
+  if (w.lastError?.trim()) return "error";
   return "active";
 }
 
 export const LISTENER_STATUS_LABEL: Record<ListenerStatus, string> = { paused: "Paused", running: "Running", error: "Error", active: "Active" };
 
 function span(sec: number): string {
+  if (sec <= 0) return "0s";
   if (sec % 86400 === 0) return `${sec / 86400}d`;
   if (sec % 3600 === 0) return `${sec / 3600}h`;
   if (sec % 60 === 0) return `${sec / 60}m`;
@@ -73,8 +87,19 @@ export function listenerNextRun(w: Pick<Watcher, "enabled" | "live">): number | 
   return w.enabled ? (w.live?.nextRunAt ?? null) : null;
 }
 
-/** The chief that owns a listener, for the All chief's list: the owner's name tag, or null when the listener belongs to the viewer (no tag). */
+/** The chief that owns a listener, for the All chief's list: the owner's name tag, "Another chief" when its owner is no longer known, or null when the listener belongs to the viewer or to no chief (no tag). */
 export function listenerOwner(w: Pick<Watcher, "cosId">, viewer: Pick<Cos, "ticketId">, chiefName: (cosId: string) => string | null): string | null {
   if (!w.cosId || w.cosId === viewer.ticketId) return null;
-  return chiefName(w.cosId);
+  return chiefName(w.cosId) ?? "Another chief";
+}
+
+/** "in 5m" for a time ahead of `now` (ms). */
+export function until(ts: number, now: number): string {
+  const s = Math.round((ts - now) / 1000);
+  if (s < 10) return "now";
+  if (s < 60) return `in ${s}s`;
+  const m = Math.round(s / 60);
+  if (m < 60) return `in ${m}m`;
+  const h = Math.round(m / 60);
+  return h < 24 ? `in ${h}h` : `in ${Math.round(h / 24)}d`;
 }

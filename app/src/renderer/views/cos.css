@@ -200,6 +200,6 @@
   color: var(--green);
 }
 .cos-listener-error {
-  background: var(--red-soft, var(--amber-soft, var(--bg-hover)));
-  color: var(--red, var(--text-2));
+  background: var(--red-soft);
+  color: var(--red);
 }

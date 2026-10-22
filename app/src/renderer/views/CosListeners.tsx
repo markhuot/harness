@@ -15,6 +15,7 @@ import {
   listenerOwner,
   listenerSchedule,
   listenerStatus,
+  until,
 } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import { relativeTime } from "../components/bits";
@@ -30,26 +31,18 @@ function useNow(): number {
   return now;
 }
 
-function until(ts: number, now: number): string {
-  const s = Math.round((ts - now) / 1000);
-  if (s < 10) return "now";
-  if (s < 60) return `in ${s}s`;
-  const m = Math.round(s / 60);
-  if (m < 60) return `in ${m}m`;
-  const h = Math.round(m / 60);
-  return h < 24 ? `in ${h}h` : `in ${Math.round(h / 24)}d`;
-}
-
 export function CosListeners({ chief, onChat }: { chief: Cos; onChat: () => void }) {
   const { state } = useStore();
   const now = useNow();
   const rows = useMemo(() => chiefListeners(Object.values(state.watchers), chief), [state.watchers, chief]);
-  const owner = (cosId: string): string | null => {
-    const other = Object.values(state.chiefs).find((c) => c.ticketId === cosId);
-    if (!other) return null;
-    const group = other.groupId ? projectGroups(Object.values(state.projects)).find((g) => g.id === other.groupId) : undefined;
-    return cosTitle(other, group?.name ?? null);
-  };
+  const owner = useMemo(() => {
+    const groups = projectGroups(Object.values(state.projects));
+    const names = new Map<string, string>();
+    for (const c of Object.values(state.chiefs)) {
+      names.set(c.ticketId, cosTitle(c, (c.groupId ? groups.find((g) => g.id === c.groupId)?.name : undefined) ?? null));
+    }
+    return (cosId: string): string | null => names.get(cosId) ?? null;
+  }, [state.chiefs, state.projects]);
   return (
     <div className="cos-inbox cos-listeners" data-testid="cos-listeners">
       <div className="cos-inbox-bar">

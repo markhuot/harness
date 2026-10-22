@@ -31,6 +31,40 @@ private let work = Cos(ticketId: "cos-work", key: "COS-2", scope: "group:g1", gr
         #expect(Listeners.command(watcher("a", command: "env GH_TOKEN=abc gh pr list")) == "env GH_TOKEN=*** gh pr list")
     }
 
+    @Test func theCommandMasksHeadersCurlUsersJsonWebhooksAndBareTokens() {
+        func mask(_ c: String) -> String { Listeners.command(watcher("a", command: c), max: 400) }
+        #expect(mask("curl -H 'X-Api-Key: abc' -H 'Cookie: a=1; b=2' https://x/y") == "curl -H 'X-Api-Key: ***' -H 'Cookie: ***' https://x/y")
+        #expect(mask("curl -u user:secret https://x") == "curl -u user:*** https://x")
+        #expect(mask("curl --user=user:secret https://x") == "curl --user=user:*** https://x")
+        #expect(mask(#"curl -d '{"token":"abc","name":"ok"}' https://x"#) == #"curl -d '{"token":***,"name":"ok"}' https://x"#)
+        #expect(mask(#"curl -d "{\"token\":\"abc\"}" https://x"#) == #"curl -d "{\"token\":***}" https://x"#)
+        #expect(mask("curl -X POST https://hooks.slack.com/services/T000/B000/XXXXXXXX -d hi") == "curl -X POST https://hooks.slack.com/services/*** -d hi")
+        #expect(mask("curl https://discord.com/api/webhooks/123/abcDEF") == "curl https://discord.com/api/webhooks/***")
+        for token in ["ghp_abcdefghijklmnopqrstuvwxyz0123", "github_pat_11AAAAAAAAAAAAAAAAAAAA_bbbb", "sk-abcdefghijklmnop1234", "xoxb-1234567890-abcdef", "glpat-abcdefghij1234", "AKIAABCDEFGHIJKLMNOP"] {
+            #expect(mask("tool \(token) --name ok") == "tool *** --name ok")
+        }
+        #expect(mask("git push -u origin main") == "git push -u origin main")
+    }
+
+    @Test func anEscapedQuoteLeavesNoFragmentOfTheSecret() {
+        #expect(Listeners.command(watcher("a", command: #"cli --token 'pa'\''ss' --name ok"#)) == "cli --token *** --name ok")
+        #expect(Listeners.command(watcher("a", command: #"cli --password "a \"b c" --name ok"#)) == "cli --password *** --name ok")
+    }
+
+    @Test func passDoesNotMatchPassiveOrBypass() {
+        #expect(Listeners.command(watcher("a", command: "cli --passive foo --bypass bar --token --verbose")) == "cli --passive foo --bypass bar --token --verbose")
+        #expect(Listeners.command(watcher("a", command: "cli --pass hunter2 --db-password=x")) == "cli --pass *** --db-password=***")
+    }
+
+    @Test func untilReadsTheLargestFittingUnit() {
+        let now = 1_000_000.0
+        #expect(Listeners.until(now + 5_000, now: now) == "now")
+        #expect(Listeners.until(now + 45_000, now: now) == "in 45s")
+        #expect(Listeners.until(now + 300_000, now: now) == "in 5m")
+        #expect(Listeners.until(now + 3 * 3_600_000, now: now) == "in 3h")
+        #expect(Listeners.until(now + 2 * 86_400_000, now: now) == "in 2d")
+    }
+
     @Test func aLegacyExecutableReadsAsOneLineAndALoopShowsItsFirstLineCutToLength() {
         #expect(Listeners.command(watcher("a", command: "watch-prs", args: ["--project", "my repo"])) == "watch-prs --project 'my repo'")
         #expect(Listeners.command(watcher("a", command: "while true; do\n\(String(repeating: "x", count: 200))\ndone"), max: 20) == "while true; do")
@@ -50,10 +84,12 @@ private let work = Cos(ticketId: "cos-work", key: "COS-2", scope: "group:g1", gr
         #expect(Listeners.status(watcher("a", error: "x", live: running)) == .running)
         #expect(Listeners.status(watcher("a", error: "x", live: waiting)) == .error)
         #expect(Listeners.status(watcher("a")) == .active)
+        #expect(Listeners.status(watcher("a", error: "  \n ")) == .active, "a whitespace-only error is no error")
         #expect(Listeners.schedule(watcher("a", intervalSec: 45)) == "Every 45s")
         #expect(Listeners.schedule(watcher("a", intervalSec: 300)) == "Every 5m")
         #expect(Listeners.schedule(watcher("a", intervalSec: 7200)) == "Every 2h")
         #expect(Listeners.schedule(watcher("a", intervalSec: 90)) == "Every 90s")
+        #expect(Listeners.schedule(watcher("a", intervalSec: 0)) == "Every 0s")
         #expect(Listeners.schedule(watcher("a", mode: .loop)) == "Runs continuously")
         #expect(Listeners.nextRun(watcher("a", live: waiting)) == 5)
         #expect(Listeners.nextRun(watcher("a", enabled: false, live: waiting)) == nil, "a paused listener has no next run")
@@ -62,6 +98,7 @@ private let work = Cos(ticketId: "cos-work", key: "COS-2", scope: "group:g1", gr
     @Test func theOwnerTagNamesAnotherChiefOnly() {
         let name: (String) -> String? = { $0 == "cos-work" ? "Work" : nil }
         #expect(Listeners.owner(watcher("a", cos: .value("cos-work")), viewer: all, chiefName: name) == "Work")
+        #expect(Listeners.owner(watcher("a", cos: .value("cos-gone")), viewer: all, chiefName: name) == "Another chief")
         #expect(Listeners.owner(watcher("a", cos: .value("cos-all")), viewer: all, chiefName: name) == nil)
         #expect(Listeners.owner(watcher("a", cos: .null), viewer: all, chiefName: name) == nil)
     }
