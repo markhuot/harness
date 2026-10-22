@@ -1310,6 +1310,7 @@
       "ticketKey": "HARNESS-201",
       "wakeId": null,
       "handledBy": null,
+      "outcome": null,
       "createdAt": 1773500340000
     },
     {
@@ -1327,6 +1328,7 @@
       "ticketKey": "HARNESS-202",
       "wakeId": "wake-2",
       "handledBy": null,
+      "outcome": null,
       "createdAt": 1773500160000
     },
     {
@@ -1344,6 +1346,7 @@
       "ticketKey": "HARNESS-203",
       "wakeId": null,
       "handledBy": null,
+      "outcome": null,
       "createdAt": 1773499680000
     },
     {
@@ -1361,6 +1364,7 @@
       "ticketKey": null,
       "wakeId": null,
       "handledBy": null,
+      "outcome": null,
       "createdAt": 1773499200000
     },
     {
@@ -1378,7 +1382,53 @@
       "ticketKey": "HARNESS-190",
       "wakeId": "wake-1",
       "handledBy": "run-9",
+      "outcome": {
+        "kind": "acted",
+        "text": "Posted the summary to the chat and moved HARNESS-205 to planning."
+      },
       "createdAt": 1773495000000
+    },
+    {
+      "id": "ev-needs-user",
+      "cosId": "cos-all",
+      "projectKey": "HARNESS",
+      "sourceKind": "activity",
+      "title": "HARNESS-206 needs a decision on the release tag",
+      "summary": "",
+      "actor": "agent",
+      "status": "handled",
+      "verdict": "escalate",
+      "reason": "A blocked ticket waiting on the human",
+      "model": "claude-haiku-5-5",
+      "ticketKey": "HARNESS-206",
+      "wakeId": "wake-1",
+      "handledBy": "run-9",
+      "outcome": {
+        "kind": "needs_user",
+        "text": "Pick the release tag: the ticket is blocked until you answer."
+      },
+      "createdAt": 1773494700000
+    },
+    {
+      "id": "ev-no-action",
+      "cosId": "cos-all",
+      "projectKey": "HARNESS",
+      "sourceKind": "activity",
+      "title": "HARNESS-207 review approved",
+      "summary": "",
+      "actor": "agent",
+      "status": "handled",
+      "verdict": "escalate",
+      "reason": "A review decision",
+      "model": "claude-haiku-5-5",
+      "ticketKey": "HARNESS-207",
+      "wakeId": "wake-1",
+      "handledBy": "run-9",
+      "outcome": {
+        "kind": "no_action",
+        "text": "The agent review approved it and it already waits for you; nothing to do."
+      },
+      "createdAt": 1773494580000
     },
     {
       "id": "ev-schedule",
@@ -1395,6 +1445,7 @@
       "ticketKey": null,
       "wakeId": "wake-1",
       "handledBy": "run-9",
+      "outcome": null,
       "createdAt": 1773494400000
     }
   ],
