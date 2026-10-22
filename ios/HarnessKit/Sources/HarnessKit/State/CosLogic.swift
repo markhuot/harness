@@ -138,6 +138,28 @@ public enum CosSettings {
     public static func enabled(_ settings: PublicSettings?) -> Bool { settings?.cosEnabled ?? defaultEnabled }
     public static func canUnblock(_ settings: PublicSettings?) -> Bool { settings?.cosCanUnblock ?? defaultCanUnblock }
 
+    /// The driver and model a chief of staff runs on when its wake isn't about a project that chose one (resolveCosChoice):
+    /// the app's CoS choice, else the app's Work choice.
+    public static func appModel(_ settings: PublicSettings?) -> PhaseChoice {
+        settings?.cosModel ?? Phases.settingsPhaseChoice(settings?.phaseModels, .work)
+    }
+
+    /// The chief's model for a wake about `project` alone (resolveCosChoice): its own, else the app's.
+    public static func model(project: Project?, settings: PublicSettings?) -> PhaseChoice {
+        project?.cosModel ?? appModel(settings)
+    }
+
+    /// A PhaseChoice as the picker's value: nil (the Default row) is no driver.
+    public static func pickerChoice(_ c: PhaseChoice?) -> Watchers.TriageChoice {
+        Watchers.TriageChoice(driver: c?.driver, model: c?.model)
+    }
+
+    /// What a picker pick saves: the Default row (no driver) clears the choice.
+    public static func patch(_ c: Watchers.TriageChoice) -> Patch<PhaseChoice> {
+        guard let driver = Models.nonEmpty(c.driver) else { return .null }
+        return .value(PhaseChoice(driver: driver, model: c.model))
+    }
+
     /// What "Inherit" resolves to, for its label ("Inherit (on)").
     public static func inheritedLabel(_ app: Bool) -> String { "Inherit (\(app ? "on" : "off"))" }
 

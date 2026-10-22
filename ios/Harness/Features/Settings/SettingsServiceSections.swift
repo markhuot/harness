@@ -179,6 +179,14 @@ struct SettingsCosSection: View {
                     .tint(c.accent)
                     .accessibilityLabel("CoS can unblock")
             }
+            SettingsRow(label: "CoS model", hint: "The model every chief of staff runs on. A project can choose its own. Applies to the next run, not one in progress.") {
+                DriverModelPicker(
+                    value: CosSettings.pickerChoice(settings.cosModel),
+                    resolved: CosSettings.pickerChoice(Phases.settingsPhaseChoice(settings.phaseModels, .work)),
+                    title: "CoS model",
+                    defaultLabel: "Use Work model"
+                ) { save(SettingsPatch(cosModel: CosSettings.patch($0))) }
+            }
         } header: {
             Text("Chief of staff")
         }

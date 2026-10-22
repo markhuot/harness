@@ -67,6 +67,8 @@ public struct Settings: Codable, Sendable, Equatable {
     public var cosEnabled: Bool?
     /// Whether a chief of staff may unblock tickets (projects may override it). nil → `CosSettings.defaultCanUnblock`.
     public var cosCanUnblock: Bool?
+    /// The driver and model every chief of staff runs on (projects may override it). nil → the Work choice.
+    public var cosModel: PhaseChoice?
 
     public init(
         phaseModels: PhaseModels? = nil, defaultDriver: String, maxConcurrentRuns: Int, permissionMode: PermissionMode, classifier: ClassifierBackend,
@@ -75,10 +77,11 @@ public struct Settings: Codable, Sendable, Equatable {
         anthropicApiKey: String? = nil, claudeOauthToken: String? = nil, copilotGithubToken: String? = nil, baseBranch: String? = nil,
         listen: ListenSetting? = nil, browserIdleTabMinutes: Int? = nil, prompts: [String: String?]? = nil,
         notifications: NotificationSettings? = nil, contextGaugeLimit: Int? = nil, saveOnBlur: Bool? = nil,
-        cosEnabled: Bool? = nil, cosCanUnblock: Bool? = nil
+        cosEnabled: Bool? = nil, cosCanUnblock: Bool? = nil, cosModel: PhaseChoice? = nil
     ) {
         self.cosEnabled = cosEnabled
         self.cosCanUnblock = cosCanUnblock
+        self.cosModel = cosModel
         self.contextGaugeLimit = contextGaugeLimit
         self.saveOnBlur = saveOnBlur
         self.phaseModels = phaseModels
@@ -136,6 +139,8 @@ public struct PublicSettings: Codable, Sendable, Equatable {
     /// Settings.cosEnabled / cosCanUnblock; nil from an older service (read the defaults then).
     public var cosEnabled: Bool?
     public var cosCanUnblock: Bool?
+    /// Settings.cosModel; nil when none is chosen (and from an older service).
+    public var cosModel: PhaseChoice?
     /// Whether an API key for the anthropic-api driver is stored
     public var anthropicApiKeySet: Bool
     /// Whether a long-lived Claude token for the claude-code driver is stored. Services from before
@@ -151,10 +156,11 @@ public struct PublicSettings: Codable, Sendable, Equatable {
         listen: ListenSetting? = nil, browserIdleTabMinutes: Int? = nil, prompts: [String: String?]? = nil,
         notifications: NotificationSettings? = nil,
         anthropicApiKeySet: Bool, claudeOauthTokenSet: Bool? = nil, copilotGithubTokenSet: Bool? = nil, contextGaugeLimit: Int? = nil, saveOnBlur: Bool? = nil,
-        cosEnabled: Bool? = nil, cosCanUnblock: Bool? = nil
+        cosEnabled: Bool? = nil, cosCanUnblock: Bool? = nil, cosModel: PhaseChoice? = nil
     ) {
         self.cosEnabled = cosEnabled
         self.cosCanUnblock = cosCanUnblock
+        self.cosModel = cosModel
         self.contextGaugeLimit = contextGaugeLimit
         self.saveOnBlur = saveOnBlur
         self.phaseModels = phaseModels
