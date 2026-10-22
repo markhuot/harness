@@ -115,8 +115,15 @@ public final class Router {
         self.root = root
     }
 
-    /// Applies a link. Returns the theme picks a settings link carries, for the caller to save.
-    @discardableResult
+    /// Opens a chief of staff (`scope`: "all" or "group:<id>") as a card of its own, docked and
+    /// shown beside the board like a ticket; one already open comes forward.
+    public func openCos(scope: String) {
+        guard self.scope == .main else { return }
+        sheet = nil
+        cover = nil
+        presentTicketSheet(.cos(scope: scope))
+    }
+
     /// Opens a service terminal as a sheet of its own (docked with the tickets and files); one already
     /// open comes forward instead of opening twice. Closes the palette it was chosen from.
     public func openTerminal(id: String) {
@@ -125,6 +132,8 @@ public final class Router {
         presentTicketSheet(.terminal(id: id))
     }
 
+    /// Applies a link. Returns the theme picks a settings link carries, for the caller to save.
+    @discardableResult
     public func open(_ link: DeepLink) -> ThemePicker.ThemePrefsPatch? {
         if scope == .ticket { return openInTicket(link) }
         switch link {
@@ -197,7 +206,7 @@ public final class Router {
         return nil
     }
 
-    /// Main scope: opens a ticket chosen outside the ticket sheet (a board card, the inbox), presented
+    /// Main scope: opens a ticket chosen outside the ticket sheet (a board card, the Chief of Staff's ticket card), presented
     /// on top. A sheet showing it on top comes forward as it is (switched to `tab` if it names one);
     /// a sheet with it at the root comes forward popped back to it; otherwise a new sheet joins the
     /// dock on top. Ticket scope: `push`.
@@ -212,7 +221,9 @@ public final class Router {
     /// selected tab's stack. Ticket scope: push on its stack.
     public func push(_ route: Route) {
         // A file is its own card in the dock (main scope), never a step inside another sheet.
-        if scope == .main, case let .file(params) = route {
+        if scope == .main, case let .cos(scope) = route {
+            openCos(scope: scope)
+        } else if scope == .main, case let .file(params) = route {
             presentTicketSheet(.file(params))
         } else if scope == .main, var s = ticketSheet {
             if case let .ticket(key, tab) = route, s.isFile {
@@ -739,6 +750,9 @@ public struct TicketSheet: Hashable, Sendable, Identifiable {
         /// A terminal the service hosts: a card of its own, shared with the Mac. The id is the
         /// service's; a terminal that has gone (the service restarted) shows as ended.
         case terminal(id: String)
+        /// A chief of staff's chat and Inbox (`scope`: "all" or "group:<id>"): a card of its own,
+        /// in the dock and beside the board like a ticket.
+        case cos(scope: String)
     }
 
     /// Stays the same while the sheet docks, restores, switches, or changes content in place.
@@ -793,6 +807,12 @@ public struct TicketSheet: Hashable, Sendable, Identifiable {
 
     public var isFile: Bool { file != nil }
 
+    /// The scope of the chief of staff this sheet shows at its root; nil for anything else.
+    public var cosScope: String? {
+        if case let .cos(scope) = root { return scope }
+        return nil
+    }
+
     /// The service terminal this sheet shows at its root; nil for a ticket, a file or New session.
     public var terminalID: String? {
         if case let .terminal(id) = root { return id }
@@ -805,6 +825,7 @@ public struct TicketSheet: Hashable, Sendable, Identifiable {
         if let key = topTicketKey { return key }
         if let file { return FileViewerRules.fileName(file.path) }
         if terminalID != nil { return "Terminal" }
+        if cosScope != nil { return "Chief of Staff" }
         return "New session"
     }
 
@@ -838,7 +859,7 @@ public struct TicketSheet: Hashable, Sendable, Identifiable {
         case .newSession: self.root == root
         case let .file(params):
             if case let .file(mine) = self.root { mine.sameFile(as: params) } else { false }
-        case .terminal: self.root == root
+        case .terminal, .cos: self.root == root
         }
     }
 }

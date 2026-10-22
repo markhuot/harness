@@ -422,6 +422,50 @@ public final class HarnessClient: Sendable {
         try await request("POST", "/watchers/inject", body: InjectOutputBody(source: source, text: text, prompt: prompt))
     }
 
+    // MARK: Chiefs of staff
+
+    public func listCos() async throws -> [Cos] {
+        try await request("GET", "/cos")
+    }
+
+    /// The chief of a scope ("all" or "group:<id>"), made on first use.
+    public func openCos(scope: String) async throws -> Cos {
+        try await request("POST", "/cos", body: OpenCosBody(scope: scope))
+    }
+
+    /// A chief's Inbox, newest first; `before` is the previous page's `nextCursor`.
+    public func cosEvents(_ id: String, before: String? = nil, limit: Int? = nil) async throws -> CosEventPage {
+        try await request("GET", "/cos/\(id)/events\(Query.build([("before", .str(before)), ("limit", .int(limit))]))")
+    }
+
+    public func cosBadge() async throws -> CosBadge {
+        try await request("GET", "/cos/events/badge")
+    }
+
+    /// An ignored event joins the chief's next wake.
+    public func escalateCosEvent(_ id: String) async throws -> CosEvent {
+        try await request("POST", "/cos/events/\(id)/escalate")
+    }
+
+    /// A chief's chat, newest page first; `before` is the previous page's `nextCursor`.
+    public func cosTranscript(_ id: String, before: String? = nil, limit: Int? = nil) async throws -> CosChatPage {
+        try await request("GET", "/cos/\(id)/transcript\(Query.build([("before", .str(before)), ("limit", .int(limit))]))")
+    }
+
+    /// A message to the chief; it skips triage.
+    public func sendCosMessage(_ id: String, text: String) async throws -> CosMessageSent {
+        try await request("POST", "/cos/\(id)/messages", body: CosMessageBody(text: text))
+    }
+
+    public func getCosMemory(_ key: String) async throws -> CosMemory {
+        try await request("GET", "/tickets/\(key)/memory")
+    }
+
+    /// A memory that changed since `baseRevision` throws a 409 whose `memoryConflict` has the chief's version.
+    public func putCosMemory(_ key: String, text: String, baseRevision: String) async throws -> CosMemory {
+        try await request("PUT", "/tickets/\(key)/memory", body: PutCosMemoryBody(text: text, baseRevision: baseRevision))
+    }
+
     // MARK: Drivers & settings
 
     /// The plan-usage gauges' readings (DESIGN.md "Plan usage").

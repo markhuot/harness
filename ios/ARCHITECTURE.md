@@ -297,7 +297,7 @@ feature needs something new here, add to it without changing what's there.
   the frame when the tab changes, ignores frames from other tabs (in flight after a switch), and
   supplies the strip (every tab, even a lone one, so it can be torn off) and chip labels. Services from before tabs send no ids:
   nothing is filtered, the strip never shows and New tab is disabled.
-- **Navigation.** `Router` (HarnessKit/Shell, one per window: § Windows) holds `selectedTab` (the section: Board, Inbox or Settings; the app has no tab bar, the Projects sidebar switches sections), a path per section, one `sheet` and
+- **Navigation.** `Router` (HarnessKit/Shell, one per window: § Windows) holds `selectedTab` (the section: Board or Settings; the app has no tab bar, the Projects sidebar switches sections), a path per section, one `sheet` and
   one `cover`. Push with `router.push(.ticket(key:tab:))`; present with
   `router.present(.newSession(projectId:key:))`; `router.showBoard()` dismisses everything and goes
   to the Board. Never keep your own `NavigationStack` inside a pushed screen. Sheets are wrapped in
@@ -315,9 +315,9 @@ feature needs something new here, add to it without changing what's there.
 
   | Link | Opens |
   | --- | --- |
-  | `harness://board` (`/search` is an alias), `/inbox`, `/settings[?theme=&lightTheme=&darkTheme=]` | that section, popped to its root, modals dismissed; settings applies valid theme picks (ThemePicker.themeLinkPrefs) |
+  | `harness://board` (`/search` is an alias), `/inbox` (the old Inbox: opens the board), `/settings[?theme=&lightTheme=&darkTheme=]` | that section, popped to its root, modals dismissed; settings applies valid theme picks (ThemePicker.themeLinkPrefs) |
   | `harness://ticket/<key>[?tab=spec\|activity\|transcript\|details\|children\|agents\|browser\|changes\|agent:<id>\|plugin:<p>:<t>]` | push TicketDetailScreen (an invalid tab is dropped, and an old `summaries` opens spec; `plugin:git:changes` opens the built-in Changes tab); on iPad at regular width, open or bring forward that ticket's window (§ Windows) |
-  | `harness://inbox/<sessionId>` | push TriageScreen |
+  | `harness://cos[/<group id>]` | the chief of staff of All projects or that group, as a ticket-sheet card (`Router.openCos`) |
   | `harness://file/<path>?ticket=\|project=#Lx-Ly` | a file card in the dock (TicketSheet.Root.file; a ticket window pushes FileViewerScreen) (FileViewer.fileRoute(forURL:), anchor kept) |
   | `harness://project/<id>`, `/driver/<id>`, `/prompts`, `/prompt/<id>`, `/extensions` | push ProjectSettingsScreen, DriverSettingsScreen, PromptsScreen, PromptDetailScreen, ExtensionSettingsScreen |
   | `harness://projects[?from=search]` | Projects sheet (0.6 / large detents); on iPad (regular width), shows the sidebar column |
@@ -365,7 +365,7 @@ host, where the window's chords don't fire).
 **Keyboard shortcuts** (App/KeyCommands.swift, whose header has the reasons) follow the desktop's
 ⌘ chords (keys.ts) at either width. iOS keeps the first registration of a chord, so the
 window-wide ones are hidden buttons at each window's root from its first frame (`WindowShortcuts`
-in SceneChrome): New Session ⌘N, All Projects ⌘1, Inbox ⌘2, Settings ⌘,, and Next/Previous Tab
+in SceneChrome): New Session ⌘N, All Projects ⌘1, Settings ⌘,, and Next/Previous Tab
 ⇧⌘]/⇧⌘[, which step the ticket screen on top (it registers with `ShortcutTargets` as it appears,
 `Tabs.nextTab`). ⌃⌘S is a hidden button in MainTabs (the Projects sheet, which closes itself on
 ⌃⌘S) and DesktopShell (the `sidebarHidden` pref). ⌘↩ on a field sharing its screen (composer,
@@ -777,8 +777,7 @@ the same way (`TranscriptRow`, `BrowserToolbar`), or nest them inside your slot'
 | SubagentView | Ticket/SubagentView.swift | Agents | `SubagentView(ticket: Ticket, subagentId: String)` |
 | BrowserTabView | Ticket/BrowserTabView.swift | Browser | `BrowserTabView(ticket: Ticket)` |
 | PluginTabView | Ticket/PluginTabView.swift | Plugin tabs | `PluginTabView(ticket: Ticket, tab: PluginTab)` |
-| InboxScreen | Inbox/InboxScreen.swift | Inbox | `InboxScreen()` |
-| TriageScreen | Inbox/TriageScreen.swift | Inbox | `TriageScreen(sessionId: String)` |
+| CosScreen | ChiefOfStaff/CosScreen.swift | Chief of Staff | `CosScreen(scope: String, tab: CosTab)` (Chat, Inbox, Memory sheet, the board's `CosButton`; HarnessKit CosLogic, `BoardStore.cos`) |
 | SettingsScreen | Settings/SettingsScreen.swift | Settings | `SettingsScreen()` (placeholder already has Macs + appearance; keep both) |
 | DriverSettingsScreen | Settings/DriverSettingsScreen.swift | Settings | `DriverSettingsScreen(driverId: String)` (HARNESS-145, port of main's HARNESS-157) |
 | ProjectSettingsScreen | Settings/ProjectSettingsScreen.swift | Projects | `ProjectSettingsScreen(projectId: String)` |
@@ -833,14 +832,13 @@ from it (Ticket/TicketDetailSupport.swift):
   `TicketDetailLogic`. Approve/Complete menus are native `Menu`s; AXe closes one with
   "Dismiss context menu".
 
-## Transcript, Agents and Inbox (Ticket/Transcript*, Ticket/Agents*, Inbox/)
+## Transcript and Agents (Ticket/Transcript*, Ticket/Agents*)
 
 What HARNESS-140 settled:
 
 - **Decisions live in HarnessKit** (tested): `TranscriptLogic` (rows, the delta and "Working…"
   rows, which entries draw nothing, the sub-agent a tool call started, tool state, permission
-  footer, the window), `InboxLogic` (watcher order, Retry now, triage badge and outcome, link
-  context) and `AgentsLogic` (sections, previews, marks, row labels).
+  footer, the window) and `AgentsLogic` (sections, previews, marks, row labels).
 - **The transcript is a windowed plain `VStack`, not a `LazyVStack`.** A lazy stack re-estimates
   the rows it hasn't measured as they scroll by, so its content height jumps by hundreds of points
   mid-fling and the bottom can't be held. It draws the newest `TranscriptLogic.windowStep` (150)
@@ -1134,7 +1132,7 @@ native-pattern difference, not a missing feature.
 | --- | --- | --- | --- |
 | Keychain load before the first frame; one store per server + nonce | app/_layout, state/app, state/store | HarnessApp, Shell/AppModel, State/BoardStore | done |
 | Storage keys `harness.servers`, `harness.prefs`, `harness.token.<id>` (after first unlock) | lib/storage, lib/servers, lib/prefs | App/KeychainStorage, Shell/AppModel, Logic/Prefs | done (one-way migration of the RN app's items) |
-| Sections Board / Inbox / Settings, switched from the Projects sidebar (no tab bar) | app/(tabs)/_layout | App/RootView | done (differs: RN has a tab bar) |
+| Sections Board / Settings, switched from the Projects sidebar (no tab bar) | app/(tabs)/_layout | App/RootView | done (differs: RN has a tab bar) |
 | Theme: color scheme, accent tint, bg, nav title colors | state/app, app/_layout | App/RootView, App/BarAppearance, Theme/Palette | done |
 | Actions + toasts (3 max, 6 s / 2.6 s) + haptics + pick/confirm | state/store useAction, ui/Toasts, ui/haptics, ui/pick | App/Actions, UI/Haptics, UI/Confirm | done (menus are native `Menu`s; no toasts, failures play the error haptic; differs) |
 | UI kit: badges, buttons, cards, callouts, empty states, conductor rollups, parent crumb, related rows | ui/kit, ui/Conductor, ui/RelatedTickets | UI/* | done |
@@ -1147,7 +1145,7 @@ native-pattern difference, not a missing feature.
 | Cards: badges, review marks, blocked/approval lines, rollups, dep chips, driver/model names, dimmed children, drafts | screens/TicketCard | BoardTicketCard, UI/Badges (ModelBadge) | done |
 | Card menu (titled "KEY · title"): the ticket's own actions (Start work, Approve submenu, Request changes, Re-open, the More items), open parent, copy key, discard draft; VoiceOver actions | screens/TicketCard | BoardTicketCard, BoardScreenRules | done |
 | Command palette: commands, tickets, ticket actions, Open file…, `>` `#` `@` prefixes, Show/Hide child tickets | views/CommandPalette | Features/Palette/PaletteScreen, HarnessKit Palette, PaletteRows | done (the board's column filtering is Mac-only) |
-| Projects sheet (the sidebar, its header button badged with triaging or busy sessions): Inbox row (same badge), All projects, project group rows (HARNESS-269: `folder` icon and open count, alphabetical, under All projects), rows, settings gear, Add project, Settings at the bottom; on iPad a split view's sidebar column, hidden and shown by its toggle | screens/Projects | Features/Board/ProjectsSheet (ProjectsSidebar), ProjectsAdd, App/RootView DesktopShell, HarnessKit SidebarRow | done |
+| Projects sheet (the sidebar): All projects, project group rows (HARNESS-269: `folder` icon and open count, alphabetical, under All projects), rows, settings gear, Add project, Settings at the bottom; on iPad a split view's sidebar column, hidden and shown by its toggle | screens/Projects | Features/Board/ProjectsSheet (ProjectsSidebar), ProjectsAdd, App/RootView DesktopShell, HarnessKit SidebarRow | done |
 | Ticket screen: load, renamed key, not found, draft → New session, Remote ID list | screens/TicketDetail | Features/Ticket/TicketDetailScreen | done |
 | Hero More (…): Move to done, Cancel run, Delete (no header menu, title at the top of the sheet) | screens/TicketDetail | TicketDetailScreen | done |
 | Hero: crumb, status dot and title (compact on plugin/sub-agent, gone on Browser but for an approval card), a key row of ticket key, driver, model name, branch, PR, review marks and the context gauge at its end (no project, status or Conductor pill); 25pt above the expanded title, 14pt below the header | screens/TicketDetail | TicketDetailHero | done |
@@ -1166,15 +1164,14 @@ native-pattern difference, not a missing feature.
 | Browser tab: toolbar, frames, touch/wheel/drag input, keyboard, resize gate, tab strip and New tab | screens/BrowserTab, lib/browserInput | BrowserTabView, BrowserTabModel, BrowserInputViews | done |
 | Plugin tabs in a web view with the host bridge and theme | screens/PluginTab, lib/pluginHost | PluginTabView, PluginWebHost, PluginTabsLoader | done |
 | Changes tab (the git plugin's page) | plugins/git/ui | ChangesTabView, ChangesRowViews, HarnessKit ChangesStore/ChangesRows/ChangesPatch | done (native; file paths open the file viewer: native only) |
-| Inbox: watcher strip, Retry now, error expand, sessions, Inbox zero | screens/Inbox | Features/Inbox/InboxScreen, HarnessKit InboxLogic | done |
-| Triage item: outcome, Open KEY, transcript, file-link scope | screens/Inbox, app/inbox/[id] | TriageScreen | done |
+| Chief of staff: board button with count, Chat (paged, ticket cards), Inbox (verdicts, Escalate anyway, Listen), Memory | (the Mac's chief of staff) | Features/ChiefOfStaff/CosScreen, HarnessKit CosLogic, `TicketSheet.Root.cos` | done |
 | New session: project, kind, prompt (@, /), Options, Start/Plan first, drafts, Cancel choices | screens/NewSession, lib/newSession, lib/draftSync | Features/NewSession/NewSessionScreen, HarnessKit NewSessionEditor/DraftSync | done (Cancel asks with an alert; differs) |
 | Pickers: selects, model, permission, driver+model sheet, per-phase model sheet, branch sheet, project color | ui/selects, ui/DriverModelPicker, ui/BranchPicker, ui/ProjectColor, lib/modelSheet | Features/Pickers/* | done |
 | File viewer: header, menu, File/Diff, ranges, editing and Save, errors | screens/FileViewer, lib/fileViewer | Features/Files/*, HarnessKit FileViewerRules/FileViewerLoader | done |
 | Markdown, code blocks, file links + scope, attachments row and viewer | ui/Markdown, ui/CodeBlock, ui/fileLinks, ui/Attachments, lib/attachments | Features/Content/* | done (code copies by long-press; differs) |
 | Syntax highlighting | lib/highlight | HarnessHighlight, Highlight/HighlightedText | done |
 | Settings: Macs (Connect, Rename, Forget, Rotate token), network, appearance + themes | screens/Settings, lib/themePicker | Features/Settings/SettingsScreen, SettingsAppearance | done |
-| Settings: drivers (each opens its screen) + per-phase models, general, permissions, triage | screens/Settings (HARNESS-157) | SettingsServiceSections | done |
+| Settings: drivers (each opens its screen) + per-phase models, general, permissions, chief of staff | screens/Settings (HARNESS-157) | SettingsServiceSections | done |
 | Driver screen: status, Log in, Anthropic API key | screens/DriverSettings, app/driver/[id] | Features/Settings/DriverSettingsScreen | done |
 | Settings: prompts summary, watchers (menu, enable), projects | screens/Settings | SettingsListSections | done |
 | Project settings: identifier rename preview, color, folder, agents, completion, Remove | screens/ProjectSettings | ProjectSettingsScreen | done |

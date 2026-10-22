@@ -150,51 +150,6 @@ public enum SettingsRules {
         return s.name == host ? nil : host
     }
 
-    // MARK: Watchers
-
-    /// Watchers by name (`localeCompare`), ties by id so the order is stable.
-    public static func sortedWatchers(_ watchers: some Collection<Watcher>) -> [Watcher] {
-        watchers.sorted {
-            switch $0.name.localizedCompare($1.name) {
-            case .orderedAscending: true
-            case .orderedDescending: false
-            case .orderedSame: $0.id < $1.id
-            }
-        }
-    }
-
-    /// "Loop" or "Every 300s".
-    public static func watcherScheduleLabel(_ w: Watcher) -> String {
-        w.mode == .loop ? "Loop" : "Every \(w.intervalSec)s"
-    }
-
-    /// The driver a watcher's triage runs on and, when one applies, its model (WatcherTriageLabel).
-    public struct TriageTarget: Equatable, Sendable {
-        /// "" when there's no driver to name
-        public var driver: String
-        public var model: String?
-    }
-
-    public static func watcherTriageTarget(_ w: Watcher, settings: PublicSettings?) -> TriageTarget {
-        let driver = settings.map { Watchers.watcherDriver(w, settings: $0) } ?? (w.driver ?? "")
-        let model = driver.isEmpty ? nil : Watchers.watcherModel(driver, watcher: w, settings: settings)
-        return TriageTarget(driver: driver, model: model)
-    }
-
-    /// "Claude Code · Opus", "Claude Code", or "Default driver".
-    public static func watcherTriageLabel(_ target: TriageTarget, drivers: [DriverInfo], models: [ModelInfo]?) -> String {
-        let name = target.driver.isEmpty ? "Default driver" : drivers.first { $0.id == target.driver }?.name ?? target.driver
-        guard let model = target.model else { return name }
-        return "\(name) · \(Models.modelName(models, model))"
-    }
-
-    /// The row's last line: "<triage> · last run 5m ago · in ~/x".
-    public static func watcherMetaLine(triage: String, _ w: Watcher, now: Double = Date().timeIntervalSince1970 * 1000) -> String {
-        var line = "\(triage) · last run \(Format.relativeTime(w.lastRunAt, now: now))"
-        if let cwd = w.cwd, !cwd.isEmpty { line += " · in \(cwd)" }
-        return line
-    }
-
     // MARK: Project settings
 
     /// The identifier field as typed: upper case, at most 20 UTF-16 units (the field's length cap).

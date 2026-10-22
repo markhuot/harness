@@ -16,7 +16,7 @@ struct RouteScreen: View {
             // The tab last picked on the ticket's sheet wins (a link that names a tab writes it
             // there), so a screen that mounts again (a layout flip, a relaunch) opens on it.
             case let .ticket(key, tab): TicketDetailScreen(key: key, initialTab: router.ticketTab(key: key) ?? tab)
-            case let .triage(id): TriageScreen(sessionId: id)
+            case let .cos(scope): CosScreen(scope: scope)
             case let .file(params): FileViewerScreen(params: params)
             case let .project(id): ProjectSettingsScreen(projectId: id)
             case let .driver(id): DriverSettingsScreen(driverId: id)
@@ -70,7 +70,6 @@ struct SheetHost: View {
         switch sheet {
         case .projects: RequireStore { ProjectsSheet() }
         case let .newSession(projectId, key): RequireStore { NewSessionScreen(projectId: projectId, key: key) }
-        case let .watcher(id): RequireStore { WatcherFormScreen(id: id) }
         case .connect: ConnectScreen()
         case let .pair(url, token): PairScreen(url: url, token: token)
         case let .palette(files): RequireStore { PaletteScreen(startInFiles: files) }

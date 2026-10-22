@@ -42,6 +42,8 @@ final class WorldTransport: HTTPTransport, @unchecked Sendable {
         case "/sessions": return w.list("sessions").filter { q["kind"] == nil || $0["kind"] as? String == q["kind"] }
         case "/watchers": return w.list("watchers")
         case "/settings": return w.root["settings"]
+        case "/cos": return w.list("chiefs")
+        case "/cos/events/badge": return w.root["cosBadge"]
         case "/drivers": return w.list("drivers")
         case "/terminals", "/prompts", "/plugins": return [Any]()
         case "/network": return ["mode": "localhost", "host": NSNull(), "port": 7717, "bound": [Any](), "active": "localhost", "tailscale": NSNull(), "error": NSNull(), "override": NSNull()] as [String: Any]
@@ -64,6 +66,14 @@ final class WorldTransport: HTTPTransport, @unchecked Sendable {
         default: break
         }
         let parts = path.split(separator: "/").map(String.init)
+        if parts.count == 3, parts[0] == "cos", parts[2] == "events" {
+            return ["items": w.list("cosEvents").filter { $0["cosId"] as? String == parts[1] }, "nextCursor": NSNull()] as [String: Any]
+        }
+        if parts.count == 3, parts[0] == "cos", parts[2] == "transcript" {
+            // Newest page first, as the service sends it; the world's chat is one page.
+            return ["entries": Array(w.list("cosChat").filter { $0["cosId"] as? String == parts[1] }.reversed()), "nextCursor": NSNull()] as [String: Any]
+        }
+        if parts.count == 3, parts[0] == "tickets", parts[2] == "memory", w.list("chiefs").contains(where: { $0["key"] as? String == parts[1] }) { return w.root["cosMemory"] }
         if parts.count == 3, parts[0] == "projects", parts[2] == "branches" { return [["name": "main", "lastCommitAt": w.now - 3_600_000] as [String: Any]] }
         if parts.count == 3, parts[0] == "drivers", parts[2] == "models" {
             return ["driverId": parts[1], "models": [["id": "claude-opus-5-5", "name": "Opus 5.5", "default": true] as [String: Any]], "error": NSNull(), "fetchedAt": w.now] as [String: Any]

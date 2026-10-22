@@ -2,13 +2,9 @@ import { activity, entry, run, session } from "./build";
 import { tickets } from "./tickets";
 import { hoursAgo, minutesAgo } from "./time";
 
-/** One session per ticket, plus triage sessions for the inbox: one working, one dispatched, one declined, one failed. */
+/** One session per ticket. */
 export const sessions = [
   ...tickets.map((t) => session({ key: t.key, kind: "ticket", busy: t.busy, cwd: t.workdir ?? "/Users/dev/harness", updatedAt: t.updatedAt })),
-  session({ key: "TRIAGE-1", kind: "triage", title: "FOO-201 Checkout button misaligned on Safari", triageStatus: "triaging", updatedAt: minutesAgo(1) }),
-  session({ key: "TRIAGE-2", kind: "triage", title: "FOO-198 Add export to CSV", triageStatus: "dispatched", outcome: "Dispatched to WEB as WEB-1", updatedAt: minutesAgo(20) }),
-  session({ key: "TRIAGE-3", kind: "triage", title: "FOO-150 Upgrade to Node 24", triageStatus: "declined", outcome: "Declined: already done in HARNESS-7", updatedAt: hoursAgo(3) }),
-  session({ key: "TRIAGE-4", kind: "triage", title: "FOO-77 Intermittent 502", triageStatus: "failed", outcome: "The watcher's agent exited with an error", updatedAt: hoursAgo(6) }),
 ];
 
 export const runs = [

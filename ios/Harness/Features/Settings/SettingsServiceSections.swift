@@ -156,31 +156,36 @@ struct SettingsPermissionsSection: View {
     }
 }
 
-/// The driver and model watchers' triage sessions use when they don't pick their own.
-struct SettingsTriageSection: View {
+/// The chiefs of staff's two app-wide switches (projects may override both): whether they run, and
+/// whether they may unblock tickets.
+struct SettingsCosSection: View {
     let settings: PublicSettings
 
     @Environment(BoardStore.self) private var store
     @Environment(Actions.self) private var actions
+    @Environment(\.palette) private var c
 
     var body: some View {
         Section {
-            SettingsRow(label: "Default model") {
-                DriverModelPicker(
-                    value: Watchers.settingsWatcherChoice(settings),
-                    resolved: Watchers.TriageChoice(driver: settings.defaultDriver, model: settings.defaultModels[settings.defaultDriver] ?? nil),
-                    title: "Default model",
-                    defaultLabel: "Same as default"
-                ) { choice in
-                    guard let api = store.api else { return }
-                    let patch = Watchers.settingsWatcherChoicePatch(choice, settings: settings)
-                    actions.perform { _ = try await api.updateSettings(patch) }
-                }
+            SettingsRow(label: "CoS enabled", hint: "Chiefs of staff watch ticket moves, watchers and schedules, and wake when something needs them. Off, events wait in their Inbox. Projects can override it.") {
+                Toggle("CoS enabled", isOn: Binding(get: { CosSettings.enabled(settings) }, set: { save(SettingsPatch(cosEnabled: $0)) }))
+                    .labelsHidden()
+                    .tint(c.accent)
+                    .accessibilityLabel("CoS enabled")
+            }
+            SettingsRow(label: "CoS can unblock", hint: "A chief of staff may answer a blocked ticket's question itself. Projects can override it.") {
+                Toggle("CoS can unblock", isOn: Binding(get: { CosSettings.canUnblock(settings) }, set: { save(SettingsPatch(cosCanUnblock: $0)) }))
+                    .labelsHidden()
+                    .tint(c.accent)
+                    .accessibilityLabel("CoS can unblock")
             }
         } header: {
-            Text("Triage")
-        } footer: {
-            Text("Used by watchers that don't pick their own.")
+            Text("Chief of staff")
         }
+    }
+
+    private func save(_ patch: SettingsPatch) {
+        guard let api = store.api else { return }
+        actions.perform { _ = try await api.updateSettings(patch) }
     }
 }

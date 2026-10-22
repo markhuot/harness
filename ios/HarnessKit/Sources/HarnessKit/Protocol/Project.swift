@@ -57,6 +57,11 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
     @Nullable public var group: String?
     /// The id of the project's group (stable across renames); nil → none. Absent from older payloads.
     @Nullable public var groupId: String?
+    /// Whether chiefs of staff handle this project's events: its own value, or `.null`/absent to
+    /// inherit settings.cosEnabled. Resolve with `CosSettings.resolve`.
+    public var cosEnabled: Patch<Bool>
+    /// Whether a chief of staff may unblock this project's tickets; `.null`/absent inherits settings.cosCanUnblock.
+    public var cosCanUnblock: Patch<Bool>
     public var createdAt: Timestamp
     public var updatedAt: Timestamp
 
@@ -66,8 +71,11 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
         skipAgentReview: Bool? = nil, skipHumanReview: Bool? = nil, requireHumanReview: Bool? = nil,
         permissionMode: PermissionMode? = nil, baseBranch: Patch<String> = .absent,
         completionAction: CompletionAction? = nil, completionActions: [CompletionAction]? = nil,
-        pullRequestHost: Patch<String> = .absent, color: String? = nil, group: String? = nil, groupId: String? = nil, createdAt: Timestamp, updatedAt: Timestamp
+        pullRequestHost: Patch<String> = .absent, color: String? = nil, group: String? = nil, groupId: String? = nil,
+        cosEnabled: Patch<Bool> = .absent, cosCanUnblock: Patch<Bool> = .absent, createdAt: Timestamp, updatedAt: Timestamp
     ) {
+        self.cosEnabled = cosEnabled
+        self.cosCanUnblock = cosCanUnblock
         self.id = id
         self.key = key
         self.name = name

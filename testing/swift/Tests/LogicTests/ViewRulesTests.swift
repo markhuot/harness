@@ -10,21 +10,11 @@ private func ticket(_ key: String, project: String = "p-A", status: TicketStatus
     Ticket(id: "t-\(key)", key: key, projectId: project, title: key, spec: "", status: status, sessionId: "s-\(key)", driver: "d", workdir: workdir, draft: draft, createdAt: 0, updatedAt: 0)
 }
 
-private func session(triage: TriageStatus?, busy: Bool = false) -> Session {
-    Session(id: "s", key: "TRIAGE-1", kind: .triage, driver: "d", cwd: "/", triageStatus: triage, busy: busy, createdAt: 0, updatedAt: 0)
-}
-
 private func ext(_ id: String, _ source: BrowserExtensionSource) -> BrowserExtension {
     BrowserExtension(id: id, name: id, version: "1", source: source, enabled: true, status: .loaded, hasAction: false)
 }
 
 @Suite struct ViewRulesTests {
-    @Test func triagingCountsWorkingSessionsWhateverTheirStatusSays() {
-        #expect(ViewRules.triagingCount([]) == 0)
-        let sessions = [session(triage: .triaging), session(triage: .dispatched, busy: true), session(triage: .declined), session(triage: nil)]
-        #expect(ViewRules.triagingCount(sessions) == 2)
-    }
-
     @Test func galleryProjectIsTheLowestKeyThatIsNotKnownToBeNonGit() {
         #expect(ViewRules.galleryProject([]) == nil)
         let picked = ViewRules.galleryProject([project("C"), project("A", isGit: false), project("B", isGit: nil)])

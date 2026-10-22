@@ -241,6 +241,7 @@ struct BoardScreen: View {
     /// two hide while a ticket panel covers them).
     @ToolbarContentBuilder private func toolbar(_ ctx: BoardContext) -> some ToolbarContent {
         ToolbarItem(placement: .bottomBar) { ProjectsButton(action: toggleProjects) }
+        ToolbarItem(placement: .bottomBar) { CosButton(scope: CosLogic.boardScope(filter: ctx.filter, projects: store.state.projects)) }
         ToolbarSpacer(.flexible, placement: .bottomBar)
         if !panelCoversBar {
             ToolbarItem(placement: .bottomBar) {

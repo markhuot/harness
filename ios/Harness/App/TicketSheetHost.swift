@@ -17,7 +17,7 @@ import SwiftUI
 /// above the board and this sheet alike, so the other docked tickets show over the open ticket too;
 /// tapping a card swaps the sheet to that ticket, or presents it again from the board.
 ///
-/// Pickers, the watcher form and covers come up over it: the root is busy presenting this, so
+/// Pickers and covers come up over it: the root is busy presenting this, so
 /// they're presented from here. Projects docks it instead (`Router.open(.sheet(.projects))`), and
 /// anything the board behind presents (an alert in Settings, say) has UIKit dismiss it, which the
 /// root's binding turns into `dismissSheet()`. New session drafts are saved either way.
@@ -133,6 +133,7 @@ struct TicketSheetContent: View {
         case let .ticket(key, tab): RouteScreen(route: .ticket(key: key, tab: tab))
         case let .newSession(projectId, key): NewSessionScreen(projectId: projectId, key: key)
         case let .terminal(id): TerminalSheetScreen(id: id, cardID: sheet.id)
+        case let .cos(scope): CosScreen(scope: scope)
         case let .file(params): FileViewerScreen(params: params, cardID: sheet.id, reveal: router.dockedSheets.first { $0.id == sheet.id }?.revealed ?? sheet.revealed)
         }
     }

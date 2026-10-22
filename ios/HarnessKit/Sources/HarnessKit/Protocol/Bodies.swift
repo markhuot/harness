@@ -38,13 +38,21 @@ public struct CreateProjectBody: Codable, Sendable, Equatable {
     /// The default completion action; must be one the project offers. Default "merge".
     public var completionAction: CompletionAction?
 
+    /// Project.cosEnabled: its own value; null → inherit settings.cosEnabled
+    public var cosEnabled: Patch<Bool>
+    /// Project.cosCanUnblock: its own value; null → inherit settings.cosCanUnblock
+    public var cosCanUnblock: Patch<Bool>
+
     public init(
         path: String, name: String? = nil, key: String? = nil, defaultDriver: Patch<String> = .absent,
         useWorktrees: Bool? = nil, skipAgentReview: Bool? = nil, skipHumanReview: Bool? = nil, requireHumanReview: Bool? = nil,
         color: Patch<String> = .absent, group: Patch<String> = .absent, groupId: Patch<String> = .absent, permissionMode: Patch<PermissionMode> = .absent,
         phaseModels: PhaseModelsPatch? = nil, defaultModels: [String: String?]? = nil, baseBranch: Patch<String> = .absent,
-        completionAction: CompletionAction? = nil
+        completionAction: CompletionAction? = nil,
+        cosEnabled: Patch<Bool> = .absent, cosCanUnblock: Patch<Bool> = .absent
     ) {
+        self.cosEnabled = cosEnabled
+        self.cosCanUnblock = cosCanUnblock
         self.path = path
         self.name = name
         self.key = key
@@ -95,13 +103,21 @@ public struct UpdateProjectBody: Codable, Sendable, Equatable {
     /// The default completion action; must be one the project offers.
     public var completionAction: CompletionAction?
 
+    /// Project.cosEnabled: its own value; null → inherit settings.cosEnabled
+    public var cosEnabled: Patch<Bool>
+    /// Project.cosCanUnblock: its own value; null → inherit settings.cosCanUnblock
+    public var cosCanUnblock: Patch<Bool>
+
     public init(
         path: String? = nil, name: String? = nil, key: String? = nil, defaultDriver: Patch<String> = .absent,
         useWorktrees: Bool? = nil, skipAgentReview: Bool? = nil, skipHumanReview: Bool? = nil, requireHumanReview: Bool? = nil,
         color: Patch<String> = .absent, group: Patch<String> = .absent, groupId: Patch<String> = .absent, permissionMode: Patch<PermissionMode> = .absent,
         phaseModels: PhaseModelsPatch? = nil, defaultModels: [String: String?]? = nil, baseBranch: Patch<String> = .absent,
-        completionAction: CompletionAction? = nil
+        completionAction: CompletionAction? = nil,
+        cosEnabled: Patch<Bool> = .absent, cosCanUnblock: Patch<Bool> = .absent
     ) {
+        self.cosEnabled = cosEnabled
+        self.cosCanUnblock = cosCanUnblock
         self.path = path
         self.name = name
         self.key = key
@@ -452,6 +468,8 @@ public struct SettingsPatch: Codable, Sendable, Equatable {
     public var prompts: [String: String?]?
     /// Merged over the stored notifications block (categories per category).
     public var notifications: NotificationSettingsPatch?
+    public var cosEnabled: Bool?
+    public var cosCanUnblock: Bool?
 
     public init(
         phaseModels: PhaseModelsPatch? = nil, defaultDriver: String? = nil, maxConcurrentRuns: Int? = nil, permissionMode: PermissionMode? = nil,
@@ -459,8 +477,11 @@ public struct SettingsPatch: Codable, Sendable, Equatable {
         reviewModels: [String: String?]? = nil, watcherDriver: Patch<String> = .absent,
         watcherModels: [String: String?]? = nil, anthropicApiKey: Patch<String> = .absent,
         claudeOauthToken: Patch<String> = .absent, copilotGithubToken: Patch<String> = .absent, baseBranch: String? = nil, listen: ListenSetting? = nil, browserIdleTabMinutes: Int? = nil,
-        prompts: [String: String?]? = nil, notifications: NotificationSettingsPatch? = nil, contextGaugeLimit: Int? = nil, saveOnBlur: Bool? = nil
+        prompts: [String: String?]? = nil, notifications: NotificationSettingsPatch? = nil, contextGaugeLimit: Int? = nil, saveOnBlur: Bool? = nil,
+        cosEnabled: Bool? = nil, cosCanUnblock: Bool? = nil
     ) {
+        self.cosEnabled = cosEnabled
+        self.cosCanUnblock = cosCanUnblock
         self.contextGaugeLimit = contextGaugeLimit
         self.saveOnBlur = saveOnBlur
         self.phaseModels = phaseModels

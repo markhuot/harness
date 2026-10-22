@@ -10,6 +10,8 @@ export const settings: PublicSettings = {
   reviewModels: {},
   baseBranch: "main",
   anthropicApiKeySet: false,
+  cosEnabled: true,
+  cosCanUnblock: false,
 };
 
 export const drivers: DriverInfo[] = [

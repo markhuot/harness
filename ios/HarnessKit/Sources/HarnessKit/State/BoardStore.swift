@@ -97,6 +97,11 @@ public final class BoardStore {
     /// The service's terminals (GET /terminals, then terminal.* events). Held here, not in the reducer:
     /// the TS reducer has no terminal state to stay in parity with.
     public private(set) var terminals: [TerminalInfo] = []
+    /// The chiefs of staff, their Inbox rows and chat entries loaded so far, and the badge (GET /cos,
+    /// GET /cos/events/badge, then the cos.* events). Held here, not in the reducer, like the usage.
+    public private(set) var cos = CosState()
+    /// Change the CoS state: what a view fetched (a page of events, of chat, a chief it opened).
+    public func updateCos(_ change: (inout CosState) -> Void) { change(&cos) }
     /// Replace the terminals, as a refetch does (and the snapshot tests).
     public func setTerminals(_ list: [TerminalInfo]) { terminals = list }
     /// Replace the usage report, as a `usage.updated` event does (and the snapshot tests, whose stub client reports none).
@@ -324,6 +329,7 @@ public final class BoardStore {
     }
 
     private func receive(_ event: HarnessEvent) {
+        if let bus = CosBusEvent(event: event) { cos.apply(bus) }
         switch event {
         case .usageUpdated(let u): usage = u
         case .terminalCreated, .terminalUpdated, .terminalRemoved: terminals = TerminalList.apply(terminals, event)
@@ -465,12 +471,16 @@ public final class BoardStore {
         async let health = try? await client.health()
         async let usage = try? await client.getUsage()
         async let terminalList = try? await client.listTerminals(refresh: false)
+        async let chiefs = try? await client.listCos()
+        async let badge = try? await client.cosBadge()
         do {
             let snapshot = try await loadSnapshot(scope)
             guard !closed else { return }
             if let h = await health { self.health = h }
             if let u = await usage { self.usage = u }
             if let list = await terminalList { self.terminals = list }
+            if let list = await chiefs { cos.setChiefs(list) }
+            if let b = await badge { cos.badge = b }
             dispatch(.snapshot(snapshot))
             loader.legacy = snapshot.donePage == nil
             loader.snapshotApplied()

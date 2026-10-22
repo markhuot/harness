@@ -3,13 +3,6 @@ import Foundation
 /// Small rules the iPhone and iPad screens used to compute inline in their view bodies, here so the
 /// views only call them and testing/swift covers their edges (ties, empty lists, boundaries).
 public enum ViewRules {
-    // MARK: Projects sheet
-
-    /// The Inbox row's badge: triage sessions still working (their status says so, or the session is busy).
-    public static func triagingCount(_ sessions: [Session]) -> Int {
-        sessions.filter { $0.triageStatus == .triaging || $0.busy }.count
-    }
-
     // MARK: Picker gallery
 
     /// The project the picker gallery borrows to show real data: the lowest key, skipping projects known not to be git.

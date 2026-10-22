@@ -97,7 +97,7 @@ struct PaletteShortcuts: View {
 }
 
 /// The window-wide chords, for a main or a ticket window: New Session (⌘N), All Projects (⌘1),
-/// Inbox (⌘2), Settings (⌘,), and Next Tab (⇧⌘]) and Previous Tab (⇧⌘[) on the ticket showing.
+/// Settings (⌘,), and Next Tab (⇧⌘]) and Previous Tab (⇧⌘[) on the ticket showing.
 /// In a ticket window the sections open in a main window (Router.onSectionLink), and New session
 /// comes up over the ticket. They're all here, at the root and from the first frame, because iOS
 /// keeps the first registration of a chord: one added later, or a second screen's, never fires.
@@ -121,8 +121,6 @@ struct WindowShortcuts: View {
             .keyboardShortcut("n")
             Button("All Projects") { router.select(.allProjects, app: app) }
                 .keyboardShortcut("1")
-            Button("Inbox") { router.open(.tab(.inbox)) }
-                .keyboardShortcut("2")
             Button("Settings") { router.open(.tab(.settings)) }
                 .keyboardShortcut(",")
         }

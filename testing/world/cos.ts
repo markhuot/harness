@@ -1,8 +1,7 @@
-// The chiefs of staff in the world: one for All projects, one for the Work group and its Inbox and
-// chat. Mac renders only (the iPhone world.json has no chiefs until its own Inbox lands), so these
-// are not part of `world`.
+// The chiefs of staff in the world: one for All projects, one for the Work group (with an empty
+// Inbox and chat), and the All chief's Inbox, chat and memory.
 
-import type { Cos, CosChatEntry, CosEvent } from "@harness/shared";
+import { COS_OPEN_STATUSES, type Cos, type CosBadge, type CosChatEntry, type CosEvent, type CosMemory } from "@harness/shared";
 import { minutesAgo } from "./time";
 
 export const chiefs: Cos[] = [
@@ -50,3 +49,12 @@ export const cosChat: CosChatEntry[] = [
   { id: "chat-5", cosId: "cos-all", createdAt: minutesAgo(5), kind: "event_batch", wakeId: "wake-2", eventIds: ["ev-handling"], digest: "ignored 3 routine moves" },
   m("chat-6", 4, "assistant", "HARNESS-202 is blocked on a decision about the migration order. I can answer it the way you did last week if you'd like."),
 ];
+
+/** What GET /cos/events/badge answers: the open events of each chief. */
+export const cosBadge: CosBadge = {
+  total: cosEvents.filter((e) => e.cosId && COS_OPEN_STATUSES.includes(e.status)).length,
+  byCos: Object.fromEntries(chiefs.map((c) => [c.ticketId, cosEvents.filter((e) => e.cosId === c.ticketId && COS_OPEN_STATUSES.includes(e.status)).length])),
+};
+
+/** The chiefs' memory, written once for both (GET /tickets/:key/memory). */
+export const cosMemory: CosMemory = { text: "# Memory\n\n## Triage guidance\n\nIgnore routine ticket moves.\n", revision: "rev-1" };

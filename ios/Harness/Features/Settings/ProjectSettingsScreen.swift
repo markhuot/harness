@@ -166,6 +166,8 @@ private struct ProjectSettingsForm: View {
                 }
             }
 
+            ProjectCosSection(project: project, settings: settings) { save($0) }
+
             Section("Danger zone") {
                 VStack(alignment: .leading, spacing: 10) {
                     VStack(alignment: .leading, spacing: 2) {

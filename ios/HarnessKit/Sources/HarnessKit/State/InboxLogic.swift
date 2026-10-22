@@ -1,55 +1,7 @@
 import Foundation
 
-// The decisions behind the Inbox, the triage screen, the Agents & tasks tab, the sub-agent view and
-// the task output view, pulled
+// The decisions behind the Agents & tasks tab, the sub-agent view and the task output view, pulled
 // out of the views so they can be tested.
-
-public enum InboxLogic {
-    /// The watcher strip's order: enabled ones first, then by name (`localeCompare`).
-    public static func sortedWatchers(_ watchers: [Watcher]) -> [Watcher] {
-        watchers.sorted { a, b in
-            if a.enabled != b.enabled { return a.enabled }
-            let c = BoardState.localeCompare(a.name, b.name)
-            return c != .orderedSame ? c == .orderedAscending : JSString.less(a.id, b.id)
-        }
-    }
-
-    /// "Loop" or "Every 60s".
-    public static func scheduleLabel(_ w: Watcher) -> String {
-        w.mode == .loop ? "Loop" : "Every \(w.intervalSec)s"
-    }
-
-    /// "Retry now" shows for a failed watcher whose process isn't running right now.
-    public static func showsRetry(_ w: Watcher, status: WatcherStatus) -> Bool {
-        status.error != nil && w.live?.state != .running
-    }
-
-    /// The triage badge of a session (no status yet reads as triaging).
-    public static func triageLabel(_ s: Session) -> Format.TriageLabel {
-        let status = s.triageStatus ?? .triaging
-        return Format.triageLabel[status] ?? Format.TriageLabel(label: status.rawValue, tone: .neutral)
-    }
-
-    /// The outcome callout's tone and icon: dispatched is green, failed red, anything else neutral.
-    public static func outcomeStyle(_ s: Session) -> (tone: Format.Tone, icon: String) {
-        switch s.triageStatus {
-        case .dispatched?: (.green, "checkCircle")
-        case .failed?: (.red, "alert")
-        default: (.neutral, "alert")
-        }
-    }
-
-    /// The ticket a triage session dispatched, when it's loaded.
-    public static func dispatchedTicket(_ state: BoardState, _ s: Session) -> Ticket? {
-        Format.dispatchedKey(s).flatMap { state.ticketByKey($0) }
-    }
-
-    /// Where its file links open (FileViewer.triageLinkContext for its dispatched ticket).
-    public static func linkContext(_ state: BoardState, _ s: Session) -> FileLinkContext {
-        let key = Format.dispatchedKey(s)
-        return FileViewer.triageLinkContext(dispatchedKey: key, dispatchedProjectId: key.flatMap { state.ticketByKey($0) }?.projectId)
-    }
-}
 
 public enum AgentsLogic {
     /// The Agents & tasks list: one list of sub-agents and tasks, the latest updated first.

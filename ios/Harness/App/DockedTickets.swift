@@ -29,6 +29,10 @@ struct DockedTicketText: Equatable {
                 ref = "Terminal"
                 title = "ended"
             }
+        } else if let scope = sheet.cosScope {
+            // A chief of staff: what it covers, "All projects" or its group.
+            ref = "Chief of Staff"
+            title = CosLogic.title(scope: scope, groupName: state?.projectGroups().first { CosLogic.scopeKey(groupId: $0.id) == scope }?.name)
         } else if let file = sheet.file {
             // A file: its name, and the ticket or project it's in.
             ref = FileViewerRules.fileName(file.path)
@@ -383,7 +387,7 @@ struct DockedTicketsKeeper: ViewModifier {
         switch sheet.root {
         case let .ticket(key, _): out.append(key)
         case let .newSession(_, key?): out.append(key)
-        case .newSession, .file, .terminal: break
+        case .newSession, .file, .terminal, .cos: break
         }
         if let top = sheet.topTicketKey, !out.contains(top) { out.append(top) }
         return out

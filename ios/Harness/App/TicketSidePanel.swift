@@ -262,7 +262,7 @@ extension Animation {
 /// (`Router.liveSheets`) mounted behind it, hidden, so switching is instant and keeps each one's
 /// place. The other docked tickets wait as a stack of cards in the board's bottom-right corner
 /// (DockedCardsContainer), left of the panel while it's open and following its resize; while docked the
-/// panel stays mounted off the edge and every ticket is a card. Pickers, the watcher form and
+/// panel stays mounted off the edge and every ticket is a card. Pickers and
 /// covers come up from the root (SceneChrome), which presents nothing else here. Pop-out hands the
 /// top ticket to its own window (`Router.popOutSheet()`) where the device has windows.
 struct TicketPanelHost: View {
