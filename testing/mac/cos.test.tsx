@@ -227,15 +227,10 @@ describe("the chief's header", () => {
     expect(byId(m, "cos-inbox-count")).toBeNull();
   });
 
-  test("the switch turns the chief off and on", async () => {
+  test("the open pane has no on/off switch (that lives in Settings)", async () => {
     const m = await open();
     await m.until("the chat", () => msgs(m).length > 0);
-    const sw = m.container.querySelector<HTMLInputElement>('input[role="switch"]')!;
-    expect(sw.checked).toBe(true);
-    await click(m, sw);
-    expect(m.client.bodies.find((b) => b.request === "PATCH /cos/cos-all")?.body).toEqual({ enabled: false });
-    expect(m.container.querySelector<HTMLInputElement>('input[role="switch"]')!.checked).toBe(false);
-    expect((byId(m, "cos-composer-input") as HTMLTextAreaElement).disabled).toBe(true);
+    expect(m.container.querySelector('input[role="switch"]')).toBeNull();
   });
 
   test("a scope with no chief offers to turn one on, and shows it once it exists", async () => {

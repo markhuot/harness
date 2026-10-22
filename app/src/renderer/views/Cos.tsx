@@ -1,5 +1,5 @@
 // A chief of staff: a callout card on the board (CosCallout, not in a column) that opens its pane
-// (CosPane): its Chat and Inbox tabs under the ticket pane's chrome, an on/off switch, and its
+// (CosPane): its Chat and Inbox tabs under the ticket pane's chrome and its
 // Memory (a sheet, not a tab). The ticket detail assumes a work ticket (workdir, subagents,
 // changes), so this reuses only its chrome (header, tab strip).
 
@@ -8,7 +8,6 @@ import { cosScopeKey, projectGroups, parseCosScopeKey, type Cos, type CosScopeKe
 import { scopeGroup } from "@harness/shared/state";
 import { COS_TABS, COS_TAB_LABEL, cosBadgeCount, cosTitle, type CosTab } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
-import { Switch } from "../components/bits";
 import { PaneGrip } from "../components/paneHeader";
 import { keysArea } from "../components/commands";
 import { commandKeys } from "../state/keys";
@@ -40,7 +39,7 @@ export function useCosTitle(scope: CosScopeKey): string {
   return cosTitle({ scope }, group?.name ?? null);
 }
 
-/** Open (or create) a scope's chief and switch it on or off, keeping the store's copy current. */
+/** Open (or create) a scope's chief, keeping the store's copy current. */
 export function useCosActions() {
   const { client, dispatch } = useStore();
   const act = useAction();
@@ -51,14 +50,10 @@ export function useCosActions() {
       if (chief) dispatch({ type: "chief", chief });
       return chief;
     },
-    setEnabled: async (chief: Cos, enabled: boolean) => {
-      const next = await act(() => client.setCosEnabled(chief.ticketId, enabled));
-      if (next) dispatch({ type: "chief", chief: next });
-    },
   };
 }
 
-/** The board title bar's button to its chief of staff, with a pill for what waits. The on/off switch lives in the pane header. */
+/** The board title bar's button to its chief of staff, with a pill for what waits. */
 export function CosCallout({ scope }: { scope: CosScopeKey }) {
   const { state } = useStore();
   const boardScope = usePaneScope();
@@ -105,12 +100,9 @@ export function CosPane({ paneId, content }: { paneId: string; content: CosConte
         </span>
         <div className="grow" />
         {chief && (
-          <>
-            <button className="btn btn-sm" data-testid="cos-memory-open" onClick={() => setMemory(true)}>
-              <Icon name="fileText" size={12} /> Memory
-            </button>
-            <Switch checked={chief.enabled} ariaLabel={`Chief of staff for ${title} on`} label={chief.enabled ? "On" : "Off"} onChange={(v) => void actions.setEnabled(chief, v)} />
-          </>
+          <button className="btn btn-sm" data-testid="cos-memory-open" onClick={() => setMemory(true)}>
+            <Icon name="fileText" size={12} /> Memory
+          </button>
         )}
         <button className="btn btn-ghost btn-icon" onClick={close} title={`Close (Esc / ${commandKeys("pane.close")[0]})`} aria-label="Close pane" data-testid="cos-close" data-pane-autofocus>
           <Icon name="x" />
