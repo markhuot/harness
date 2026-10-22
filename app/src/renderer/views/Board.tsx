@@ -203,8 +203,8 @@ export function BoardPane() {
             <Icon name="settings" size={13} />
           </button>
         )}
-        <div className="grow" />
         <CosCallout scope={boardCosScope(state.projects, boardScope, boardProjectId)} />
+        <div className="grow" />
         <div className="search no-drag">
           <Icon name="hash" size={12} />
           <input

@@ -322,6 +322,10 @@ describe("the board's callout", () => {
     expect(text(callout(m))).toContain("Chief of Staff");
     expect(callout(m).closest("header.view-header")).not.toBeNull();
     expect(callout(m).querySelector('input[role="switch"]')).toBeNull();
+    const header = callout(m).closest("header.view-header")!;
+    const grow = header.querySelector(":scope > .grow")!;
+    // beside the title: before the spacer that pushes search to the right
+    expect(callout(m).compareDocumentPosition(grow) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(text(byId(m, "cos-callout-badge"))).toBe("3");
     await m.settle(() => m.client.push({ kind: "cos.badge", total: 5, byCos: { "cos-all": 4, "cos-work": 2 } }));
     expect(text(byId(m, "cos-callout-badge"))).toBe("4");
