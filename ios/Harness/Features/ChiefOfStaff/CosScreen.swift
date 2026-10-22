@@ -195,10 +195,13 @@ struct CosChatView: View {
         switch row {
         case let .message(_, fromHuman, text):
             if fromHuman {
-                MarkdownView(text: text)
-                    .padding(11)
-                    .background(c.accentSoft, in: UnevenRoundedRectangle(topLeadingRadius: 14, bottomLeadingRadius: 14, bottomTrailingRadius: 14, topTrailingRadius: 4))
-                    .frame(maxWidth: .infinity, alignment: .trailing)
+                // Shrinks to fit a short message; a table or code block needs a definite width.
+                TranscriptBubbleWidth(fraction: 0.92, fill: MarkdownView.scrollsSideways(text)) {
+                    MarkdownView(text: text)
+                        .padding(11)
+                        .background(c.accentSoft, in: UnevenRoundedRectangle(topLeadingRadius: 14, bottomLeadingRadius: 14, bottomTrailingRadius: 14, topTrailingRadius: 4))
+                }
+                .frame(maxWidth: .infinity, alignment: .trailing)
             } else {
                 MarkdownView(text: text).frame(maxWidth: .infinity, alignment: .leading)
             }

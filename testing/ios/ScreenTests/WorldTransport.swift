@@ -71,7 +71,7 @@ final class WorldTransport: HTTPTransport, @unchecked Sendable {
         }
         if parts.count == 3, parts[0] == "cos", parts[2] == "transcript" {
             // Newest page first, as the service sends it; the world's chat is one page.
-            return ["entries": w.list("cosChat").filter { $0["cosId"] as? String == parts[1] }.reversed(), "nextCursor": NSNull()] as [String: Any]
+            return ["entries": Array(w.list("cosChat").filter { $0["cosId"] as? String == parts[1] }.reversed()), "nextCursor": NSNull()] as [String: Any]
         }
         if parts.count == 3, parts[0] == "tickets", parts[2] == "memory", w.list("chiefs").contains(where: { $0["key"] as? String == parts[1] }) { return w.root["cosMemory"] }
         if parts.count == 3, parts[0] == "projects", parts[2] == "branches" { return [["name": "main", "lastCommitAt": w.now - 3_600_000] as [String: Any]] }
