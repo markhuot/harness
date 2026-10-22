@@ -17,6 +17,8 @@ struct DriverModelPicker: View {
     var onlyDriver: String?
     var disabled = false
     var inheritedModel: ((String) -> String?)?
+    /// List only drivers that can run a chief of staff (the picked one stays).
+    var forCos = false
     let onChange: (Watchers.TriageChoice) -> Void
 
     @Environment(BoardStore.self) private var store
@@ -24,7 +26,7 @@ struct DriverModelPicker: View {
 
     var body: some View {
         let cache = store.sharedModelCache
-        let drivers = store.state.drivers
+        let drivers = forCos ? CosSettings.drivers(store.state.drivers, keeping: value.driver) : store.state.drivers
         let ids = PickerLogic.choiceDriverIds(drivers, value: value, resolved: resolved, onlyDriver: onlyDriver)
         let names = Dictionary(drivers.map { ($0.id, $0.name) }, uniquingKeysWith: { a, _ in a })
         let lists = Dictionary(ids.map { ($0, cache.get($0)) }, uniquingKeysWith: { a, _ in a })

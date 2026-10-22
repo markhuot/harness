@@ -65,7 +65,7 @@ import type {
 } from "@harness/shared";
 import { mapPaneRefs, type PaneArrangeResult, type PaneOp, type TerminalInfo } from "@harness/shared";
 import type { MacRequests } from "../api/mac-requests";
-import type { BaseBranchSource, BranchInfo, CompletionAction, MessageDraft, MessageDraftBody, PlanUsageReport, PromptEntry, SessionActionBody } from "@harness/shared";
+import type { BaseBranchSource, BranchInfo, CompletionAction, PhaseChoice, MessageDraft, MessageDraftBody, PlanUsageReport, PromptEntry, SessionActionBody } from "@harness/shared";
 import {
   checkProjectKey,
   COMPLETION_ACTIONS,
@@ -185,6 +185,7 @@ import {
   toPublicSettings,
   validateBranchName,
   validateModelId,
+  validateCosModel,
   validateModelMap,
   validatePhaseModels,
   validateSettingsPatch,
@@ -504,10 +505,11 @@ function nullableBoolean(name: string, value: unknown): boolean | null | undefin
 }
 
 /** The chief-of-staff overrides of a project create / PATCH body (only the fields it carries). */
-function projectCosFields(body: Partial<CreateProjectBody>): { cosEnabled?: boolean | null; cosCanUnblock?: boolean | null } {
+function projectCosFields(body: Partial<CreateProjectBody>, knownDrivers: string[]): { cosEnabled?: boolean | null; cosCanUnblock?: boolean | null; cosModel?: PhaseChoice | null } {
   const cosEnabled = nullableBoolean("cosEnabled", body.cosEnabled);
   const cosCanUnblock = nullableBoolean("cosCanUnblock", body.cosCanUnblock);
-  return { ...(cosEnabled !== undefined && { cosEnabled }), ...(cosCanUnblock !== undefined && { cosCanUnblock }) };
+  const cosModel = body.cosModel === undefined ? undefined : validateCosModel("cosModel", body.cosModel, knownDrivers);
+  return { ...(cosEnabled !== undefined && { cosEnabled }), ...(cosCanUnblock !== undefined && { cosCanUnblock }), ...(cosModel !== undefined && { cosModel }) };
 }
 
 /** Validate a completion action from a request body (omitted / null → undefined). */
@@ -617,6 +619,8 @@ export class Orchestrator {
   private triageRuns = new Map<string, { cosId: string; system: string; model: string; ids: string[]; verdicts: Map<string, TriageVerdict> }>();
   private cosOff: (() => void)[] = [];
   /** Who caused the activity written in this async context ("cos:<ticket id>" inside a chief's run) */
+  /** The project the latest wake of each chief (by ticket id) was about, when every event in it was; a chat message clears it. */
+  private cosWakeProject = new Map<string, string | null>();
   private actorContext = new AsyncLocalStorage<string | null>();
   /**
    * `${project path}\0${settings base branch}` → the branch checked out in that checkout, for
@@ -686,7 +690,7 @@ export class Orchestrator {
       now: () => this.now(),
       settings: () => this.settings(),
       triage: () => this.cosTriage(),
-      deliver: (cosTicketId, text) => this.wakeCos(cosTicketId, text),
+      deliver: (cosTicketId, text, projectKey) => this.wakeCos(cosTicketId, text, projectKey),
       runStatus: (runId) => this.store.runs.get(runId)?.status ?? null,
       runReplies: (runId, since) => this.store.transcript.assistantTexts(runId, since),
       log: this.log,
@@ -902,7 +906,7 @@ export class Orchestrator {
       this.driverList().map(async (d) => {
         try {
           const info = await d.info();
-          return { ...info, ...(d.sessionActions ? { sessionActions: d.sessionActions } : {}), reportsContextUsage: d.reportsContextUsage !== false };
+          return { ...info, ...(d.sessionActions ? { sessionActions: d.sessionActions } : {}), reportsContextUsage: d.reportsContextUsage !== false, runsCos: d.runsCos !== false };
         } catch (err) {
           return {
             id: d.id,
@@ -969,7 +973,7 @@ export class Orchestrator {
       key,
       useWorktrees: body.useWorktrees,
       ...projectReviewDefaults(body),
-      ...projectCosFields(body),
+      ...projectCosFields(body, [...this.drivers.keys()]),
       color: body.color !== undefined ? validProjectColor(body.color) : null,
       group: this.groupRef(body) ?? null,
       baseBranch: validateBranchName("baseBranch", body.baseBranch),
@@ -1189,6 +1193,7 @@ export class Orchestrator {
       completionAction: rawAction,
       cosEnabled: _cosEnabled,
       cosCanUnblock: _cosCanUnblock,
+      cosModel: _cosModel,
       skipAgentReview: _skipAgent,
       skipHumanReview: _skipHuman,
       requireHumanReview: _require,
@@ -1199,7 +1204,7 @@ export class Orchestrator {
     const baseBranch = rawBase !== undefined ? validateBranchName("baseBranch", rawBase) : undefined;
     const completionAction = this.validProjectCompletion(path ?? existing.path, rawAction);
     const phaseModels = this.projectPhaseModels(existing.phaseModels, body);
-    return { newKey, permissionMode, rest: { ...rest, ...projectReviewDefaults(body), ...projectCosFields(body), color, baseBranch, completionAction }, group, path, phaseModels };
+    return { newKey, permissionMode, rest: { ...rest, ...projectReviewDefaults(body), ...projectCosFields(body, [...this.drivers.keys()]), color, baseBranch, completionAction }, group, path, phaseModels };
   }
 
   async deleteProject(id: string) {
@@ -1284,9 +1289,11 @@ export class Orchestrator {
   }
 
   /** Hand a chief a message from the pipeline; resolves to the run that will read it. */
-  private async wakeCos(cosTicketId: string, text: string): Promise<string | null> {
+  private async wakeCos(cosTicketId: string, text: string, projectKey: string | null): Promise<string | null> {
     const ticket = this.store.tickets.get(cosTicketId);
     if (!ticket) throw notFound(`Unknown chief of staff: ${cosTicketId}`);
+    // A wake about one project runs on that project's chief-of-staff model; any other run runs on the app's.
+    this.cosWakeProject.set(cosTicketId, projectKey ? (this.store.projects.getByKey(projectKey)?.id ?? null) : null);
     return this.steerOrEnqueue(ticket.sessionId, "cos", { text, attachments: [] });
   }
 
@@ -2676,6 +2683,8 @@ export class Orchestrator {
       if (attachments.length) throw conflict(`${ticket.key} is waiting on a tool approval: answer it before sending attachments`);
       return this.answerApproval(ticket.key, { decision: "deny", message: text });
     }
+    // A message to a chief isn't about one project, so its run takes the app's model, not the project of the wake before it.
+    if (ticket.kind === "cos") this.cosWakeProject.delete(ticket.id);
     this.notCompleting(ticket, "messaged");
     this.autoRetries.delete(ticket.id);
     this.resetRejections(ticket);
@@ -2739,7 +2748,6 @@ export class Orchestrator {
         return;
       }
     }
-    // A chief of staff has one kind of run: a chat run would get the work tools.
     await this.steerOrEnqueue(ticket.sessionId, ticket.kind === "cos" ? "cos" : "chat", message);
   }
 
@@ -4478,6 +4486,7 @@ ${numberLines(r.body)}`;
       baseBranch: p.baseBranch ?? null,
       cosEnabled: p.cosEnabled ?? null,
       cosCanUnblock: p.cosCanUnblock ?? null,
+      cosModel: p.cosModel ?? null,
       completionAction: p.completionAction ?? "merge",
       completionActions: p.completionActions ?? offeredCompletionActions(p),
       pullRequestHost: p.pullRequestHost ?? null,
@@ -5450,7 +5459,7 @@ ${numberLines(r.body)}`;
   private runModel(run: Run, session: Session, ticket: Ticket | null, project: Project | null): string | null {
     if (run.kind === "triage") return this.triageRuns.get(session.id)?.model ?? null;
     const settings = this.settings();
-    return resolveRunModel({ driver: run.driver, kind: run.kind, ticket, project, settings });
+    return resolveRunModel({ driver: run.driver, kind: run.kind, ticket, project, settings, cosProject: this.cosProject(ticket) });
   }
 
   /**
@@ -5467,7 +5476,13 @@ ${numberLines(r.body)}`;
   /** The driver a run of this kind goes to: its phase's (see resolveRunChoice); a standalone session keeps its own. */
   private runDriver(kind: RunKind, session: Session, ticket: Ticket | null): string {
     if (!ticket) return session.driver;
-    return resolveRunChoice({ kind, ticket, project: this.store.projects.get(ticket.projectId) ?? null, settings: this.settings() }).driver;
+    return resolveRunChoice({ kind, ticket, project: this.store.projects.get(ticket.projectId) ?? null, settings: this.settings(), cosProject: this.cosProject(ticket) }).driver;
+  }
+
+  /** The project a chief's current run is about (see cosWakeProject), for resolveCosChoice. */
+  private cosProject(ticket: Ticket | null): Project | null {
+    const id = ticket?.kind === "cos" ? this.cosWakeProject.get(ticket.id) : null;
+    return id ? (this.store.projects.get(id) ?? null) : null;
   }
 
   /**

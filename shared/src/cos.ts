@@ -1,6 +1,7 @@
 // Chief of staff (CoS) shapes shared by the service and its clients (DESIGN.md "Chief of staff").
 
-import type { HarnessEvent, Project, Settings } from "./protocol";
+import type { HarnessEvent, PhaseChoice, Project, Settings } from "./protocol";
+import { settingsPhaseChoice } from "./phases";
 
 /** The two settings a project may override of the app's (Project.cosEnabled, Project.cosCanUnblock). */
 export type CosSettingKey = "cosEnabled" | "cosCanUnblock";
@@ -14,6 +15,20 @@ export const COS_SETTING_DEFAULTS: Readonly<Record<CosSettingKey, boolean>> = { 
  */
 export function resolveCosSetting(project: Pick<Project, "cosEnabled" | "cosCanUnblock"> | null | undefined, settings: Pick<Settings, "cosEnabled" | "cosCanUnblock">, key: CosSettingKey): boolean {
   return project?.[key] ?? settings[key] ?? COS_SETTING_DEFAULTS[key];
+}
+
+/**
+ * The driver and model a chief of staff runs on: the project's own choice (the project its wake is
+ * about), else the app's CoS choice, else the app's Work choice, so an install that never chose one
+ * runs as before. The one place that resolves it: every chief run (wake, chat, hand-off) reads it.
+ */
+export function resolveCosChoice(project: Pick<Project, "cosModel"> | null | undefined, settings: Pick<Settings, "cosModel" | "phaseModels">): PhaseChoice {
+  return project?.cosModel ?? settings.cosModel ?? settingsPhaseChoice(settings.phaseModels, "work");
+}
+
+/** The drivers a CoS model picker offers: those that can run a chief, and `keep` (the driver already picked) so a saved choice never vanishes. */
+export function cosDrivers<T extends { id: string; runsCos?: boolean }>(drivers: readonly T[], keep?: string | null): T[] {
+  return drivers.filter((d) => d.runsCos !== false || d.id === keep);
 }
 
 /** What a CoS sees and may act on: every project (`all`) or the projects of one group. */

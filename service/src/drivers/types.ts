@@ -199,6 +199,8 @@ export interface Driver {
   sessionActions?: { compact: boolean; newSession: boolean };
   /** False when the driver reports no token counts at all (its gauge stays empty). Default true. */
   reportsContextUsage?: boolean;
+  /** False when the driver can't run a chief of staff (kind "cos"), so the CoS model pickers leave it out. Default true. */
+  runsCos?: boolean;
   /**
    * Summarize the saved conversation in place (kind "compact" runs): the same session continues
    * from the summary. Emits "compacted" when done, and "state" if the saved state changed.

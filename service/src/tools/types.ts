@@ -30,6 +30,7 @@ import type {
   TriageStatus,
   TranscriptRole,
   Watcher,
+  PhaseChoice,
 } from "@harness/shared";
 import type { BrowserService } from "../browser/types";
 import type { ActivityHit, ActivityQuery } from "../store/activity";
@@ -543,6 +544,8 @@ export interface ProjectView {
   cosEnabled: boolean | null;
   /** Whether a chief of staff may answer the project's blocked tickets; null → settings.cosCanUnblock */
   cosCanUnblock: boolean | null;
+  /** The driver and model a chief woken for the project's events alone runs on; null → settings.cosModel */
+  cosModel: PhaseChoice | null;
   /** What approving a ticket does by default: merge, pr (a GitHub pull request) or custom */
   completionAction: CompletionAction;
   /** The completion actions the project offers (pr needs a remote gh is logged into) */
