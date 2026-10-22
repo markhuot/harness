@@ -42,6 +42,7 @@ import { useStore } from "../state/store";
 import { draftEditorKey, paneSavedDraft } from "../state/draftSession";
 import { BoardPane } from "../views/Board";
 import { TicketDetail } from "../views/TicketDetail";
+import { CosPane } from "../views/Cos";
 import { TerminalPane } from "../views/TerminalPane";
 import { DraftEditor } from "../views/DraftEditor";
 import { FilePane } from "../views/FilePane";
@@ -202,6 +203,8 @@ export function Pane({
           <DraftEditor key={draftEditorKey(leaf.id, draft.id)} paneId={leaf.id} ticket={draft} zoomed={zoomed} />
         ) : c.kind === "ticket" ? (
           <TicketDetail key={c.ticketKey} paneId={leaf.id} ticketKey={c.ticketKey} tab={c.tab} zoomed={zoomed} />
+        ) : c.kind === "cos" ? (
+          <CosPane paneId={leaf.id} content={c} zoomed={zoomed} />
         ) : c.kind === "compose" ? (
           <DraftEditor key={`draft:${c.id}`} paneId={leaf.id} compose={c} zoomed={zoomed} />
         ) : c.kind === "file" ? (

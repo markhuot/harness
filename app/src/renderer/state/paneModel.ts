@@ -16,6 +16,7 @@
 //   • a split's sizes are positive fractions that sum to 1;
 //   • focusedId/zoomedId name an existing leaf, or are null.
 
+import { isCosTab, type CosTab } from "@harness/shared/state";
 import { ALL_SCOPE, parsePluginTab, parseSubagentTab, TAB_LABEL, tabStripTab, ticketTabWithChanges, type TicketTab } from "@harness/shared/state";
 
 /**
@@ -75,8 +76,15 @@ export interface TicketTabContent {
   tab: TornTab;
   browserTab?: number;
 }
+/** A chief of staff's pane (its Chat and Inbox tabs), opened from the board's callout card. */
+export interface CosContent {
+  kind: "cos";
+  /** The chief's scope key: "all" or "group:<id>". */
+  scope: string;
+  tab: CosTab;
+}
 /** What a pane shows. */
-export type PaneContent = { kind: "board" } | { kind: "ticket"; ticketKey: string; tab: TicketTab } | TicketTabContent | TerminalContent | ComposeContent | FileContent;
+export type PaneContent = { kind: "board" } | CosContent | { kind: "ticket"; ticketKey: string; tab: TicketTab } | TicketTabContent | TerminalContent | ComposeContent | FileContent;
 export interface PaneLeaf {
   type: "leaf";
   id: string;
@@ -161,6 +169,9 @@ export const terminalLeafBySession = (root: PaneNode, sessionId: string): PaneLe
   leaves(root).find((l) => l.content.kind === "terminal" && l.content.sessionId === sessionId) ?? null;
 export const composeLeafById = (root: PaneNode, id: string): PaneLeaf | null => leaves(root).find((l) => l.content.kind === "compose" && l.content.id === id) ?? null;
 
+/** The chief of staff's pane: one at a time, whichever scope it shows. */
+export const cosLeaf = (root: PaneNode): PaneLeaf | null => leaves(root).find((l) => l.content.kind === "cos") ?? null;
+
 /** What makes two file panes the same file: the root and the path. */
 export const fileKey = (c: Pick<FileContent, "root" | "path">): string => ("ticketKey" in c.root ? `t:${c.root.ticketKey}` : `p:${c.root.projectId}`) + `\u0000${c.path}`;
 export const fileLeafByKey = (root: PaneNode, key: string): PaneLeaf | null => leaves(root).find((l) => l.content.kind === "file" && fileKey(l.content) === key) ?? null;
@@ -199,6 +210,8 @@ function leafShowing(root: PaneNode, content: PaneContent): PaneLeaf | null {
       return ticketLeafByKey(root, content.ticketKey);
     case "ticketTab":
       return tornLeafByKey(root, tornKey(content));
+    case "cos":
+      return cosLeaf(root);
     case "terminal":
       return terminalLeafBySession(root, content.sessionId);
     case "compose":
@@ -217,6 +230,8 @@ export function paneLabel(content: PaneContent): string {
       return content.ticketKey;
     case "ticketTab":
       return `${content.ticketKey} · ${tornTabLabel(content)}`;
+    case "cos":
+      return "chief of staff";
     case "compose":
       return "New session";
     case "file":
@@ -348,6 +363,8 @@ export function normalize(
       switch (l.content.kind) {
         case "board":
           return sawBoard ? false : (sawBoard = true);
+        case "cos":
+          return once(keys, "\u0000cos");
         case "compose":
           return once(composes, l.content.id);
         case "file":
@@ -531,6 +548,28 @@ export function openTicket(state: PaneState, key: string, tab?: TicketTab): Pane
   const board = boardLeaf(state.root)!;
   const leaf: PaneLeaf = { type: "leaf", id: freshId(allIds(state.root)), content };
   return normalize({ root: insertLeaf(state.root, board.id, "right", leaf, 1 - BOARD_SHARE), focusedId: leaf.id, zoomedId: null });
+}
+
+/**
+ * The board's chief-of-staff card: focus the chief's pane (showing `scope`, and `tab` if given),
+ * else split the board with it on the right, like a ticket opening beside the board.
+ */
+export function openCos(state: PaneState, scope: string, tab?: CosTab): PaneState {
+  const existing = cosLeaf(state.root);
+  if (existing && existing.content.kind === "cos") {
+    const next: CosContent = { kind: "cos", scope, tab: tab ?? (existing.content.scope === scope ? existing.content.tab : "chat") };
+    return normalize({ root: setLeafContent(state.root, existing.id, next), focusedId: existing.id, zoomedId: zoomFor(state, existing.id) });
+  }
+  const board = boardLeaf(state.root)!;
+  const leaf: PaneLeaf = { type: "leaf", id: freshId(allIds(state.root)), content: { kind: "cos", scope, tab: tab ?? "chat" } };
+  return normalize({ root: insertLeaf(state.root, board.id, "right", leaf, 1 - BOARD_SHARE), focusedId: leaf.id, zoomedId: null });
+}
+
+/** Switch the chief of staff pane's tab. */
+export function setCosTab(state: PaneState, leafId: string, tab: CosTab): PaneState {
+  const leaf = findLeaf(state.root, leafId);
+  if (!leaf || leaf.content.kind !== "cos" || leaf.content.tab === tab) return state;
+  return { ...state, root: setLeafContent(state.root, leafId, { ...leaf.content, tab }) };
 }
 
 /**
@@ -796,7 +835,7 @@ export function closePane(state: PaneState, leafId: string): PaneState {
 export function escapePanes(s: PaneState): PaneState {
   if (s.zoomedId) return toggleZoom(s, s.zoomedId);
   const kind = s.focusedId ? findLeaf(s.root, s.focusedId)?.content.kind : null;
-  return kind === "ticket" || kind === "ticketTab" || kind === "compose" || kind === "file" ? closePane(s, s.focusedId!) : s;
+  return kind === "ticket" || kind === "ticketTab" || kind === "cos" || kind === "compose" || kind === "file" ? closePane(s, s.focusedId!) : s;
 }
 
 export function setTab(state: PaneState, leafId: string, tab: TicketTab): PaneState {
@@ -1173,7 +1212,7 @@ export function splitTarget(state: PaneState, fromLeafId: string | null = null, 
 // ---------------------------------------------------------------------------
 
 /** The narrowest a pane may get: the board keeps its columns usable, a ticket its header and tabs, a terminal ~40 columns, a file ~40 columns past its line numbers. */
-export const PANE_MIN_WIDTH = { board: 320, ticket: 360, ticketTab: 360, terminal: 320, compose: 360, file: 360 } as const;
+export const PANE_MIN_WIDTH = { board: 320, ticket: 360, ticketTab: 360, cos: 360, terminal: 320, compose: 360, file: 360 } as const;
 /** The shortest any pane may get in a column split (a torn-off composer included: its input, attachments and send bar). */
 export const PANE_MIN_HEIGHT = 200;
 
@@ -1408,6 +1447,7 @@ function parseContent(v: unknown): PaneContent | null {
     // Changes): ticketTabWithChanges maps it.
     return { kind: "ticket", ticketKey: v.ticketKey, tab: (typeof v.tab === "string" && ticketTabWithChanges(v.tab)) || "spec" };
   }
+  if (v.kind === "cos" && typeof v.scope === "string" && v.scope) return { kind: "cos", scope: v.scope, tab: isCosTab(v.tab) ? v.tab : "chat" };
   if (v.kind === "ticketTab" && typeof v.ticketKey === "string" && v.ticketKey && typeof v.tab === "string") {
     // A tab that isn't one (any more) has nothing to show: the pane goes, rather than turn into the Spec.
     const tab: TornTab | null = v.tab === COMPOSER_TAB ? COMPOSER_TAB : ticketTabWithChanges(v.tab);

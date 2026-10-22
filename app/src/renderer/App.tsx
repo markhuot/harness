@@ -4,7 +4,6 @@ import { StoreProvider, useStore } from "./state/store";
 import { paneScopeOf } from "./state/route";
 import { Icon } from "./components/Icon";
 import { Sidebar } from "./views/Sidebar";
-import { CosView } from "./views/Cos";
 import { SettingsView } from "./views/Settings";
 import { ProjectSettingsView } from "./views/ProjectSettings";
 import { ResizeHandle } from "./components/ResizeHandle";
@@ -254,8 +253,6 @@ function Shell() {
       <main className="main">
         {!state.ready ? (
           <ServiceLoading />
-        ) : route.view === "cos" ? (
-          <CosView scope={route.scope} tab={route.tab} />
         ) : route.view === "settings" ? (
           <SettingsView />
         ) : route.view === "project" ? (

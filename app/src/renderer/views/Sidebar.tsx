@@ -10,7 +10,6 @@ import { routeGroupId } from "../state/boardScope";
 import { keysArea, runCommand, useCommands } from "../components/commands";
 import { useRovingList } from "../components/useRovingList";
 import { PlanUsage } from "./PlanUsage";
-import { chiefOf, useCosActions } from "./Cos";
 import { countSegments, sidebarCounts, type StatusCounts } from "../state/sidebarCounts";
 
 export function Sidebar({
@@ -45,9 +44,6 @@ export function Sidebar({
   useCommands("sidebar", { "sidebar.exit": () => runCommand("pane.right") });
 
   const counts = useMemo(() => sidebarCounts(Object.values(state.tickets), (id) => state.projects[id]?.groupId), [state.tickets, state.projects]);
-  const cosActions = useCosActions();
-  // One chief of staff per group, and one for All projects; a row exists before its chief does (opening it makes it).
-  const chiefRows: { scope: CosScopeKey; label: string }[] = [{ scope: "all", label: "All projects" }, ...groups.map((g) => ({ scope: cosScopeKey({ group: g.id }), label: g.name }))];
 
   const addProject = async () => {
     const path = await window.harness?.pickDirectory();
@@ -157,44 +153,6 @@ export function Sidebar({
                 counts={counts.byGroup[g.id]}
               />
             ))}
-          </nav>
-
-          <div className="nav-section">
-            <span className="section-title">Chiefs of staff</span>
-          </div>
-          <nav className="nav">
-            {chiefRows.map(({ scope, label }) => {
-              const chief = chiefOf(state.chiefs, scope);
-              const open = async () => {
-                if (!chief) await cosActions.open(scope);
-                navigate({ view: "cos", scope, tab: "chat" });
-              };
-              const count = chief ? cosBadgeCount(state.cosBadge, chief.ticketId) : 0;
-              return (
-                <div key={scope} className="nav-cos" data-testid="nav-cos" data-scope={scope}>
-                  <NavItem
-                    icon="bot"
-                    label={label}
-                    title={`Chief of staff for ${label}`}
-                    active={route.view === "cos" && route.scope === scope}
-                    onClick={() => void open()}
-                    badge={
-                      count > 0 ? (
-                        <span className="nav-badge" data-testid="nav-cos-badge" title={`${count} event${count === 1 ? "" : "s"} waiting`}>
-                          {count}
-                        </span>
-                      ) : undefined
-                    }
-                  />
-                  <Switch
-                    checked={chief?.enabled ?? false}
-                    ariaLabel={`Chief of staff for ${label} on`}
-                    title={chief?.enabled ? "On: click to turn off" : "Off: click to turn on"}
-                    onChange={(v) => void (chief ? cosActions.setEnabled(chief, v) : v && cosActions.open(scope))}
-                  />
-                </div>
-              );
-            })}
           </nav>
 
           <div className="nav-section">

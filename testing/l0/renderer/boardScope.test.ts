@@ -20,7 +20,6 @@ describe("boardProjectOf", () => {
     expect(boardProjectOf(state, board({ projectId: "p1", group: "g" }))).toBeNull();
   });
   test("other views have no board project", () => {
-    expect(boardProjectOf(state, { view: "cos", scope: "all", tab: "chat" })).toBeNull();
     expect(boardProjectOf(state, { view: "project", projectId: "p1" })).toBeNull();
   });
 });

@@ -43,7 +43,7 @@ describe("boardCardKeys", () => {
 describe("presenceTickets", () => {
   test("no panes, or a route that isn't a board or pop-out, is empty", () => {
     expect(presenceTickets(input(null))).toEqual([]);
-    expect(presenceTickets(input(panes([{ kind: "ticket", ticketKey: "A-1", tab: "spec" }]), { route: { view: "cos", scope: "all", tab: "chat" } }))).toEqual([]);
+    expect(presenceTickets(input(panes([{ kind: "ticket", ticketKey: "A-1", tab: "spec" }]), { route: { view: "settings", section: null } }))).toEqual([]);
   });
   test("ticket panes, torn-off tabs and files resolved in a ticket count; project files and terminals don't", () => {
     const p = panes([

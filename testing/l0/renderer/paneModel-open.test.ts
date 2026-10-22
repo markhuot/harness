@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import {
-  BOARD_SHARE, COMPOSE_WIDTH_PX, PANE_MIN_WIDTH, composeToTicket, defaultPanes, findLeaf, leaves, openCompose, openFile, openTerminal, openTicket, openTicketAtRightEdge, openTicketInNewSplit,
+  BOARD_SHARE, COMPOSE_WIDTH_PX, PANE_MIN_WIDTH, composeToTicket, defaultPanes, findLeaf, leaves, openCompose, openCos, escapePanes, setCosTab, openFile, openTerminal, openTicket, openTicketAtRightEdge, openTicketInNewSplit,
   resetPaneIds, setFileView, type FileContent, type PaneLeaf, type PaneState,
 } from "../../../app/src/renderer/state/paneModel";
 import { board, col, compose, file, invariantErrors, row, shape, sizesOf, st, term, ticket } from "./paneBuild";
@@ -333,5 +333,36 @@ describe("composeToTicket", () => {
   test("an unfocused compose closing leaves focus where it was", () => {
     const s = composeToTicket({ ...base, focusedId: "B" }, "n1", "A-1");
     expect(s.focusedId).toBe("B");
+  });
+});
+
+describe("openCos", () => {
+  test("beside a bare board: a pane on its right taking 40%, focused, on the chat", () => {
+    const s = openCos(bare(), "all");
+    expect(shape(s.root)).toBe(`row(B,${added(bare(), s).id})`);
+    near(sizesOf(s.root), [BOARD_SHARE, 1 - BOARD_SHARE]);
+    expect(findLeaf(s.root, s.focusedId!)?.content).toEqual({ kind: "cos", scope: "all", tab: "chat" });
+    ok(s);
+  });
+
+  test("there is one chief pane: another scope reuses it, and the same scope keeps its tab", () => {
+    const opened = openCos(bare(), "all");
+    const inbox = setCosTab(opened, leaves(opened.root)[1]!.id, "inbox");
+    const again = openCos(inbox, "all");
+    expect(leaves(again.root).filter((l) => l.content.kind === "cos")).toHaveLength(1);
+    expect(leaves(again.root)[1]!.content).toEqual({ kind: "cos", scope: "all", tab: "inbox" });
+    const other = openCos(inbox, "group:g1");
+    expect(leaves(other.root).filter((l) => l.content.kind === "cos")).toHaveLength(1);
+    expect(leaves(other.root)[1]!.content).toEqual({ kind: "cos", scope: "group:g1", tab: "chat" });
+    ok(other);
+  });
+
+  test("Escape closes it, like a ticket pane", () => {
+    const s = openCos(bare(), "all");
+    expect(leaves(escapePanes(s).root)).toHaveLength(1);
+  });
+
+  test("it can't be narrower than a ticket pane", () => {
+    expect(PANE_MIN_WIDTH.cos).toBe(PANE_MIN_WIDTH.ticket);
   });
 });

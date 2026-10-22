@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { CosChatEntry } from "@harness/shared";
-import { CosView } from "../../app/src/renderer/views/Cos";
+import { CosPane } from "../../app/src/renderer/views/Cos";
+import { BoardPane } from "../../app/src/renderer/views/Board";
+import { defaultPanes, openCos } from "../../app/src/renderer/state/paneModel";
+import { getPanes, leaves, updatePanes, usePanes } from "../../app/src/renderer/state/panes";
 import { ProjectSettingsView } from "../../app/src/renderer/views/ProjectSettings";
 import { SettingsView } from "../../app/src/renderer/views/Settings";
-import { Sidebar } from "../../app/src/renderer/views/Sidebar";
-import { useStore } from "../../app/src/renderer/state/store";
 import { all, click, edited, mount, text, type } from "./render";
 import { FakeClient } from "./fakeClient";
 import { world } from "../world";
@@ -12,13 +13,23 @@ import { minutesAgo } from "../world/time";
 
 type M = Awaited<ReturnType<typeof mount>>;
 
-/** The chief the route names, as the app's main area shows it. */
+/** The chief's pane, as the workspace shows it beside the board. */
 function Routed() {
-  const { route } = useStore();
-  return route.view === "cos" ? <CosView scope={route.scope} tab={route.tab} /> : <div data-testid="elsewhere">{route.view}</div>;
+  const panes = usePanes("*");
+  const leaf = leaves(panes.root).find((l) => l.content.kind === "cos");
+  return leaf && leaf.content.kind === "cos" ? <CosPane paneId={leaf.id} content={leaf.content} /> : <div data-testid="elsewhere" />;
 }
 
-const open = (hash = "#/cos/all", client?: FakeClient) => mount(<Routed />, { hash, client });
+/** Opens the chief named by a `#/cos/<scope>[/<tab>]` shorthand in a pane, the way the board's card does. */
+const open = (hash = "#/cos/all", client?: FakeClient) => {
+  const [scope = "all", tab = "chat"] = hash.replace("#/cos/", "").split("/").map(decodeURIComponent);
+  updatePanes("*", () => openCos(defaultPanes("B"), scope, tab as "chat" | "inbox"));
+  return mount(<Routed />, { client });
+};
+const paneTab = () => {
+  const c = leaves(getPanes("*").root).find((l) => l.content.kind === "cos")?.content;
+  return c && c.kind === "cos" ? c.tab : null;
+};
 const byId = (m: M, id: string) => m.container.querySelector<HTMLElement>(`[data-testid="${id}"]`);
 const msgs = (m: M) => all(m.container, '[data-testid^="cos-msg"]').map((e) => text(e));
 const events = (m: M) => all(m.container, '[data-testid="cos-event"]');
@@ -198,7 +209,7 @@ describe("Inbox", () => {
     await type(m, input, "Listen to GitHub for PR feedback on harness");
     await click(m, byId(m, "cos-listen-send")!);
     expect(m.client.bodies.find((b) => b.request === "POST /cos/cos-all/messages")?.body).toEqual({ text: "Listen to GitHub for PR feedback on harness" });
-    expect(location.hash).toBe("#/cos/all");
+    expect(paneTab()).toBe("chat");
     expect(byId(m, "cos-listen-input")).toBeNull();
   });
 });
@@ -299,50 +310,77 @@ describe("Memory", () => {
   });
 });
 
-describe("Sidebar", () => {
-  const sidebar = () => mount(<Sidebar onNewSession={() => {}} onNewTerminal={() => {}} />);
-  const rows = (m: M) => all(m.container, '[data-testid="nav-cos"]');
+describe("the board's callout", () => {
+  const board = (hash = "#/board") => mount(<BoardPane />, { hash });
+  const callout = (m: M) => byId(m, "cos-callout")!;
+  const sw = (m: M) => callout(m).querySelector<HTMLInputElement>('input[role="switch"]')!;
 
-  test("a chief of staff row for All projects and for each group, with the count of its open events", async () => {
-    const m = await sidebar();
-    await m.until("the rows", () => rows(m).length === 3);
-    expect(rows(m).map((r) => r.dataset.scope)).toEqual(["all", "group:group-personal", "group:group-work"]);
-    expect(text(rows(m)[0])).toContain("All projects");
-    expect(text(byId(m, "nav-cos-badge"))).toBe("3");
-    expect(all(m.container, '[data-testid="nav-cos-badge"]')).toHaveLength(1);
-    await m.settle(() => m.client.push({ kind: "cos.badge", total: 5, byCos: { "cos-all": 3, "cos-work": 2 } }));
-    expect(all(m.container, '[data-testid="nav-cos-badge"]').map((b) => text(b))).toEqual(["3", "2"]);
+  test("a card above the columns, not in one, with the count of its open events", async () => {
+    updatePanes("*", () => defaultPanes("B"));
+    const m = await board();
+    await m.until("the callout", () => !!byId(m, "cos-callout-badge"));
+    expect(callout(m).dataset.scope).toBe("all");
+    expect(text(callout(m))).toContain("All projects");
+    expect(callout(m).closest(".column")).toBeNull();
+    expect(text(byId(m, "cos-callout-badge"))).toBe("3");
+    await m.settle(() => m.client.push({ kind: "cos.badge", total: 5, byCos: { "cos-all": 4, "cos-work": 2 } }));
+    expect(text(byId(m, "cos-callout-badge"))).toBe("4");
   });
 
-  test("the old Inbox entry is gone", async () => {
-    const m = await sidebar();
-    await m.until("the rows", () => rows(m).length === 3);
-    expect(all(m.container, ".nav-item").some((e) => text(e) === "Inbox")).toBe(false);
+  test("a group's board shows its group's chief, and a project's board its group's", async () => {
+    const group = await board("#/board/group/group-work");
+    await group.until("the callout", () => !!byId(group, "cos-callout"));
+    expect(callout(group).dataset.scope).toBe("group:group-work");
+    const project = world.projects.find((p) => p.groupId === "group-work")!;
+    const m = await board(`#/board/${project.id}`);
+    await m.until("the callout", () => !!byId(m, "cos-callout"));
+    expect(callout(m).dataset.scope).toBe("group:group-work");
   });
 
-  test("each row has its own switch, which a group without a chief turns on by making one", async () => {
-    const m = await sidebar();
-    await m.until("the rows", () => rows(m).length === 3);
-    const sw = (r: HTMLElement) => r.querySelector<HTMLInputElement>('input[role="switch"]')!;
-    expect(rows(m).map((r) => sw(r).checked)).toEqual([true, false, true]);
-    await click(m, sw(rows(m)[0]!));
-    expect(m.client.bodies.find((b) => b.request === "PATCH /cos/cos-all")?.body).toEqual({ enabled: false });
-    expect(sw(rows(m)[0]!).checked).toBe(false);
-    expect(sw(rows(m)[2]!).checked).toBe(true);
-    await click(m, sw(rows(m)[1]!));
-    expect(m.client.bodies.find((b) => b.request === "POST /cos")?.body).toEqual({ scope: "group:group-personal" });
-    expect(sw(rows(m)[1]!).checked).toBe(true);
-  });
-
-  test("a row opens its chief's chat, making the chief first when the group has none", async () => {
-    const m = await sidebar();
-    await m.until("the rows", () => rows(m).length === 3);
-    await click(m, rows(m)[2]!.querySelector(".nav-item")!);
-    expect(location.hash).toBe("#/cos/group%3Agroup-work");
+  test("the card opens the chief's pane beside the board, focused", async () => {
+    updatePanes("*", () => defaultPanes("B"));
+    const m = await board();
+    await m.until("the callout", () => !!byId(m, "cos-callout-open"));
+    await click(m, byId(m, "cos-callout-open")!);
+    const cos = leaves(getPanes("*").root).find((l) => l.content.kind === "cos");
+    expect(cos?.content).toEqual({ kind: "cos", scope: "all", tab: "chat" });
+    expect(getPanes("*").focusedId).toBe(cos!.id);
     expect(m.client.requests).not.toContain("POST /cos");
-    await click(m, rows(m)[1]!.querySelector(".nav-item")!);
-    expect(m.client.requests).toContain("POST /cos");
-    expect(location.hash).toBe("#/cos/group%3Agroup-personal");
+  });
+
+  test("a group without a chief gets one made on first open", async () => {
+    updatePanes("*", () => defaultPanes("B"));
+    const m = await board("#/board/group/group-personal");
+    await m.until("the callout", () => !!byId(m, "cos-callout-open"));
+    await click(m, byId(m, "cos-callout-open")!);
+    expect(m.client.bodies.find((b) => b.request === "POST /cos")?.body).toEqual({ scope: "group:group-personal" });
+    expect(leaves(getPanes("*").root).some((l) => l.content.kind === "cos" && l.content.scope === "group:group-personal")).toBe(true);
+  });
+
+  test("the switch turns the chief off, or turns a group's on by making one", async () => {
+    updatePanes("*", () => defaultPanes("B"));
+    const m = await board();
+    await m.until("the callout", () => !!byId(m, "cos-callout"));
+    expect(sw(m).checked).toBe(true);
+    await click(m, sw(m));
+    expect(m.client.bodies.find((b) => b.request === "PATCH /cos/cos-all")?.body).toEqual({ enabled: false });
+    expect(sw(m).checked).toBe(false);
+    const g = await board("#/board/group/group-personal");
+    await g.until("the callout", () => !!byId(g, "cos-callout"));
+    expect(sw(g).checked).toBe(false);
+    await click(g, sw(g));
+    expect(g.client.bodies.find((b) => b.request === "POST /cos")?.body).toEqual({ scope: "group:group-personal" });
+    expect(sw(g).checked).toBe(true);
+  });
+});
+
+describe("the sidebar", () => {
+  test("has no chief of staff rows", async () => {
+    const { Sidebar } = await import("../../app/src/renderer/views/Sidebar");
+    const m = await mount(<Sidebar onNewSession={() => {}} onNewTerminal={() => {}} />);
+    await m.until("the sidebar", () => all(m.container, ".nav-item").length > 0);
+    expect(all(m.container, '[data-testid="nav-cos"]')).toHaveLength(0);
+    expect(all(m.container, ".nav-item").some((e) => /Chief|Inbox/.test(text(e)))).toBe(false);
   });
 });
 

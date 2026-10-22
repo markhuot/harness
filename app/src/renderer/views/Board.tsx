@@ -37,6 +37,7 @@ import { Icon } from "../components/Icon";
 import { DriverBadge, MenuButton, ReviewMark, STATUS_LABEL, StatusDot, TicketKey } from "../components/bits";
 import { ModelBadge } from "../components/ModelSelect";
 import { ConductorRollup, useHideChildren } from "../components/Conductor";
+import { boardCosScope, CosCallout } from "./Cos";
 import { ProjectKey } from "../components/ProjectKey";
 import { focusedTicket, leaves, openTicket, openTicketAtRightEdge, openTicketInNewSplit, updatePanes, usePanes } from "../state/panes";
 import { dragProps, ticketContextMenu } from "../components/paneDrag";
@@ -264,6 +265,7 @@ export function BoardPane() {
           </button>
         </div>
       )}
+      <CosCallout scope={boardCosScope(state.projects, boardScope, boardProjectId)} />
       <div className="board">
         {TICKET_STATUSES.map((status, i) => {
           const tickets = shown[i]!;

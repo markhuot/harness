@@ -1,12 +1,20 @@
-// A chief of staff (#/cos/<scope>): its Chat and Inbox tabs under the pinned-ticket chrome, an
-// on/off switch, and its Memory (a sheet, not a tab). The ticket detail assumes a work ticket
-// (workdir, subagents, changes), so this reuses only its chrome (header, tab strip).
+// A chief of staff: a callout card on the board (CosCallout, not in a column) that opens its pane
+// (CosPane): its Chat and Inbox tabs under the ticket pane's chrome, an on/off switch, and its
+// Memory (a sheet, not a tab). The ticket detail assumes a work ticket (workdir, subagents,
+// changes), so this reuses only its chrome (header, tab strip).
 
 import { useState } from "react";
-import { projectGroups, parseCosScopeKey, type Cos, type CosScopeKey } from "@harness/shared";
+import { cosScopeKey, projectGroups, parseCosScopeKey, type Cos, type CosScopeKey } from "@harness/shared";
+import { scopeGroup } from "@harness/shared/state";
 import { COS_TABS, COS_TAB_LABEL, cosBadgeCount, cosTitle, type CosTab } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import { Switch } from "../components/bits";
+import { PaneGrip } from "../components/paneHeader";
+import { keysArea } from "../components/commands";
+import { commandKeys } from "../state/keys";
+import { usePaneScope } from "../components/paneContext";
+import { closePane, openCos, setCosTab, updatePanes } from "../state/panes";
+import type { CosContent } from "../state/paneModel";
 import { useAction, useStore } from "../state/store";
 import { CosChat } from "./CosChat";
 import { CosInbox } from "./CosInbox";
@@ -18,7 +26,13 @@ export function chiefOf(chiefs: Record<string, Cos>, scope: CosScopeKey): Cos | 
   return Object.values(chiefs).find((c) => c.scope === scope);
 }
 
-/** What the sidebar and the header call a scope's chief: "All projects" or its group's name. */
+/** The scope whose chief a board shows: its group's, or All projects for a board with no group. */
+export function boardCosScope(projects: Record<string, { groupId?: string | null }>, boardScope: string, boardProjectId: string | null): CosScopeKey {
+  const group = scopeGroup(boardScope) ?? (boardProjectId ? (projects[boardProjectId]?.groupId ?? null) : null);
+  return group ? cosScopeKey({ group }) : "all";
+}
+
+/** What the board card and the header call a scope's chief: "All projects" or its group's name. */
 export function useCosTitle(scope: CosScopeKey): string {
   const { state } = useStore();
   const parsed = parseCosScopeKey(scope);
@@ -44,17 +58,55 @@ export function useCosActions() {
   };
 }
 
-export function CosView({ scope, tab }: { scope: CosScopeKey; tab: CosTab }) {
-  const { state, navigate } = useStore();
+/** The board's call-out to its chief of staff: one card above the columns, with a badge for what waits and the on/off switch. */
+export function CosCallout({ scope }: { scope: CosScopeKey }) {
+  const { state } = useStore();
+  const boardScope = usePaneScope();
+  const title = useCosTitle(scope);
+  const actions = useCosActions();
+  const chief = chiefOf(state.chiefs, scope);
+  const count = chief ? cosBadgeCount(state.cosBadge, chief.ticketId) : 0;
+  const open = async () => {
+    if (!chief) await actions.open(scope);
+    updatePanes(boardScope, (s) => openCos(s, scope));
+  };
+  return (
+    <div className="cos-callout" data-testid="cos-callout" data-scope={scope}>
+      <button className="cos-callout-open" data-testid="cos-callout-open" title={`Chief of staff for ${title}`} onClick={() => void open()}>
+        <Icon name="bot" />
+        <span className="cos-callout-title">Chief of staff · {title}</span>
+        {count > 0 && (
+          <span className="nav-badge" data-testid="cos-callout-badge" title={`${count} event${count === 1 ? "" : "s"} waiting`}>
+            {count}
+          </span>
+        )}
+      </button>
+      <Switch
+        checked={chief?.enabled ?? false}
+        ariaLabel={`Chief of staff for ${title} on`}
+        title={chief?.enabled ? "On: click to turn off" : "Off: click to turn on"}
+        onChange={(v) => void (chief ? actions.setEnabled(chief, v) : v && actions.open(scope))}
+      />
+    </div>
+  );
+}
+
+export function CosPane({ paneId, content }: { paneId: string; content: CosContent; zoomed?: boolean }) {
+  const { state } = useStore();
+  const boardScope = usePaneScope();
+  const scope = content.scope as CosScopeKey;
+  const tab = content.tab;
   const title = useCosTitle(scope);
   const actions = useCosActions();
   const [memory, setMemory] = useState(false);
   const chief = chiefOf(state.chiefs, scope);
-  const go = (t: CosTab) => navigate({ view: "cos", scope, tab: t });
+  const go = (t: CosTab) => updatePanes(boardScope, (s) => setCosTab(s, paneId, t));
+  const close = () => updatePanes(boardScope, (s) => closePane(s, paneId));
 
   return (
-    <div className="view cos" data-testid="cos-view" data-scope={scope}>
+    <aside className="detail cos" data-testid="cos-view" data-scope={scope} {...keysArea("ticket", `cos:${paneId}`)}>
       <div className="view-header detail-titlebar">
+        <PaneGrip paneId={paneId} chip="Chief of staff" title="" />
         <Icon name="bot" />
         <span className="detail-title" data-testid="cos-title">
           Chief of staff · {title}
@@ -68,6 +120,9 @@ export function CosView({ scope, tab }: { scope: CosScopeKey; tab: CosTab }) {
             <Switch checked={chief.enabled} ariaLabel={`Chief of staff for ${title} on`} label={chief.enabled ? "On" : "Off"} onChange={(v) => void actions.setEnabled(chief, v)} />
           </>
         )}
+        <button className="btn btn-ghost btn-icon" onClick={close} title={`Close (Esc / ${commandKeys("pane.close")[0]})`} aria-label="Close pane" data-testid="cos-close" data-pane-autofocus>
+          <Icon name="x" />
+        </button>
       </div>
       {chief ? (
         <>
@@ -101,6 +156,6 @@ export function CosView({ scope, tab }: { scope: CosScopeKey; tab: CosTab }) {
           </button>
         </div>
       )}
-    </div>
+    </aside>
   );
 }
