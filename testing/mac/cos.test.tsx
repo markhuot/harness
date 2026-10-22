@@ -10,6 +10,7 @@ import { all, click, edited, mount, text, type } from "./render";
 import { FakeClient } from "./fakeClient";
 import { world } from "../world";
 import { minutesAgo } from "../world/time";
+import { watcher } from "../world/build";
 
 type M = Awaited<ReturnType<typeof mount>>;
 
@@ -235,11 +236,79 @@ describe("Inbox", () => {
   });
 });
 
+describe("Listeners", () => {
+  const listeners = (m: M) => all(m.container, '[data-testid="cos-listener"]');
+  const row = (m: M, name: string) => listeners(m).find((r) => r.dataset.listener === `watcher-${name}`)!;
+  const withWatchers = (...w: ReturnType<typeof watcher>[]) => {
+    const client = new FakeClient(edited((x) => void (x.watchers = w)));
+    return client;
+  };
+
+  test("the All chief lists every watcher: its status, schedule, last run and the secret-free command", async () => {
+    const client = withWatchers(
+      watcher({ name: "jira", command: "JIRA_TOKEN=abc watch-jira --token hunter2", cosId: "cos-all", live: { state: "waiting", since: minutesAgo(30), nextRunAt: Date.now() + 60_000, failures: 0 } }),
+      watcher({ name: "github", command: "watch-prs", mode: "loop", enabled: false, lastRunAt: null, cosId: "cos-all" }),
+      watcher({ name: "sentry", command: "watch-sentry", cosId: "cos-all", lastError: "401 from the Sentry API", live: { state: "stopped", since: minutesAgo(9), nextRunAt: null, failures: 3 } }),
+    );
+    const m = await open("#/cos/all/listeners", client);
+    await m.until("the rows", () => listeners(m).length === 3);
+    // active ones first, the paused one last
+    expect(listeners(m).map((r) => r.dataset.listener)).toEqual(["watcher-jira", "watcher-sentry", "watcher-github"]);
+    const jira = row(m, "jira");
+    expect(jira.dataset.status).toBe("active");
+    expect(text(jira)).toContain("Every 5m");
+    expect(text(jira)).toContain("Next run in 1m");
+    expect(text(jira.querySelector('[data-testid="cos-listener-command"]'))).toBe("watch-jira --token ***");
+    expect(text(jira)).not.toContain("hunter2");
+    expect(row(m, "sentry").dataset.status).toBe("error");
+    expect(text(row(m, "sentry").querySelector('[data-testid="cos-listener-error"]'))).toBe("401 from the Sentry API");
+    expect(row(m, "github").dataset.status).toBe("paused");
+    expect(text(row(m, "github"))).toContain("Runs continuously");
+    expect(text(row(m, "github"))).toContain("Last ran never");
+    expect(all(m.container, "button, input, textarea").filter((e) => e.closest('[data-testid="cos-listeners"]') && e.dataset.testid !== "cos-listeners-ask")).toHaveLength(0);
+  });
+
+  test("a group's chief lists only its own watchers; the All chief tags another chief's with its name", async () => {
+    const client = withWatchers(watcher({ name: "mine", command: "a", cosId: "cos-work" }), watcher({ name: "theirs", command: "b", cosId: "cos-all" }), watcher({ name: "orphan", command: "c" }));
+    const group = await open("#/cos/group:group-work/listeners", client);
+    await group.until("the rows", () => listeners(group).length > 0);
+    expect(listeners(group).map((r) => r.dataset.listener)).toEqual(["watcher-mine"]);
+    expect(byId(group, "cos-listener-owner")).toBeNull();
+    group.unmount();
+
+    const m = await open("#/cos/all/listeners", withWatchers(watcher({ name: "mine", command: "a", cosId: "cos-work" }), watcher({ name: "theirs", command: "b", cosId: "cos-all" })));
+    await m.until("the rows", () => listeners(m).length === 2);
+    expect(text(row(m, "mine").querySelector('[data-testid="cos-listener-owner"]'))).toBe("Work");
+    expect(row(m, "theirs").querySelector('[data-testid="cos-listener-owner"]')).toBeNull();
+  });
+
+  test("creating, switching off and deleting a watcher updates the list with no refetch", async () => {
+    const client = withWatchers(watcher({ name: "jira", command: "watch-jira", cosId: "cos-all" }));
+    const m = await open("#/cos/all/listeners", client);
+    await m.until("the row", () => listeners(m).length === 1);
+    const fetched = client.requests.filter((r) => r === "GET /watchers").length;
+    const added = watcher({ name: "github", command: "watch-prs", cosId: "cos-all" });
+    await m.settle(() => client.push({ kind: "watcher.upserted", watcher: added }));
+    expect(listeners(m)).toHaveLength(2);
+    await m.settle(() => client.push({ kind: "watcher.upserted", watcher: { ...added, enabled: false } }));
+    expect(row(m, "github").dataset.status).toBe("paused");
+    await m.settle(() => client.push({ kind: "watcher.deleted", id: added.id }));
+    expect(listeners(m).map((r) => r.dataset.listener)).toEqual(["watcher-jira"]);
+    expect(client.requests.filter((r) => r === "GET /watchers")).toHaveLength(fetched);
+  });
+
+  test("a chief with no listeners says so", async () => {
+    const m = await open("#/cos/group:group-work/listeners", withWatchers(watcher({ name: "theirs", command: "b", cosId: "cos-all" })));
+    await m.until("the empty state", () => !!byId(m, "cos-listeners-empty"));
+    expect(listeners(m)).toHaveLength(0);
+  });
+});
+
 describe("the chief's header", () => {
-  test("the tab strip is Chat and Inbox, the Inbox carrying the count of events still open", async () => {
+  test("the tab strip is Chat, Inbox and Listeners, the Inbox carrying the count of events still open", async () => {
     const m = await open();
     await m.until("the tabs", () => all(m.container, '[role="tab"]').length > 0);
-    expect(all(m.container, '[role="tab"]').map((t) => t.dataset.tab)).toEqual(["chat", "inbox"]);
+    expect(all(m.container, '[role="tab"]').map((t) => t.dataset.tab)).toEqual(["chat", "inbox", "listeners"]);
     // waiting, handling and escalated; the ignored and handled rows don't count
     await m.until("the badge", () => text(byId(m, "cos-inbox-count")) === "3");
     await m.settle(() => m.client.push({ kind: "cos.badge", total: 1, byCos: { "cos-all": 1 } }));

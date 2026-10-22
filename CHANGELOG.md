@@ -11,6 +11,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Added
 
+- A chief of staff now has a Listeners tab, on the Mac, iPhone and iPad, next to Chat and Inbox. It lists the watchers the chief manages (the All chief lists every one, tagging another chief's by name) with their status (active, running, paused or error), what they run with credentials masked, how often, when they last ran and when they run next. It updates live as watchers change and is read-only: ask the chief in chat to add or change one.
 - Triage of a chief of staff's events now looks things up before it decides. It runs as a read-only agent (Haiku by default) that can read a pull request with `gh`, a Jira item through your Jira MCP, and the board, so an event that is only a pointer (a review comment on a pull request, a thread that changed) is judged by what actually changed and who changed it. The brief it passes the chief says what it found and names the ticket the event belongs to. It can't write anything: `gh` mutations, Jira writes and other changes are refused. If it can't tell, or a lookup fails, the event wakes the chief.
 - A watcher's prompt (what its lines mean and how to look them up) is used again: triage reads it as guidance for that watcher's events.
 - Each Inbox row can open the triage run's transcript, to see what it looked up.
