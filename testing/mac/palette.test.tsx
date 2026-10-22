@@ -7,12 +7,12 @@ const open = () => mount(<CommandPalette origin={document.body} onClose={() => {
 const rows = (m: { container: HTMLElement }) => all(m.container, '[role="option"]').map((r) => text(r));
 
 describe("CommandPalette", () => {
-  test("an empty query lists commands: boards for every project, then settings and the inbox", async () => {
+  test("an empty query lists commands: boards for every project, then settings", async () => {
     const m = await open();
     const list = rows(m);
     expect(list.some((r) => r.startsWith("Board: Harness"))).toBe(true);
     expect(list.some((r) => r.startsWith("Board: Scratch"))).toBe(true);
-    expect(list.some((r) => r.startsWith("Inbox"))).toBe(true);
+    expect(list.some((r) => r.startsWith("Inbox"))).toBe(false);
     expect(list.some((r) => r.startsWith("Settings: Drivers"))).toBe(true);
   });
 

@@ -4,7 +4,9 @@
 // fake can't drift from the client's API surface. The event socket is controlled by the test.
 
 import { HarnessApiError, HarnessClient } from "@harness/shared";
-import type { DriverModels, HarnessEvent, HarnessSocket, NetworkStatus, NotificationStatus, PairingInfo, SpecRevisionInfo, Ticket, TicketStatus } from "@harness/shared";
+import { COS_OPEN_STATUSES, type ClientEvent, type Cos, type CosBadge, type CosChatEntry, type CosChatPage, type CosEventPage, type MemoryConflict, type PutCosMemoryBody } from "@harness/shared";
+import { chiefs, cosChat, cosEvents } from "../world/cos";
+import type { DriverModels, HarnessSocket, NetworkStatus, NotificationStatus, PairingInfo, SpecRevisionInfo, Ticket, TicketStatus } from "@harness/shared";
 import { world as defaultWorld, type World } from "../world";
 
 type Handlers = Parameters<HarnessClient["connect"]>[0];
@@ -43,6 +45,8 @@ export class FakeClient extends HarnessClient {
   readonly socket = new FakeSocket();
   private handlers: Handlers | null = null;
   world: World;
+  /** The chiefs of staff, their Inbox, chat and memory: the writes the views make change these. */
+  readonly cos = { chiefs: structuredClone(chiefs), events: structuredClone(cosEvents), chat: structuredClone(cosChat), memory: { text: "# Memory\n\n## Triage guidance\n\nIgnore routine ticket moves.\n", revision: "rev-1" } };
 
   constructor(world: World = defaultWorld) {
     super({ baseUrl: "http://fake.test", token: "fake" });
@@ -55,18 +59,18 @@ export class FakeClient extends HarnessClient {
     this.inflight++;
     try {
       await Promise.resolve();
-      return this.answer<T>(method, path);
+      return this.answer<T>(method, path, body);
     } finally {
       this.inflight--;
     }
   }
 
-  private answer<T>(method: string, path: string): T {
+  private answer<T>(method: string, path: string, body?: unknown): T {
     const key = `${method} ${path.split("?")[0]}`;
     const override = this.overrides.get(key);
     if (override) return override() as T;
     const url = new URL(path, "http://fake.test");
-    const answer = this.route(method, url);
+    const answer = this.route(method, url, body);
     if (answer === NO_ROUTE) {
       this.unrouted.push(`${method} ${path}`);
       throw new HarnessApiError(404, `fake service has no route for ${method} ${path}`);
@@ -74,10 +78,12 @@ export class FakeClient extends HarnessClient {
     return structuredClone(answer) as T;
   }
 
-  private route(method: string, url: URL): unknown {
+  private route(method: string, url: URL, body?: unknown): unknown {
     const w = this.world;
     const p = url.pathname;
     const q = url.searchParams;
+    const cos = this.cosRoute(method, p, q, body);
+    if (cos !== NO_ROUTE) return cos;
     if (method !== "GET") return NO_ROUTE;
     if (p === "/health") return ok({ ok: true });
     if (p === "/projects") return w.projects;
@@ -140,6 +146,67 @@ export class FakeClient extends HarnessClient {
     return NO_ROUTE;
   }
 
+  /** The chiefs of staff: lists, pages (newest first, a cursor of `<createdAt>:<id>`), and the writes the views make. */
+  private cosRoute(method: string, p: string, q: URLSearchParams, body: unknown): unknown {
+    const c = this.cos;
+    let m: RegExpMatchArray | null;
+    if (method === "GET" && p === "/cos") return c.chiefs;
+    if (method === "POST" && p === "/cos") {
+      const scope = (body as { scope: Cos["scope"] }).scope;
+      let chief = c.chiefs.find((x) => x.scope === scope);
+      if (!chief) {
+        chief = { ticketId: `cos-${scope}`, key: `COS-${c.chiefs.length + 1}`, scope, groupId: scope === "all" ? null : scope.slice("group:".length), enabled: true, createdAt: this.world.now };
+        c.chiefs.push(chief);
+      }
+      return chief;
+    }
+    if (method === "GET" && p === "/cos/events/badge") {
+      const byCos: Record<string, number> = {};
+      for (const e of c.events) if (e.cosId && COS_OPEN_STATUSES.includes(e.status)) byCos[e.cosId] = (byCos[e.cosId] ?? 0) + 1;
+      return { total: Object.values(byCos).reduce((n, v) => n + v, 0), byCos } satisfies CosBadge;
+    }
+    m = p.match(/^\/cos\/events\/([^/]+)\/escalate$/);
+    if (method === "POST" && m) {
+      const e = c.events.find((x) => x.id === m![1]);
+      if (!e) return NO_ROUTE;
+      e.status = "escalated";
+      e.verdict = "escalate";
+      return e;
+    }
+    m = p.match(/^\/cos\/([^/]+)$/);
+    if (method === "PATCH" && m) {
+      const chief = c.chiefs.find((x) => x.ticketId === m![1]);
+      if (!chief) return NO_ROUTE;
+      chief.enabled = (body as { enabled: boolean }).enabled;
+      return chief;
+    }
+    m = p.match(/^\/cos\/([^/]+)\/events$/);
+    if (method === "GET" && m) {
+      const rows = c.events.filter((e) => e.cosId === m![1] || e.cosId === null).filter((e) => !q.get("status") || e.status === q.get("status"));
+      return paged(rows, q) satisfies CosEventPage;
+    }
+    m = p.match(/^\/cos\/([^/]+)\/transcript$/);
+    if (method === "GET" && m) {
+      const { items, nextCursor } = paged(c.chat.filter((e) => e.cosId === m![1]), q);
+      return { entries: items, nextCursor } satisfies CosChatPage;
+    }
+    m = p.match(/^\/cos\/([^/]+)\/messages$/);
+    if (method === "POST" && m) {
+      const entry: CosChatEntry = { id: `chat-sent-${c.chat.length + 1}`, cosId: m[1]!, createdAt: this.world.now, kind: "message", role: "user", text: (body as { text: string }).text };
+      c.chat.push(entry);
+      return { entryId: entry.id };
+    }
+    m = p.match(/^\/tickets\/([^/]+)\/memory$/);
+    if (m && method === "GET") return c.memory;
+    if (m && method === "PUT") {
+      const b = body as PutCosMemoryBody;
+      if (b.baseRevision !== c.memory.revision) throw new HarnessApiError(409, "memory changed", { currentRevision: c.memory.revision, text: c.memory.text } satisfies MemoryConflict);
+      c.memory = { text: b.text, revision: `rev-${b.text.length}` };
+      return c.memory;
+    }
+    return NO_ROUTE;
+  }
+
   private page(tickets: Ticket[], q: URLSearchParams): Ticket[] {
     const limit = Number(q.get("limit") ?? tickets.length);
     return [...tickets].sort((a, b) => (b.completedAt ?? b.updatedAt) - (a.completedAt ?? a.updatedAt)).slice(0, limit);
@@ -160,9 +227,21 @@ export class FakeClient extends HarnessClient {
     this.handlers?.onStatus?.(false);
   }
   /** The service pushes an event. */
-  push(event: HarnessEvent) {
+  push(event: ClientEvent) {
     this.handlers?.onEvent(event);
   }
 }
 
 const NO_ROUTE = Symbol("no route");
+
+/** A page of rows, newest first: those older than the cursor (`<createdAt>:<id>`), at most `limit`. */
+function paged<T extends { id: string; createdAt: number }>(rows: T[], q: URLSearchParams): { items: T[]; nextCursor: string | null } {
+  const limit = Number(q.get("limit") ?? 50);
+  const sorted = [...rows].sort((a, b) => b.createdAt - a.createdAt || (a.id < b.id ? 1 : -1));
+  const before = q.get("before");
+  const [bt, ...bid] = before ? before.split(":") : [];
+  const older = before ? sorted.filter((r) => r.createdAt < Number(bt) || (r.createdAt === Number(bt) && r.id < bid.join(":"))) : sorted;
+  const items = older.slice(0, limit);
+  const last = items[items.length - 1];
+  return { items, nextCursor: older.length > limit && last ? `${last.createdAt}:${last.id}` : null };
+}

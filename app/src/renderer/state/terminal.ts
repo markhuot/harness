@@ -26,7 +26,7 @@ export function terminalCwd(
 
 /**
  * Which board a new terminal goes on: the board on screen; a project's own board from its
- * settings page; otherwise (Inbox, Settings) the board last shown, else All projects.
+ * settings page; otherwise (a chief of staff, Settings) the board last shown, else All projects.
  */
 export function terminalScope(route: Route, lastBoardScope: string | null): string {
   if (route.view === "board") return paneScopeOf(route)!;

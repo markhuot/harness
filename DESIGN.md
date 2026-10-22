@@ -907,6 +907,24 @@ over the CoS session, its stamped activity and its wakes), `POST /cos/:id/messag
 attachments? }` → `{ entryId }`. Bus events `cos.event.upserted`, `cos.badge`, `cos.transcript.appended`
 (typed `CosBusEvent`, not part of `HarnessEvent`, so clients that don't know them ignore them).
 
+#### The Mac
+
+A chief opens at `#/cos/<scope>[/<tab>]` (scope `all` or `group:<id>`; tab `chat` or `inbox`), a route
+of its own rather than a pane: its ticket is in no ticket list, and `TicketDetail` assumes a work
+ticket, so `views/Cos.tsx` reuses only the chrome (header, tab strip). The sidebar has a row per
+scope under "Chiefs of staff", before the chief exists too (opening or switching it on makes it,
+`POST /cos`), each with its own switch (`PATCH /cos/:id`) and a badge from `GET /cos/events/badge`
+kept live by `cos.badge`. The store holds `chiefs`, `cosEvents` (by id, so a pushed event replaces its
+row), `cosChat` (oldest first, merged by id so a page and a live push never show an entry twice) and
+`cosBadge`; the pure rules (tab set, merges, inbox states, the tri-state of a project's override,
+the scroll anchor kept when an older page loads) are in `shared/src/state/cos.ts`. Chat pages in as
+the reader nears the top and keeps what they were reading under their eye; the Inbox is a plain
+list that never needs the chief running, and its **+** sends the chief a message in chat, because the
+chief creates listeners with its own tools. Memory is a sheet from the header, saved against the
+revision it opened. The app's two switches are in Settings → Chief of staff; a project's are
+Inherit/On/Off selects (`null` clears the override). The old watcher Inbox, its ⌘2 binding and the
+watcher forms are gone; `#/inbox` links open the board.
+
 #### Memory and activity query
 
 A chief has one **memory document**: markdown in its ticket's `agent_notes`, split into sections by
@@ -3303,8 +3321,8 @@ need (a held driver, a delivered output) rather than sleeping or waiting out `id
 ## Desktop app (`app/`)
 
 Electron main (`app/src/main`) plus a React renderer (`app/src/renderer`). The left sidebar
-collapses and resizes (`state/layout.ts`); the rest of the window (`<main>`) shows Inbox,
-Settings, project settings, or on the board route the pane workspace.
+collapses and resizes (`state/layout.ts`); the rest of the window (`<main>`) shows a chief of staff
+(`views/Cos.tsx`), Settings, project settings, or on the board route the pane workspace.
 
 - **Pane workspace.** A tmux-style split tree (`state/panes.ts`) per board scope: each project's
   board has its own, each project group's board has one, and All projects has one too.
@@ -3348,7 +3366,7 @@ Settings, project settings, or on the board route the pane workspace.
   File links in chat (`harness://file/…` or plain paths, `shared/src/fileLinks.ts`) render as
   `.file-link` anchors in `components/Markdown.tsx` and call the store's `openFile`. A link's own
   `?ticket=`/`?project=` names its root, else the `FileLinkScope` the text renders in (the ticket
-  pane's ticket, the Inbox session's dispatched project; `state/fileOpen.ts`). `openFile` in
+  pane's ticket; `state/fileOpen.ts`). `openFile` in
   `state/panes.ts` focuses the pane already showing that file and moves it to the link's lines
   (switching to the File tab), else shows it in the pane it's opened from when that's a file pane
   (the palette's file browser over one), else reuses a file pane just right of that pane, else
@@ -3537,7 +3555,7 @@ Settings, project settings, or on the board route the pane workspace.
     Changes ahead of Details, then plugin tabs), with ⇧⌘[ / ⇧⌘] (`nextTab`, wrapping), 1–9 and ←/→ on a focused tab. j/k, Space and g/G
     scroll the current tab's own scroller. `i` focuses the composer, and Escape there hands focus
     back to the current tab.
-  - *Lists and overlays.* The sidebar, the Inbox and a conductor's Tickets tab are roving lists
+  - *Lists and overlays.* The sidebar and a conductor's Tickets tab are roving lists
     (`useRovingList`: j/k/↑/↓, g/G/Home/End, one tab stop). Menus focus their first item, move with
     ↑/↓ and give focus back to their button. Modals trap Tab and restore focus when they close.
   - *Palette and overlay.* ⌘K (`views/CommandPalette.tsx`) lists the commands that apply where the
@@ -3572,14 +3590,14 @@ Settings, project settings, or on the board route the pane workspace.
     Elements get `:focus-visible` rings from `--focus`. A click never shows any of them.
 - **Routing.** `#/board/<project>` is the board's filter, `#/board/group/<id>` a project
   group's board and `#/board/all` All projects. `#/board/<project>/ticket/<KEY>[/<tab>]`
-  still works as a link (Inbox, New session, the test and screenshot scripts): arriving at it
+  still works as a link (New session, the test and screenshot scripts): arriving at it
   opens the ticket the way a card click does. The route the app launches with opens its ticket
   in a mount effect, never during render. Until the panes catch up, the mirror below leaves the
   hash alone. After that the hash mirrors the focused ticket
   pane with `history.replaceState` (`mirrorRoute`), and with no ticket focused it's just the
   board. Opening an already focused ticket is a no-op, so the two never fight. All of this is per
   scope: `#/board/<project>/ticket/<KEY>` opens the ticket in that project's panes, and the mirror
-  reads the route's scope. Leaving for Inbox or Settings, or for another project, and coming back
+  reads the route's scope. Leaving for a chief of staff or Settings, or for another project, and coming back
   restores that board's panes.
 - **Project groups.** The sidebar lists the groups (`projectGroups`) under All projects,
   alphabetically, each with the count pill of its projects' tickets (`sidebarCounts` `byGroup`);
@@ -3748,7 +3766,7 @@ the conventions, and ios/README.md the build and test commands.
   are the phone's, laid out at the window's width. The iPad runs several windows (one AppModel
   and store, a Router per window). At regular width a ticket (or New session) opens in a panel
   that slides in from the right, full height, with the board still live to its left. A ticket
-  opened from outside the panel (a card, the inbox, search, a link) opens on top of the one in
+  opened from outside the panel (a card, search, a link) opens on top of the one in
   it, which waits docked, and a link inside the panel (a child, a dep, a file) pushes inside it
   with Back. The panel resizes from its leading edge (25–80% of the window, 800pt until resized,
   then remembered as a fraction of the window), and its title bar docks, pops out or closes the
@@ -3821,8 +3839,8 @@ the conventions, and ios/README.md the build and test commands.
   mailto and other schemes open outside the app, and a file link (`harness://file/…`, or a bare
   relative or absolute path) pushes the file viewer with `path`, `ticket` or `project`, `start`
   and `end`. A relative link resolves in the ticket or project the markdown belongs to, unless the
-  link carries its own `?ticket=`/`?project=`. A triage session (the Inbox) has no folder, so its
-  outcome and transcript resolve in the project of the ticket it dispatched, as on the desktop.
+  link carries its own `?ticket=`/`?project=`. A triage session (the iPhone's old Inbox) has no folder, so its
+  outcome and transcript resolve in the project of the ticket it dispatched.
   When that ticket isn't loaded, they use its key instead. A session that dispatched nothing has
   no scope, and a relative link from it plays the error haptic. `FileViewerScreen` loads `FileView` and,
   only when `git.repo && git.dirty`, `FileDiff`, and shows File and Diff tabs (the Diff tab counts

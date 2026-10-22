@@ -28,7 +28,7 @@ export interface PresenceInput {
   boardScope: string;
   /**
    * The panes this window shows: the route's board's on the board, the pop-out's in a pop-out
-   * window, null elsewhere (Settings, Inbox, a project's settings), which shows no ticket.
+   * window, null elsewhere (Settings, a chief of staff, a project's settings), which shows no ticket.
    */
   panes: PaneState | null;
   hideChildren: boolean;

@@ -171,7 +171,7 @@ export function useRoute() {
   }, []);
   // On the board the hash mirrors the focused ticket pane. replaceState adds no history entry and
   // fires no hashchange, and opening the focused ticket again is a no-op, so the two never fight.
-  // Each board has its own panes, so this follows the route's scope (leaving for Inbox and coming
+  // Each board has its own panes, so this follows the route's scope (leaving for a chief of staff and coming
   // back, or switching projects, shows that board's panes again).
   const scope = paneScopeOf(route);
   const focused = focusedTicket(usePanes(scope ?? ALL_SCOPE));

@@ -94,9 +94,10 @@ export const text = (el: Element | null | undefined) => (el?.textContent ?? "").
 export const all = (root: ParentNode, selector: string) => [...root.querySelectorAll<HTMLElement>(selector)];
 
 /** Set an input's value the way typing does, so React's onChange sees it. */
-export function type(m: Mounted, input: HTMLInputElement, value: string) {
+export function type(m: Mounted, input: HTMLInputElement | HTMLTextAreaElement, value: string) {
   return m.settle(() => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
+    const proto = input instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+    Object.getOwnPropertyDescriptor(proto, "value")!.set!.call(input, value);
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
 }
