@@ -6,7 +6,7 @@
 import { HarnessApiError, HarnessClient } from "@harness/shared";
 import { COS_OPEN_STATUSES, type ClientEvent, type Cos, type CosBadge, type CosChatEntry, type CosChatPage, type CosEventPage, type MemoryConflict, type PutCosMemoryBody } from "@harness/shared";
 import { chiefs, cosChat, cosEvents } from "../world/cos";
-import type { DriverModels, HarnessSocket, NetworkStatus, NotificationStatus, PairingInfo, SpecRevisionInfo, Ticket, TicketStatus } from "@harness/shared";
+import type { CreateTicketBody, DriverModels, FileWriteResult, SubmitTicketBody, UpdateTicketBody, HarnessSocket, WriteFileRequest, NetworkStatus, NotificationStatus, PairingInfo, SpecRevisionInfo, Ticket, TicketStatus } from "@harness/shared";
 import { world as defaultWorld, type World } from "../world";
 
 type Handlers = Parameters<HarnessClient["connect"]>[0];
@@ -84,6 +84,30 @@ export class FakeClient extends HarnessClient {
     const q = url.searchParams;
     const cos = this.cosRoute(method, p, q, body);
     if (cos !== NO_ROUTE) return cos;
+    let m: RegExpMatchArray | null = p.match(/^\/tickets\/([^/]+)\/file$/);
+    if (method === "PUT" && m) {
+      // A save: the world's file takes the new contents, so a reload shows what was written.
+      const b = body as WriteFileRequest;
+      const f = w.files.views.find((v) => v.path === b.path);
+      if (!f) return NO_ROUTE;
+      f.contents = b.contents;
+      f.size = b.contents.length;
+      return { path: b.path, size: f.size } satisfies FileWriteResult;
+    }
+    // Drafts (the New Ticket form): the first save creates one, edits patch it, Plan first / Start submit it.
+    if (method === "POST" && p === "/tickets") {
+      const b = body as CreateTicketBody;
+      const project = w.projects.find((x) => x.id === b.projectId);
+      if (!project) return NO_ROUTE;
+      const t: Ticket = { ...w.tickets[0]!, id: `ticket-new-${w.tickets.length}`, key: `${project.key}-${project.nextSeq}`, projectId: project.id, spec: b.spec, title: b.title ?? b.spec, status: "planning", draft: !!b.draft };
+      project.nextSeq++;
+      w.tickets.push(t);
+      return t;
+    }
+    m = p.match(/^\/tickets\/([^/]+)(\/submit)?$/);
+    const draft = m && w.tickets.find((t) => t.key === m![1] && t.draft);
+    if (draft && method === "PATCH" && !m![2]) return Object.assign(draft, body as UpdateTicketBody);
+    if (draft && method === "POST" && m![2]) return Object.assign(draft, { draft: false, status: (body as SubmitTicketBody).start ? "in_progress" : "planning" });
     if (method !== "GET") return NO_ROUTE;
     if (p === "/health") return ok({ ok: true });
     if (p === "/projects") return w.projects;
@@ -105,7 +129,6 @@ export class FakeClient extends HarnessClient {
     if (p === "/watchers") return w.watchers;
     if (p === "/settings") return w.settings;
     if (p === "/drivers") return w.drivers;
-    let m: RegExpMatchArray | null;
     if (p === "/terminals" || p === "/prompts" || p === "/plugins") return [];
     if (p === "/pairing") return { url: "http://127.0.0.1:7717", token: "fake", pairUrl: "harness://pair" } satisfies PairingInfo;
     if (p === "/browser-extensions") return { extensions: [], running: false };

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { FilePane } from "../../app/src/renderer/views/FilePane";
 import { SpecTab } from "../../app/src/renderer/views/SpecTab";
 import { resetWrapPrefs, WRAP_KEY } from "../../app/src/renderer/state/viewPrefs";
+import type { EditorHandle } from "../../editor/src/editor";
 import { world } from "../world";
 import { all, click, mount, text, type Mounted } from "./render";
 
@@ -50,8 +51,11 @@ describe("file pane view menu", () => {
     await m.until("the file loads", () => !!m.container.querySelector("[data-testid=file-editor]"));
     await openMenu(m, 'button[title="More"]');
     expect(item("view-wrap")!.getAttribute("aria-checked")).toBe("false");
+    const editor = () => m.container.querySelector<HTMLElement & { harnessEditor?: EditorHandle }>("[data-testid=file-editor]")!.harnessEditor!;
+    expect(editor().probe().wrap).toBe(false);
     await click(m, item("view-wrap")!);
     expect(JSON.parse(localStorage.getItem(WRAP_KEY)!)).toEqual({ ".ts": true });
+    expect(editor().probe().wrap).toBe(true);
     m.unmount();
 
     resetWrapPrefs(); // as after a restart: read from storage again
@@ -82,6 +86,22 @@ describe("spec tab view menu", () => {
     expect(items()).toEqual(expect.arrayContaining(["Source", "Rendered", "Wrap lines"]));
     expect(item("view-source")!.getAttribute("aria-checked")).toBe("false");
     expect(item("view-rendered")!.getAttribute("aria-checked")).toBe("true");
+  });
+
+  test("Source shows the spec's markdown in the editor, and Rendered brings the document back", async () => {
+    const ticket = world.tickets.find((t) => t.key === "HARNESS-5")!;
+    const m = await mount(spec("HARNESS-5"));
+    await m.until("the spec", () => !!m.container.querySelector("[data-testid=spec-doc]"));
+    await openMenu(m, '[data-testid="spec-more"]');
+    await click(m, item("view-source")!);
+    const source = () => m.container.querySelector<HTMLElement & { harnessEditor?: EditorHandle }>("[data-testid=spec-source] [data-testid=file-editor], [data-testid=spec-source] .file-editor");
+    await m.until("the spec's source in the editor", () => !!source()?.harnessEditor);
+    expect(source()!.harnessEditor!.getContents()).toBe(ticket.spec);
+    expect(m.container.querySelector("[data-testid=spec-doc]")).toBeNull();
+    await openMenu(m, '[data-testid="spec-more"]');
+    await click(m, item("view-rendered")!);
+    expect(m.container.querySelector("[data-testid=spec-source]")).toBeNull();
+    expect(m.container.querySelector("[data-testid=spec-doc]")).not.toBeNull();
   });
 
   test("a spec with one revision has no Show changes item", async () => {

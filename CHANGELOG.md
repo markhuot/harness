@@ -9,6 +9,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Changed
+
+- Internal: the end-to-end walkthrough is down from sixteen steps to nine, each one something only the real apps together can show, and it no longer types into the Mac app (except the file palette's query) or sleeps; the Mac app it drives isn't throttled when a simulator covers it, and a timed-out wait prints the page's focus and visibility. What the removed steps checked is now covered by Mac views and service tests (the New Ticket form, saving a file and a failed save, the spec's Source view, wrap, and the file routes over HTTP), and the iPad's live dock-glow test scores each frame against the moment the card drew it and skips, rather than fails, when the host is too loaded to judge, so `bun run testing` stops failing on a slow Mac.
+
 ## [app-20261022.1246](https://github.com/markhuot/harness/releases/tag/app-20261022.1246) - 2026-10-22
 
 ### Added

@@ -125,6 +125,16 @@ export class Cdp {
   }
 }
 
+/**
+ * What a failed wait says about the page besides its text: whether the window has focus, whether Chromium
+ * thinks it's visible (a hidden or occluded one stops animation frames), and what holds the keyboard focus.
+ */
+export const PAGE_STATE = `(() => {
+  const a = document.activeElement;
+  const what = !a || a === document.body ? 'body' : a.tagName.toLowerCase() + (a.dataset?.testid ? '[data-testid=' + a.dataset.testid + ']' : '') + (a.getAttribute('aria-label') ? '[aria-label=' + a.getAttribute('aria-label') + ']' : '');
+  return 'focus ' + document.hasFocus() + ', ' + document.visibilityState + ', active ' + what;
+})()`;
+
 export class Page {
   private waits = 0;
 
@@ -180,7 +190,7 @@ export class Page {
       return r.v;
     } catch (e) {
       abandoned = true;
-      const last = await this.evaluate<string>(`(window.${key}Stop && window.${key}Stop(), String(JSON.stringify(window.${key}Last) ?? 'false') + ' on ' + location.hash + ' / ' + (document.body?.innerText ?? '').slice(0, 200))`).catch(() => "(page not answering)");
+      const last = await this.evaluate<string>(`(window.${key}Stop && window.${key}Stop(), String(JSON.stringify(window.${key}Last) ?? 'false') + ' on ' + location.hash + ' (' + ${PAGE_STATE} + ') / ' + (document.body?.innerText ?? '').slice(0, 200))`).catch(() => "(page not answering)");
       if (e instanceof Error && e.name === "DeadlineError") throw new Error(`${e.message.replace(/last seen: .*$/, "")}last seen: ${last.replace(/\s+/g, " ")}`);
       throw e;
     }

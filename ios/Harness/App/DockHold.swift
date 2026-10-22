@@ -80,6 +80,8 @@ struct DockGhostCard: View {
     var pulsePhase: Double?
     /// Snapshots can't set the system's Reduce Motion, so they ask for it here.
     var forceReduceMotion = false
+    /// Told the date each running frame's pulse is drawn for; the live test scores frames against it.
+    var onFrame: ((Date) -> Void)?
     @Environment(\.palette) private var c
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
 
@@ -100,6 +102,7 @@ struct DockGhostCard: View {
             let phase = pulsePhase
                 ?? context.date.timeIntervalSinceReferenceDate
                     .truncatingRemainder(dividingBy: Self.pulsePeriod) / Self.pulsePeriod
+            let _ = pulsePhase == nil ? onFrame?(context.date) : nil
             card(phase: phase)
         }
         .opacity(armed ? 1 : 0)
