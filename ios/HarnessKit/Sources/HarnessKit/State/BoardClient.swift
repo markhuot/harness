@@ -30,6 +30,9 @@ public protocol BoardClient: LoaderClient, DetailClient {
     func listTerminals(refresh: Bool) async throws -> [TerminalInfo]
     func createTerminal(_ body: CreateTerminalBody) async throws -> TerminalInfo
     func closeTerminal(_ id: String) async throws
+    /// The chiefs of staff and their Inbox badge; a client without them throws and the store keeps none.
+    func listCos() async throws -> [Cos]
+    func cosBadge() async throws -> CosBadge
 }
 
 extension BoardClient {
@@ -37,6 +40,8 @@ extension BoardClient {
     public func listTerminals(refresh: Bool) async throws -> [TerminalInfo] { [] }
     public func createTerminal(_ body: CreateTerminalBody) async throws -> TerminalInfo { throw URLError(.unsupportedURL) }
     public func closeTerminal(_ id: String) async throws { throw URLError(.unsupportedURL) }
+    public func listCos() async throws -> [Cos] { [] }
+    public func cosBadge() async throws -> CosBadge { throw URLError(.unsupportedURL) }
 }
 
 extension HarnessClient: BoardClient {}

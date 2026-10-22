@@ -47,13 +47,6 @@ extension BoardState {
         return projects.values.contains { JSString.upper($0.key) == prefix }
     }
 
-    /// Triage sessions, newest first.
-    public func triageSessions() -> [Session] {
-        sessions.values.filter { $0.kind == .triage }.sorted { a, b in
-            a.createdAt != b.createdAt ? a.createdAt > b.createdAt : JSString.less(a.id, b.id)
-        }
-    }
-
     /// The driver new tickets in a project get: the project's own default, else the global one (nil until settings load).
     public func defaultDriverOf(_ projectId: String) -> String? {
         projects[projectId]?.defaultDriver ?? settings?.defaultDriver

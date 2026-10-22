@@ -316,7 +316,6 @@ struct PaletteScreen: View {
         case .goAllProjects: router.select(.allProjects, app: app)
         case let .goGroup(g): router.select(.group(g), app: app)
         case let .goProject(id): router.select(.project(id), app: app)
-        case .goInbox: router.open(.tab(.inbox))
         case .goSettings: router.open(.tab(.settings))
         case let .ticket(action):
             guard let ticket else { return }

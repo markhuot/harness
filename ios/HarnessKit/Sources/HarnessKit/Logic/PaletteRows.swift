@@ -11,7 +11,7 @@ public struct PaletteCommand: PaletteRankable, Identifiable, Equatable, Sendable
         /// A terminal in the project being viewed (All projects when none), opened in a sheet and on the Mac.
         case newTerminal
         case toggleChildren
-        case goAllProjects, goInbox, goSettings
+        case goAllProjects, goSettings
         case goGroup(String)
         case goProject(String)
         /// Switches the palette into file mode.
@@ -74,7 +74,6 @@ public enum PaletteCommands {
         for p in state.sortedProjects() {
             out.append(PaletteCommand(id: "project:\(p.id)", label: "Board: \(p.name)", group: "Go to", keywords: [p.key], symbol: "square.grid.2x2", action: .goProject(p.id)))
         }
-        out.append(PaletteCommand(id: "inbox", label: "Go to Inbox", group: "Go to", symbol: "tray", action: .goInbox))
         out.append(PaletteCommand(id: "settings", label: "Open Settings", group: "Go to", keywords: ["preferences"], symbol: "gearshape", action: .goSettings))
         return out
     }

@@ -36,7 +36,15 @@ import HarnessKit
         _ = try decode(PublicSettings.self, try #require(Self.world()["settings"]))
         #expect(Set(tickets.map(\.projectId)).isSubset(of: Set(projects.map(\.id))))
         #expect(Set(tickets.map(\.status)) == Set(TicketStatus.allKnown), "the world shows a ticket in every status")
-        #expect(sessions.contains { $0.kind == .triage })
+        #expect(!sessions.contains { $0.kind == .triage }, "triage is gone: the chiefs of staff have the events now")
+        let chiefs = try decodeAll(Cos.self, key: "chiefs")
+        let events = try decodeAll(CosEvent.self, key: "cosEvents")
+        _ = try decodeAll(CosChatEntry.self, key: "cosChat")
+        _ = try decode(CosBadge.self, try #require(Self.world()["cosBadge"]))
+        _ = try decode(CosMemory.self, try #require(Self.world()["cosMemory"]))
+        #expect(Set(events.map(\.status)) == Set(CosEventStatus.allKnown).subtracting([.triaging]), "the world's Inbox shows every state a row can rest in (triaging reads like pending)")
+        #expect(Set(events.compactMap(\.cosId)).isSubset(of: Set(chiefs.map(\.ticketId))))
+        #expect(projects.contains { $0.cosEnabled == .value(false) }, "a project with its chief switched off")
     }
 
     @Test func everyTicketDetailAndFileDecodes() throws {

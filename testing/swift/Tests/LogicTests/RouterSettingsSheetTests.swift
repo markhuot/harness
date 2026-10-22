@@ -3,10 +3,10 @@ import HarnessKit
 
 @MainActor @Suite struct RouterSettingsSheetTests {
     @Test func settingsIsASheetAtCompactWidthAndLeavesTheSectionAlone() {
-        let r = Router(selectedTab: .inbox)
+        let r = Router(selectedTab: .board)
         r.open(.tab(.settings))
         #expect(r.sheet == .settings)
-        #expect(r.selectedTab == .inbox)
+        #expect(r.selectedTab == .board)
     }
 
     @Test func settingsIsASectionAtRegularWidth() {

@@ -63,6 +63,10 @@ public struct Settings: Codable, Sendable, Equatable {
     /// switch per category, and where the APNs keys are. The service always sends it; optional so
     /// clients tolerate an older service without it.
     public var notifications: NotificationSettings?
+    /// Whether chiefs of staff run (projects may override it). nil → `CosSettings.defaultEnabled`.
+    public var cosEnabled: Bool?
+    /// Whether a chief of staff may unblock tickets (projects may override it). nil → `CosSettings.defaultCanUnblock`.
+    public var cosCanUnblock: Bool?
 
     public init(
         phaseModels: PhaseModels? = nil, defaultDriver: String, maxConcurrentRuns: Int, permissionMode: PermissionMode, classifier: ClassifierBackend,
@@ -70,8 +74,11 @@ public struct Settings: Codable, Sendable, Equatable {
         watcherDriver: Patch<String> = .absent, watcherModels: [String: String?]? = nil,
         anthropicApiKey: String? = nil, claudeOauthToken: String? = nil, copilotGithubToken: String? = nil, baseBranch: String? = nil,
         listen: ListenSetting? = nil, browserIdleTabMinutes: Int? = nil, prompts: [String: String?]? = nil,
-        notifications: NotificationSettings? = nil, contextGaugeLimit: Int? = nil, saveOnBlur: Bool? = nil
+        notifications: NotificationSettings? = nil, contextGaugeLimit: Int? = nil, saveOnBlur: Bool? = nil,
+        cosEnabled: Bool? = nil, cosCanUnblock: Bool? = nil
     ) {
+        self.cosEnabled = cosEnabled
+        self.cosCanUnblock = cosCanUnblock
         self.contextGaugeLimit = contextGaugeLimit
         self.saveOnBlur = saveOnBlur
         self.phaseModels = phaseModels
@@ -126,6 +133,9 @@ public struct PublicSettings: Codable, Sendable, Equatable {
     public var prompts: [String: String?]?
     /// nil from services older than notifications (Settings hides its Notifications switches then).
     public var notifications: NotificationSettings?
+    /// Settings.cosEnabled / cosCanUnblock; nil from an older service (read the defaults then).
+    public var cosEnabled: Bool?
+    public var cosCanUnblock: Bool?
     /// Whether an API key for the anthropic-api driver is stored
     public var anthropicApiKeySet: Bool
     /// Whether a long-lived Claude token for the claude-code driver is stored. Services from before
@@ -140,8 +150,11 @@ public struct PublicSettings: Codable, Sendable, Equatable {
         watcherDriver: Patch<String> = .absent, watcherModels: [String: String?]? = nil, baseBranch: String? = nil,
         listen: ListenSetting? = nil, browserIdleTabMinutes: Int? = nil, prompts: [String: String?]? = nil,
         notifications: NotificationSettings? = nil,
-        anthropicApiKeySet: Bool, claudeOauthTokenSet: Bool? = nil, copilotGithubTokenSet: Bool? = nil, contextGaugeLimit: Int? = nil, saveOnBlur: Bool? = nil
+        anthropicApiKeySet: Bool, claudeOauthTokenSet: Bool? = nil, copilotGithubTokenSet: Bool? = nil, contextGaugeLimit: Int? = nil, saveOnBlur: Bool? = nil,
+        cosEnabled: Bool? = nil, cosCanUnblock: Bool? = nil
     ) {
+        self.cosEnabled = cosEnabled
+        self.cosCanUnblock = cosCanUnblock
         self.contextGaugeLimit = contextGaugeLimit
         self.saveOnBlur = saveOnBlur
         self.phaseModels = phaseModels

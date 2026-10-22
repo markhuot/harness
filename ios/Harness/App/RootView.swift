@@ -272,7 +272,6 @@ private struct SectionStack: View {
     var body: some View {
         switch router.selectedTab {
         case .board: TabStack(tab: .board) { BoardScreen() }
-        case .inbox: TabStack(tab: .inbox) { InboxScreen() }
         case .settings: TabStack(tab: .settings) { SettingsScreen() }
         }
     }
@@ -333,11 +332,9 @@ extension EnvironmentValues {
     @Entry var inSheet = false
 }
 
-/// The header button that opens the Projects sidebar, on each section's root screen. Its amber
-/// badge counts the triage sessions triaging or busy, like the sidebar's Inbox row, so the tab
-/// bar's old Inbox badge still shows from every section. None in the iPad's DesktopShell, where
-/// the split view's own toggle shows the sidebar and its Inbox row carries the badge. The phone's
-/// board has no header and puts ProjectsButton in its own bottom bar (BoardBottomBar).
+/// The header button that opens the Projects sidebar, on each section's root screen. None in the
+/// iPad's DesktopShell, where the split view's own toggle shows the sidebar. The phone's board has
+/// no header and puts ProjectsButton in its own bottom bar (BoardBottomBar).
 struct SidebarToolbarItem: ToolbarContent {
     @Environment(\.desktopShell) private var desktop
     @Environment(\.inSheet) private var inSheet
@@ -349,7 +346,7 @@ struct SidebarToolbarItem: ToolbarContent {
     }
 }
 
-/// The sidebar glyph that opens the Projects sheet, with the amber triaging badge. `circle` draws
+/// The sidebar glyph that opens the Projects sheet. `circle` draws
 /// it as a glass circle of its own, for a bar that isn't a toolbar (the phone board's).
 struct ProjectsButton: View {
     var circle = false
@@ -371,26 +368,12 @@ struct ProjectsButton: View {
     }
 
     private var button: some View {
-        let triaging = store.state.triageSessions().filter { $0.triageStatus == .triaging || $0.busy }.count
-        return Button { if let action { action() } else { router.present(.projects) } } label: {
+        Button { if let action { action() } else { router.present(.projects) } } label: {
             Image(systemName: "sidebar.left")
                 .font(circle ? .system(size: 19, weight: .medium) : nil)
                 .frame(width: circle ? 34 : nil, height: circle ? 34 : nil)
-                .overlay(alignment: .topTrailing) {
-                    if triaging > 0 {
-                        Text("\(triaging)")
-                            .font(.scaled(size: 11, weight: .bold))
-                            .monospacedDigit()
-                            .foregroundStyle(c.onAmber)
-                            .padding(.horizontal, 4)
-                            .frame(minWidth: 16, minHeight: 16)
-                            .background(c.amber, in: .capsule)
-                            .offset(x: 9, y: -9)
-                    }
-                }
         }
         .accessibilityLabel("Projects")
-        .accessibilityValue(triaging > 0 ? "\(triaging) triaging" : "")
     }
 }
 

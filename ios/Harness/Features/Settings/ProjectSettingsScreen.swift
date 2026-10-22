@@ -166,6 +166,17 @@ private struct ProjectSettingsForm: View {
                 }
             }
 
+            Section {
+                cosChoiceRow("CoS enabled", hint: "Whether chiefs of staff handle this project's events. Inherit follows the app setting.", value: project.cosEnabled, app: CosSettings.enabled(settings)) {
+                    save(UpdateProjectBody(cosEnabled: $0))
+                }
+                cosChoiceRow("CoS can unblock", hint: "Whether a chief of staff may answer this project's blocked tickets itself. Inherit follows the app setting.", value: project.cosCanUnblock, app: CosSettings.canUnblock(settings)) {
+                    save(UpdateProjectBody(cosCanUnblock: $0))
+                }
+            } header: {
+                Text("Chief of staff")
+            }
+
             Section("Danger zone") {
                 VStack(alignment: .leading, spacing: 10) {
                     VStack(alignment: .leading, spacing: 2) {
@@ -194,6 +205,17 @@ private struct ProjectSettingsForm: View {
         .task(id: project.id) {
             guard let api = store.api else { return }
             if let page = try? await api.ticketPage(status: .done, projectId: project.id, limit: 1), !Task.isCancelled { doneTotal = page.total }
+        }
+    }
+
+    private func cosChoiceRow(_ label: String, hint: String, value: Patch<Bool>, app: Bool, set: @escaping (Patch<Bool>) -> Void) -> some View {
+        SettingsRow(label: label, hint: hint) {
+            SelectMenu(
+                value: CosTriState(value),
+                options: CosTriState.allCases.map { PickerOption(value: $0, label: CosSettings.label($0, inherited: app)) },
+                title: label,
+                accessibilityName: label
+            ) { set($0.patch) }
         }
     }
 

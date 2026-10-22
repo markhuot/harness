@@ -16,7 +16,7 @@ struct ProjectsSheet: View {
     }
 }
 
-/// The desktop sidebar, and how the app moves between its sections: Inbox, All projects, each
+/// The desktop sidebar, and how the app moves between its sections: All projects, each
 /// project group's board (alphabetically, under All projects), and each project with its open
 /// count and a settings gear (pick one to filter the board), and Settings at
 /// the bottom with the connection. Add a project by its path on the Mac. The phone shows it as the
@@ -42,17 +42,12 @@ struct ProjectsSidebar: View {
         let totalOpen = counts.values.reduce(0, +)
         let groups = state.projectGroups()
         let groupCounts = BoardScreenRules.groupOpenCounts(counts, projects: projects)
-        let triaging = ViewRules.triagingCount(state.triageSessions())
         let row = SidebarRow.current(tab: router.selectedTab, board: state.boardFilter(app.prefs.boardProject))
         let bg = column ? c.bgSidebar : c.bg
 
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 Card {
-                    ProjectsNavRow(icon: "inbox", label: "Inbox", badge: triaging, active: row == .inbox) {
-                        select(.inbox)
-                    }
-                    Divider().overlay(c.border)
                     ProjectsNavRow(icon: "layers", label: "All projects", count: totalOpen, active: row == .allProjects) {
                         select(.allProjects)
                     }

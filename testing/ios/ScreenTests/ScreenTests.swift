@@ -58,8 +58,48 @@ final class ScreenTests: ScreenTestCase {
         try await screen("project-settings-group", router: router) { RootView() }
     }
 
-    func testInbox() async throws {
-        try await screen("inbox", router: Router(selectedTab: .inbox)) { RootView() }
+    /// The board's Chief of Staff button, with its count pill, opened: the chat in the ticket sheet
+    /// (the iPhone's sheet, the iPad's side panel).
+    func testCosChat() async throws {
+        let router = Router()
+        router.openCos(scope: "all")
+        try await screen("cos-chat", router: router) { RootView() }
+    }
+
+    /// The Inbox in every state: waiting, handling, ignored with its reason and Escalate anyway,
+    /// escalated, handled, and a watcher item and a schedule.
+    func testCosInbox() async throws {
+        try await screen("cos-inbox") { NavigationStack { CosScreen(scope: "all", tab: .inbox) } }
+    }
+
+    /// The Work group's chief: nothing in its chat or Inbox yet.
+    func testCosEmpty() async throws {
+        try await screen("cos-empty") { NavigationStack { CosScreen(scope: "group:group-work", tab: .inbox) } }
+    }
+
+    /// The chiefs' bus events reach the store through the socket, which delivers them as events
+    /// HarnessEvent doesn't know: the badge and a chat entry land in the CoS state.
+    func testCosEventsFromTheSocketReachTheStore() async throws {
+        let badge = try JSONDecoder().decode(HarnessEvent.self, from: Data(#"{"kind":"cos.badge","total":9,"byCos":{"cos-all":9}}"#.utf8))
+        let chat = try JSONDecoder().decode(HarnessEvent.self, from: Data(#"{"kind":"cos.transcript.appended","cosId":"cos-all","entry":{"id":"live-1","cosId":"cos-all","createdAt":1,"kind":"message","role":"assistant","text":"hello"}}"#.utf8))
+        world.socket.push(badge)
+        world.socket.push(chat)
+        var spins = 0
+        while world.store.cos.badge?.total != 9 && spins < 500 { await FrameClock.tick(); spins += 1 }
+        XCTAssertEqual(world.store.cos.badge?.total, 9)
+        XCTAssertTrue(world.store.cos.chat["cos-all"]?.contains { $0.id == "live-1" } == true)
+    }
+
+    func testCosMemory() async throws {
+        let chief = try XCTUnwrap(world.store.cos.chief(scope: "all"))
+        try await screen("cos-memory") { CosMemorySheet(chief: chief) }
+    }
+
+    /// A project whose chief of staff is switched off: its own choice, with the app's value beside Inherit.
+    func testProjectSettingsCos() async throws {
+        let router = Router()
+        router.push(.project(id: "project-NOTES"))
+        try await screen("project-settings-cos", router: router) { RootView() }
     }
 
     func testSettings() async throws {

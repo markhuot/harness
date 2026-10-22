@@ -6,7 +6,7 @@ import Foundation
 
 /// The shell's sections, picked in the Projects sidebar. Each keeps its own NavigationStack.
 public enum AppTab: String, Codable, Hashable, Sendable, CaseIterable {
-    case board, inbox, settings
+    case board, settings
 }
 
 /// A screen pushed onto a tab's NavigationStack. RN pushes these on the root stack above the
@@ -14,8 +14,8 @@ public enum AppTab: String, Codable, Hashable, Sendable, CaseIterable {
 public enum Route: Hashable, Sendable, Codable {
     /// harness://ticket/<key>?tab=…  `tab` is nil when the link has none (TicketDetail picks).
     case ticket(key: String, tab: TicketTab?)
-    /// harness://inbox/<sessionId>
-    case triage(sessionId: String)
+    /// harness://cos[/<group id>]: a chief of staff (`scope` is "all" or "group:<id>")
+    case cos(scope: String)
     /// harness://file/<path>?ticket=|project=#Lx-Ly (FileViewer.fileRoute(forURL:))
     case file(FileRouteParams)
     /// harness://project/<id>
@@ -36,8 +36,6 @@ public enum SheetRoute: Hashable, Sendable, Identifiable {
     case projects
     /// New session, optionally for a project or resuming a planning ticket's draft.
     case newSession(projectId: String?, key: String?)
-    /// The watcher form; nil id is a new watcher.
-    case watcher(id: String?)
     /// Connect to a Mac (manual entry, saved Macs, Scan).
     case connect
     /// harness://pair?url=…&token=… (the raw, already-decoded params; PairScreen validates them).
@@ -102,9 +100,8 @@ public enum DeepLink: Equatable, Sendable {
         case "board": return .tab(.board)
         // The board's search field is always on screen; old search links land there.
         case "search": return .tab(.board)
-        case "inbox":
-            if let id = tail.first, !id.isEmpty { return .push(.triage(sessionId: id)) }
-            return .tab(.inbox)
+        // The watcher Inbox is gone: its links open the board (a chief of staff has the events now).
+        case "inbox": return .tab(.board)
         case "settings":
             let patch = ThemePicker.themeLinkPrefs(queryItems: query)
             return .tab(.settings, themes: patch == ThemePicker.ThemePrefsPatch() ? nil : patch)
@@ -126,7 +123,9 @@ public enum DeepLink: Equatable, Sendable {
             return .push(.prompt(id: id))
         case "projects": return .sheet(.projects)
         case "new": return .sheet(.newSession(projectId: param("projectId"), key: param("key")))
-        case "watcher": return .sheet(.watcher(id: param("id")))
+        // Watchers belong to the chiefs of staff now; an old link opens the board.
+        case "watcher": return .tab(.board)
+        case "cos": return .push(.cos(scope: CosLogic.scopeKey(groupId: tail.first)))
         case "connect": return .sheet(.connect)
         case "pair": return .sheet(.pair(url: param("url"), token: param("token")))
         case "scan": return .cover(.scan)

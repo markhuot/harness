@@ -24,6 +24,13 @@ public struct HarnessAPIError: Error, Sendable, Equatable, LocalizedError {
         return SpecConflict(currentRevision: Int(rev), spec: spec)
     }
 
+    /// The MemoryConflict of a memory write refused because the memory moved on (409), else nil.
+    public var memoryConflict: MemoryConflict? {
+        guard status == 409, case let .object(o)? = data, case let .string(rev)? = o["currentRevision"],
+              case let .string(text)? = o["text"] else { return nil }
+        return MemoryConflict(currentRevision: rev, text: text)
+    }
+
     /// `specConflict` of any error that is a HarnessAPIError.
     public static func specConflict(_ error: any Error) -> SpecConflict? {
         (error as? HarnessAPIError)?.specConflict

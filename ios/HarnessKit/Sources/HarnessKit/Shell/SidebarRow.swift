@@ -3,7 +3,6 @@ import Foundation
 /// A row of the Projects sidebar (the phone's Projects sheet, the iPad's sidebar column): where
 /// it takes the app, and which row is highlighted for where the app is.
 public enum SidebarRow: Hashable, Sendable {
-    case inbox
     case allProjects
     /// A project group's board, by the group's id
     case group(String)
@@ -14,7 +13,6 @@ public enum SidebarRow: Hashable, Sendable {
     /// (`BoardState.boardFilter`: a filter whose project or group is gone reads as All projects).
     public static func current(tab: AppTab, board: String?) -> SidebarRow {
         switch tab {
-        case .inbox: .inbox
         case .settings: .settings
         case .board: board.map { b in Paging.scopeGroup(b).map(SidebarRow.group) ?? .project(b) } ?? .allProjects
         }
@@ -25,13 +23,12 @@ public enum SidebarRow: Hashable, Sendable {
         switch self {
         case let .group(id): Paging.groupScope(id)
         case let .project(id): id
-        case .inbox, .allProjects, .settings: nil
+        case .allProjects, .settings: nil
         }
     }
 
     public var tab: AppTab {
         switch self {
-        case .inbox: .inbox
         case .settings: .settings
         case .allProjects, .group, .project: .board
         }

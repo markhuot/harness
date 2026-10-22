@@ -133,6 +133,7 @@ struct TicketSheetContent: View {
         case let .ticket(key, tab): RouteScreen(route: .ticket(key: key, tab: tab))
         case let .newSession(projectId, key): NewSessionScreen(projectId: projectId, key: key)
         case let .terminal(id): TerminalSheetScreen(id: id, cardID: sheet.id)
+        case let .cos(scope): CosScreen(scope: scope)
         case let .file(params): FileViewerScreen(params: params, cardID: sheet.id, reveal: router.dockedSheets.first { $0.id == sheet.id }?.revealed ?? sheet.revealed)
         }
     }

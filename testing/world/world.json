@@ -55,7 +55,8 @@
       "updatedAt": 1773414000000,
       "key": "NOTES",
       "name": "Notes",
-      "path": "/Users/dev/notes"
+      "path": "/Users/dev/notes",
+      "cosEnabled": false
     },
     {
       "id": "project-SCRATCH",
@@ -822,62 +823,6 @@
       "updatedAt": 1773392400000,
       "key": "NOTES-2",
       "kind": "ticket"
-    },
-    {
-      "id": "session-TRIAGE-1",
-      "ticketId": null,
-      "driver": "claude-code",
-      "cwd": "/Users/dev/harness",
-      "title": "FOO-201 Checkout button misaligned on Safari",
-      "triageStatus": "triaging",
-      "outcome": null,
-      "busy": false,
-      "createdAt": 1773327600000,
-      "updatedAt": 1773500340000,
-      "key": "TRIAGE-1",
-      "kind": "triage"
-    },
-    {
-      "id": "session-TRIAGE-2",
-      "ticketId": null,
-      "driver": "claude-code",
-      "cwd": "/Users/dev/harness",
-      "title": "FOO-198 Add export to CSV",
-      "triageStatus": "dispatched",
-      "outcome": "Dispatched to WEB as WEB-1",
-      "busy": false,
-      "createdAt": 1773327600000,
-      "updatedAt": 1773499200000,
-      "key": "TRIAGE-2",
-      "kind": "triage"
-    },
-    {
-      "id": "session-TRIAGE-3",
-      "ticketId": null,
-      "driver": "claude-code",
-      "cwd": "/Users/dev/harness",
-      "title": "FOO-150 Upgrade to Node 24",
-      "triageStatus": "declined",
-      "outcome": "Declined: already done in HARNESS-7",
-      "busy": false,
-      "createdAt": 1773327600000,
-      "updatedAt": 1773489600000,
-      "key": "TRIAGE-3",
-      "kind": "triage"
-    },
-    {
-      "id": "session-TRIAGE-4",
-      "ticketId": null,
-      "driver": "claude-code",
-      "cwd": "/Users/dev/harness",
-      "title": "FOO-77 Intermittent 502",
-      "triageStatus": "failed",
-      "outcome": "The watcher's agent exited with an error",
-      "busy": false,
-      "createdAt": 1773327600000,
-      "updatedAt": 1773478800000,
-      "key": "TRIAGE-4",
-      "kind": "triage"
     }
   ],
   "runs": [
@@ -1331,6 +1276,195 @@
       }
     }
   ],
+  "chiefs": [
+    {
+      "ticketId": "cos-all",
+      "key": "COS-1",
+      "scope": "all",
+      "groupId": null,
+      "enabled": true,
+      "createdAt": 1772895600000
+    },
+    {
+      "ticketId": "cos-work",
+      "key": "COS-2",
+      "scope": "group:group-work",
+      "groupId": "group-work",
+      "enabled": true,
+      "createdAt": 1773241200000
+    }
+  ],
+  "cosEvents": [
+    {
+      "id": "ev-waiting",
+      "cosId": "cos-all",
+      "projectKey": "HARNESS",
+      "sourceKind": "activity",
+      "title": "HARNESS-201 moved to in progress",
+      "summary": "",
+      "actor": "agent",
+      "status": "pending",
+      "verdict": "pending",
+      "reason": null,
+      "model": null,
+      "ticketKey": "HARNESS-201",
+      "wakeId": null,
+      "handledBy": null,
+      "createdAt": 1773500340000
+    },
+    {
+      "id": "ev-handling",
+      "cosId": "cos-all",
+      "projectKey": "HARNESS",
+      "sourceKind": "activity",
+      "title": "HARNESS-202 is blocked",
+      "summary": "Needs a decision on the migration order",
+      "actor": "agent",
+      "status": "handling",
+      "verdict": "escalate",
+      "reason": "A blocked ticket waiting on the human",
+      "model": "claude-haiku-5-5",
+      "ticketKey": "HARNESS-202",
+      "wakeId": "wake-2",
+      "handledBy": null,
+      "createdAt": 1773500160000
+    },
+    {
+      "id": "ev-ignored",
+      "cosId": "cos-all",
+      "projectKey": "HARNESS",
+      "sourceKind": "activity",
+      "title": "HARNESS-203 moved to review",
+      "summary": "An agent finished its work",
+      "actor": "agent",
+      "status": "ignored",
+      "verdict": "ignore",
+      "reason": "Routine move; the agent review is already running",
+      "model": "claude-haiku-5-5",
+      "ticketKey": "HARNESS-203",
+      "wakeId": null,
+      "handledBy": null,
+      "createdAt": 1773499680000
+    },
+    {
+      "id": "ev-escalated",
+      "cosId": "cos-all",
+      "projectKey": null,
+      "sourceKind": "watcher",
+      "title": "New comment on FOO-17",
+      "summary": "",
+      "actor": "watcher:jira",
+      "status": "escalated",
+      "verdict": "escalate",
+      "reason": "A customer is waiting on an answer",
+      "model": "claude-haiku-5-5",
+      "ticketKey": null,
+      "wakeId": null,
+      "handledBy": null,
+      "createdAt": 1773499200000
+    },
+    {
+      "id": "ev-handled",
+      "cosId": "cos-all",
+      "projectKey": "HARNESS",
+      "sourceKind": "activity",
+      "title": "HARNESS-190 landed on main",
+      "summary": "",
+      "actor": "agent",
+      "status": "handled",
+      "verdict": "escalate",
+      "reason": "Done tickets are worth a summary",
+      "model": "claude-haiku-5-5",
+      "ticketKey": "HARNESS-190",
+      "wakeId": "wake-1",
+      "handledBy": "run-9",
+      "createdAt": 1773495000000
+    },
+    {
+      "id": "ev-schedule",
+      "cosId": "cos-all",
+      "projectKey": null,
+      "sourceKind": "schedule",
+      "title": "Friday review of open tickets",
+      "summary": "",
+      "actor": "system",
+      "status": "handled",
+      "verdict": "escalate",
+      "reason": "A schedule the chief set",
+      "model": null,
+      "ticketKey": null,
+      "wakeId": "wake-1",
+      "handledBy": "run-9",
+      "createdAt": 1773494400000
+    }
+  ],
+  "cosChat": [
+    {
+      "id": "chat-1",
+      "cosId": "cos-all",
+      "createdAt": 1773488400000,
+      "kind": "message",
+      "role": "user",
+      "text": "What did the agents get done yesterday?"
+    },
+    {
+      "id": "chat-2",
+      "cosId": "cos-all",
+      "createdAt": 1773488460000,
+      "kind": "message",
+      "role": "assistant",
+      "text": "Three tickets landed on **HARNESS**: the sidebar counts, the palette fix and the settings reorder. One is still in review."
+    },
+    {
+      "id": "chat-3",
+      "cosId": "cos-all",
+      "createdAt": 1773493200000,
+      "kind": "ticket_created",
+      "key": "HARNESS-204",
+      "title": "Follow up on the flaky palette test",
+      "status": "planning"
+    },
+    {
+      "id": "chat-4",
+      "cosId": "cos-all",
+      "createdAt": 1773498600000,
+      "kind": "ticket_moved",
+      "key": "HARNESS-203",
+      "title": "Reorder the settings sections",
+      "from": "in_progress",
+      "to": "review"
+    },
+    {
+      "id": "chat-5",
+      "cosId": "cos-all",
+      "createdAt": 1773500100000,
+      "kind": "event_batch",
+      "wakeId": "wake-2",
+      "eventIds": [
+        "ev-handling"
+      ],
+      "digest": "ignored 3 routine moves"
+    },
+    {
+      "id": "chat-6",
+      "cosId": "cos-all",
+      "createdAt": 1773500160000,
+      "kind": "message",
+      "role": "assistant",
+      "text": "HARNESS-202 is blocked on a decision about the migration order. I can answer it the way you did last week if you'd like."
+    }
+  ],
+  "cosBadge": {
+    "total": 3,
+    "byCos": {
+      "cos-all": 3,
+      "cos-work": 0
+    }
+  },
+  "cosMemory": {
+    "text": "# Memory\n\n## Triage guidance\n\nIgnore routine ticket moves.\n",
+    "revision": "rev-1"
+  },
   "settings": {
     "defaultDriver": "claude-code",
     "maxConcurrentRuns": 3,
@@ -1342,7 +1476,9 @@
     },
     "reviewModels": {},
     "baseBranch": "main",
-    "anthropicApiKeySet": false
+    "anthropicApiKeySet": false,
+    "cosEnabled": true,
+    "cosCanUnblock": false
   },
   "drivers": [
     {
