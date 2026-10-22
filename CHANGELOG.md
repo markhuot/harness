@@ -11,9 +11,15 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Added
 
+- Triage of a chief of staff's events now looks things up before it decides. It runs as a read-only agent (Haiku by default) that can read a pull request with `gh`, a Jira item through your Jira MCP, and the board, so an event that is only a pointer (a review comment on a pull request, a thread that changed) is judged by what actually changed and who changed it. The brief it passes the chief says what it found and names the ticket the event belongs to. It can't write anything: `gh` mutations, Jira writes and other changes are refused. If it can't tell, or a lookup fails, the event wakes the chief.
+- A watcher's prompt (what its lines mean and how to look them up) is used again: triage reads it as guidance for that watcher's events.
+- Each Inbox row can open the triage run's transcript, to see what it looked up.
 - The chief of staff now records what it did about each event it was woken for, with a new `record_event_outcomes` tool: it acted (and what it did), needed no action (and why), or needs you to do something (and what). The Inbox on the Mac, iPhone, iPad and iPhone Duo shows that text on the row. An event the chief's run finished without recording anything for reads "Reviewed, no outcome recorded".
 
 ### Changed
+
+- Triage now judges events in batches of 5 with up to 4 minutes per batch (and up to 30 events a pass), so one slow lookup holds back fewer events. With the Anthropic API as the classifier it still judges from the event text alone, and the Inbox says "triaged without lookup".
+- Internal: the service has a `triage` run kind again (its own hidden sessions), `triage_verdict` tool, a `gh` read-only allowlist in the permission gate, and a `--max-turns` limit on the Claude driver.
 
 - The Inbox no longer says "Handled: the chief of staff dealt with it" for an event whose wake run merely finished. Rows show the chief's recorded outcome instead (Acted, No action needed, Needs you), and older handled rows without one read "Reviewed, no outcome recorded".
 - The chief of staff isn't woken for routine events any more: an agent review's approval of a ticket that waits for you, and a ticket that completed as planned. They stay in the Inbox as Filtered with the reason. Triage now also leaves out reviews that approved work waiting for you, and still escalates blocks, failures, questions and requested changes.

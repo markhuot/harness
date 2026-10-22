@@ -27,3 +27,15 @@ test("a chief of staff run has no built-in tool at all, so only the harness serv
   expect(a[a.indexOf("--tools") + 1]).toBe("");
   for (const kind of ["plan", "work", "review", "complete", "conductor", "chat"] as const) expect(args(kind)).not.toContain("--tools");
 });
+
+test("a triage run reads: Bash only, the user's MCP servers loaded, no sub-agents or web, a turn limit, and every other call asked of the harness", () => {
+  const a = buildClaudeArgs({ kind: "triage", systemPrompt: "sys", maxTurns: 40, mcp: { url: "http://127.0.0.1:1/mcp", headers: {} } }, DEFAULT_SETTINGS, null);
+  expect(a[a.indexOf("--tools") + 1]).toBe("Bash");
+  expect(a).not.toContain("--strict-mcp-config"); // Jira and the rest must load
+  expect(listAfter(a, "--disallowedTools")).toEqual(["Agent", "Task", "WebFetch", "WebSearch"]);
+  expect(a[a.indexOf("--max-turns") + 1]).toBe("40");
+  expect(a[a.indexOf("--permission-mode") + 1]).toBe("default");
+  expect(a[a.indexOf("--permission-prompt-tool") + 1]).toMatch(/permission_prompt$/);
+  // Runs that set no limit pass none.
+  expect(args("work")).not.toContain("--max-turns");
+});

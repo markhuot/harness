@@ -1081,3 +1081,98 @@ test("routine activity is filtered before triage: an agent review's approval of 
   await s.after(MIN);
   expect(s.eventOf("marker-approved-elsewhere").verdict).not.toBe("filtered");
 });
+
+// ---- Triage as an agent run ---------------------------------------------------------------------
+
+/** What an agent triage reports about itself: smaller batches, more time, a transcript. */
+class AgentLike extends ScriptedTriage {
+  readonly limits = { chunk: 2, perPass: 30, timeoutMs: 240_000 };
+  sessionId: string | null = "triage-session-1";
+  override async triage(input: TriageInput, signal: AbortSignal): Promise<TriageResult> {
+    const res = await super.triage(input, signal);
+    return { ...res, sessionId: this.sessionId };
+  }
+}
+
+test("a triage that brings its own limits gets batches of that size and that long to answer", async () => {
+  const agent = new AgentLike();
+  const s = await quiet({ triage: agent });
+  const before = agent.calls.length;
+  for (const n of [1, 2, 3, 4, 5]) s.happen(s.t, `marker-batch-${n}`);
+  await s.after(MIN);
+  expect(agent.calls.slice(before).map((c) => c.events.length)).toEqual([2, 2, 1]);
+  // The timeout is the triage's own (4 minutes for an agent run), not the one-shot minute.
+  const hang: CosTriage = { backend: "fake", model: "m", limits: { chunk: 5, perPass: 30, timeoutMs: 240_000 }, triage: (_i, signal) => new Promise((_, reject) => signal.addEventListener("abort", () => reject(new Error("aborted")))) };
+  const t = await quiet({ triage: hang });
+  t.happen(t.t, "marker-slow");
+  t.h.clock.advance(MIN);
+  const tick = t.engine.tick();
+  await until(() => [...t.timers.pending.values()].some((x) => x.ms === 240_000));
+  t.timers.fire(240_000);
+  await tick;
+  await t.h.settle();
+  expect(t.eventOf("marker-slow").reason).toBe("triage timed out");
+});
+
+test("an event keeps the session of the triage run that judged it, ignored or escalated", async () => {
+  const agent = new AgentLike();
+  agent.answers.push(escalating("marker-esc", "Copilot review on PR #1297; owning ticket ACME-1"));
+  const s = await quiet({ triage: agent });
+  s.happen(s.t, "marker-esc");
+  s.happen(s.t, "marker-ign");
+  await s.after(MIN);
+  expect(s.eventOf("marker-esc").triageSessionId).toBe("triage-session-1");
+  expect(s.eventOf("marker-ign").triageSessionId).toBe("triage-session-1");
+  expect(s.eventOf("marker-ign").status).toBe("ignored");
+  // The brief reaches the chief, inside the untrusted fence.
+  const wake = s.h.driver.requests.at(-1)!.prompt;
+  expect(wake).toContain("owning ticket ACME-1");
+});
+
+test("a triage run that ends early keeps the verdicts it recorded and escalates the rest", async () => {
+  const { TriageIncomplete } = await import("../../../service/src/cos/triage");
+  let ids: string[] = [];
+  const partial: CosTriage = {
+    backend: "fake",
+    model: "m",
+    async triage(input) {
+      ids = input.events.map((e) => e.id);
+      throw new TriageIncomplete("triage run failed: boom", [verdict(ids[0]!, "ignore")], "triage-session-2");
+    },
+  };
+  const s = await quiet({ triage: partial });
+  s.happen(s.t, "marker-first");
+  s.happen(s.t, "marker-second");
+  await s.after(MIN);
+  const [a, b] = [s.eventOf("marker-first"), s.eventOf("marker-second")];
+  const ignored = [a, b].find((e) => e.id === ids[0])!;
+  const escalated = [a, b].find((e) => e.id === ids[1])!;
+  expect(ignored.status).toBe("ignored");
+  expect(escalated.reason).toBe("triage failed: triage run failed: boom");
+  expect(escalated.triageSessionId).toBe("triage-session-2");
+});
+
+test("a one-shot triage with no lookup says so in its reasons", async () => {
+  const blind = new ScriptedTriage();
+  Object.assign(blind, { lookup: false });
+  blind.answers.push(escalating("marker-blind"));
+  const s = await quiet({ triage: blind });
+  s.happen(s.t, "marker-blind");
+  s.happen(s.t, "marker-other");
+  await s.after(MIN);
+  expect(s.eventOf("marker-blind").reason).toBe("needs the chief (triaged without lookup)");
+  expect(s.eventOf("marker-other").reason).toBe("routine (triaged without lookup)");
+});
+
+test("the watcher's prompt reaches triage with the events it printed, and only those", async () => {
+  const s = await quiet();
+  const feed = s.h.store.watchers.create({ name: "gh-notifications", command: "gh", prompt: "A thread line is only a pointer: read the PR with gh pr view and say who changed it." });
+  const plain = s.h.store.watchers.create({ name: "no-prompt", command: "true" });
+  const from = (w: { id: string }, title: string) => s.engine.addExternal({ sourceKind: "watcher", sourceRef: `${w.id}:sha256:${title}`, actor: "watcher:x", title, body: "b", cosId: s.chief.ticketId });
+  from(feed, "marker-with-prompt");
+  from(plain, "marker-without-prompt");
+  await s.after(MIN);
+  const input = s.scripted!.calls.flatMap((c) => c.events);
+  expect(input.find((e) => e.title === "marker-with-prompt")!.watcher).toEqual({ name: "gh-notifications", prompt: expect.stringContaining("read the PR") });
+  expect(input.find((e) => e.title === "marker-without-prompt")!.watcher).toEqual({ name: "no-prompt", prompt: "" });
+});

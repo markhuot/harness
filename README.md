@@ -193,7 +193,7 @@ instead of showing a stale bar.
   chief when the project has no group). It opens as **Chat** (one continuous conversation) and
   **Inbox** (what it has seen, with a verdict on each) beside the board on the Mac, and as the same
   screens on iPhone and iPad. A group's chief only sees and changes tickets in its group. A cheap
-  model reads each event first and wakes the chief only for what needs it. A chief can create and
+  model reads each event first, looking things up read-only when the event is only a pointer, and wakes the chief only for what needs it. A chief can create and
   start tickets, remind you or wake itself on a schedule, keep a memory you can edit, look at
   terminals in the tickets it covers, and, only where **CoS can unblock** is on, answer blocked
   tickets. Chiefs of staff and **CoS can unblock** are set in Settings, with a per-project override.
@@ -202,7 +202,7 @@ instead of showing a stale bar.
   Examples are in `service/examples/watchers/`. In interval mode, each run's output becomes an
   event. In loop mode, each burst of output does. Output identical to something the watcher
   already printed is skipped. A watcher belongs to a **chief of staff**: its output lands in that
-  chief's inbox, a cheap model summarizes it, and the chief wakes only when it needs to, then
+  chief's inbox, a cheap model looks into it first (it can read the pull request with `gh`, a Jira item through your MCP servers, or the board, read-only, and follows the watcher's prompt), and the chief wakes only when it needs to, then
   decides what to do (start a ticket in the right project, send an update to an existing one, or
   nothing). Watcher output is treated as untrusted text, never as instructions. Ask a chief to set
   one up ("watch our events API every minute and tell me about anything assigned to me"); you
