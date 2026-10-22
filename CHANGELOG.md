@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261022.1246](https://github.com/markhuot/harness/releases/tag/app-20261022.1246) - 2026-10-22
+
 ### Added
 
 - Harness now has a **chief of staff**: an always-on chat that drives the app with the same tools agents have, one per project group and an All projects one for the rest. Open it from the **Chief of Staff** button in a board's title bar (Mac) or bottom bar (iPhone and iPad), which shows how many events wait. A group's chief only sees and changes tickets in its group. It hears what happens on its projects and from your watchers, through a cheap triage read that wakes it only for what needs it. It can create and start tickets, set reminders and wake-ups for itself, keep a memory you can edit, look at and type into terminals (with your approval), rearrange your Mac window, and answer blocked tickets only where "CoS can unblock" is on. Switch chiefs on or off in Settings, with a per-project override. The entries below say what each part does.
