@@ -58,7 +58,7 @@ export function useCosActions() {
   };
 }
 
-/** The board's call-out to its chief of staff: one card above the columns, with a badge for what waits and the on/off switch. */
+/** The board title bar's button to its chief of staff, with a pill for what waits. The on/off switch lives in the pane header. */
 export function CosCallout({ scope }: { scope: CosScopeKey }) {
   const { state } = useStore();
   const boardScope = usePaneScope();
@@ -71,23 +71,15 @@ export function CosCallout({ scope }: { scope: CosScopeKey }) {
     updatePanes(boardScope, (s) => openCos(s, scope));
   };
   return (
-    <div className="cos-callout" data-testid="cos-callout" data-scope={scope}>
-      <button className="cos-callout-open" data-testid="cos-callout-open" title={`Chief of staff for ${title}`} onClick={() => void open()}>
-        <Icon name="bot" />
-        <span className="cos-callout-title">Chief of staff · {title}</span>
-        {count > 0 && (
-          <span className="nav-badge" data-testid="cos-callout-badge" title={`${count} event${count === 1 ? "" : "s"} waiting`}>
-            {count}
-          </span>
-        )}
-      </button>
-      <Switch
-        checked={chief?.enabled ?? false}
-        ariaLabel={`Chief of staff for ${title} on`}
-        title={chief?.enabled ? "On: click to turn off" : "Off: click to turn on"}
-        onChange={(v) => void (chief ? actions.setEnabled(chief, v) : v && actions.open(scope))}
-      />
-    </div>
+    <button className="btn btn-sm cos-callout" data-testid="cos-callout" data-scope={scope} title={`Chief of Staff for ${title}`} onClick={() => void open()}>
+      <Icon name="bot" size={13} />
+      Chief of Staff
+      {count > 0 && (
+        <span className="nav-badge" data-testid="cos-callout-badge" title={`${count} event${count === 1 ? "" : "s"} waiting`}>
+          {count}
+        </span>
+      )}
+    </button>
   );
 }
 

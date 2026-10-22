@@ -313,15 +313,15 @@ describe("Memory", () => {
 describe("the board's callout", () => {
   const board = (hash = "#/board") => mount(<BoardPane />, { hash });
   const callout = (m: M) => byId(m, "cos-callout")!;
-  const sw = (m: M) => callout(m).querySelector<HTMLInputElement>('input[role="switch"]')!;
 
-  test("a card above the columns, not in one, with the count of its open events", async () => {
+  test("a button in the title bar, not on the columns, with the count of its open events", async () => {
     updatePanes("*", () => defaultPanes("B"));
     const m = await board();
     await m.until("the callout", () => !!byId(m, "cos-callout-badge"));
     expect(callout(m).dataset.scope).toBe("all");
-    expect(text(callout(m))).toContain("All projects");
-    expect(callout(m).closest(".column")).toBeNull();
+    expect(text(callout(m))).toContain("Chief of Staff");
+    expect(callout(m).closest("header.view-header")).not.toBeNull();
+    expect(callout(m).querySelector('input[role="switch"]')).toBeNull();
     expect(text(byId(m, "cos-callout-badge"))).toBe("3");
     await m.settle(() => m.client.push({ kind: "cos.badge", total: 5, byCos: { "cos-all": 4, "cos-work": 2 } }));
     expect(text(byId(m, "cos-callout-badge"))).toBe("4");
@@ -337,11 +337,11 @@ describe("the board's callout", () => {
     expect(callout(m).dataset.scope).toBe("group:group-work");
   });
 
-  test("the card opens the chief's pane beside the board, focused", async () => {
+  test("the button opens the chief's pane beside the board, focused", async () => {
     updatePanes("*", () => defaultPanes("B"));
     const m = await board();
-    await m.until("the callout", () => !!byId(m, "cos-callout-open"));
-    await click(m, byId(m, "cos-callout-open")!);
+    await m.until("the callout", () => !!byId(m, "cos-callout"));
+    await click(m, byId(m, "cos-callout")!);
     const cos = leaves(getPanes("*").root).find((l) => l.content.kind === "cos");
     expect(cos?.content).toEqual({ kind: "cos", scope: "all", tab: "chat" });
     expect(getPanes("*").focusedId).toBe(cos!.id);
@@ -351,26 +351,10 @@ describe("the board's callout", () => {
   test("a group without a chief gets one made on first open", async () => {
     updatePanes("*", () => defaultPanes("B"));
     const m = await board("#/board/group/group-personal");
-    await m.until("the callout", () => !!byId(m, "cos-callout-open"));
-    await click(m, byId(m, "cos-callout-open")!);
+    await m.until("the callout", () => !!byId(m, "cos-callout"));
+    await click(m, byId(m, "cos-callout")!);
     expect(m.client.bodies.find((b) => b.request === "POST /cos")?.body).toEqual({ scope: "group:group-personal" });
     expect(leaves(getPanes("*").root).some((l) => l.content.kind === "cos" && l.content.scope === "group:group-personal")).toBe(true);
-  });
-
-  test("the switch turns the chief off, or turns a group's on by making one", async () => {
-    updatePanes("*", () => defaultPanes("B"));
-    const m = await board();
-    await m.until("the callout", () => !!byId(m, "cos-callout"));
-    expect(sw(m).checked).toBe(true);
-    await click(m, sw(m));
-    expect(m.client.bodies.find((b) => b.request === "PATCH /cos/cos-all")?.body).toEqual({ enabled: false });
-    expect(sw(m).checked).toBe(false);
-    const g = await board("#/board/group/group-personal");
-    await g.until("the callout", () => !!byId(g, "cos-callout"));
-    expect(sw(g).checked).toBe(false);
-    await click(g, sw(g));
-    expect(g.client.bodies.find((b) => b.request === "POST /cos")?.body).toEqual({ scope: "group:group-personal" });
-    expect(sw(g).checked).toBe(true);
   });
 });
 

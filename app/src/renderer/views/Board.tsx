@@ -204,6 +204,7 @@ export function BoardPane() {
           </button>
         )}
         <div className="grow" />
+        <CosCallout scope={boardCosScope(state.projects, boardScope, boardProjectId)} />
         <div className="search no-drag">
           <Icon name="hash" size={12} />
           <input
@@ -265,7 +266,6 @@ export function BoardPane() {
           </button>
         </div>
       )}
-      <CosCallout scope={boardCosScope(state.projects, boardScope, boardProjectId)} />
       <div className="board">
         {TICKET_STATUSES.map((status, i) => {
           const tickets = shown[i]!;
