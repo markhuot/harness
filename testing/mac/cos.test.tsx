@@ -188,6 +188,19 @@ describe("Inbox", () => {
     expect(events(m)).toHaveLength(9);
   });
 
+  test("a row judged by a triage run links to what it looked up; a row judged without one doesn't", async () => {
+    const client = new FakeClient();
+    const base = client.cos.events.find((e) => e.id === "ev-ignored")!;
+    client.cos.events.push({ ...base, id: "ev-looked", title: "PR thread changed", triageSessionId: "triage-session-7", createdAt: base.createdAt + 1 });
+    const m = await open("#/cos/all/inbox", client);
+    await m.until("the rows", () => events(m).length > 0);
+    expect(all(m.container, '[data-testid="cos-triage-run"]')).toHaveLength(1);
+    expect(eventRow(m, "ev-ignored").querySelector('[data-testid="cos-triage-run"]')).toBeNull();
+    await click(m, eventRow(m, "ev-looked").querySelector('[data-testid="cos-triage-run"]')!);
+    await m.until("the transcript", () => !!byId(m, "cos-triage-transcript"));
+    expect(m.client.requests.some((r) => r.startsWith("GET /sessions/triage-session-7/transcript"))).toBe(true);
+  });
+
   test("events nobody owns yet show, another chief's and the chief's own filtered ones don't", async () => {
     const client = new FakeClient();
     const base = client.cos.events[0]!;

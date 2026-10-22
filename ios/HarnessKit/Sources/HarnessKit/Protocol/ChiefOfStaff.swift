@@ -126,12 +126,14 @@ public struct CosEvent: Codable, Sendable, Equatable, Identifiable {
     @Nullable public var handledBy: String?
     /// What the chief recorded for it; nil when its run recorded none (and for events handled before outcomes existed)
     @Nullable public var outcome: CosOutcome?
+    /// The session whose transcript shows what triage looked up for it; nil when a one-shot call judged it
+    @Nullable public var triageSessionId: String?
     public var createdAt: Timestamp
 
     public init(
         id: String, cosId: String? = nil, projectKey: String? = nil, sourceKind: CosEventSource = .activity, title: String, summary: String = "",
         actor: String = "agent", status: CosEventStatus = .pending, verdict: CosEventVerdict = .pending, reason: String? = nil, model: String? = nil,
-        ticketKey: String? = nil, wakeId: String? = nil, handledBy: String? = nil, outcome: CosOutcome? = nil, createdAt: Timestamp
+        ticketKey: String? = nil, wakeId: String? = nil, handledBy: String? = nil, outcome: CosOutcome? = nil, triageSessionId: String? = nil, createdAt: Timestamp
     ) {
         self.id = id
         self.cosId = cosId
@@ -148,6 +150,7 @@ public struct CosEvent: Codable, Sendable, Equatable, Identifiable {
         self.wakeId = wakeId
         self.handledBy = handledBy
         self.outcome = outcome
+        self.triageSessionId = triageSessionId
         self.createdAt = createdAt
     }
 }

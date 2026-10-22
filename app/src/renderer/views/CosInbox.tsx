@@ -8,6 +8,7 @@ import type { Cos, CosEvent } from "@harness/shared";
 import { canEscalate, inboxState, mergeEvents } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import { Modal, relativeTime } from "../components/bits";
+import { Transcript } from "./Transcript";
 import { useAction, useStore } from "../state/store";
 
 const PAGE = 50;
@@ -81,6 +82,7 @@ const SOURCE_LABEL = { activity: "Ticket", watcher: "Watcher", schedule: "Schedu
 function EventRow({ event: e }: { event: CosEvent }) {
   const { client, dispatch, navigate } = useStore();
   const act = useAction();
+  const [looking, setLooking] = useState(false);
   const st = inboxState(e);
   const escalate = async () => {
     const next = await act(() => client.escalateCosEvent(e.id));
@@ -120,12 +122,25 @@ function EventRow({ event: e }: { event: CosEvent }) {
             {e.outcome.text}
           </span>
         )}
+        {e.triageSessionId && (
+          <button className="link-btn" data-testid="cos-triage-run" onClick={() => setLooking(true)}>
+            What triage looked up
+          </button>
+        )}
         {canEscalate(e) && (
           <button className="btn btn-sm" data-testid="cos-escalate" onClick={() => void escalate()}>
             Escalate anyway
           </button>
         )}
       </div>
+      {looking && e.triageSessionId && (
+        <Modal onClose={() => setLooking(false)} width={720}>
+          <h3>Triage of “{e.title}”</h3>
+          <div className="cos-triage-transcript" data-testid="cos-triage-transcript">
+            <Transcript sessionId={e.triageSessionId} emptyHint="The triage run left no transcript." />
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

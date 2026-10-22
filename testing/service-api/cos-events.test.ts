@@ -32,7 +32,7 @@ test("GET /cos/:id/events pages newest first with a cursor, filters by status, a
   expect(all.items.length).toBeGreaterThan(2);
   const event = all.items.find((e) => e.status === "pending")!;
   expect(Object.keys(event).sort()).toEqual(
-    ["actor", "cosId", "createdAt", "handledBy", "id", "model", "outcome", "projectKey", "reason", "sourceKind", "status", "summary", "ticketKey", "title", "verdict", "wakeId"].sort(),
+    ["actor", "cosId", "createdAt", "handledBy", "id", "model", "outcome", "projectKey", "reason", "sourceKind", "status", "summary", "ticketKey", "title", "triageSessionId", "verdict", "wakeId"].sort(),
   );
   expect(event).toMatchObject({ cosId: cos.ticketId, projectKey: "ACME", sourceKind: "activity", status: "pending", verdict: "pending", reason: null, model: null, handledBy: null, outcome: null });
   expect([...all.items].sort((a, b) => b.createdAt - a.createdAt || (a.id < b.id ? 1 : -1)).map((e) => e.id)).toEqual(all.items.map((e) => e.id));
