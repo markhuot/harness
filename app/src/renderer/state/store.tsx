@@ -1,7 +1,7 @@
 // React wiring for the store: connection → HarnessClient + HarnessSocket → reducer.
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
-import { HarnessClient, projectGroups, resolveGroupKey, type FileLink, type HarnessEvent, type HarnessSocket, type ServerMessage, type TerminalInfo } from "@harness/shared";
+import { HarnessClient, projectGroups, resolveGroupKey, type ClientEvent, type FileLink, type HarnessSocket, type ServerMessage, type TerminalInfo } from "@harness/shared";
 import {
   canLoadMoreDone,
   canLoadMoreSearch,
@@ -62,7 +62,7 @@ declare global {
   }
 }
 
-type EventListener = (e: HarnessEvent) => void;
+type EventListener = (e: ClientEvent) => void;
 
 export interface Store {
   state: State;
@@ -196,7 +196,7 @@ export function useRoute() {
  * paging (404 on /tickets/page) gets the old full list and no paging state.
  */
 async function loadSnapshot(client: HarnessClient, scope: string): Promise<Snapshot> {
-  const [projects, board, sessions, watchers, settings, drivers] = await Promise.all([
+  const [projects, board, sessions, watchers, settings, drivers, chiefs, cosBadge] = await Promise.all([
     client.listProjects(),
     Promise.all([
       client.listTickets(undefined, { status: LIVE_STATUSES }),
@@ -209,8 +209,10 @@ async function loadSnapshot(client: HarnessClient, scope: string): Promise<Snaps
     client.listWatchers().catch(() => []),
     client.getSettings().catch(() => null),
     client.listDrivers().catch(() => []),
+    client.listCos().catch(() => undefined),
+    client.cosBadge().catch(() => null),
   ]);
-  return { projects, ...board, sessions, watchers, settings, drivers };
+  return { projects, ...board, sessions, watchers, settings, drivers, chiefs, cosBadge };
 }
 
 export { boardProjectOf, boardScopeOf };

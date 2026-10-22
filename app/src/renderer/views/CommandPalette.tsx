@@ -1,5 +1,5 @@
 // ⌘K command palette: every command that applies where the focus was (the focused ticket's actions
-// first, named as its buttons read: "Approve and merge", "Re-open…"), navigation (boards, inbox, settings sections), tickets and files, fuzzy-ranked by
+// first, named as its buttons read: "Approve and merge", "Re-open…"), navigation (boards, chiefs of staff, settings sections), tickets and files, fuzzy-ranked by
 // state/palette.ts. ">" narrows it to commands, "#" to tickets and "@" to files (⌘P opens it that
 // way). Files are searched in one root: the focused ticket pane's ticket, else the board's project
 // (paletteFileRoot), git-ignored files included; `path:12` or `path#L12-L20` opens at those lines.
@@ -234,7 +234,6 @@ export function CommandPalette({ origin, initial = "", onClose, onShortcuts }: {
         nav(`group:${g.id}`, `Board: ${g.name}`, () => navigate({ view: "board", projectId: null, group: g.id, ticketKey: null, tab: "spec" }), ["group"]);
       }
       for (const p of sortedProjects(state)) nav(`project:${p.id}`, `Board: ${p.name}`, () => navigate({ view: "board", projectId: p.id, ticketKey: null, tab: "spec" }), [p.key]);
-      if (!have.has("inbox")) nav("inbox", "Inbox", () => navigate({ view: "inbox", sessionId: null }));
       if (!have.has("settings")) nav("settings", "Settings", () => navigate({ view: "settings", section: null }));
       for (const [id, label] of SETTINGS_SECTIONS) nav(`settings:${id}`, `Settings: ${label}`, () => navigate({ view: "settings", section: id }));
       if (!have.has("new-session")) nav("new-session", "New Session…", () => runCommand("new-session", origin));

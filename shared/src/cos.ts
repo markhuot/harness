@@ -1,6 +1,6 @@
 // Chief of staff (CoS) shapes shared by the service and its clients (DESIGN.md "Chief of staff").
 
-import type { Project, Settings } from "./protocol";
+import type { HarnessEvent, Project, Settings } from "./protocol";
 
 /** The two settings a project may override of the app's (Project.cosEnabled, Project.cosCanUnblock). */
 export type CosSettingKey = "cosEnabled" | "cosCanUnblock";
@@ -123,6 +123,9 @@ export type CosBusEvent =
   | { kind: "cos.event.upserted"; event: CosEvent }
   | { kind: "cos.badge"; total: number; byCos: Record<string, number> }
   | { kind: "cos.transcript.appended"; cosId: string; entry: CosChatEntry };
+
+/** Everything a client's socket may deliver: the protocol's events and the chiefs'. */
+export type ClientEvent = HarnessEvent | CosBusEvent;
 
 // ---------------------------------------------------------------------------
 // Schedules: a chief of staff's reminders and wake-ups (DESIGN.md "Schedules")

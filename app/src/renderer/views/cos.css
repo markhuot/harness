@@ -1,0 +1,194 @@
+/* Chief of staff view (views/Cos.tsx): Chat, Inbox and the memory sheet */
+
+.cos {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.cos-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.cos-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 16px 0;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--amber-soft, var(--bg-elev));
+  font-size: 12px;
+}
+
+/* Chat */
+.cos-chat {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.cos-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+}
+.cos-older {
+  align-self: center;
+  flex: none;
+}
+.cos-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+.cos-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 560px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elev);
+  text-align: left;
+  font-size: 12.5px;
+}
+.cos-card:hover {
+  background: var(--bg-hover);
+}
+.cos-card-key {
+  font-weight: 600;
+  flex: none;
+}
+.cos-card-title {
+  flex: 1;
+  min-width: 0;
+}
+.cos-card-what,
+.cos-card-status {
+  flex: none;
+  font-size: 11.5px;
+}
+
+/* Inbox */
+.cos-inbox {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.cos-inbox-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+.cos-rows {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+.cos-event {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.cos-event-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.cos-event-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+  min-width: 0;
+}
+.cos-event-title .link-btn {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: var(--accent);
+}
+.cos-event-sub,
+.cos-event-meta {
+  font-size: 11.5px;
+}
+.cos-verdict {
+  flex: none;
+  width: 220px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+.cos-reason {
+  font-size: 11.5px;
+}
+.cos-pill {
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  background: var(--bg-hover);
+  color: var(--text-2);
+}
+.cos-pill-escalated,
+.cos-pill-handling {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.cos-pill-handled {
+  background: var(--green-soft);
+  color: var(--green);
+}
+.cos-listen textarea,
+.cos-memory textarea {
+  width: 100%;
+  resize: vertical;
+}
+.cos-memory-text {
+  min-height: 320px;
+}
+
+/* Sidebar rows */
+.nav-cos {
+  display: flex;
+  align-items: center;
+}
+.nav-cos .nav-item {
+  flex: 1;
+  min-width: 0;
+}
+.nav-cos .switch {
+  margin-right: 8px;
+  flex: none;
+}
+.nav-badge {
+  flex: none;
+  min-width: 16px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10.5px;
+  text-align: center;
+}

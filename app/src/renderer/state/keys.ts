@@ -59,7 +59,6 @@ export const COMMANDS: CommandSpec[] = [
   { id: "new-session", label: "New Session…", group: "General", scope: "global", keys: [cmd("KeyN")], menu: true },
   { id: "new-terminal", label: "New Terminal", group: "General", scope: "global", keys: [cmd("KeyT")], menu: true },
   { id: "board", label: "Go to All Projects", group: "General", scope: "global", keys: [cmd("Digit1")], menu: true, keywords: ["Board: All Projects"] },
-  { id: "inbox", label: "Go to Inbox", group: "General", scope: "global", keys: [cmd("Digit2")], menu: true },
   { id: "settings", label: "Open Settings", group: "General", scope: "global", keys: [cmd("Comma")], menu: true },
   { id: "toggle-sidebar", label: "Toggle Sidebar", group: "General", scope: "global", keys: [cmd("KeyS", { ctrl: true })], menu: true },
 
@@ -101,7 +100,7 @@ export const COMMANDS: CommandSpec[] = [
   // Palette only; the handler's label follows the setting ("Show child tickets" / "Hide child tickets").
   { id: "board.children", label: "Show child tickets", group: "Board", scope: "board", keys: [], keywords: ["children", "hide", "show", "child tickets"] },
 
-  // Lists (the sidebar, the inbox, a conductor's Tickets tab)
+  // Lists (the sidebar, a conductor's Tickets tab)
   { id: "list.next", label: "Next item", group: "Lists", scope: "list", keys: [k("KeyJ"), k("ArrowDown")], palette: false },
   { id: "list.prev", label: "Previous item", group: "Lists", scope: "list", keys: [k("KeyK"), k("ArrowUp")], palette: false },
   { id: "list.first", label: "First item", group: "Lists", scope: "list", keys: [k("KeyG"), k("Home")], palette: false },

@@ -4,7 +4,7 @@ import { StoreProvider, useStore } from "./state/store";
 import { paneScopeOf } from "./state/route";
 import { Icon } from "./components/Icon";
 import { Sidebar } from "./views/Sidebar";
-import { InboxView } from "./views/Inbox";
+import { CosView } from "./views/Cos";
 import { SettingsView } from "./views/Settings";
 import { ProjectSettingsView } from "./views/ProjectSettings";
 import { ResizeHandle } from "./components/ResizeHandle";
@@ -218,7 +218,6 @@ function Shell() {
     // A terminal needs the desktop app's PTYs.
     "new-terminal": !!window.harness && (() => openTerminal()),
     board: () => navigate({ view: "board", projectId: null, ticketKey: null, tab: "spec" }),
-    inbox: () => navigate({ view: "inbox", sessionId: null }),
     settings: () => navigate({ view: "settings", section: null }),
     "toggle-sidebar": toggleSidebar,
   });
@@ -255,8 +254,8 @@ function Shell() {
       <main className="main">
         {!state.ready ? (
           <ServiceLoading />
-        ) : route.view === "inbox" ? (
-          <InboxView />
+        ) : route.view === "cos" ? (
+          <CosView scope={route.scope} tab={route.tab} />
         ) : route.view === "settings" ? (
           <SettingsView />
         ) : route.view === "project" ? (

@@ -29,7 +29,6 @@ import {
   ticketLinkable,
   ticketsForProject,
   transcriptKey,
-  triageSessions,
   unresolvedKeys,
   type Snapshot,
   type State,
@@ -698,13 +697,6 @@ describe("ticketByKey / ticketLinkable", () => {
   });
 });
 
-describe("triageSessions", () => {
-  test("only triage sessions, newest first", () => {
-    const st = withState({ sessions: { a: session("a", { kind: "triage", createdAt: 1 }), b: session("b", { kind: "triage", createdAt: 5 }), c: session("c", { kind: "ticket", createdAt: 9 }) } });
-    expect(triageSessions(st).map((s) => s.id)).toEqual(["b", "a"]);
-  });
-});
-
 describe("driver and model selectors", () => {
   const st = withState({
     projects: { p: project("p", { defaultDriver: "codex", defaultModels: { codex: "gpt-9" } } as never), q: project("q") },
@@ -774,7 +766,7 @@ describe("dependencies", () => {
     expect(unresolvedKeys(withState({ tickets: tickets(me) }))).toEqual([]);
   });
 
-  test("unresolvedKeys collects unknown dependencies, dependents, triage outcomes and extras once, upper-cased; skipping known, aliased and 404'd keys", () => {
+  test("unresolvedKeys collects unknown dependencies, dependents and extras once, upper-cased; skipping known, aliased and 404'd keys", () => {
     const me = ticket("A-1", { dependsOn: ["x-1", "D-1", "alias-1", "dead-1"] });
     const st = withState({
       ready: true,
@@ -782,9 +774,8 @@ describe("dependencies", () => {
       keyAliases: { "ALIAS-1": done.id },
       missingKeys: { "DEAD-1": true },
       dependents: { [me.id]: ["z-9", "X-1"] },
-      sessions: { s: session("s", { kind: "triage", outcome: "Dispatched to TRI-7." }), t: session("t", { kind: "ticket", outcome: "Dispatched to NOPE-1" }) },
     });
-    expect(unresolvedKeys(st, ["extra-2", "A-1"]).sort()).toEqual(["EXTRA-2", "TRI-7", "X-1", "Z-9"]);
+    expect(unresolvedKeys(st, ["extra-2", "A-1"]).sort()).toEqual(["EXTRA-2", "X-1", "Z-9"]);
   });
 
   test("conductorsNeedingChildren: only conductors whose detail hasn't arrived, once ready", () => {

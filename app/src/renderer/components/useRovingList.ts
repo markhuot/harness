@@ -1,4 +1,4 @@
-// A roving tabindex for a list (the sidebar, the inbox, a conductor's Tickets tab): the list is one
+// A roving tabindex for a list (the sidebar, a conductor's Tickets tab): the list is one
 // Tab stop, and the "list" commands (j/k, ↑/↓, g/G, Home/End; state/keys.ts) move the focus
 // between its items. The component marks its items with data-roving-item and spreads
 // keysArea("list", owner) on the container itself, so the keys reach this owner while the focus is

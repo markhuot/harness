@@ -64,7 +64,7 @@ import type {
   PlanUsageReport,
   SessionActionBody,
 } from "./protocol";
-import type { CosMemory, PutCosMemoryBody } from "./cos";
+import type { ClientEvent, Cos, CosBadge, CosChatPage, CosEvent, CosEventPage, CosEventStatus, CosMemory, CosScopeKey, MemoryConflict, PutCosMemoryBody } from "./cos";
 import type { Device, NotificationStatus, Presence, RegisterDeviceBody, TestNotificationResult } from "./notifications";
 import type { FileMatch } from "./mentions";
 import type { CommandMatch } from "./commands";
@@ -91,6 +91,13 @@ export function specConflict(err: unknown): SpecConflict | null {
   if (!(err instanceof HarnessApiError) || err.status !== 409) return null;
   const d = err.data as Partial<SpecConflict> | undefined;
   return d && typeof d.currentRevision === "number" && typeof d.spec === "string" ? { currentRevision: d.currentRevision, spec: d.spec } : null;
+}
+
+/** The MemoryConflict of a PUT …/memory refused because the memory moved on (409), else null. */
+export function memoryConflict(err: unknown): MemoryConflict | null {
+  if (!(err instanceof HarnessApiError) || err.status !== 409) return null;
+  const d = err.data as Partial<MemoryConflict> | undefined;
+  return d && typeof d.currentRevision === "string" && typeof d.text === "string" ? { currentRevision: d.currentRevision, text: d.text } : null;
 }
 
 export interface HarnessClientOptions {
@@ -273,6 +280,36 @@ export class HarnessClient {
   /** Replace the memory. A memory that changed since `baseRevision` rejects with a 409 whose `data` is a MemoryConflict. */
   putCosMemory(key: string, body: PutCosMemoryBody) {
     return this.request<CosMemory>("PUT", `/tickets/${key}/memory`, body);
+  }
+  // Chiefs of staff
+  listCos() {
+    return this.request<Cos[]>("GET", "/cos");
+  }
+  /** The chief of a scope, made on first use. */
+  openCos(scope: CosScopeKey) {
+    return this.request<Cos>("POST", "/cos", { scope });
+  }
+  setCosEnabled(id: string, enabled: boolean) {
+    return this.request<Cos>("PATCH", `/cos/${id}`, { enabled });
+  }
+  /** A chief's Inbox, newest first; `before` is the previous page's nextCursor. */
+  cosEvents(id: string, opts: { status?: CosEventStatus; before?: string | null; limit?: number } = {}) {
+    return this.request<CosEventPage>("GET", `/cos/${id}/events${query({ status: opts.status, before: opts.before, limit: opts.limit })}`);
+  }
+  cosBadge() {
+    return this.request<CosBadge>("GET", "/cos/events/badge");
+  }
+  /** An ignored event joins the chief's next wake. */
+  escalateCosEvent(id: string) {
+    return this.request<CosEvent>("POST", `/cos/events/${id}/escalate`);
+  }
+  /** A chief's chat, newest page first; `before` is the previous page's nextCursor. */
+  cosTranscript(id: string, opts: { before?: string | null; limit?: number } = {}) {
+    return this.request<CosChatPage>("GET", `/cos/${id}/transcript${query({ before: opts.before, limit: opts.limit })}`);
+  }
+  /** A message to the chief; it skips triage. */
+  sendCosMessage(id: string, text: string) {
+    return this.request<{ entryId: string }>("POST", `/cos/${id}/messages`, { text });
   }
   humanReview(key: string, body: HumanReviewBody) {
     return this.request<Ticket>("POST", `/tickets/${key}/review`, body);
@@ -532,7 +569,7 @@ export class HarnessClient {
 
   /** Open the live event stream. Reconnects automatically until close() is called. */
   connect(handlers: {
-    onEvent: (e: HarnessEvent) => void;
+    onEvent: (e: ClientEvent) => void;
     onStatus?: (connected: boolean) => void;
     onMessage?: (msg: ServerMessage) => void;
   }): HarnessSocket {
@@ -555,7 +592,7 @@ const subKey = (sessionId: string, viewerId: string | undefined) => `${sessionId
  * id) is for every viewer of the session.
  */
 export function isBrowserEventFor(
-  e: HarnessEvent,
+  e: ClientEvent,
   sessionId: string,
   viewerId: string | undefined,
 ): e is Extract<HarnessEvent, { kind: "browser.frame" | "browser.state" }> {
@@ -579,7 +616,7 @@ export class HarnessSocket {
   constructor(
     private url: string,
     private handlers: {
-      onEvent: (e: HarnessEvent) => void;
+      onEvent: (e: ClientEvent) => void;
       onStatus?: (connected: boolean) => void;
       /** Every other message from the service (terminal.snapshot, terminal.output, …). */
       onMessage?: (msg: ServerMessage) => void;

@@ -5,7 +5,6 @@ import {
   approvalToast,
   decisionSource,
   describeApprovalInput,
-  dispatchedKey,
   driverIcon,
   driverLabel,
   fitRect,
@@ -278,13 +277,6 @@ describe("formatMaybeJson", () => {
     expect(formatMaybeJson("abcdef", 4)).toBe("abcd\n… (2 more characters)");
     expect(formatMaybeJson("abcd", 4)).toBe("abcd");
   });
-});
-
-test("dispatchedKey finds the ticket key, or nothing", () => {
-  expect(dispatchedKey({ outcome: "Dispatched to FOO-123 today" })).toBe("FOO-123");
-  expect(dispatchedKey({ outcome: "Declined" })).toBeUndefined();
-  expect(dispatchedKey({ outcome: undefined } as never)).toBeUndefined();
-  expect(dispatchedKey({ outcome: "xFOO-1" })).toBeUndefined();
 });
 
 describe("normalizeUrl", () => {

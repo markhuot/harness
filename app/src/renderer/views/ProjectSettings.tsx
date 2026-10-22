@@ -6,13 +6,13 @@ import { useEffect, useMemo, useState } from "react";
 import type { CompletionAction, Project } from "@harness/shared";
 import { offeredCompletionActions, projectCompletionDefault, projectGroups, resolveBaseBranch } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
-import { inheritedBaseLabel, previewProjectKey, tildify } from "@harness/shared/state";
+import { inheritedBaseLabel, inheritedLabel, previewProjectKey, tildify, triStateOf, triStateValue, type TriState } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import { Switch } from "../components/bits";
 import { BranchSelect } from "../components/BranchSelect";
 import { GroupSelect } from "../components/GroupSelect";
 import { ProjectColorPicker, ProjectKey } from "../components/ProjectKey";
-import { DraftInput, Row, Section } from "./Settings";
+import { COS_SWITCHES, DraftInput, Row, Section } from "./Settings";
 import "./settings.css";
 import { ProjectModelRow } from "./settings/ModelSettings";
 import { ProjectPermissionRow } from "./settings/PermissionSettings";
@@ -169,6 +169,26 @@ function ProjectSettings({ project }: { project: Project }) {
                 <Switch ariaLabel="Skip human review" checked={!!project.skipHumanReview} onChange={(v) => void save({ skipHumanReview: v })} />
               </Row>
               {project.isGit && <CompletionActionRow project={project} onChange={(completionAction) => void save({ completionAction })} />}
+            </div>
+          </Section>
+
+          <Section id="project-cos" title="Chief of staff" desc="Each follows the app's setting unless this project overrides it.">
+            <div className="card-surface settings-card">
+              {COS_SWITCHES.map((s) => (
+                <Row key={s.key} title={s.title} sub={s.sub}>
+                  <select
+                    className="select"
+                    aria-label={s.title}
+                    data-testid={`project-${s.key}`}
+                    value={triStateOf(project[s.key])}
+                    onChange={(e) => void save({ [s.key]: triStateValue(e.target.value as TriState) })}
+                  >
+                    <option value="inherit">{inheritedLabel(state.settings?.[s.key] ?? s.fallback)}</option>
+                    <option value="on">On</option>
+                    <option value="off">Off</option>
+                  </select>
+                </Row>
+              ))}
             </div>
           </Section>
 

@@ -55,6 +55,6 @@ export function popoutBounds(pane: ScreenRect | undefined, workArea: ScreenRect,
  * has focus: a pop-out holds one pane, with no board, sidebar or other views to go to. The rest
  * (closing the pane, the palette, a ticket's tabs) go to the focused window.
  */
-const MAIN_WINDOW_COMMANDS = new Set(["new-session", "new-terminal", "board", "inbox", "settings", "toggle-sidebar"]);
+const MAIN_WINDOW_COMMANDS = new Set(["new-session", "new-terminal", "board", "settings", "toggle-sidebar"]);
 
 export const commandGoesToMain = (cmd: string) => MAIN_WINDOW_COMMANDS.has(cmd);

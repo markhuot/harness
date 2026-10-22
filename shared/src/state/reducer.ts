@@ -3,7 +3,6 @@
 
 import type {
   DriverInfo,
-  HarnessEvent,
   Project,
   PublicSettings,
   Run,
@@ -22,7 +21,8 @@ import type {
 } from "../index";
 import { isConductor, reviewPassed } from "../protocol";
 import type { DepState } from "./conductor";
-import { dispatchedKey } from "./format";
+import { mergeChat } from "./cos";
+import type { ClientEvent, Cos, CosBadge, CosChatEntry, CosEvent } from "../cos";
 import { inheritedModel } from "./models";
 import { ALL_SCOPE, adjustDoneTotals, doneColumn, groupScope, inScope, mergeTickets, pagingFromPage, reducePaging, scopeGroup, scopeOf, type DonePaging, type PagingAction, type SearchState } from "./paging";
 
@@ -77,6 +77,14 @@ export interface State {
   dependents: Record<string, string[]>;
   /** Newest createdAt the last snapshot saw (null before one): tells new tickets from unloaded old ones */
   ticketsAsOf: number | null;
+  /** The chiefs of staff by ticket id (GET /cos) */
+  chiefs: Record<string, Cos>;
+  /** Events a chief's Inbox has shown or been pushed, by event id (newest first through selectors) */
+  cosEvents: Record<string, CosEvent>;
+  /** A chief's chat so far (pages loaded and entries pushed), oldest first, by chief id */
+  cosChat: Record<string, CosChatEntry[]>;
+  /** Events awaiting a verdict or being handled, per chief (null before the first answer) */
+  cosBadge: CosBadge | null;
 }
 
 export const initialState: State = {
@@ -103,6 +111,10 @@ export const initialState: State = {
   childrenLoaded: {},
   dependents: {},
   ticketsAsOf: null,
+  chiefs: {},
+  cosEvents: {},
+  cosChat: {},
+  cosBadge: null,
 };
 
 export interface Snapshot {
@@ -112,12 +124,15 @@ export interface Snapshot {
   watchers: Watcher[];
   settings: PublicSettings | null;
   drivers: DriverInfo[];
+  /** The chiefs of staff (absent from a service that has none to list) */
+  chiefs?: Cos[];
+  cosBadge?: CosBadge | null;
   /** The first done page for the board's current scope (tickets holds every non-done ticket) */
   donePage?: { scope: string; page: TicketPage };
 }
 
 export type Action =
-  | { type: "event"; event: HarnessEvent }
+  | { type: "event"; event: ClientEvent }
   | { type: "snapshot"; snapshot: Snapshot }
   | { type: "connected"; connected: boolean }
   /** `requestedKey`: the key the detail was fetched by (an old key records an alias) */
@@ -137,6 +152,14 @@ export type Action =
   /** GET /tickets/:key/spec/revisions/:rev: one revision's body */
   | { type: "specRevision"; ticketId: string; revision: SpecRevision }
   | { type: "drivers"; drivers: DriverInfo[] }
+  | { type: "chiefs"; chiefs: Cos[] }
+  /** One chief changed (opened, switched on or off) */
+  | { type: "chief"; chief: Cos }
+  | { type: "cosBadge"; badge: CosBadge }
+  /** A page of a chief's Inbox, merged into what's loaded */
+  | { type: "cosEvents"; events: CosEvent[] }
+  /** A page of a chief's chat (any order), merged into what's loaded */
+  | { type: "cosChat"; cosId: string; entries: CosChatEntry[] }
   | PagingAction;
 
 // ---------------------------------------------------------------------------
@@ -147,6 +170,10 @@ function byId<T extends { id: string }>(items: T[]): Record<string, T> {
   const out: Record<string, T> = {};
   for (const item of items) out[item.id] = item;
   return out;
+}
+
+function byTicketId(chiefs: Cos[]): Record<string, Cos> {
+  return Object.fromEntries(chiefs.map((c) => [c.ticketId, c]));
 }
 
 function without<T>(rec: Record<string, T>, id: string): Record<string, T> {
@@ -295,8 +322,14 @@ function pruneDeltas(deltas: State["deltas"], sessions: State["sessions"], runs:
 // Reducer
 // ---------------------------------------------------------------------------
 
-export function applyEvent(state: State, event: HarnessEvent): State {
+export function applyEvent(state: State, event: ClientEvent): State {
   switch (event.kind) {
+    case "cos.event.upserted":
+      return { ...state, cosEvents: { ...state.cosEvents, [event.event.id]: event.event } };
+    case "cos.badge":
+      return { ...state, cosBadge: { total: event.total, byCos: event.byCos } };
+    case "cos.transcript.appended":
+      return { ...state, cosChat: { ...state.cosChat, [event.cosId]: mergeChat(state.cosChat[event.cosId] ?? [], [event.entry]) } };
     case "project.upserted": {
       const projects = { ...state.projects, [event.project.id]: event.project };
       // Joining or leaving a group changes what that group's board counts: page it afresh.
@@ -428,6 +461,8 @@ export function reducer(state: State, action: Action): State {
         watchers: byId(s.watchers),
         settings: s.settings,
         drivers: s.drivers,
+        chiefs: s.chiefs ? byTicketId(s.chiefs) : state.chiefs,
+        cosBadge: s.cosBadge ?? state.cosBadge,
       };
     }
     case "detail": {
@@ -491,6 +526,19 @@ export function reducer(state: State, action: Action): State {
     }
     case "drivers":
       return { ...state, drivers: action.drivers };
+    case "chiefs":
+      return { ...state, chiefs: byTicketId(action.chiefs) };
+    case "chief":
+      return { ...state, chiefs: { ...state.chiefs, [action.chief.ticketId]: action.chief } };
+    case "cosBadge":
+      return { ...state, cosBadge: action.badge };
+    case "cosEvents": {
+      const cosEvents = { ...state.cosEvents };
+      for (const e of action.events) cosEvents[e.id] = e;
+      return { ...state, cosEvents };
+    }
+    case "cosChat":
+      return { ...state, cosChat: { ...state.cosChat, [action.cosId]: mergeChat(state.cosChat[action.cosId] ?? [], action.entries) } };
     case "tickets":
       return { ...state, tickets: mergeTickets(state.tickets, action.tickets) };
     case "missingKeys": {
@@ -546,12 +594,6 @@ export function ticketLinkable(state: State, key: string): boolean {
   return Object.values(state.projects).some((p) => p.key.toUpperCase() === prefix);
 }
 
-export function triageSessions(state: State): Session[] {
-  return Object.values(state.sessions)
-    .filter((s) => s.kind === "triage")
-    .sort((a, b) => b.createdAt - a.createdAt);
-}
-
 /** The driver new tickets in a project get: the project's own default, else the global one (null until settings load). */
 export function defaultDriverOf(state: State, projectId: string): string | null {
   return state.projects[projectId]?.defaultDriver ?? state.settings?.defaultDriver ?? null;
@@ -600,7 +642,7 @@ export function dependencyStates(state: State, ticket: Ticket): DepState[] {
 
 /**
  * Ticket keys the UI references but the store can't resolve yet: dependencies of loaded tickets,
- * dependents from details, and triage outcomes ("Dispatched to FOO-123"). Keys the service
+ * and dependents from details. Keys the service
  * already 404'd are left out. Fetch each with getTicket and dispatch "detail" (with requestedKey)
  * or "missingKeys".
  */
@@ -616,10 +658,6 @@ export function unresolvedKeys(state: State, extra: string[] = []): string[] {
   };
   for (const t of Object.values(state.tickets)) t.dependsOn.forEach(want);
   for (const keys of Object.values(state.dependents)) keys.forEach(want);
-  for (const s of Object.values(state.sessions)) {
-    const k = s.kind === "triage" ? dispatchedKey(s) : null;
-    if (k) want(k);
-  }
   extra.forEach(want);
   return [...out];
 }

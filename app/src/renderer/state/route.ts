@@ -3,13 +3,14 @@
 // On the board, the ticket part is an entry point into the pane workspace (state/panes.ts):
 // arriving at it opens the ticket in a pane, and afterwards the hash mirrors the focused ticket
 // pane (see mirrorRoute) without adding history entries.
-//   #/inbox[/<sessionId>]
+//   #/cos/<scope>[/<tab>]   a chief of staff (scope: "all" or "group:<groupId>"; tab: chat or inbox)
 //   #/settings[/<section>]
 //   #/project/<projectId>/settings
 //   #/popout/<id>/<fromScope>   a pop-out window's one pane (components/PopoutWindow.tsx), which
 //                               goes back to the board of `fromScope` when popped back in
 
-import { ALL_SCOPE, groupScope, scopeGroup, scopeOf, scopeProject, ticketTabWithChanges, type TicketTab } from "@harness/shared/state";
+import { cosScopeKey, parseCosScopeKey, type CosScopeKey } from "@harness/shared";
+import { ALL_SCOPE, groupScope, isCosTab, type CosTab, scopeGroup, scopeOf, scopeProject, ticketTabWithChanges, type TicketTab } from "@harness/shared/state";
 
 // Ticket tabs are shared with the iOS app (@harness/shared/state "tabs").
 export { parsePluginTab, pluginTabRoute, TICKET_TABS, type BuiltinTicketTab, type TicketTab } from "@harness/shared/state";
@@ -17,7 +18,7 @@ export { parsePluginTab, pluginTabRoute, TICKET_TABS, type BuiltinTicketTab, typ
 export type Route =
   /** `group` set: a project group's board, by id (projectId is null then); else a project's, or All projects */
   | { view: "board"; projectId: string | null; group?: string | null; ticketKey: string | null; tab: TicketTab }
-  | { view: "inbox"; sessionId: string | null }
+  | { view: "cos"; scope: CosScopeKey; tab: CosTab }
   | { view: "settings"; section: string | null }
   | { view: "project"; projectId: string }
   | { view: "popout"; id: string; fromScope: string };
@@ -25,7 +26,13 @@ export type Route =
 export function parseRoute(hash: string): Route {
   const parts = hash.replace(/^#\/?/, "").split("/").filter(Boolean).map(decodeURIComponent);
   const [view, ...rest] = parts;
-  if (view === "inbox") return { view: "inbox", sessionId: rest[0] ?? null };
+  // The watcher Inbox is gone (a chief of staff's Inbox replaces it): its old links open the board.
+  if (view === "inbox") return { view: "board", projectId: null, ticketKey: null, tab: "spec" };
+  if (view === "cos") {
+    const scope = parseCosScopeKey(rest[0]);
+    if (scope) return { view: "cos", scope: cosScopeKey(scope), tab: isCosTab(rest[1]) ? rest[1] : "chat" };
+    return { view: "board", projectId: null, ticketKey: null, tab: "spec" };
+  }
   if (view === "settings") return { view: "settings", section: rest[0] ?? null };
   if (view === "project" && rest[0]) return { view: "project", projectId: rest[0] };
   if (view === "popout" && rest[0]) return { view: "popout", id: rest[0], fromScope: rest[1] ?? ALL_SCOPE };
@@ -53,8 +60,8 @@ export function parseRoute(hash: string): Route {
 export function formatRoute(r: Route): string {
   const e = encodeURIComponent;
   switch (r.view) {
-    case "inbox":
-      return r.sessionId ? `#/inbox/${e(r.sessionId)}` : "#/inbox";
+    case "cos":
+      return `#/cos/${e(r.scope)}` + (r.tab !== "chat" ? `/${r.tab}` : "");
     case "settings":
       return r.section ? `#/settings/${e(r.section)}` : "#/settings";
     case "project":

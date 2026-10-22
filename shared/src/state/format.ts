@@ -10,7 +10,6 @@ import type {
   TicketKind,
   TicketStatus,
   TranscriptEntry,
-  TriageStatus,
 } from "../protocol";
 import { PERMISSION_MODE_LABELS } from "../permissions";
 import { commandLine } from "../commandLine";
@@ -282,22 +281,6 @@ export function formatMaybeJson(text: string, max = 20000): string {
     } catch {}
   }
   return text.length > max ? text.slice(0, max) + `\n… (${text.length - max} more characters)` : text;
-}
-
-// ---------------------------------------------------------------------------
-// Inbox
-// ---------------------------------------------------------------------------
-
-export const TRIAGE_LABEL: Record<TriageStatus, { label: string; tone: "amber" | "green" | "neutral" | "red" }> = {
-  triaging: { label: "Triaging", tone: "amber" },
-  dispatched: { label: "Dispatched", tone: "green" },
-  declined: { label: "Declined", tone: "neutral" },
-  failed: { label: "Failed", tone: "red" },
-};
-
-/** "Dispatched to FOO-123" → "FOO-123" (the ticket a triage outcome names). */
-export function dispatchedKey(session: Pick<Session, "outcome">): string | undefined {
-  return session.outcome?.match(/\b[A-Z][A-Z0-9_]*-\d+\b/)?.[0];
 }
 
 // ---------------------------------------------------------------------------

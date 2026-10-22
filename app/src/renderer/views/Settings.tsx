@@ -1,15 +1,14 @@
-// Settings: appearance, drivers (each with its own settings) and the default model, general run settings, network, notifications, the browser's extensions, prompts, watchers, and the project list
+// Settings: appearance, drivers (each with its own settings) and the default model, general run settings, network, notifications, the browser's extensions, prompts, the chief of staff switches, and the project list
 // (each project's own settings live on its Project settings screen).
 
 import { useEffect, useState, type ReactNode } from "react";
-import type { DriverInfo, ModelInfo, Project, PublicSettings, Settings, Watcher } from "@harness/shared";
-import { DEFAULT_BASE_BRANCH, DEFAULT_BROWSER_IDLE_TAB_MINUTES, DEFAULT_CONTEXT_GAUGE_LIMIT, MAX_BROWSER_IDLE_TAB_MINUTES, settingsWatcherChoice, settingsWatcherChoicePatch, watcherCommandLine, watcherDriver } from "@harness/shared";
+import type { Project, PublicSettings, Settings } from "@harness/shared";
+import { DEFAULT_BASE_BRANCH, DEFAULT_BROWSER_IDLE_TAB_MINUTES, DEFAULT_CONTEXT_GAUGE_LIMIT, MAX_BROWSER_IDLE_TAB_MINUTES} from "@harness/shared";
 import { limitError, parseLimit } from "../state/contextGauge";
 import { useAction, useStore } from "../state/store";
 import { modelName, sortedProjects } from "@harness/shared/state";
 import { useDriverModels } from "../state/models";
 import { DriverModelSelect } from "../components/ModelSelect";
-import { emptyWatcher, fromDraft, noSettings, toDraft, watcherDefaultChoice, type TriageSettings, type WatcherDraft } from "./settings/watcherDraft";
 import { Icon } from "../components/Icon";
 import "./settings.css";
 import { relativeTime, Switch } from "../components/bits";
@@ -34,7 +33,7 @@ export const SETTINGS_SECTIONS = [
   ["notifications", "Notifications"],
   ["extensions", "Extensions"],
   ["prompts", "Prompts"],
-  ["watchers", "Watchers"],
+  ["cos", "Chief of staff"],
   ["projects", "Projects"],
 ] as const;
 
@@ -84,7 +83,7 @@ export function SettingsView() {
           {state.settings && <NotificationsSection settings={state.settings} />}
           <ExtensionsSection />
           <PromptsSection />
-          <WatchersSection />
+          {state.settings && <CosSection settings={state.settings} />}
           <ProjectsSection />
         </div>
       </div>
@@ -198,247 +197,27 @@ function GeneralSection({ settings }: { settings: PublicSettings }) {
 }
 
 // ---------------------------------------------------------------------------
-// Watchers
+// Chief of staff: the app's defaults; each project may override them (its own settings screen)
 // ---------------------------------------------------------------------------
 
-function driverLabel(drivers: DriverInfo[], id: string): string {
-  return drivers.find((x) => x.id === id)?.name ?? id;
-}
+export const COS_SWITCHES = [
+  { key: "cosEnabled", title: "Chief of staff enabled", sub: "Chiefs of staff triage ticket moves, watcher items and schedules for the projects they cover. Off, no chief gets events or runs.", fallback: true },
+  { key: "cosCanUnblock", title: "Chief of staff can unblock tickets", sub: "A chief may answer a blocked ticket itself, learning from how you answered before. Off, it only tells you.", fallback: false },
+] as const;
 
-function WatcherForm({
-  initial,
-  settings,
-  onCancel,
-  onSubmit,
-  submitLabel,
-}: {
-  initial: WatcherDraft;
-  settings: TriageSettings;
-  onCancel: () => void;
-  onSubmit: (d: WatcherDraft) => Promise<boolean>;
-  submitLabel: string;
-}) {
-  const [d, setD] = useState(initial);
-  const [busy, setBusy] = useState(false);
-  const set = <K extends keyof WatcherDraft>(k: K, v: WatcherDraft[K]) => setD((p) => ({ ...p, [k]: v }));
-  const valid = d.name.trim() && d.command.trim();
-  const resolved = watcherDefaultChoice(settings);
-
-  return (
-    <form
-      className="settings-form"
-      onSubmit={async (e) => {
-        e.preventDefault();
-        if (!valid) return;
-        setBusy(true);
-        const ok = await onSubmit(d);
-        setBusy(false);
-        if (ok) onCancel();
-      }}
-    >
-      <div className="settings-form-grid">
-        <div className="field">
-          <label>Name</label>
-          <input className="input" value={d.name} autoFocus placeholder="jira" onChange={(e) => set("name", e.target.value)} />
-        </div>
-        <div className="field span-2">
-          <label>Command</label>
-          <textarea
-            className="textarea mono"
-            rows={2}
-            value={d.command}
-            placeholder={"~/Sites/Jira/watch-jira.js\nwhile true; do curl -s https://example.com/events; sleep 60; done"}
-            onChange={(e) => set("command", e.target.value)}
-          />
-          <div className="field-hint">Runs in your login shell, so pipes, PATH and loops work. Whatever it prints shows up in the Inbox.</div>
-        </div>
-        <div className="field span-2">
-          <label>Prompt</label>
-          <textarea
-            className="textarea"
-            rows={2}
-            value={d.prompt}
-            placeholder="If this event is assigned to me and has actionable next steps, dispatch it to the NYTIMES project."
-            onChange={(e) => set("prompt", e.target.value)}
-          />
-          <div className="field-hint">Optional. Tells triage what to do with this watcher's output, including which project to dispatch it to.</div>
-        </div>
-        <div className="field">
-          <label>Working directory</label>
-          <input className="input mono" value={d.cwd} placeholder="Optional" onChange={(e) => set("cwd", e.target.value)} />
-        </div>
-        <div className="field" data-testid="watcher-model">
-          <label>Model</label>
-          <DriverModelSelect value={d.choice} resolved={resolved} onChange={(c) => set("choice", c)} />
-          <div className="field-hint">Driver and model for this watcher's triage sessions.</div>
-        </div>
-        <div className="field">
-          <label>Mode</label>
-          <div className="row">
-            <div className="segmented">
-              <button type="button" className={d.mode === "loop" ? "on" : ""} onClick={() => set("mode", "loop")}>
-                Loop
-              </button>
-              <button type="button" className={d.mode === "interval" ? "on" : ""} onClick={() => set("mode", "interval")}>
-                Interval
-              </button>
-            </div>
-            {d.mode === "interval" && (
-              <>
-                <input className="input" type="number" min={1} style={{ width: 90 }} value={d.intervalSec} onChange={(e) => set("intervalSec", Number(e.target.value))} />
-                <span className="muted">sec</span>
-              </>
-            )}
-          </div>
-          <div className="field-hint">{d.mode === "loop" ? "Re-runs as soon as the command exits." : "Runs on a fixed schedule."}</div>
-        </div>
-        <div className="field">
-          <label>Enabled</label>
-          <div className="row" style={{ height: 30 }}>
-            <Switch checked={d.enabled} onChange={(v) => set("enabled", v)} label={d.enabled ? "On" : "Off"} />
-          </div>
-        </div>
-      </div>
-      <div className="settings-form-foot">
-        <button type="button" className="btn btn-ghost" onClick={onCancel}>
-          Cancel
-        </button>
-        <button type="submit" className="btn btn-primary" disabled={!valid || busy}>
-          {busy && <span className="spinner" />}
-          {submitLabel}
-        </button>
-      </div>
-    </form>
-  );
-}
-
-function WatchersSection() {
-  const { state, client } = useStore();
-  const act = useAction();
-  const [editing, setEditing] = useState<string | "new" | null>(null);
-  const watchers = Object.values(state.watchers).sort((a, b) => a.name.localeCompare(b.name));
-  const settings: TriageSettings = state.settings ?? noSettings;
-
-  return (
-    <Section
-      id="watchers"
-      title="Watchers"
-      desc="Any command that prints text, plus a prompt. Whatever it prints opens a triage session in the Inbox with that prompt. The prompt names the project to dispatch to."
-      actions={
-        editing !== "new" && (
-          <button className="btn btn-sm" onClick={() => setEditing("new")}>
-            <Icon name="plus" size={12} /> Add watcher
-          </button>
-        )
-      }
-    >
-      {state.settings && <WatcherDefaults settings={state.settings} />}
-      <div className="card-surface settings-card">
-        {editing === "new" && (
-          <WatcherForm
-            initial={emptyWatcher}
-            settings={settings}
-            submitLabel="Create watcher"
-            onCancel={() => setEditing(null)}
-            onSubmit={async (d) => !!(await act(() => client.createWatcher(fromDraft(d)), "Watcher created"))}
-          />
-        )}
-        {watchers.length === 0 && editing !== "new" && (
-          <div className="empty">
-            <Icon name="eye" />
-            <strong>No watchers yet</strong>
-            Add a command whose output should be triaged, like watch-jira or a curl loop.
-          </div>
-        )}
-        {watchers.map((w) =>
-          editing === w.id ? (
-            <WatcherForm
-              key={w.id}
-              initial={toDraft(w, settings)}
-              settings={settings}
-              submitLabel="Save"
-              onCancel={() => setEditing(null)}
-              onSubmit={async (d) => !!(await act(() => client.updateWatcher(w.id, fromDraft(d)), "Watcher saved"))}
-            />
-          ) : (
-            <div className="settings-row" key={w.id}>
-              <Switch ariaLabel={`Enable ${w.name}`} checked={w.enabled} onChange={(v) => void act(() => client.updateWatcher(w.id, { enabled: v }))} />
-              <div className="settings-row-main">
-                <div className="settings-row-title">
-                  {w.name}
-                  <span className="badge">{w.mode === "loop" ? "Loop" : `Every ${w.intervalSec}s`}</span>
-                  {!w.enabled && <span className="badge badge-outline">Paused</span>}
-                </div>
-                <div className="settings-row-sub mono" title={watcherCommandLine(w)}>
-                  {watcherCommandLine(w)}
-                </div>
-                {w.prompt && (
-                  <div className="settings-row-sub" title={w.prompt}>
-                    {w.prompt}
-                  </div>
-                )}
-                <div className="settings-row-sub">
-                  <WatcherTriageLabel watcher={w} settings={settings} drivers={state.drivers} /> · last run {relativeTime(w.lastRunAt)}
-                  {w.cwd && <> · in <span className="mono">{w.cwd}</span></>}
-                </div>
-                {w.lastError && <div className="settings-row-err">{w.lastError}</div>}
-              </div>
-              <div className="settings-row-actions">
-                <button className="btn btn-sm" onClick={() => void act(() => client.runWatcher(w.id), "Watcher started")}>
-                  <Icon name="play" size={11} /> Run now
-                </button>
-                <button className="btn btn-sm btn-ghost btn-icon" title="Edit" onClick={() => setEditing(w.id)}>
-                  <Icon name="edit" size={13} />
-                </button>
-                <button
-                  className="btn btn-sm btn-ghost btn-icon btn-danger"
-                  title="Delete"
-                  onClick={() => {
-                    if (confirm(`Delete watcher “${w.name}”?`)) void act(() => client.deleteWatcher(w.id), "Watcher deleted");
-                  }}
-                >
-                  <Icon name="trash" size={13} />
-                </button>
-              </div>
-            </div>
-          ),
-        )}
-      </div>
-    </Section>
-  );
-}
-
-/** "Claude Code · Opus": the driver a watcher triages on, plus the model when it or the watcher default picks one. */
-function WatcherTriageLabel({ watcher, settings, drivers }: { watcher: Watcher; settings: TriageSettings; drivers: DriverInfo[] }) {
-  const { client, epoch } = useStore();
-  const driver = watcherDriver(watcher, settings);
-  const model = driver ? (watcher.models?.[driver] || settings.watcherModels?.[driver] || null) : null;
-  const { data } = useDriverModels(client, model ? driver : "", epoch);
-  if (!driver) return <>Default driver</>;
-  return (
-    <>
-      {driverLabel(drivers, driver)}
-      {model && <> · {modelName(data?.models as ModelInfo[] | undefined, model)}</>}
-    </>
-  );
-}
-
-/** Driver + model for every watcher that doesn't pick its own. */
-function WatcherDefaults({ settings }: { settings: PublicSettings }) {
+function CosSection({ settings }: { settings: PublicSettings }) {
   const { client } = useStore();
   const act = useAction();
   return (
-    <div className="card-surface settings-card" style={{ marginBottom: 12 }} data-testid="watcher-defaults">
-      <Row title="Default model" sub="Used by watchers that don't pick their own.">
-        <DriverModelSelect
-          value={settingsWatcherChoice(settings)}
-          resolved={{ driver: settings.defaultDriver, model: settings.defaultModels[settings.defaultDriver] ?? null }}
-          defaultLabel="Same as default"
-          autoWidth
-          onChange={(c) => void act(() => client.updateSettings(settingsWatcherChoicePatch(c, settings)))}
-        />
-      </Row>
-    </div>
+    <Section id="cos" title="Chief of staff" desc="A chief of staff triages what happens on a board and acts on it. Each group, and All projects, has its own, switched on or off from the sidebar. A project can override these two.">
+      <div className="card-surface settings-card">
+        {COS_SWITCHES.map((s) => (
+          <Row key={s.key} title={s.title} sub={s.sub}>
+            <Switch checked={settings[s.key] ?? s.fallback} ariaLabel={s.title} onChange={(v) => void act(() => client.updateSettings({ [s.key]: v }))} />
+          </Row>
+        ))}
+      </div>
+    </Section>
   );
 }
 

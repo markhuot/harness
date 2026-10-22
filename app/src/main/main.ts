@@ -513,7 +513,6 @@ function buildMenu() {
         commandItem("open-file"),
         { type: "separator" },
         commandItem("board", "All Projects"),
-        commandItem("inbox", "Inbox"),
         { type: "separator" },
         // ⌘W closes the focused pane, or the window when the board (or no pane) has focus.
         commandItem("pane.close"),

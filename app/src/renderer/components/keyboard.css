@@ -1,6 +1,6 @@
 /* Focus rings for keyboard navigation. Elements ring on :focus-visible only, so a click never shows
    one; the sidebar's area ring shows only in keyboard mode (html[data-input="keyboard"],
-   state/inputModality.ts). Rows in clipped lists (the inbox, a conductor's Tickets tab, menus) ring
+   state/inputModality.ts). Rows in clipped lists (a conductor's Tickets tab, menus) ring
    inset, since a halo outside them would be cut off. Theme tokens only. */
 
 .tab:focus-visible,
@@ -18,7 +18,6 @@
   box-shadow: inset 0 0 0 2px var(--focus);
 }
 
-.inbox-item:focus-visible,
 .child-row:focus-visible {
   outline: none;
   box-shadow: inset 0 0 0 2px var(--focus);
