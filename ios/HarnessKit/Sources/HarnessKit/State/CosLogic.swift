@@ -149,6 +149,11 @@ public enum CosSettings {
         project?.cosModel ?? appModel(settings)
     }
 
+    /// The drivers a CoS model picker offers (cosDrivers): those that can run a chief, and `keep` so a saved choice never vanishes.
+    public static func drivers(_ all: [DriverInfo], keeping keep: String?) -> [DriverInfo] {
+        all.filter { $0.runsCos != false || $0.id == keep }
+    }
+
     /// A PhaseChoice as the picker's value: nil (the Default row) is no driver.
     public static func pickerChoice(_ c: PhaseChoice?) -> Watchers.TriageChoice {
         Watchers.TriageChoice(driver: c?.driver, model: c?.model)

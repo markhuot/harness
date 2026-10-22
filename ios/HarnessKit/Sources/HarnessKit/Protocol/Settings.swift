@@ -215,11 +215,14 @@ public struct DriverInfo: Codable, Sendable, Equatable, Identifiable {
     public var sessionActions: SessionActions?
     /// false: the driver reports no token counts, so its gauge stays empty. nil from an older service.
     public var reportsContextUsage: Bool?
+    /// false: the driver can't run a chief of staff, so the CoS model pickers leave it out. nil: it can.
+    public var runsCos: Bool?
 
     public init(
         id: String, name: String, description: String, available: Bool, authenticated: Bool, detail: String, supportsLogin: Bool,
-        sessionActions: SessionActions? = nil, reportsContextUsage: Bool? = nil
+        sessionActions: SessionActions? = nil, reportsContextUsage: Bool? = nil, runsCos: Bool? = nil
     ) {
+        self.runsCos = runsCos
         self.sessionActions = sessionActions
         self.reportsContextUsage = reportsContextUsage
         self.id = id

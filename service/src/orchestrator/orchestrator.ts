@@ -906,7 +906,7 @@ export class Orchestrator {
       this.driverList().map(async (d) => {
         try {
           const info = await d.info();
-          return { ...info, ...(d.sessionActions ? { sessionActions: d.sessionActions } : {}), reportsContextUsage: d.reportsContextUsage !== false };
+          return { ...info, ...(d.sessionActions ? { sessionActions: d.sessionActions } : {}), reportsContextUsage: d.reportsContextUsage !== false, runsCos: d.runsCos !== false };
         } catch (err) {
           return {
             id: d.id,
@@ -2683,6 +2683,8 @@ export class Orchestrator {
       if (attachments.length) throw conflict(`${ticket.key} is waiting on a tool approval: answer it before sending attachments`);
       return this.answerApproval(ticket.key, { decision: "deny", message: text });
     }
+    // A message to a chief isn't about one project, so its run takes the app's model, not the project of the wake before it.
+    if (ticket.kind === "cos") this.cosWakeProject.delete(ticket.id);
     this.notCompleting(ticket, "messaged");
     this.autoRetries.delete(ticket.id);
     this.resetRejections(ticket);
@@ -2746,8 +2748,6 @@ export class Orchestrator {
         return;
       }
     }
-    // A chief of staff has one kind of run: a chat run would get the work tools. A message isn't about one project.
-    if (ticket.kind === "cos") this.cosWakeProject.delete(ticket.id);
     await this.steerOrEnqueue(ticket.sessionId, ticket.kind === "cos" ? "cos" : "chat", message);
   }
 

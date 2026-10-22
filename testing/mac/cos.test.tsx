@@ -432,6 +432,17 @@ describe("settings", () => {
     expect(sent[0]!.cosModel.driver).toBeTruthy();
   });
 
+  test("a driver that can't run a chief isn't offered, unless it is the one already picked", async () => {
+    const w = edited((x) => void (x.drivers[0]!.runsCos = false));
+    const m = await mount(<SettingsView />, { hash: "#/settings", world: w });
+    await m.until("the picker", () => !!byId(m, "cosModel")?.querySelector("button"));
+    await click(m, byId(m, "cosModel")!.querySelector("button")!);
+    const options = all(document.body, '[role="option"]');
+    expect(options.map((o) => text(o))).toHaveLength(1);
+    expect(text(options[0]!)).toContain("Use Work model");
+    await click(m, options[0]!); // closes the popover, so it doesn't outlive the test
+  });
+
   test("a project's chief-of-staff model reads 'Use app default' until it picks one, and Default clears it", async () => {
     const id = world.projects[0]!.id;
     const w = edited((x) => void (x.projects[0]!.cosModel = { driver: x.drivers[0]!.id, model: null }));

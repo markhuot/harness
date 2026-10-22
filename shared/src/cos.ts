@@ -26,6 +26,11 @@ export function resolveCosChoice(project: Pick<Project, "cosModel"> | null | und
   return project?.cosModel ?? settings.cosModel ?? settingsPhaseChoice(settings.phaseModels, "work");
 }
 
+/** The drivers a CoS model picker offers: those that can run a chief, and `keep` (the driver already picked) so a saved choice never vanishes. */
+export function cosDrivers<T extends { id: string; runsCos?: boolean }>(drivers: readonly T[], keep?: string | null): T[] {
+  return drivers.filter((d) => d.runsCos !== false || d.id === keep);
+}
+
 /** What a CoS sees and may act on: every project (`all`) or the projects of one group. */
 export type CosScope = "all" | { group: string };
 

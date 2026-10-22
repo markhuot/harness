@@ -210,6 +210,15 @@ private func project(_ id: String, group: String?) -> Project {
         #expect(CosSettings.model(project: nil, settings: settings(cosModel: app)) == app)
     }
 
+    @Test func theChiefPickerLeavesOutDriversThatCantRunAChief() throws {
+        func driver(_ id: String, runsCos: Bool?) -> DriverInfo {
+            DriverInfo(id: id, name: id, description: "", available: true, authenticated: true, detail: "", supportsLogin: false, runsCos: runsCos)
+        }
+        let all = [driver("a", runsCos: nil), driver("b", runsCos: false), driver("c", runsCos: true)]
+        #expect(CosSettings.drivers(all, keeping: nil).map(\.id) == ["a", "c"])
+        #expect(CosSettings.drivers(all, keeping: "b").map(\.id) == ["a", "b", "c"], "a saved choice never vanishes")
+    }
+
     @Test func aPickedModelSavesAndTheDefaultRowClearsIt() throws {
         func json(_ body: UpdateProjectBody) throws -> [String: Any] {
             try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(body)) as? [String: Any])

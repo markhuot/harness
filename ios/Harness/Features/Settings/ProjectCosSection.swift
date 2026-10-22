@@ -16,12 +16,13 @@ struct ProjectCosSection: View {
             row("CoS can unblock", hint: "Whether a chief of staff may answer this project's blocked tickets itself. Inherit follows the app setting.", value: project.cosCanUnblock, app: CosSettings.canUnblock(settings)) {
                 save(UpdateProjectBody(cosCanUnblock: $0))
             }
-            SettingsRow(label: "CoS model", hint: "Used when a chief of staff is woken for this project's events alone. Applies to its next run.") {
+            SettingsRow(label: "CoS model", hint: "For a wake about this project alone. Chat, stall-only and multi-project wakes use the app default. Next run.") {
                 DriverModelPicker(
                     value: CosSettings.pickerChoice(project.cosModel),
                     resolved: CosSettings.pickerChoice(CosSettings.appModel(settings)),
                     title: "CoS model",
-                    defaultLabel: "Use app default"
+                    defaultLabel: "Use app default",
+                    forCos: true
                 ) { save(UpdateProjectBody(cosModel: CosSettings.patch($0))) }
             }
         } header: {

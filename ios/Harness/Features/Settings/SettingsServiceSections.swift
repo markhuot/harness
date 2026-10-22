@@ -184,7 +184,8 @@ struct SettingsCosSection: View {
                     value: CosSettings.pickerChoice(settings.cosModel.optional),
                     resolved: CosSettings.pickerChoice(Phases.settingsPhaseChoice(settings.phaseModels, .work)),
                     title: "CoS model",
-                    defaultLabel: "Use Work model"
+                    defaultLabel: "Use Work model",
+                    forCos: true
                 ) { save(SettingsPatch(cosModel: CosSettings.patch($0))) }
             }
         } header: {

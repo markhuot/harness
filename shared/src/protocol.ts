@@ -945,6 +945,8 @@ export interface DriverInfo {
    */
   sessionActions?: { compact: boolean; newSession: boolean };
   reportsContextUsage?: boolean;
+  /** false: the driver can't run a chief of staff, so the CoS model pickers leave it out. Absent: it can. */
+  runsCos?: boolean;
 }
 
 /** A model a driver can run with (GET /drivers/:id/models). */

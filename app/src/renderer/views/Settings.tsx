@@ -221,16 +221,17 @@ export function CosModelRow({ value, settings, project, onChange }: { value: Pha
       title={title}
       sub={
         project
-          ? "Used when a chief is woken for this project's events alone. Applies to its next run."
+          ? "For a wake about this project alone. Chat, stall-only and multi-project wakes use the app default. Next run."
           : "The model every chief runs on. A project can choose its own. Applies to the next run, not one in progress."
       }
     >
-      <span data-testid={project ? "project-cosModel" : "cosModel"}>
+      <span data-testid={project ? "project-cosModel" : "cosModel"} style={{ display: "inline-block", maxWidth: 240 }}>
         <DriverModelSelect
           autoWidth
           value={value ?? { driver: null, model: null }}
           resolved={project ? resolveCosChoice(null, settings) : resolveCosChoice(null, { phaseModels: settings.phaseModels })}
           defaultLabel={project ? "Use app default" : "Use Work model"}
+          forCos
           onChange={(c) => onChange(choiceOf(c))}
         />
       </span>
