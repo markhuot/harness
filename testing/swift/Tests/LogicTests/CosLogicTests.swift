@@ -37,14 +37,6 @@ private func project(_ id: String, group: String?) -> Project {
         #expect(CosLogic.badgeText(100) == "99+")
     }
 
-    @Test func theClientSideCountMatchesTheServicesBadgeRule() {
-        let events = [
-            event("a", status: .pending), event("b", status: .triaging), event("c", status: .escalated), event("d", status: .handling),
-            event("e", status: .handled), event("f", status: .ignored), event("g", cos: "c2", status: .pending),
-        ]
-        #expect(CosLogic.openEventCount(events, cosId: "c1") == 4)
-    }
-
     // MARK: Inbox
 
     @Test func theInboxShowsOwnedAndUnassignedEventsNewestFirstAndHidesFilteredOnes() {
@@ -100,6 +92,43 @@ private func project(_ id: String, group: String?) -> Project {
         #expect(CosLogic.mergeChat(merged, paged) == merged, "merging the same page again changes nothing")
     }
 
+    @Test func aReloadThatMissesWhatIsLoadedDropsItSoPagingFillsTheHole() {
+        var state = CosState()
+        state.mergeChat("c1", [message("m1", at: 1), message("m2", at: 2)])
+        let hole = state.loadNewestChat("c1", [message("m9", at: 9), message("m10", at: 10)], hasOlder: true)
+        #expect(hole)
+        #expect(state.chat["c1"]?.map(\.id) == ["m9", "m10"])
+    }
+
+    @Test func aReloadThatOverlapsOrHasNoOlderPagesKeepsWhatIsLoaded() {
+        var state = CosState()
+        state.mergeChat("c1", [message("m1", at: 1), message("m2", at: 2)])
+        let overlapped = state.loadNewestChat("c1", [message("m2", at: 2), message("m3", at: 3)], hasOlder: true)
+        #expect(!overlapped)
+        #expect(state.chat["c1"]?.map(\.id) == ["m1", "m2", "m3"])
+        let complete = state.loadNewestChat("c1", [message("m9", at: 9)], hasOlder: false)
+        #expect(!complete, "the page is all there is: nothing is missing")
+        #expect(state.chat["c1"]?.map(\.id) == ["m1", "m2", "m3", "m9"])
+    }
+
+    @Test func aLiveEntryNewerThanTheReloadedPageSurvivesTheDrop() {
+        var state = CosState()
+        state.mergeChat("c1", [message("m1", at: 1), message("live", at: 20)])
+        state.loadNewestChat("c1", [message("m9", at: 9)], hasOlder: true)
+        #expect(state.chat["c1"]?.map(\.id) == ["m9", "live"])
+    }
+
+    @Test func anInboxReloadThatMissesWhatIsLoadedDropsItsRowsAndKeepsOtherChiefs() {
+        var state = CosState()
+        state.mergeEvents([event("old", at: 1), event("unassigned", cos: nil, at: 2), event("other", cos: "c2", at: 3)])
+        let dropped = state.loadNewestEvents("c1", [event("new", at: 50)], hasOlder: true)
+        #expect(dropped)
+        #expect(state.events.keys.sorted() == ["new", "other"])
+        let kept = state.loadNewestEvents("c1", [event("new", at: 50), event("newer", at: 60)], hasOlder: true)
+        #expect(!kept, "an overlapping page leaves the rows alone")
+        #expect(state.events.keys.sorted() == ["new", "newer", "other"])
+    }
+
     @Test func chatRowsAreMessagesShortLinesAndTicketCards() {
         let entries: [CosChatEntry] = [
             message("m1", at: 1, text: "question", role: "user"),
@@ -123,22 +152,7 @@ private func project(_ id: String, group: String?) -> Project {
         #expect(CosLogic.statusLabel("review") == "Review")
     }
 
-    @Test func olderPagesKeepTheReadersPlace() {
-        #expect(CosLogic.anchoredOffset(beforeOffset: 10, beforeHeight: 1000, height: 1600) == 610)
-        #expect(CosLogic.anchoredOffset(beforeOffset: 0, beforeHeight: 1000, height: 900) == 0, "never above the top")
-        #expect(CosLogic.nearTop(80))
-        #expect(!CosLogic.nearTop(81))
-    }
-
     // MARK: Settings
-
-    @Test func aProjectInheritsTheAppValueUnlessItOverridesIt() {
-        #expect(CosSettings.resolve(project: .absent, app: false, default: true) == false)
-        #expect(CosSettings.resolve(project: .null, app: false, default: true) == false)
-        #expect(CosSettings.resolve(project: .value(true), app: false, default: false) == true)
-        #expect(CosSettings.resolve(project: .value(false), app: true, default: true) == false)
-        #expect(CosSettings.resolve(project: .absent, app: nil, default: true) == true, "nothing saved reads the default")
-    }
 
     @Test func theAppDefaultsAreOnForTheChiefAndOffForUnblocking() {
         #expect(CosSettings.enabled(nil))

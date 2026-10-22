@@ -115,8 +115,6 @@ public final class Router {
         self.root = root
     }
 
-    /// Applies a link. Returns the theme picks a settings link carries, for the caller to save.
-    @discardableResult
     /// Opens a chief of staff (`scope`: "all" or "group:<id>") as a card of its own, docked and
     /// shown beside the board like a ticket; one already open comes forward.
     public func openCos(scope: String) {
@@ -134,6 +132,8 @@ public final class Router {
         presentTicketSheet(.terminal(id: id))
     }
 
+    /// Applies a link. Returns the theme picks a settings link carries, for the caller to save.
+    @discardableResult
     public func open(_ link: DeepLink) -> ThemePicker.ThemePrefsPatch? {
         if scope == .ticket { return openInTicket(link) }
         switch link {

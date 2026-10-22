@@ -32,6 +32,7 @@ struct CosScreen: View {
     @Environment(\.palette) private var c
     @State private var tab: CosTab
     @State private var memoryOpen = false
+    @State private var openFailure: String?
 
     var body: some View {
         let state = store.state
@@ -45,6 +46,17 @@ struct CosScreen: View {
                 case .chat: CosChatView(chief: chief)
                 case .inbox: CosInboxView(chief: chief, onChat: { tab = .chat })
                 }
+            } else if let openFailure {
+                Spacer()
+                VStack(spacing: 10) {
+                    Text(openFailure).font(.scaled(size: 14)).foregroundStyle(c.red).multilineTextAlignment(.center)
+                    Button("Try again") { Task { await makeChief() } }
+                        .buttonStyle(.bordered)
+                        .accessibilityIdentifier("cos-open-retry")
+                }
+                .padding(24)
+                .accessibilityIdentifier("cos-open-failure")
+                Spacer()
             } else {
                 Spacer()
                 ProgressView()
@@ -57,14 +69,21 @@ struct CosScreen: View {
         .sheet(isPresented: $memoryOpen) {
             if let chief { CosMemorySheet(chief: chief) }
         }
-        .task(id: scope) {
-            // A link to a chief that isn't made yet makes it, like the board's button.
-            guard store.cos.chief(scope: scope) == nil else { return }
-            if let chief = await actions.run({ try await store.connectedAPI().openCos(scope: scope) }) {
-                store.updateCos { $0.chiefs[chief.ticketId] = chief }
-            }
-        }
+        .task(id: scope) { await makeChief() }
         .accessibilityIdentifier("cos-view")
+    }
+
+    /// A link to a chief that isn't made yet makes it, like the board's button.
+    private func makeChief() async {
+        guard store.cos.chief(scope: scope) == nil else { return }
+        openFailure = nil
+        do {
+            let chief = try await store.connectedAPI().openCos(scope: scope)
+            store.updateCos { $0.chiefs[chief.ticketId] = chief }
+        } catch {
+            haptic(.error)
+            openFailure = Connection.describeError(error, baseUrl: store.baseUrl)
+        }
     }
 
     private func header(_ chief: Cos?, title: String) -> some View {
@@ -142,6 +161,7 @@ struct CosChatView: View {
     @State private var loading = false
     @State private var draft = ""
     @State private var sending = false
+    @State private var failure: String?
     @FocusState private var focused: Bool
 
     private static let page = 30
@@ -175,6 +195,7 @@ struct CosChatView: View {
                     withAnimation(.snappy) { proxy.scrollTo(Self.bottom, anchor: .bottom) }
                 }
             }
+            if let failure { CosFailureBanner(text: failure) { self.failure = nil } }
             composer
         }
         .task(id: "\(chief.ticketId)#\(store.epoch)") { await loadFirst() }
@@ -218,9 +239,10 @@ struct CosChatView: View {
 
     private var composer: some View {
         HStack(alignment: .bottom, spacing: 8) {
-            TextField("Message the chief of staff", text: $draft, axis: .vertical)
+            TextField(chief.enabled ? "Message the chief of staff" : "Switched off", text: $draft, axis: .vertical)
                 .lineLimit(1...6)
                 .focused($focused)
+                .disabled(!chief.enabled)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 9)
                 .background(c.bgSunken, in: .rect(cornerRadius: 18))
@@ -238,24 +260,40 @@ struct CosChatView: View {
         .overlay(alignment: .top) { Rectangle().fill(c.border).frame(height: 1 / 3) }
     }
 
-    private var canSend: Bool { !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !sending }
+    private var canSend: Bool { chief.enabled && !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !sending }
 
     private func send() {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, !sending else { return }
+        guard canSend else { return }
         sending = true
+        failure = nil
         Task {
-            let sent = await actions.run { try await store.connectedAPI().sendCosMessage(chief.ticketId, text: text) }
-            sending = false
-            if sent != nil { draft = "" }
+            defer { sending = false }
+            do {
+                _ = try await store.connectedAPI().sendCosMessage(chief.ticketId, text: text)
+                // Text typed while the request was in flight stays.
+                if draft.trimmingCharacters(in: .whitespacesAndNewlines) == text { draft = "" }
+            } catch {
+                haptic(.error)
+                failure = Connection.describeError(error, baseUrl: store.baseUrl)
+            }
         }
     }
 
     private func loadFirst() async {
-        guard let page = await actions.run({ try await store.connectedAPI().cosTranscript(chief.ticketId, limit: Self.page) }) else { return }
-        store.updateCos { $0.mergeChat(chief.ticketId, page.entries) }
-        // A refetch after a reconnect keeps the older pages already loaded.
-        if cursor == nil { cursor = .some(page.nextCursor) }
+        let page: CosChatPage
+        do {
+            page = try await store.connectedAPI().cosTranscript(chief.ticketId, limit: Self.page)
+        } catch {
+            haptic(.error)
+            failure = Connection.describeError(error, baseUrl: store.baseUrl)
+            return
+        }
+        var hole = false
+        store.updateCos { hole = $0.loadNewestChat(chief.ticketId, page.entries, hasOlder: page.nextCursor != nil) }
+        // A refetch after a reconnect keeps the older pages already loaded, unless the new page
+        // doesn't reach them: then paging starts again from this page.
+        if cursor == nil || hole { cursor = .some(page.nextCursor) }
     }
 
     private func loadOlder(_ before: String, proxy: ScrollViewProxy, first: String?) {
@@ -311,6 +349,30 @@ struct CosTicketCard: View {
     }
 }
 
+/// A failed request, in words, above the composer or list it came from. Tapping dismisses it.
+struct CosFailureBanner: View {
+    let text: String
+    let dismiss: () -> Void
+
+    @Environment(\.palette) private var c
+
+    var body: some View {
+        Button(action: dismiss) {
+            Text(text)
+                .font(.scaled(size: 13))
+                .foregroundStyle(c.red)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(c.redSoft)
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Dismisses the message")
+        .accessibilityIdentifier("cos-failure")
+    }
+}
+
 // MARK: Inbox
 
 /// A plain list of the events the chief owns (and the unassigned ones): what happened and the
@@ -326,6 +388,7 @@ struct CosInboxView: View {
     @State private var cursor: String??
     @State private var loading = false
     @State private var asking = false
+    @State private var failure: String?
 
     private static let page = 50
 
@@ -343,6 +406,7 @@ struct CosInboxView: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
+            if let failure { CosFailureBanner(text: failure) { self.failure = nil } }
             ScrollView {
                 LazyVStack(spacing: 10) {
                     if rows.isEmpty, cursor != nil {
@@ -382,16 +446,36 @@ struct CosInboxView: View {
     private func load(before: String?) async {
         loading = true
         defer { loading = false }
-        guard let page = await actions.run({ try await store.connectedAPI().cosEvents(chief.ticketId, before: before, limit: Self.page) }) else { return }
-        store.updateCos { $0.mergeEvents(page.items) }
-        // A reload of the newest page keeps the cursor of older pages already loaded.
-        if before != nil || cursor == nil { cursor = .some(page.nextCursor) }
+        let page: CosEventPage
+        do {
+            page = try await store.connectedAPI().cosEvents(chief.ticketId, before: before, limit: Self.page)
+        } catch {
+            haptic(.error)
+            failure = Connection.describeError(error, baseUrl: store.baseUrl)
+            return
+        }
+        failure = nil
+        var hole = false
+        if before == nil {
+            store.updateCos { hole = $0.loadNewestEvents(chief.ticketId, page.items, hasOlder: page.nextCursor != nil) }
+        } else {
+            store.updateCos { $0.mergeEvents(page.items) }
+        }
+        // A reload of the newest page keeps the cursor of older pages already loaded, unless the
+        // new page doesn't reach them: then paging starts again from this page.
+        if before != nil || cursor == nil || hole { cursor = .some(page.nextCursor) }
     }
 
     private func escalate(_ e: CosEvent) {
+        failure = nil
         Task {
-            guard let next = await actions.run({ try await store.connectedAPI().escalateCosEvent(e.id) }) else { return }
-            store.updateCos { $0.mergeEvents([next]) }
+            do {
+                let next = try await store.connectedAPI().escalateCosEvent(e.id)
+                store.updateCos { $0.mergeEvents([next]) }
+            } catch {
+                haptic(.error)
+                failure = Connection.describeError(error, baseUrl: store.baseUrl)
+            }
         }
     }
 }
@@ -465,6 +549,7 @@ struct CosListenSheet: View {
     @Environment(\.palette) private var c
     @State private var text = ""
     @State private var sending = false
+    @State private var failure: String?
 
     var body: some View {
         NavigationStack {
@@ -477,9 +562,10 @@ struct CosListenSheet: View {
                     .background(c.bgSunken, in: .rect(cornerRadius: 10))
                     .accessibilityIdentifier("cos-listen-input")
                 if !chief.enabled {
-                    Text("This chief of staff is off: turn it on in Settings to have it act on this.")
+                    Text("This chief of staff is switched off, so it can't act on this until it is on.")
                         .font(.scaled(size: 13)).foregroundStyle(c.text3)
                 }
+                if let failure { Text(failure).font(.scaled(size: 13)).foregroundStyle(c.red) }
                 Spacer()
             }
             .padding(16)
@@ -501,10 +587,16 @@ struct CosListenSheet: View {
     private func ask() {
         let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
         sending = true
+        failure = nil
         Task {
-            let ok = await actions.run { try await store.connectedAPI().sendCosMessage(chief.ticketId, text: body) }
-            sending = false
-            if ok != nil { sent() }
+            defer { sending = false }
+            do {
+                _ = try await store.connectedAPI().sendCosMessage(chief.ticketId, text: body)
+                sent()
+            } catch {
+                haptic(.error)
+                failure = Connection.describeError(error, baseUrl: store.baseUrl)
+            }
         }
     }
 }
@@ -531,13 +623,16 @@ struct CosMemorySheet: View {
         NavigationStack {
             Group {
                 if loaded {
-                    TextEditor(text: $text)
-                        .font(.mono(14))
-                        .scrollContentBackground(.hidden)
-                        .padding(10)
-                        .background(c.bgSunken, in: .rect(cornerRadius: 10))
-                        .padding(16)
-                        .accessibilityIdentifier("cos-memory-text")
+                    VStack(spacing: 0) {
+                        if let failure { CosFailureBanner(text: "Not saved: \(failure)") { self.failure = nil } }
+                        TextEditor(text: $text)
+                            .font(.mono(14))
+                            .scrollContentBackground(.hidden)
+                            .padding(10)
+                            .background(c.bgSunken, in: .rect(cornerRadius: 10))
+                            .padding(16)
+                            .accessibilityIdentifier("cos-memory-text")
+                    }
                 } else if let failure {
                     Text(failure).font(.scaled(size: 14)).foregroundStyle(c.red).padding(16)
                 } else {
@@ -585,6 +680,7 @@ struct CosMemorySheet: View {
     private func save(base: String?) {
         guard let base else { return }
         saving = true
+        failure = nil
         Task {
             defer { saving = false }
             do {

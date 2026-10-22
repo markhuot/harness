@@ -39,6 +39,37 @@ public struct CosState: Equatable, Sendable {
         chat[cosId] = CosLogic.mergeChat(chat[cosId] ?? [], page)
     }
 
+    /// Merges a chat's newest page after a (re)load. When older entries remain (`hasOlder`) and the page
+    /// shares nothing with what is loaded, entries arrived in between that no page covers: what was
+    /// loaded is dropped (live entries newer than the page stay) so the page's cursor reaches all of
+    /// it. Returns true when it did.
+    @discardableResult
+    public mutating func loadNewestChat(_ cosId: String, _ page: [CosChatEntry], hasOlder: Bool) -> Bool {
+        let existing = chat[cosId] ?? []
+        let ids = Set(existing.map(\.id))
+        let hole = hasOlder && !existing.isEmpty && !page.contains { ids.contains($0.id) }
+        if hole {
+            let newest = page.map(\.createdAt).max() ?? 0
+            chat[cosId] = existing.filter { $0.createdAt > newest }
+        }
+        mergeChat(cosId, page)
+        return hole
+    }
+
+    /// The Inbox twin of `loadNewestChat`: drops the chief's loaded rows (and the unassigned ones)
+    /// when the newest page leaves a hole above them.
+    @discardableResult
+    public mutating func loadNewestEvents(_ cosId: String, _ page: [CosEvent], hasOlder: Bool) -> Bool {
+        let own = events.values.filter { $0.cosId == cosId || $0.cosId == nil }
+        let hole = hasOlder && !own.isEmpty && !page.contains { events[$0.id] != nil }
+        if hole {
+            let newest = page.map(\.createdAt).max() ?? 0
+            for e in own where e.createdAt <= newest { events[e.id] = nil }
+        }
+        mergeEvents(page)
+        return hole
+    }
+
     /// The chief of a scope ("all" or "group:<id>"), when it exists yet.
     public func chief(scope: String) -> Cos? {
         chiefs.values.first { $0.scope == scope }
@@ -101,11 +132,6 @@ public enum CosSettings {
     public static let defaultEnabled = true
     public static let defaultCanUnblock = false
 
-    /// A CoS setting for one project: the project's own value, else the app's, else the default.
-    public static func resolve(project: Patch<Bool>, app: Bool?, default fallback: Bool) -> Bool {
-        project.optional ?? app ?? fallback
-    }
-
     public static func enabled(_ settings: PublicSettings?) -> Bool { settings?.cosEnabled ?? defaultEnabled }
     public static func canUnblock(_ settings: PublicSettings?) -> Bool { settings?.cosCanUnblock ?? defaultCanUnblock }
 
@@ -154,11 +180,6 @@ public enum CosLogic {
 
     /// Statuses that count toward the badge (an event somebody still has to see to).
     public static let openStatuses: [CosEventStatus] = [.pending, .triaging, .escalated, .handling]
-
-    /// Open events of the loaded ones: the client-side twin of the service's badge.
-    public static func openEventCount(_ events: [CosEvent], cosId: String) -> Int {
-        events.filter { $0.cosId == cosId && openStatuses.contains($0.status) }.count
-    }
 
     public static func inboxState(status: CosEventStatus, verdict: CosEventVerdict) -> CosInboxState {
         if verdict == .filtered { return .filtered }
@@ -253,14 +274,5 @@ public enum CosLogic {
     public static func wakeLine(count: Int, digest: String) -> String {
         let head = "Woke for \(count) event\(count == 1 ? "" : "s")"
         return digest.isEmpty ? head : "\(head): \(digest)"
-    }
-
-    /// Whether a chat scroller is near enough its top to ask for the next older page.
-    public static func nearTop(_ offset: Double, threshold: Double = 80) -> Bool { offset <= threshold }
-
-    /// Where a scroller sits after older entries were prepended above what it showed: the same
-    /// content stays under the same pixel.
-    public static func anchoredOffset(beforeOffset: Double, beforeHeight: Double, height: Double) -> Double {
-        max(0, beforeOffset + (height - beforeHeight))
     }
 }
