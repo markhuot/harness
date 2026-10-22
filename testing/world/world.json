@@ -1365,7 +1365,8 @@
       "wakeId": null,
       "handledBy": null,
       "outcome": null,
-      "createdAt": 1773499200000
+      "createdAt": 1773499200000,
+      "triageSessionId": "triage-run-1"
     },
     {
       "id": "ev-handled",
