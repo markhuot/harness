@@ -521,17 +521,16 @@ export function steps(start: Start, built: { app: string }): Step[] {
       async run(ctx) {
         const main = ctx.mac.main;
         const d = ctx.daemon;
-        const { groupChief, allChief, blocked } = ctx.cos;
+        const { groupChief, allChief } = ctx.cos;
         const cosRunsSince = (from: number) => ctx.ws.messages.slice(from).filter((m) => m.type === "event" && m.event.kind === "run.upserted" && m.event.run.kind === "cos").length;
-        const owner = async (title: string) => {
+        const newest = async () => {
           const page = await d.call<CosEventPage>("GET", `/cos/${groupChief!.ticketId}/events?limit=200`);
-          return page.items.find((e) => e.title.includes(title));
+          return page.items.find((e) => e.ticketKey === ticket.key);
         };
-        // A change on a walk-project ticket is a pending event of its group's chief.
-        const marker = "Renamed in step 8e";
-        await d.call("PATCH", `/tickets/${blocked[WALK_PROJECT.key]}`, { title: marker });
+        // A ticket of the walk project that blocks on a question is a pending event of its group's chief.
+        const ticket = await d.call<Ticket>("POST", "/tickets", { projectId: ctx.projectId, spec: COS_BLOCKED_SPEC("logger"), skipAgentReview: true });
         const pending = await until("the chief's pending event", 15_000, async () => {
-          const e = await owner(marker);
+          const e = await newest();
           return e && e.status === "pending" ? e : undefined;
         });
         if (pending.cosId !== groupChief!.ticketId) throw new Error(`the event isn't the group chief's: ${JSON.stringify(pending)}`);
@@ -547,10 +546,10 @@ export function steps(start: Start, built: { app: string }): Step[] {
 
         // The app setting off: nobody owns it, and the chief's pane says nothing is triaged or run.
         await main.evaluate(`location.hash = '#/settings/cos'`);
-        const toggle = `input[role=switch][aria-label="Chief of staff enabled"]`;
-        await main.waitFor("the Chief of staff enabled switch, on", `document.querySelector(${JSON.stringify(toggle)})?.checked === true`);
-        await main.click(toggle);
-        await main.waitFor("the switch off", `document.querySelector(${JSON.stringify(toggle)})?.checked === false`);
+        const toggle = `[...document.querySelectorAll('.settings-row')].find((r) => r.innerText.startsWith('Chief of staff enabled')).querySelector('input')`;
+        await main.waitFor("the Chief of staff enabled switch, on", `${toggle}?.checked === true`);
+        await main.evaluate(`${toggle}.click()`);
+        await main.waitFor("the switch off", `${toggle}.checked === false`);
         await shot(ctx, "08e-mac-settings-cos");
         const unowned = await until("the event to have no owner", 15_000, async () => {
           const page = await d.call<CosEventPage>("GET", `/cos/${allChief!.ticketId}/events?limit=200`);
@@ -560,7 +559,7 @@ export function steps(start: Start, built: { app: string }): Step[] {
         await Bun.sleep(1500);
         if (cosRunsSince(seen) > 0) throw new Error("a chief of staff run started while chiefs were off");
         // Back on: the event is the All chief's again (the group chief is still off).
-        await main.click(toggle);
+        await main.evaluate(`${toggle}.click()`);
         await until("the event to be the All chief's again", 15_000, async () => {
           const page = await d.call<CosEventPage>("GET", `/cos/${allChief!.ticketId}/events?limit=200`);
           return page.items.find((e) => e.id === pending.id && e.cosId === allChief!.ticketId);
