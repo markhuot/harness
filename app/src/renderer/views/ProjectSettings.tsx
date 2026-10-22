@@ -12,7 +12,7 @@ import { Switch } from "../components/bits";
 import { BranchSelect } from "../components/BranchSelect";
 import { GroupSelect } from "../components/GroupSelect";
 import { ProjectColorPicker, ProjectKey } from "../components/ProjectKey";
-import { COS_SWITCHES, DraftInput, Row, Section } from "./Settings";
+import { COS_SWITCHES, CosModelRow, DraftInput, Row, Section } from "./Settings";
 import "./settings.css";
 import { ProjectModelRow } from "./settings/ModelSettings";
 import { ProjectPermissionRow } from "./settings/PermissionSettings";
@@ -189,6 +189,7 @@ function ProjectSettings({ project }: { project: Project }) {
                   </select>
                 </Row>
               ))}
+              {state.settings && <CosModelRow project value={project.cosModel} settings={state.settings} onChange={(cosModel) => void save({ cosModel })} />}
             </div>
           </Section>
 

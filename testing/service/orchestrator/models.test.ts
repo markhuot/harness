@@ -41,3 +41,24 @@ test("a standalone session takes the project's Work model, then settings', but o
   // The project's choice is on another driver: it decides, so no model rather than settings'.
   expect(resolveRunModel({ ...base, driver: "claude-code", project: { phaseModels: { work: choice("copilot", "gpt") } } })).toBeNull();
 });
+
+test("a chief's run takes the project's choice, then the app's CoS choice, then the Work choice", () => {
+  const base = { kind: "cos" as const, project: null, ticket: { phaseModels: {} } };
+  const withCos = { ...settings, cosModel: choice("copilot", "gpt") };
+  expect(resolveRunChoice({ ...base, settings, cosProject: null })).toEqual(choice("claude-code", "sonnet"));
+  expect(resolveRunChoice({ ...base, settings: withCos, cosProject: null })).toEqual(choice("copilot", "gpt"));
+  expect(resolveRunChoice({ ...base, settings: withCos, cosProject: { cosModel: choice("claude-code", "haiku") } })).toEqual(choice("claude-code", "haiku"));
+  // A project with no override of its own (cleared) falls back to the app's choice.
+  expect(resolveRunChoice({ ...base, settings: withCos, cosProject: { cosModel: null } })).toEqual(choice("copilot", "gpt"));
+});
+
+test("a chief ignores the ticket's and the hidden project's phase choices", () => {
+  const out = resolveRunChoice({ kind: "cos", settings, project: { phaseModels: { work: choice("copilot", "gpt") } }, ticket: { phaseModels: { work: choice("dummy", "d1") } } });
+  expect(out).toEqual(choice("claude-code", "sonnet"));
+});
+
+test("a chief's model applies only on the driver its run was queued on", () => {
+  const input = { kind: "cos" as const, project: null, ticket: { phaseModels: {} }, settings: { ...settings, cosModel: choice("copilot", "gpt") } };
+  expect(resolveRunModel({ ...input, driver: "copilot" })).toBe("gpt");
+  expect(resolveRunModel({ ...input, driver: "claude-code" })).toBeNull();
+});

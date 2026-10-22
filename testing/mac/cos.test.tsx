@@ -416,6 +416,36 @@ describe("settings", () => {
     expect(patched(m, "PATCH /settings")).toEqual([{ cosCanUnblock: true }, { cosEnabled: false }]);
   });
 
+  test("the app's chief-of-staff model defaults to the Work model, and picking one saves it", async () => {
+    const m = await mount(<SettingsView />, { hash: "#/settings" });
+    m.client.overrides.set("PATCH /settings", () => m.client.world.settings);
+    await m.until("the picker", () => !!byId(m, "cosModel")?.querySelector("button"));
+    const trigger = () => byId(m, "cosModel")!.querySelector("button")!;
+    expect(text(trigger())).toContain("Use Work model");
+    await click(m, trigger());
+    const options = all(document.body, '[role="option"]');
+    expect(text(options[0]!)).toContain("Use Work model");
+    const pick = options.find((o, i) => i > 0)!;
+    await click(m, pick);
+    const sent = patched(m, "PATCH /settings") as { cosModel: { driver: string; model: string | null } }[];
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.cosModel.driver).toBeTruthy();
+  });
+
+  test("a project's chief-of-staff model reads 'Use app default' until it picks one, and Default clears it", async () => {
+    const id = world.projects[0]!.id;
+    const w = edited((x) => void (x.projects[0]!.cosModel = { driver: x.drivers[0]!.id, model: null }));
+    const m = await mount(<ProjectSettingsView />, { hash: `#/project/${id}/settings`, world: w });
+    m.client.overrides.set(`PATCH /projects/${id}`, () => m.client.world.projects[0]);
+    await m.until("the picker", () => !!byId(m, "project-cosModel")?.querySelector("button"));
+    const trigger = () => byId(m, "project-cosModel")!.querySelector("button")!;
+    expect(text(trigger())).not.toContain("Use app default");
+    await click(m, trigger());
+    const def = all(document.body, '[role="option"]').find((o) => text(o).startsWith("Use app default"))!;
+    await click(m, def);
+    expect(patched(m, `PATCH /projects/${id}`)).toEqual([{ cosModel: null }]);
+  });
+
   test("the watcher forms are gone from Settings", async () => {
     const m = await mount(<SettingsView />, { hash: "#/settings" });
     await m.until("the page", () => text(m.container).includes("Chief of staff"));

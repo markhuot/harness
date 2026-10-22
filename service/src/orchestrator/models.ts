@@ -8,17 +8,20 @@
 // (the choice moved to a different driver after the run was queued) gives the driver's default.
 
 import type { PhaseChoice, Project, RunKind, Settings, Ticket } from "@harness/shared";
-import { resolvePhaseChoice, runPhase, settingsPhaseChoice } from "@harness/shared";
+import { resolveCosChoice, resolvePhaseChoice, runPhase, settingsPhaseChoice } from "@harness/shared";
 
 export interface RunChoiceInput {
   kind: RunKind;
   ticket: Pick<Ticket, "phaseModels"> | null;
   project: Pick<Project, "phaseModels"> | null;
-  settings: Pick<Settings, "phaseModels">;
+  settings: Pick<Settings, "phaseModels" | "cosModel">;
+  /** For a chief's run: the project its wake is about, when it is about one (see resolveCosChoice) */
+  cosProject?: Pick<Project, "cosModel"> | null;
 }
 
-/** The driver + model for a ticket run of this kind (a chief of staff's runs use the work choice). */
-export function resolveRunChoice({ kind, ticket, project, settings }: RunChoiceInput): PhaseChoice {
+/** The driver + model for a ticket run of this kind (a chief of staff's runs use its own choice, see resolveCosChoice). */
+export function resolveRunChoice({ kind, ticket, project, settings, cosProject }: RunChoiceInput): PhaseChoice {
+  if (kind === "cos") return resolveCosChoice(cosProject, settings);
   const phase = runPhase(kind);
   if (!ticket) return settingsPhaseChoice(settings.phaseModels, phase);
   return resolvePhaseChoice(phase, { ticket: ticket.phaseModels, project: project?.phaseModels, settings: settings.phaseModels });

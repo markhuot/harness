@@ -1,4 +1,4 @@
-import type { ListenSetting, NotificationSettings, PhaseModels, PhaseModelsPatch, PromptId, PublicSettings, Settings } from "@harness/shared";
+import type { ListenSetting, NotificationSettings, PhaseChoice, PhaseModels, PhaseModelsPatch, PromptId, PublicSettings, Settings } from "@harness/shared";
 import { COS_SETTING_DEFAULTS, applyLegacySettings, legacySettingsFields, mergePhaseModels, PHASES, DEFAULT_NOTIFICATION_SETTINGS, NOTIFICATION_CATEGORIES, branchNameError, CLASSIFIER_BACKENDS, DEFAULT_BASE_BRANCH, DEFAULT_BROWSER_IDLE_TAB_MINUTES, DEFAULT_CONTEXT_GAUGE_LIMIT, MAX_BROWSER_IDLE_TAB_MINUTES, MAX_CONTEXT_GAUGE_LIMIT, MIN_CONTEXT_GAUGE_LIMIT, LISTEN_MODES, PERMISSION_MODES, PROMPT_IDS, RENAMED_PROMPT_IDS } from "@harness/shared";
 import { badRequest } from "./errors";
 import { isPromptId, promptTemplateError } from "./prompt-templates";
@@ -22,6 +22,7 @@ export const DEFAULT_SETTINGS: Settings = {
   watcherModels: {},
   cosEnabled: COS_SETTING_DEFAULTS.cosEnabled,
   cosCanUnblock: COS_SETTING_DEFAULTS.cosCanUnblock,
+  cosModel: null,
   cosTriageModel: null,
   anthropicApiKey: null,
   claudeOauthToken: null,
@@ -223,6 +224,9 @@ export function validateSettingsPatch(body: unknown, knownDrivers?: string[], cu
         if (typeof value !== "boolean") throw badRequest(`${key} must be true or false`);
         out[key] = value;
         break;
+      case "cosModel":
+        out.cosModel = validateCosModel("cosModel", value, knownDrivers);
+        break;
       case "cosTriageModel":
         if (value !== null && typeof value !== "string") throw badRequest("cosTriageModel must be a model name or null");
         out.cosTriageModel = (value as string | null)?.trim() || null;
@@ -370,6 +374,16 @@ export function validatePhaseModels(field: string, value: unknown, knownDrivers?
     out[p] = { driver: driver.trim(), model: validateModelId(`${field}.${phase}.model`, model) };
   }
   return out;
+}
+
+/** A chief of staff's { driver, model } choice (settings.cosModel, Project.cosModel); null clears it. */
+export function validateCosModel(field: string, value: unknown, knownDrivers?: string[]): PhaseChoice | null {
+  if (value === null) return null;
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw badRequest(`${field} must be { driver, model } or null`);
+  const { driver, model } = value as { driver?: unknown; model?: unknown };
+  if (typeof driver !== "string" || !driver.trim()) throw badRequest(`${field}.driver must be a driver id`);
+  if (knownDrivers && !knownDrivers.includes(driver.trim())) throw badRequest(`Unknown driver in ${field}: ${driver}`);
+  return { driver: driver.trim(), model: validateModelId(`${field}.model`, model) };
 }
 
 /**

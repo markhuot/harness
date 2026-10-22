@@ -896,6 +896,10 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE cos_wakes ADD COLUMN reported TEXT;
   UPDATE cos_wakes SET outcome = 'spoke' WHERE kind = 'wake';
   `,
+  // 51: a project's own model for the chiefs woken for its events (JSON {driver, model}; NULL: inherit settings.cosModel).
+  `
+  ALTER TABLE projects ADD COLUMN cos_model TEXT;
+  `,
 ];
 
 /** Where the files migrations look at live (HarnessPaths); by default next to the database file. */

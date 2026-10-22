@@ -35,8 +35,11 @@ export interface CosEngineDeps {
   settings(): Settings;
   /** The triage layer, or null (with why) when none can run: its events escalate */
   triage(): CosTriage | { unavailable: string };
-  /** Hand the chief a message: steer it into its running run, else queue one. Resolves to the run that will see it. */
-  deliver(cosTicketId: string, text: string): Promise<string | null>;
+  /**
+   * Hand the chief a message: steer it into its running run, else queue one. Resolves to the run that will see it.
+   * `projectKey`: the project every event in the wake belongs to, null when they span several (or none).
+   */
+  deliver(cosTicketId: string, text: string, projectKey: string | null): Promise<string | null>;
   /** The status of a run, or null when it no longer exists */
   runStatus(runId: string): string | null;
   /** The plain-text replies a run wrote from `since` on */
@@ -589,7 +592,8 @@ export class CosEngine {
     const text = this.wakePrompt(events, parts, waiting.length - events.length, stalls);
     let runId: string | null;
     try {
-      runId = await this.d.deliver(cosId, text);
+      const keys = new Set(events.map((e) => e.projectKey));
+      runId = await this.d.deliver(cosId, text, keys.size === 1 && !stalls.length ? ([...keys][0] ?? null) : null);
     } catch (err) {
       // Nothing was handed over: no wake is charged to the cap and no batch shows in the chat.
       this.d.log(`cos: couldn't wake ${chief.key}: ${err instanceof Error ? err.message : String(err)}`);

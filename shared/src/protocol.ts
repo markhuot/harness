@@ -96,6 +96,8 @@ export interface Project {
   cosEnabled?: boolean | null;
   /** Whether a chief of staff may answer this project's blocked tickets. null → inherit settings.cosCanUnblock. */
   cosCanUnblock?: boolean | null;
+  /** The driver and model a chief of staff runs on when woken for this project's events alone. null → inherit settings.cosModel. */
+  cosModel?: PhaseChoice | null;
   createdAt: number;
   updatedAt: number;
 }
@@ -1017,6 +1019,11 @@ export interface Settings {
    * (Project.cosCanUnblock). Default false. Optional like cosEnabled.
    */
   cosCanUnblock?: boolean;
+  /**
+   * The driver and model a chief of staff runs on in every project that doesn't say (Project.cosModel).
+   * null or absent → the Work choice. Resolve with `resolveCosChoice`. Optional like cosEnabled.
+   */
+  cosModel?: PhaseChoice | null;
   /** The model that triages a chief's events before it wakes (empty or absent: the backend's Haiku). Optional like cosEnabled. */
   cosTriageModel?: string | null;
   /**
@@ -1695,6 +1702,8 @@ export interface CreateProjectBody {
   cosEnabled?: boolean | null;
   /** Project.cosCanUnblock; null clears the override (inherit settings.cosCanUnblock) */
   cosCanUnblock?: boolean | null;
+  /** Project.cosModel; null clears the override (inherit settings.cosModel) */
+  cosModel?: PhaseChoice | null;
   /** The default completion action; must be one the project offers. Default "merge". */
   completionAction?: CompletionAction;
 }

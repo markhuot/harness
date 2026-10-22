@@ -1,5 +1,5 @@
 import type { Database } from "bun:sqlite";
-import type { CompletionAction, Group, PermissionMode, PhaseModels, Project } from "@harness/shared";
+import type { CompletionAction, Group, PermissionMode, PhaseChoice, PhaseModels, Project } from "@harness/shared";
 import { legacyWork, sameGroup, isCompletionAction, offeredCompletionActions, projectKeyFromPath, RESERVED_PROJECT_KEYS } from "@harness/shared";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -27,6 +27,7 @@ interface ProjectRow {
   completion_action?: string | null;
   cos_enabled?: number | null;
   cos_can_unblock?: number | null;
+  cos_model?: string | null;
   default_models: string;
   phase_models?: string | null;
   created_at: number;
@@ -88,6 +89,7 @@ const toProject = (r: ProjectRow): Project => {
     baseBranch: r.base_branch ?? null,
     cosEnabled: r.cos_enabled === null || r.cos_enabled === undefined ? null : bool(r.cos_enabled),
     cosCanUnblock: r.cos_can_unblock === null || r.cos_can_unblock === undefined ? null : bool(r.cos_can_unblock),
+    cosModel: fromJson<PhaseChoice | null>(r.cos_model, null),
     completionAction: isCompletionAction(r.completion_action) ? r.completion_action : "merge",
     completionActions: offeredCompletionActions({ isGit, pullRequestHost }),
     pullRequestHost,
@@ -130,6 +132,8 @@ export interface NewProject {
   cosEnabled?: boolean | null;
   /** null → inherit settings.cosCanUnblock */
   cosCanUnblock?: boolean | null;
+  /** null → inherit settings.cosModel */
+  cosModel?: PhaseChoice | null;
   /** The project's own per-phase choices (the legacy default_driver / default_models columns follow its Work choice) */
   phaseModels?: PhaseModels;
 }
@@ -204,8 +208,8 @@ export class ProjectRepo {
       const key = this.uniqueKey(input.key ? normalizeProjectKey(input.key) : projectKeyFromPath(input.path));
       this.db
         .query(
-          `INSERT INTO projects (id, key, name, path, next_seq, default_driver, use_worktrees, skip_agent_review, skip_human_review, color, group_id, group_name, base_branch, completion_action, cos_enabled, cos_can_unblock, default_models, phase_models, created_at, updated_at)
-           VALUES ($id, $key, $name, $path, 1, $defaultDriver, $useWorktrees, $skipAgentReview, $skipHumanReview, $color, $groupId, (SELECT name FROM groups WHERE id = $groupId), $baseBranch, $completionAction, $cosEnabled, $cosCanUnblock, $defaultModels, $phaseModels, $t, $t)`,
+          `INSERT INTO projects (id, key, name, path, next_seq, default_driver, use_worktrees, skip_agent_review, skip_human_review, color, group_id, group_name, base_branch, completion_action, cos_enabled, cos_can_unblock, cos_model, default_models, phase_models, created_at, updated_at)
+           VALUES ($id, $key, $name, $path, 1, $defaultDriver, $useWorktrees, $skipAgentReview, $skipHumanReview, $color, $groupId, (SELECT name FROM groups WHERE id = $groupId), $baseBranch, $completionAction, $cosEnabled, $cosCanUnblock, $cosModel, $defaultModels, $phaseModels, $t, $t)`,
         )
         .run({
           id,
@@ -222,6 +226,7 @@ export class ProjectRepo {
           completionAction: input.completionAction ?? "merge",
           cosEnabled: input.cosEnabled === null || input.cosEnabled === undefined ? null : int(input.cosEnabled),
           cosCanUnblock: input.cosCanUnblock === null || input.cosCanUnblock === undefined ? null : int(input.cosCanUnblock),
+          cosModel: input.cosModel ? toJson(input.cosModel) : null,
           defaultModels: toJson(legacyWork(input.phaseModels).models),
           phaseModels: toJson(input.phaseModels ?? {}),
           t,
@@ -239,7 +244,7 @@ export class ProjectRepo {
     this.db
       .query(
         `UPDATE projects SET name = $name, path = $path, default_driver = $defaultDriver,
-           use_worktrees = $useWorktrees, skip_agent_review = $skipAgentReview, skip_human_review = $skipHumanReview, color = $color, group_id = $groupId, group_name = (SELECT name FROM groups WHERE id = $groupId), base_branch = $baseBranch, completion_action = $completionAction, cos_enabled = $cosEnabled, cos_can_unblock = $cosCanUnblock, default_models = $defaultModels, phase_models = $phaseModels,
+           use_worktrees = $useWorktrees, skip_agent_review = $skipAgentReview, skip_human_review = $skipHumanReview, color = $color, group_id = $groupId, group_name = (SELECT name FROM groups WHERE id = $groupId), base_branch = $baseBranch, completion_action = $completionAction, cos_enabled = $cosEnabled, cos_can_unblock = $cosCanUnblock, cos_model = $cosModel, default_models = $defaultModels, phase_models = $phaseModels,
            updated_at = $t WHERE id = $id`,
       )
       .run({
@@ -256,6 +261,7 @@ export class ProjectRepo {
         completionAction: patch.completionAction ?? existing.completionAction ?? "merge",
         cosEnabled: nullableFlag(patch.cosEnabled, existing.cosEnabled),
         cosCanUnblock: nullableFlag(patch.cosCanUnblock, existing.cosCanUnblock),
+        cosModel: (patch.cosModel !== undefined ? patch.cosModel : existing.cosModel) ? toJson((patch.cosModel !== undefined ? patch.cosModel : existing.cosModel)!) : null,
         defaultModels: toJson(legacy.models),
         phaseModels: toJson(phaseModels),
         t: this.now(),
