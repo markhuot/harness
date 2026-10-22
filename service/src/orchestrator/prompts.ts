@@ -316,6 +316,8 @@ function instructionsSection(info: PromptInfo, o: PromptOverrides | null | undef
       return ""; // its instructions are the same every run, so they sit in the system prompt (systemPrompt)
     case "compact":
       return ""; // a compact run sends no instructions
+    case "triage":
+      return ""; // the orchestrator hands a triage run its own system prompt (cos/triage.ts)
     case "chat": {
       const status = ticket?.status;
       return renderPrompt(

@@ -74,6 +74,7 @@ const toEvent = (r: Row): StoredCosEvent => {
     kind: r.kind,
     sourceRef: r.source_ref,
     outcome: outcomeOf(payload),
+    triageSessionId: typeof payload.triageSession === "string" ? payload.triageSession : null,
     payload,
     consumingRunId: r.consuming_run_id,
     updatedAt: r.updated_at,

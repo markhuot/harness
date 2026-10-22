@@ -106,6 +106,8 @@ export interface RunRequest {
    */
   runContext?: string;
   cwd: string;
+  /** Most agent turns the run may take (claude-code: --max-turns); absent: no limit. Triage runs set it so one can't wander. */
+  maxTurns?: number;
   /**
    * Model for this run, resolved by the orchestrator (ticket → project → settings; review runs
    * may use settings.reviewModels). null → the driver's own default.

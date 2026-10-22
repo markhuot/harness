@@ -933,7 +933,7 @@ test("a ticket's title in the triage prompt sits inside a fence", async () => {
   s.happen(s.t, "marker-title");
   await s.after(MIN);
   const { buildTriagePrompt } = await import("../../../service/src/cos/triage");
-  const user = buildTriagePrompt({ guidance: "", projects: [], openConditions: ["T-1 \"TITLE-HOSTILE\" is blocked"], events: [{ id: "e1", source: "activity", actor: "a", title: "t", project: null, ticket: 'T-1 "TICKET-HOSTILE" (blocked)', body: "b" }] }).user;
+  const user = buildTriagePrompt({ cosId: "c1", guidance: "", projects: [], openConditions: ["T-1 \"TITLE-HOSTILE\" is blocked"], events: [{ id: "e1", source: "activity", actor: "a", title: "t", project: null, ticket: 'T-1 "TICKET-HOSTILE" (blocked)', body: "b" }] }).user;
   expect(outsideFences(user)).not.toMatch(/HOSTILE/);
   expect(user).toContain("TITLE-HOSTILE");
 });

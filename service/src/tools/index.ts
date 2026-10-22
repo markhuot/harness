@@ -29,6 +29,7 @@ import { outcomeTools } from "./outcomes";
 import { scheduleTools } from "./schedules";
 import { block, editSpec, postNote, readSpec, recordPullRequest, resumeWork, returnToPlanning, reviewDecision, submitForReview, unblock, updateBranch, updateNotes, updateSpec } from "./ticket";
 import { memoryTools } from "./memory";
+import { triageVerdict } from "./triage";
 import { paneTools } from "./panes";
 import { terminalTools } from "./terminals";
 import type { ToolDefinition } from "./types";
@@ -47,6 +48,7 @@ export * from "./native";
 export * from "./permission";
 export * from "./schedules";
 export * from "./ticket";
+export * from "./triage";
 export { defineGatedTool, defineTool, validateInput } from "./util";
 
 export const browserTools: ToolDefinition[] = [
@@ -130,6 +132,7 @@ export const allTools: ToolDefinition[] = [
  */
 export const specTools: ToolDefinition[] = [readSpec, editSpec, updateSpec];
 
+/** A triage run reads the board and records verdicts; Bash and the user's MCP servers come with the CLI, under the read-only policy (permissions/triage.ts). */
 const RUN_TOOLS: Record<Exclude<RunKind, "chat" | "compact">, { harness: ToolDefinition[]; native: "full" | "read" | "none" }> = {
   plan: { harness: [postNote, ...specTools, updateNotes, updateTicket, ...boardTools, ...configReadTools, ...browserTools], native: "read" },
   work: {
@@ -146,6 +149,7 @@ const RUN_TOOLS: Record<Exclude<RunKind, "chat" | "compact">, { harness: ToolDef
   // has no spec or ticket lifecycle tools (it never submits or blocks), no project or settings writes (its watcher tools are human-gated), no
   // sub-agents (drivers/claude-code.ts keeps Agent and Task off it) and no files or shell of its own (it can read
   // and, with approval, type into the terminals of tickets it covers): deeper work goes to tickets it creates. Everything it reads or changes is scoped (store/scope.ts).
+  triage: { harness: [...boardTools, triageVerdict], native: "none" },
   cos: { harness: [postNote, ...memoryTools, ...scheduleTools, ...terminalTools, ...paneTools, ...watcherTools, ...boardTools, ...boardWriteTools, ...configReadTools, ...outcomeTools], native: "none" },
 };
 

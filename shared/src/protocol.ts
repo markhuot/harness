@@ -525,7 +525,7 @@ export interface Session {
 export type TriageStatus = "triaging" | "dispatched" | "declined" | "failed";
 
 /** chat: a human message to a blocked, review or done ticket, answered by its agent with the work tools (the agent moves the ticket itself). */
-export type RunKind = "plan" | "work" | "review" | "complete" | "conductor" | "chat" | "compact" | "cos";
+export type RunKind = "plan" | "work" | "review" | "complete" | "conductor" | "chat" | "compact" | "cos" | "triage";
 
 /**
  * The phases a driver + model is chosen for (DESIGN.md "Model selection"). Conductor, chat

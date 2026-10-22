@@ -96,6 +96,8 @@ export interface CosEvent {
   handledBy: string | null;
   /** What the chief recorded for it; null when its run ended without recording one (and for events handled before outcomes existed) */
   outcome: CosOutcome | null;
+  /** The session whose transcript shows what triage looked up for it; null when a one-shot call (or no model) judged it */
+  triageSessionId?: string | null;
   createdAt: number;
 }
 

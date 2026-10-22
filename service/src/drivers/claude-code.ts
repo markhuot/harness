@@ -216,6 +216,9 @@ export const CLI_PERMISSION_MODES: Record<PermissionMode, string> = { auto: "aut
 /** The --permission-mode a run gets: plan runs always "plan", else the mapped harness mode. */
 export function cliPermissionMode(req: Pick<RunRequest, "kind" | "permissionMode">, settings: Pick<Settings, "permissionMode">): string {
   if (req.kind === "plan") return "plan";
+  // Triage has no human: "default" asks the permission prompt tool about everything the CLI doesn't
+  // allow itself, and the harness answers read-only (permissions/triage.ts).
+  if (req.kind === "triage") return "default";
   return CLI_PERMISSION_MODES[req.permissionMode ?? settings.permissionMode] ?? "acceptEdits";
 }
 
@@ -285,7 +288,7 @@ export function planGrants(
   const base = cliPermissionMode(req, settings);
   const plan: GrantPlan = { permissionMode: base, rules: [], applied: [], prompted: [] };
   // Plan and read-only runs never take grants (the orchestrator doesn't send them either).
-  if (!req.grants || base === "plan" || base === "dontAsk") return plan;
+  if (!req.grants || base === "plan" || base === "dontAsk" || req.kind === "triage") return plan;
   for (const name of req.grants.tools) {
     const rule = cliToolRule(name);
     if (rule && !plan.rules.includes(rule)) plan.rules.push(rule);
@@ -309,7 +312,7 @@ const ADVISER_RUNS: RunKind[] = ["plan", "review"];
 const ADVISER_TOOLS = ["Agent", "Task"];
 
 export function buildClaudeArgs(
-  req: Pick<RunRequest, "kind" | "systemPrompt" | "mcp"> & {
+  req: Pick<RunRequest, "kind" | "systemPrompt" | "mcp" | "maxTurns"> & {
     model?: string | null;
     permissionMode?: PermissionMode;
     grants?: RunGrants;
@@ -353,6 +356,10 @@ export function buildClaudeArgs(
     // And no built-in tools at all (Bash, Read, Write, WebFetch...): it could read the service's
     // database or token and walk around the scoped store. Only the harness MCP server is left.
     ...(req.kind === "cos" ? ["--tools", ""] : []),
+    // Triage reads: Bash (the harness lets read-only gh and plain reads through), the board tools and
+    // the user's MCP servers (no --strict-mcp-config: Jira and the rest load). No sub-agents, no web.
+    ...(req.kind === "triage" ? ["--disallowedTools", ...ADVISER_TOOLS, "WebFetch", "WebSearch", "--tools", "Bash"] : []),
+    ...(req.maxTurns ? ["--max-turns", String(req.maxTurns)] : []),
     "--permission-mode",
     permissionMode,
   ];

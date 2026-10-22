@@ -273,6 +273,10 @@ export interface TerminalView {
 }
 
 export interface HarnessOps {
+  // --- triage runs ---
+  /** triage_verdict: record one event's verdict; returns what is still without one. Throws for an unknown id or verdict. */
+  recordTriageVerdict(ctx: ToolContext, input: unknown): string;
+
   // --- any ticket run ---
   /** A short Activity note on the ticket (post_note). */
   postNote(ctx: ToolContext, note: string): Promise<void>;

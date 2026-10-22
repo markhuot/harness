@@ -12,7 +12,7 @@ import { isSilentReply, QUIET_REPLY } from "./chat";
 import { memorySection, TRIAGE_GUIDANCE } from "./memory";
 import type { Store } from "../store";
 import type { StoredCosEvent } from "../store/cos-events";
-import { type CosTriage, type TriageEvent, type TriageVerdict, fenceUntrusted } from "./triage";
+import { type CosTriage, type TriageEvent, TriageIncomplete, type TriageVerdict, fenceUntrusted } from "./triage";
 
 export interface Timers {
   set(fn: () => void, ms: number): unknown;
@@ -55,7 +55,10 @@ const DRAIN_PAGE = 500;
 /** Events with no owner (no chief could take them) are kept this long and at most this many, so a board with no chief doesn't pile up rows. */
 export const COS_UNASSIGNED_RETENTION_MS = 24 * 60 * 60_000;
 export const COS_UNASSIGNED_MAX = 200;
-/** Events per triage call (a larger batch overruns the model's answer), and per batch pass; the rest wait for the next. */
+/** A reason from a call that judged from the event text alone says so: the human can tell it from one that looked. */
+const withdraw = (reason: string, lookup: boolean) => (lookup ? reason : `${reason} (triaged without lookup)`);
+
+/** Events per one-shot triage call (a larger batch overruns the model's answer), and per batch pass; the rest wait for the next. An agent run sets its own (CosTriage.limits). */
 export const TRIAGE_CHUNK = 20;
 export const TRIAGE_MAX_PER_PASS = 100;
 /** Events in one wake, and each one's raw body; the rest wait for a later wake and are counted in this one. */
@@ -354,12 +357,13 @@ export class CosEngine {
         this.patch(id, { summary: `${firstLine(e.summary, 100)} (net: ${move.from} → ${move.to})`, payload: { ...e.payload, from: move.from, to: move.to } });
       }
       // Oldest first, in calls the model's answer fits in; what a busy board leaves over waits for the next pass.
-      const all = pending.filter((e) => !gone.has(e.id)).slice(0, TRIAGE_MAX_PER_PASS).map((e) => store.cosEvents.get(e.id)!);
+      const all = pending.filter((e) => !gone.has(e.id)).slice(0, this.limits().perPass).map((e) => store.cosEvents.get(e.id)!);
       // A wake the chief scheduled for itself is never second-guessed: it asked to be woken.
       for (const e of all) if (e.sourceKind === "schedule") this.patch(e.id, { status: "escalated", verdict: "escalate", reason: "scheduled by the chief itself", wakeId: null });
       const batch = all.filter((e) => e.sourceKind !== "schedule");
       this.emitBadge();
-      for (let i = 0; i < batch.length && !this.stopped; i += TRIAGE_CHUNK) await this.triageChunk(cosId, batch.slice(i, i + TRIAGE_CHUNK));
+      const chunk = this.limits().chunk;
+      for (let i = 0; i < batch.length && !this.stopped; i += chunk) await this.triageChunk(cosId, batch.slice(i, i + chunk));
     } finally {
       this.triaging.delete(cosId);
     }
@@ -367,6 +371,12 @@ export class CosEngine {
     // The batch may have escalated for this chief or (after a project proposal, or a chief switched off meanwhile) another.
     this.rehome();
     for (const id of new Set(store.cosEvents.byStatus("escalated").flatMap((e) => (e.cosId ? [e.cosId] : [])))) await this.deliver(id);
+  }
+
+  /** The batch sizes and time budget of the triage layer in use (an agent run has smaller batches and more time than a one-shot call). */
+  private limits() {
+    const triage = this.d.triage();
+    return ("limits" in triage && triage.limits) || { chunk: TRIAGE_CHUNK, perPass: TRIAGE_MAX_PER_PASS, timeoutMs: 60_000 };
   }
 
   /** One triage call over `batch` and its verdicts applied. A failure of the call escalates just these events. */
@@ -378,6 +388,8 @@ export class CosEngine {
 
     let verdicts: Map<string, TriageVerdict>;
     let model: string | null = null;
+    let session: string | null = null;
+    let lookup = true;
     let failure: string | null = null;
     const triage = this.d.triage();
     if ("unavailable" in triage) {
@@ -386,17 +398,24 @@ export class CosEngine {
       verdicts = new Map();
     } else {
       const controller = new AbortController();
-      const timer = this.timers.set(() => controller.abort(), this.d.triageTimeoutMs ?? 60_000);
+      const timer = this.timers.set(() => controller.abort(), this.d.triageTimeoutMs ?? this.limits().timeoutMs);
       try {
         const res = await triage.triage(this.triageInput(cosId, batch), controller.signal);
         verdicts = new Map(res.verdicts.map((v) => [v.id, v]));
         model = res.model;
+        session = res.sessionId ?? null;
+        lookup = triage.lookup !== false;
         store.cosEvents.setWakeTokens(batchId, res.tokensIn ?? 0, res.tokensOut ?? 0);
         this.setUnavailable(null);
       } catch (err) {
+        // A run that ended early keeps what it recorded: the rest of the batch escalates below.
+        if (err instanceof TriageIncomplete) {
+          verdicts = new Map(err.verdicts.map((v) => [v.id, v]));
+          session = err.sessionId;
+          model = triage.model;
+        } else verdicts = new Map();
         failure = controller.signal.aborted ? "triage timed out" : `triage failed: ${err instanceof Error ? err.message : String(err)}`;
         this.d.log(`cos: ${failure}; escalating the batch`);
-        verdicts = new Map();
       } finally {
         this.timers.clear(timer);
       }
@@ -407,13 +426,13 @@ export class CosEngine {
     for (const e of batch) {
       const v = verdicts.get(e.id);
       if (v?.verdict === "ignore") {
-        this.patch(e.id, { status: "ignored", verdict: "ignore", reason: v.reason, model, wakeId: null });
+        this.patch(e.id, { status: "ignored", verdict: "ignore", reason: withdraw(v.reason, lookup), model, wakeId: null, ...(session ? { payload: { ...e.payload, triageSession: session } } : {}) });
         continue;
       }
       // Fail-open: an error, a timeout, garbage, or an event the answer left out escalates.
-      const reason = v ? v.reason : (failure ?? "triage gave no verdict for this event");
+      const reason = v ? withdraw(v.reason, lookup) : (failure ?? "triage gave no verdict for this event");
       const patch: Parameters<Store["cosEvents"]["update"]>[1] = { status: "escalated", verdict: "escalate", reason, model: v ? model : null, wakeId: null };
-      if (v?.brief) patch.payload = { ...e.payload, brief: v.brief };
+      if (v?.brief || session) patch.payload = { ...e.payload, ...(v?.brief ? { brief: v.brief } : {}), ...(session ? { triageSession: session } : {}) };
       // An event with no project goes to the owner of the project triage proposes.
       // Only a project in the chief's scope counts: injected text can't route an event into another group's chief.
       const proposed = !e.projectId && v?.project ? store.projects.getByKey(v.project) : null;
@@ -454,9 +473,16 @@ export class CosEngine {
         project: e.projectKey ? `${e.projectKey} — ${store.projects.get(e.projectId!)?.name ?? ""}` : null,
         ticket: ticket ? `${ticket.key} "${ticket.title}" (${ticket.status})` : null,
         body: String(e.payload.body ?? e.summary),
+        watcher: this.watcherOf(e),
       };
     });
-    return { guidance, projects, openConditions: this.openConditions(cosId).map((c) => c.text), events };
+    return { cosId, guidance, projects, openConditions: this.openConditions(cosId).map((c) => c.text), events };
+  }
+
+  /** The watcher an event came from, with what its owner wrote about its lines; null for other sources. */
+  private watcherOf(e: StoredCosEvent): TriageEvent["watcher"] {
+    const watcher = e.sourceKind === "watcher" ? this.d.store.watchers.get(e.sourceRef.split(":")[0]!) : null;
+    return watcher ? { name: watcher.name, prompt: watcher.prompt } : null;
   }
 
   /** Tickets still blocked and reviews still waiting past `afterMs` since they entered that status, among the ones this chief owns. */

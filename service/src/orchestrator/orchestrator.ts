@@ -2,7 +2,8 @@
 // notifications and the chief of staff. Implements HarnessOps for tools.
 
 import { AsyncLocalStorage } from "node:async_hooks";
-import { existsSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { createHash, randomBytes } from "node:crypto";
 import { fetchPullRequestTitle, PULL_REQUEST_URL } from "../pull-requests";
@@ -201,7 +202,8 @@ import { AutoModeRulesProvider } from "../permissions/rules";
 import { anthropicStructured, claudeCliStructured } from "../permissions/structured";
 import { CosEngine, wire as wireCosEvent, type Timers as CosTimers } from "../cos/engine";
 import { cosChat, isSilentReply, WAKE_PROMPT_PREFIX } from "../cos/chat";
-import { LlmTriage, type CosTriage } from "../cos/triage";
+import { AgentTriage, LlmTriage, parseTriage, TriageIncomplete, type AgentTriageRequest, type AgentTriageRun, type CosTriage, type TriageVerdict } from "../cos/triage";
+import { triageDecision } from "../permissions/triage";
 import { claudeCliEnv, resolveClaudeBin } from "../drivers/claude-code";
 import { DEFAULT_ANTHROPIC_MODEL } from "../drivers/anthropic-api";
 import { clockTime, isUsageLimit, usageLimitResumeAt } from "./usage-limit";
@@ -358,7 +360,9 @@ const RUNNABLE_WORK: RunKind[] = ["work", "conductor", "chat"];
  */
 const APPROVABLE_RUNS: RunKind[] = ["work", "complete", "conductor", "chat", "cos"];
 /** Run kinds whose native tool calls are checked as read_only, whatever the ticket's mode. */
-const READ_ONLY_RUNS: RunKind[] = ["plan"];
+const READ_ONLY_RUNS: RunKind[] = ["plan", "triage"];
+/** Most agent turns a triage run takes (a lookup or two per event, then the verdicts) */
+const TRIAGE_MAX_TURNS = 40;
 /** Run kinds that get the board write tools (create_ticket, message_ticket, update_branch, ...) */
 const BOARD_WRITE_RUNS: RunKind[] = ["work", "conductor", "chat", "cos"];
 /** Run kinds that get the (human-gated) config tools */
@@ -609,6 +613,8 @@ export class Orchestrator {
   private readonly terminalAccess: TerminalAccess | undefined;
   private readonly macRequests: MacRequests | undefined;
   private cosOpts: Pick<OrchestratorOptions, "cosTriage">;
+  /** The triage agent runs in flight, by their session: what each was asked and the verdicts it has recorded (runTriage) */
+  private triageRuns = new Map<string, { cosId: string; system: string; model: string; ids: string[]; verdicts: Map<string, TriageVerdict> }>();
   private cosOff: (() => void)[] = [];
   /** Who caused the activity written in this async context ("cos:<ticket id>" inside a chief's run) */
   private actorContext = new AsyncLocalStorage<string | null>();
@@ -1279,6 +1285,70 @@ export class Orchestrator {
     return this.steerOrEnqueue(ticket.sessionId, "cos", { text, attachments: [] });
   }
 
+  /**
+   * One triage agent run over a batch of events (DESIGN.md "Events"): a read-only run of the claude-code
+   * driver on its own session (kind "triage", hidden from the board), with the board tools and the
+   * triage_verdict tool. The session stays, so the Inbox row can open what the run looked up. Resolves
+   * with the verdicts recorded when the run ends; a run that failed or was cut off after recording
+   * some throws TriageIncomplete, which keeps them.
+   */
+  async runTriage(req: AgentTriageRequest, signal: AbortSignal): Promise<AgentTriageRun> {
+    // An empty folder to work in: the service's own checkout and settings never reach the agent.
+    mkdirSync(this.paths.scratchDir, { recursive: true });
+    const cwd = mkdtempSync(join(tmpdir(), "harness-triage-"));
+    const session = this.store.sessions.create({
+      key: `TRIAGE-${this.store.counters.next("triage")}`,
+      kind: "triage",
+      ticketId: null,
+      driver: "claude-code",
+      cwd,
+      title: `Triage of ${req.ids.length} event${req.ids.length === 1 ? "" : "s"}`,
+    });
+    const state = { cosId: req.cosId, system: req.system, model: req.model, ids: req.ids, verdicts: new Map<string, TriageVerdict>() };
+    this.triageRuns.set(session.id, state);
+    try {
+      const run = this.enqueueRun(session.id, "triage", req.prompt, undefined, { skipTranscript: false });
+      const finished = await new Promise<Run>((resolve, reject) => {
+        const off = this.bus.onKind("run.upserted", (e) => {
+          if (e.run.id !== run.id || !["succeeded", "failed", "cancelled"].includes(e.run.status)) return;
+          off();
+          signal.removeEventListener("abort", stop);
+          resolve(e.run);
+        });
+        const stop = () => {
+          off();
+          void this.cancelSession(session.id, false);
+          reject(new Error("triage was cancelled"));
+        };
+        if (signal.aborted) stop();
+        else signal.addEventListener("abort", stop, { once: true });
+      });
+      const verdicts = [...state.verdicts.values()];
+      const usage = { sessionId: session.id, tokensIn: finished.inputTokens ?? null, tokensOut: finished.outputTokens ?? null };
+      if (finished.status !== "succeeded") throw new TriageIncomplete(finished.error ? `triage run failed: ${finished.error}` : `triage run ${finished.status}`, verdicts, session.id);
+      if (!verdicts.length) throw new TriageIncomplete("the triage run recorded no verdicts", verdicts, session.id);
+      return { verdicts, ...usage };
+    } catch (err) {
+      // A cut-off run (timeout) keeps what it recorded before the cut.
+      if (err instanceof TriageIncomplete) throw err;
+      throw new TriageIncomplete(errMsg(err), [...state.verdicts.values()], session.id);
+    } finally {
+      this.triageRuns.delete(session.id);
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  }
+
+  /** HarnessOps.recordTriageVerdict: one verdict from a triage run, validated against the event ids it was asked about. */
+  recordTriageVerdict(ctx: ToolContext, input: unknown): string {
+    const state = this.triageRuns.get(ctx.session.id);
+    if (!state) throw new Error("triage_verdict is for triage runs.");
+    const [verdict] = parseTriage({ verdicts: [input] }, state.ids);
+    if (!verdict) throw new Error(`Not recorded: id must be one of ${state.ids.join(", ")}, and verdict "ignore" or "escalate".`);
+    state.verdicts.set(verdict.id, verdict);
+    const left = state.ids.filter((id) => !state.verdicts.has(id));
+    return left.length ? `Recorded. Still without a verdict: ${left.join(", ")}.` : "Recorded. Every event has a verdict: stop now.";
+  }
+
   /** The triage layer: injected, else a stateless Haiku call on the classifier's backend; `unavailable` when there is none to call. */
   private cosTriage(): CosTriage | { unavailable: string } {
     if (this.cosOpts.cosTriage) return this.cosOpts.cosTriage;
@@ -1291,6 +1361,8 @@ export class Orchestrator {
       if (!apiKey()) return { unavailable: "no Anthropic API key" };
       return new LlmTriage("anthropic-api", model, (req, signal) => anthropicStructured({ apiKey }, req, signal), this.paths.home);
     }
+    // The CLI backend gets an agent run that can look things up; a service with no claude-code driver keeps the one-shot call.
+    if (this.drivers.get("claude-code")) return new AgentTriage("claude-cli", model, (req, signal) => this.runTriage(req, signal));
     return new LlmTriage("claude-cli", model, (req, signal) => claudeCliStructured({ bin: () => resolveClaudeBin(process.env), env: () => claudeCliEnv(process.env, this.settings()) }, req, signal), this.paths.home);
   }
 
@@ -1522,6 +1594,13 @@ export class Orchestrator {
    * ticket outlived its group): it sees nothing rather than everything.
    */
   private scopeOf(ctx: ToolContext): ScopedStore {
+    // A triage run reads what its chief reads, and nothing more.
+    if (ctx.runKind === "triage") {
+      const row = this.store.cos.get(this.triageRuns.get(ctx.session.id)?.cosId ?? "");
+      const scope = row ? parseCosScopeKey(row.scope) : null;
+      if (!scope) throw new Error("This triage run has no chief to read for.");
+      return new ScopedStore(this.store, scope);
+    }
     if (ctx.runKind !== "cos" && ctx.ticket?.kind !== "cos") return this.everything;
     const row = ctx.ticket ? this.store.cos.get(ctx.ticket.id) : null;
     const scope = row ? parseCosScopeKey(row.scope) : null;
@@ -4542,6 +4621,12 @@ ${numberLines(r.body)}`;
     input: unknown,
     meta: ApprovalMeta = {},
   ): Promise<{ behavior: "allow"; updatedInput: unknown } | { behavior: "deny"; message: string }> {
+    // Triage has no human and no ticket: Harness's own read-only policy answers (permissions/triage.ts).
+    if (ctx.runKind === "triage") {
+      const d = triageDecision(toolName, input);
+      this.logPermission(ctx.session.id, ctx.runId, { tool: toolName, decision: d.behavior, source: "policy", mode: "read_only", summary: summarizeToolInput(input, 200), reason: d.behavior === "allow" ? "read-only" : d.message });
+      return d.behavior === "allow" ? { behavior: "allow", updatedInput: input } : d;
+    }
     if (ctx.runKind === "plan" && toolName === "ExitPlanMode") {
       // Claude Code's plan mode asks to leave it; on the board the human approves the plan instead.
       return { behavior: "deny", message: PLAN_APPROVAL_MESSAGE };
@@ -5342,6 +5427,7 @@ ${numberLines(r.body)}`;
    * The model a run starts with (see resolveRunModel).
    */
   private runModel(run: Run, session: Session, ticket: Ticket | null, project: Project | null): string | null {
+    if (run.kind === "triage") return this.triageRuns.get(session.id)?.model ?? null;
     const settings = this.settings();
     return resolveRunModel({ driver: run.driver, kind: run.kind, ticket, project, settings });
   }
@@ -5538,6 +5624,7 @@ ${numberLines(r.body)}`;
         browser: this.browser,
         signal: controller.signal,
       };
+      const triage = run.kind === "triage" ? this.triageRuns.get(session.id) : undefined;
       const tools = this.asActor(this.tools(run.kind, driver, ticket), ticket, run.kind);
       const token = randomBytes(24).toString("hex");
       this.mcpRuns.set(token, { tools, ctx });
@@ -5577,8 +5664,9 @@ ${numberLines(r.body)}`;
           kind: run.kind,
           prompt,
           ...(attached?.images.length ? { images: attached.images } : {}),
-          systemPrompt: this.prompts().systemPrompt(promptInfo),
-          runContext: this.prompts().runContext(promptInfo),
+          ...(triage ? { maxTurns: TRIAGE_MAX_TURNS } : {}),
+          systemPrompt: triage ? triage.system : this.prompts().systemPrompt(promptInfo),
+          runContext: triage ? undefined : this.prompts().runContext(promptInfo),
           cwd,
           model,
           permissionMode: this.permissionModeFor(ticket, project),
@@ -5928,6 +6016,7 @@ ${numberLines(r.body)}`;
   private buildOps(): HarnessOps {
     return {
       postNote: (c, n) => this.postNote(c, n),
+      recordTriageVerdict: (c, v) => this.recordTriageVerdict(c, v),
       updateNotes: (c, n) => this.updateNotes(c, n),
       wroteNotes: (c) => this.wroteNotes(c),
       statusLine: async (c, text) => void this.appendStatus(c.session.id, c.runId, text),

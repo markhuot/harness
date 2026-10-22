@@ -34,6 +34,7 @@ test("parseTriage reads JSON wrapped in prose and refuses anything without a ver
 });
 
 const input: TriageInput = {
+  cosId: "c1",
   guidance: "",
   projects: [{ key: "ACME", name: "Acme", description: "" }],
   openConditions: ["ACME-1 is blocked"],

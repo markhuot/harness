@@ -253,6 +253,30 @@ function gitReadOnly(args: string[]): boolean {
   }
 }
 
+/** `gh` subcommands that only read. Anything not listed (merge, comment, edit, auth, extension...) is not read-only. */
+const GH_READ_ONLY: Record<string, ReadonlySet<string>> = {
+  pr: new Set(["view", "diff", "checks", "list", "status"]),
+  issue: new Set(["view", "list", "status"]),
+  run: new Set(["view", "list"]),
+  repo: new Set(["view", "list"]),
+  release: new Set(["view", "list"]),
+  search: new Set(["prs", "issues", "commits", "repos", "code"]),
+};
+/** Flags that give a `gh` call a body, a method override, another host, a browser or a long-lived watch. */
+const GH_BAD_FLAG = /^(-[fFXHw]|--(field|raw-field|method|input|hostname|header|web|watch)(=|$))/;
+
+function ghReadOnly(args: string[]): boolean {
+  // A flag before the subcommand (`gh -R owner/repo pr view`) isn't accounted for: not read-only.
+  const [group, sub] = args;
+  if (!group || group.startsWith("-") || args.some((a) => GH_BAD_FLAG.test(a))) return false;
+  if (group === "api") {
+    // `gh api` becomes a POST by itself once it has a field or an input (denied above); graphql is always a POST.
+    const endpoint = args.slice(1).find((a) => !a.startsWith("-"));
+    return !!endpoint && !/^\/?graphql/.test(endpoint);
+  }
+  return !!sub && !!GH_READ_ONLY[group]?.has(sub);
+}
+
 function segmentReadOnly(argv: Segment): boolean {
   const [cmd, ...args] = argv;
   if (!cmd) return true;
@@ -270,9 +294,20 @@ function segmentReadOnly(argv: Segment): boolean {
       return args.filter((a) => !a.startsWith("-")).length <= 1; // a second path is the output file
     case "git":
       return gitReadOnly(args);
+    case "gh":
+      return ghReadOnly(args);
     default:
       return false;
   }
+}
+
+/**
+ * A command a triage run may run: read-only, and no argument reaches outside the (empty) working
+ * directory by path (`cat ~/.harness/token`). A `gh api` endpoint may start with a slash.
+ */
+export function isTriageCommand(command: string): boolean {
+  if (!isReadOnlyCommand(command)) return false;
+  return parseCommand(command).segments.every(([cmd, ...args]) => cmd === "gh" || !args.some((a) => /^(~|\/|-.*=\/)|(^|\/)\.\.(\/|$)/.test(a)));
 }
 
 /** True only when every part of the command is on the read-only allowlist. */
