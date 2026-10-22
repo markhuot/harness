@@ -1,4 +1,4 @@
-// The walkthrough's journey: one daemon, the Mac app, an iPhone and an iPad, a dozen steps that each
+// The walkthrough's journey: one daemon, the Mac app, an iPhone and an iPad, sixteen steps that each
 // build on the last: the app's basics (1 to 7), then the chief of staff (8a to 8e). It runs inside both simulator locks (walk/run.ts takes them), with the two
 // UDIDs in WALK_IPHONE_UDID and WALK_IPAD_UDID. Every step waits on something observable (a /ws
 // event, a DOM change, an accessibility label, a process's output) and every wait has a deadline.
@@ -433,6 +433,9 @@ export function steps(start: Start, built: { app: string }): Step[] {
         const event = await d.call<CosEvent | null>("POST", "/watchers/inject", { source: COS_WATCHER_SOURCE, text: COS_WATCHER_TEXT });
         if (!event || event.cosId !== ctx.cos.allChief.ticketId) throw new Error(`the injected output isn't an event of the All chief: ${JSON.stringify(event)}`);
 
+        // The phones keep whichever board they were on, so a change on a walk-project ticket gives the group's chief something waiting too.
+        await d.call("PATCH", `/tickets/${WALK_TICKET.key}`, { title: "Renamed in step 8b" });
+
         // The pill is what the service counts for the chief; wait for both to agree, on a count of at least the new event.
         const pending = async () => (await d.call<{ byCos: Record<string, number> }>("GET", "/cos/events/badge")).byCos[ctx.cos.allChief!.ticketId] ?? 0;
         const macPill = () => ctx.mac.main.evaluate<string | null>(`document.querySelector('[data-testid="cos-callout-badge"]')?.textContent?.trim() ?? null`);
@@ -444,11 +447,11 @@ export function steps(start: Start, built: { app: string }): Step[] {
         await main.waitFor("the watcher's item in the Inbox", `[...document.querySelectorAll('[data-testid="cos-event"]')].some((r) => r.innerText.includes('Watcher') && r.innerText.includes(${JSON.stringify(COS_WATCHER_TEXT)}))`);
         await shot(ctx, "08b-mac-inbox");
 
-        // The phones' board: the same button with the same count, then the Inbox tab with the item.
+        // The phones' board: the same button with a count, then the All chief's Inbox tab with the item.
         await eachPhone(ctx, async (p) => {
           await p.open("harness://board", "the board", (l) => screenState(l) === "board");
           await p.seeValue("the Chief of Staff button's count", "Chief of Staff", (v) => v !== null && /^\d+ waiting$/.test(v));
-          await p.tap("Chief of Staff", { what: "the chief's tabs", match: (l) => l.includes("Chat") && l.some((x) => x.startsWith("Inbox")) });
+          await p.open("harness://cos", "the All chief's tabs", (l) => l.includes("Chat") && l.some((x) => x.startsWith("Inbox")));
           const tab = (await p.labels()).find((x) => x.startsWith("Inbox"))!;
           await p.tap(tab, { what: "the watcher's item in the Inbox", match: (l) => l.some((x) => x.includes(COS_WATCHER_TEXT)) });
         });

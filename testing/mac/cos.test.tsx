@@ -327,6 +327,19 @@ describe("the board's callout", () => {
     expect(text(byId(m, "cos-callout-badge"))).toBe("4");
   });
 
+  test("a chief another device made shows its count as soon as a badge names it, without a reload", async () => {
+    updatePanes("*", () => defaultPanes("B"));
+    const client = new FakeClient();
+    const work = client.cos.chiefs.find((c) => c.ticketId === "cos-work")!;
+    client.cos.chiefs = client.cos.chiefs.filter((c) => c !== work);
+    const m = await mount(<BoardPane />, { hash: "#/board/group/group-work", client });
+    await m.until("the callout", () => !!byId(m, "cos-callout"));
+    expect(byId(m, "cos-callout-badge")).toBeNull();
+    client.cos.chiefs.push(work);
+    await m.settle(() => m.client.push({ kind: "cos.badge", total: 2, byCos: { "cos-work": 2 } }));
+    await m.until("the count", () => text(byId(m, "cos-callout-badge")) === "2");
+  });
+
   test("a group's board shows its group's chief, and a project's board its group's", async () => {
     const group = await board("#/board/group/group-work");
     await group.until("the callout", () => !!byId(group, "cos-callout"));

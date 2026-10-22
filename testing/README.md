@@ -56,7 +56,7 @@ socket (`WorldSocket`) replaced. A request the world has no route for fails the 
 
 One journey through the real apps, last in the gate: the service (dummy driver, port 0, a temp
 home), the built Mac app, and the iPhone and iPad apps from the same build-for-testing as L4 iOS.
-Fifteen steps, each building on the last. Steps 1 to 7 are the app's basics: launch the Mac app;
+Sixteen steps (eleven basics, five for the chief), each building on the last. Steps 1 to 7 are the app's basics: launch the Mac app;
 pair both phones by link; create a ticket on the Mac and see it on both phones; approve its plan
 and watch the dummy session arrive on all three; rename a project group in its settings; edit and
 save a file; open a terminal and pop it out into its own window (the renderer↔main IPC the L4

@@ -326,6 +326,10 @@ export function StoreProvider({
         } else if (e.kind === "project.deleted") {
           forgetProjectPanes(e.id, stateRef.current.projects[e.id]?.key ?? null);
         }
+        // A chief another device made isn't in the list yet: its count would read as nothing until the next reload.
+        if (e.kind === "cos.badge" && Object.keys(e.byCos).some((id) => !stateRef.current.chiefs[id])) {
+          void client.listCos().then((chiefs) => { for (const chief of chiefs) dispatch({ type: "chief", chief }); }).catch(() => {});
+        }
         if (e.kind === "service.status") setServiceCode(serviceCodeOf(e.status));
         else if (e.kind !== "browser.frame" && e.kind !== "browser.state") dispatch({ type: "event", event: e });
         for (const fn of listeners.current) fn(e);
