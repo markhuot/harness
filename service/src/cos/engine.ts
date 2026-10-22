@@ -175,7 +175,8 @@ export class CosEngine {
           if (!ticket || !project) filtered = "not about a ticket on the board";
           else if (actor?.startsWith("cos:")) filtered = "caused by a chief of staff";
           else if (ticket.kind === "cos" || store.projects.isInternal(project.id)) filtered = "a chief of staff's own ticket";
-          else filtered = routineActivityReason({ kind: entry.kind, from: entry.meta.from ?? null, to: entry.meta.to ?? null }, ticket.status) ?? undefined;
+          // Routine events keep their owner, so they show in its Inbox with the reason like any ignored one.
+          const routine = filtered ? undefined : routineActivityReason({ kind: entry.kind, from: entry.meta.from ?? null, to: entry.meta.to ?? null }, ticket!.status) ?? undefined;
           const ev = store.cosEvents.insert({
             cosId: filtered ? null : this.ownerFor(project, chiefs),
             projectId: project?.id ?? null,
@@ -187,7 +188,7 @@ export class CosEngine {
             title: ticket ? `${ticket.key}: ${firstLine(entry.body, 120)}` : firstLine(entry.body, 120),
             summary: firstLine(entry.body),
             payload: { body: entry.meta.detail ?? entry.body, kind: entry.kind, from: entry.meta.from ?? null, to: entry.meta.to ?? null },
-            filtered,
+            filtered: filtered ?? routine,
             createdAt: entry.createdAt,
           });
           if (ev) {
