@@ -24,7 +24,7 @@ import type { DepState } from "./conductor";
 import { mergeChat } from "./cos";
 import type { ClientEvent, Cos, CosBadge, CosChatEntry, CosEvent } from "../cos";
 import { inheritedModel } from "./models";
-import { ALL_SCOPE, adjustDoneTotals, doneColumn, groupScope, inScope, mergeTickets, pagingFromPage, reducePaging, scopeGroup, scopeOf, type DonePaging, type PagingAction, type SearchState } from "./paging";
+import { ALL_SCOPE, adjustDoneTotals, doneColumn, groupScope, inScope, isHiddenKind, mergeTickets, pagingFromPage, reducePaging, scopeGroup, scopeOf, type DonePaging, type PagingAction, type SearchState } from "./paging";
 
 export interface TranscriptState {
   entries: TranscriptEntry[];
@@ -346,6 +346,7 @@ export function applyEvent(state: State, event: ClientEvent): State {
       return { ...state, projects: without(state.projects, event.id), tickets };
     }
     case "ticket.upserted": {
+      if (isHiddenKind(event.ticket)) return state;
       const list = state.specRevisions[event.ticket.id];
       const marked = list ? withBaseline(list, event.ticket.specBaselineRevision) : list;
       return {
@@ -448,7 +449,7 @@ export function reducer(state: State, action: Action): State {
         ...state,
         ready: true,
         projects: preferNewer(byId(s.projects), state.projects),
-        tickets: preferNewer(byId(all), state.tickets),
+        tickets: Object.fromEntries(Object.entries(preferNewer(byId(all), state.tickets)).filter(([, t]) => !isHiddenKind(t))),
         donePaging,
         search: state.search ? { ...state.search, ids: null, nextCursor: null, total: 0, loading: true, error: null } : null,
         keyAliases: {},

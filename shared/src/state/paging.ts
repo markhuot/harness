@@ -119,6 +119,11 @@ export type PagingAction =
 // Reducer pieces
 // ---------------------------------------------------------------------------
 
+/** The chief of staff's own ticket (kind "cos") is plumbing: clients never hold it in ticket state. */
+export function isHiddenKind(t: Pick<Ticket, "kind">): boolean {
+  return t.kind === "cos";
+}
+
 /**
  * Merge fetched tickets into the map. A live event may have delivered a strictly newer version
  * while the request was in flight; that one wins.
@@ -127,6 +132,7 @@ export function mergeTickets(existing: Record<string, Ticket>, incoming: Ticket[
   if (incoming.length === 0) return existing;
   const next = { ...existing };
   for (const t of incoming) {
+    if (isHiddenKind(t)) continue;
     const cur = next[t.id];
     if (!cur || cur.updatedAt <= t.updatedAt) next[t.id] = t;
   }

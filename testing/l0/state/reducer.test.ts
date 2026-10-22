@@ -909,3 +909,30 @@ describe("positionForDrop", () => {
     expect(positionForDrop(col(5, 3), 1)).toBeGreaterThan(5);
   });
 });
+
+describe("reducer: the chief of staff's ticket stays off the board", () => {
+  const cos = ticket("COS-1", { kind: "cos", status: "done", projectId: "p", completedAt: 200 });
+  const task = ticket("A-1", { status: "done", projectId: "p", completedAt: 200 });
+  const paging = { total: 5, nextCursor: null, loading: false, frontier: null, newest: 100, error: null };
+  const base = () => withState({ projects: { p: project("p") }, donePaging: { "*": paging } });
+
+  test("a live upsert of a cos ticket is dropped, and an identical task one is kept and counted", () => {
+    const hidden = event(base(), { kind: "ticket.upserted", ticket: cos });
+    expect(hidden.tickets).toEqual({});
+    expect(hidden.donePaging["*"]!.total).toBe(5);
+    const shown = event(base(), { kind: "ticket.upserted", ticket: task });
+    expect(Object.keys(shown.tickets)).toEqual([task.id]);
+    expect(shown.donePaging["*"]!.total).toBe(6);
+  });
+
+  test("a merge of fetched tickets drops cos ones", () => {
+    const next = reducer(base(), { type: "tickets", tickets: [cos, task] });
+    expect(Object.keys(next.tickets)).toEqual([task.id]);
+  });
+
+  test("a snapshot purges a cos ticket already held", () => {
+    const st = withState({ tickets: tickets(cos, task) });
+    const next = reducer(st, { type: "snapshot", snapshot: snapshot({ tickets: [task] }) });
+    expect(Object.keys(next.tickets)).toEqual([task.id]);
+  });
+});

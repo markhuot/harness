@@ -809,6 +809,10 @@ kind `cos`) because a ticket already gives it approvals, grants, permission mode
 notes and a stored transcript, but it is not a board ticket: it lives in a hidden internal project
 (`projects.internal`, made on first use, running in the harness home folder with no worktree) that no
 project list, key lookup, ticket list, page or search returns, and `tickets.project_id` stays NOT NULL.
+The live socket still carries its `ticket.upserted` events, so the clients drop them: the shared reducer
+(`isHiddenKind`) and the Swift one (`Paging.isHidden`) ignore a `kind: "cos"` ticket in a live upsert, a
+fetched merge and a snapshot, and purge one already held. No board, count or total ever sees it, and a
+chief's UI reads `state.chiefs`, never its ticket.
 Its ticket can't be deleted (409) or created or changed through `POST`/`PATCH /tickets` (`cos` isn't a
 valid kind there).
 
