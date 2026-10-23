@@ -219,7 +219,8 @@ export function cliPermissionMode(req: Pick<RunRequest, "kind" | "permissionMode
   // Triage has no human: "default" asks the permission prompt tool about everything the CLI doesn't
   // allow itself, and the harness answers read-only (permissions/triage.ts). In auto (the triage
   // setting) the CLI's classifier judges first; on a model without auto mode the CLI falls back to
-  // "default" by itself and the harness's classifier answers the prompt tool instead.
+  // "default" and reports that in its init event (effective_permission_mode), and only then does the
+  // harness's classifier answer the prompt tool.
   if (req.kind === "triage") return req.permissionMode === "auto" ? "auto" : "default";
   return CLI_PERMISSION_MODES[req.permissionMode ?? settings.permissionMode] ?? "acceptEdits";
 }
@@ -751,7 +752,10 @@ export class StreamJsonParser {
           // The turn starts with the notifications queued since the last one.
           this.unreported.clear();
           noteSession(msg.session_id);
-          if (typeof msg.permissionMode === "string") this.initPermissionMode = msg.permissionMode;
+          if (typeof msg.permissionMode === "string") {
+            this.initPermissionMode = msg.permissionMode;
+            if (firstInit) events.push({ type: "effective_permission_mode", mode: msg.permissionMode });
+          }
           const requested = this.permission?.requested;
           if (firstInit && requested && typeof msg.permissionMode === "string" && msg.permissionMode !== requested) {
             const model = typeof msg.model === "string" && msg.model ? msg.model : "this model";

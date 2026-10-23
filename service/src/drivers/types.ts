@@ -66,6 +66,8 @@ export type DriverEvent =
   | { type: "compacted"; before?: number; after?: number }
   /** A notice for the human, persisted as a transcript status entry (e.g. a mode downgrade) */
   | { type: "status"; text: string }
+  /** The permission mode the CLI says it runs in (claude-code's init event), which can differ from the one requested */
+  | { type: "effective_permission_mode"; mode: string }
   /** A permission decision made inside the driver (e.g. Claude Code's auto-mode classifier) */
   | ({ type: "permission"; log: PermissionDecisionLog } & FromSubagent)
   /**

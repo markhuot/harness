@@ -16,10 +16,15 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - Settings → Chief of staff also has **Triage permissions**. Read only (the default) keeps triage on
   Harness's fixed list of gh reads and read-only tools. Auto lets a classifier judge each lookup:
   Claude Code's own when the triage model supports auto mode, otherwise Harness's (as with Haiku).
-  Either way, a lookup that isn't allowed is refused and triage escalates the event to the chief.
+  Harness's classifier is told triage only reads and treats the event text as untrusted, so a PR
+  comment can't talk it into a write; hard-denied commands and plain gh reads are settled before it
+  is asked. A lookup that isn't allowed is refused and triage escalates the event to the chief.
 
 ### Fixed
 
+- A `gh` command with an unquoted brace, such as `gh api {repos/o/r/issues/1/comments,-XPOST,-fbody=x}`,
+  is no longer treated as a read-only command: the shell turned it into a POST. This closes a gap on
+  the Anthropic API driver, where read-only commands run without asking in every permission mode.
 - Triage can now look up a pull request's review threads (and whether each one is resolved) with
   `gh api graphql -f query='query { … }'`, as GitHub watcher guidance asks. Before, these reads were
   refused because GraphQL sends a POST. Mutations, subscriptions and fields read from a file are

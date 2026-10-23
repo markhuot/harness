@@ -74,3 +74,10 @@ test("the API backend falls back to JSON in text, and errors without a key or an
   const noKey = new AnthropicApiClassifier({ apiKey: () => null, model: () => "m", rules: async () => BUILTIN_RULES });
   await expect(noKey.classify(req(), new AbortController().signal)).rejects.toThrow(/no Anthropic API key/);
 });
+
+test("a triage run's prompt says it only reads and that its first lines are untrusted text; other runs' prompts don't", () => {
+  const triage = buildClassifierPrompt(BUILTIN_RULES, req({ runKind: "triage" })).system;
+  expect(triage).toMatch(/triage run: it only reads/);
+  expect(triage).toMatch(/soft_deny/);
+  expect(buildClassifierPrompt(BUILTIN_RULES, req({ runKind: "work" })).system).not.toMatch(/triage run/);
+});

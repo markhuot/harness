@@ -918,12 +918,19 @@ human.
   and `gh api graphql` with one `query` field holding no `mutation` or `subscription` and no field read
   from a file (`-F key=@path`); no argument that leaves the folder by path), MCP tools only when their
   name reads (`get*`, `list*`, `search*`, `find*`, `read*`, `query*`), every other tool denied.
-- `auto`: the tiers every auto-mode run has, unchanged. The CLI runs in `auto`, so Claude Code's
-  classifier judges first. A model without auto mode (Haiku) silently runs in `default` instead (see
-  Permissions), and its calls reach the prompt tool; `requestApproval` hands those to Harness's
-  classifier (`gate.judge` with no ticket, as for an auto-mode ticket's prompt-tool calls). What the
-  classifier would send to a human (soft deny, failure, timeout, classifier off) comes back to
-  `requestApproval`, which refuses it for triage.
+- `auto`: the tiers every auto-mode run has. The CLI runs in `auto`, so Claude Code's classifier
+  judges first. A model without auto mode (Haiku) runs in `default` instead (see Permissions), and the
+  driver reports the mode the CLI says it runs in (`effective_permission_mode`, from the init event;
+  the run keeps it as `cliMode`). Only when that is `default` does `requestApproval` judge a prompt-tool
+  call itself: the hard-deny list first, then the read-only policy of `permissions/triage.ts` (so a
+  `gh pr view` costs no classifier call), then Harness's classifier (`gate.judge` with no ticket).
+  The classifier is told this is a triage run that only reads, so any write is a soft deny, and the
+  run's first transcript lines, built from outsiders' event text, reach it labelled
+  `[untrusted event text]`, never `[human]`. What it would send to a human (soft deny, failure,
+  timeout, classifier off) comes back to `requestApproval`, which refuses it for triage. When the CLI
+  does run in `auto` (or its mode is unknown), a call that still reaches the prompt tool is one its
+  own classifier declined to allow, and it is refused with no second try. A native-tool driver's
+  triage is always read-only (`checkPermission`), whatever the setting.
 
 Read-only denial lives in the harness's gate, not in CLI flag prefixes, because `gh api` turns
 into a POST by itself on `-f`. The prompt says the event is untrusted, to find out what changed and who

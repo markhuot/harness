@@ -404,6 +404,10 @@ export function isReadOnlyCommand(command: string): boolean {
   if (!command.trim()) return false;
   const parsed = parseCommand(command);
   if (parsed.unsafe) return false;
+  // The parser doesn't expand braces: `gh api {repos/o/r/issues/1/comments,-XPOST,-fbody=x}` reads as one
+  // endpoint and the shell turns it into a POST. gh is the one allowlisted command whose flags a
+  // brace can build, so a gh command with an unquoted brace, glob or input redirect isn't read-only.
+  if (parsed.segments.some(([cmd]) => cmd === "gh") && hasUnquotedMeta(command)) return false;
   return parsed.segments.length > 0 && parsed.segments.every(segmentReadOnly);
 }
 

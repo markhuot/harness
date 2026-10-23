@@ -209,6 +209,7 @@ import { CosEngine, wire as wireCosEvent, type Timers as CosTimers } from "../co
 import { chatEntryOf, cosChat, isSilentReply, WAKE_PROMPT_PREFIX } from "../cos/chat";
 import { AgentTriage, LlmTriage, parseTriage, TriageIncomplete, type AgentTriageRequest, type AgentTriageRun, type CosTriage, type TriageVerdict } from "../cos/triage";
 import { triageDecision } from "../permissions/triage";
+import { hardDenyReason } from "../permissions/bash";
 import { claudeCliEnv, resolveClaudeBin } from "../drivers/claude-code";
 import { DEFAULT_ANTHROPIC_MODEL } from "../drivers/anthropic-api";
 import { clockTime, isUsageLimit, usageLimitResumeAt } from "./usage-limit";
@@ -637,7 +638,7 @@ export class Orchestrator {
   private readonly macRequests: MacRequests | undefined;
   private cosOpts: Pick<OrchestratorOptions, "cosTriage">;
   /** The triage agent runs in flight, by their session: what each was asked and the verdicts it has recorded (runTriage) */
-  private triageRuns = new Map<string, { cosId: string; system: string; model: string; permissionMode: TriagePermissionMode; ids: string[]; verdicts: Map<string, TriageVerdict> }>();
+  private triageRuns = new Map<string, { cosId: string; system: string; model: string; permissionMode: TriagePermissionMode; cliMode?: string; ids: string[]; verdicts: Map<string, TriageVerdict> }>();
   private cosOff: (() => void)[] = [];
   /** Who caused the activity written in this async context ("cos:<ticket id>" inside a chief's run) */
   /** The project the latest wake of each chief (by ticket id) was about, when every event in it was; a chat message clears it. */
@@ -4724,18 +4725,31 @@ ${numberLines(r.body)}`;
     input: unknown,
     meta: ApprovalMeta = {},
   ): Promise<{ behavior: "allow"; updatedInput: unknown } | { behavior: "deny"; message: string }> {
-    // Triage has no human and no ticket. In auto mode a call reaches here when Claude Code's own
-    // classifier isn't there to judge it (a model without auto mode, like Haiku): Harness's
-    // classifier judges it as it would an auto-mode ticket's. What it can't allow would ask a human,
-    // and with none, triage is refused and escalates. Read-only mode answers from Harness's own
-    // read-only policy (permissions/triage.ts).
+    // Triage has no human and no ticket. In auto mode a call reaches here only when Claude Code's own
+    // classifier isn't there to judge it: the CLI fell back to "default" (a model without auto mode,
+    // like Haiku) and said so in its init event. The call then goes through what auto mode would
+    // check first: the hard-deny list, then the read-only policy (permissions/triage.ts, no
+    // classifier call for a `gh pr view`), then Harness's classifier, which is told triage must only
+    // read. What it can't allow would ask a human, and with none, triage is refused and escalates.
+    // A CLI that does run in auto already had its classifier say no: no second try here. Read-only
+    // mode answers from the read-only policy alone.
     if (ctx.runKind === "triage") {
-      if (this.triageRuns.get(ctx.session.id)?.permissionMode === "auto") {
-        if (meta.viaPromptTool) {
-          const d = await this.gate.judge(toolName, input, this.gateEnv(ctx, null, "auto"));
-          return d.behavior === "allow" ? { behavior: "allow", updatedInput: input } : d;
+      const triage = this.triageRuns.get(ctx.session.id);
+      if (triage?.permissionMode === "auto") {
+        const escalate = (why?: string) => ({ behavior: "deny" as const, message: `${why ? `${why} ` : ""}No human is available to approve this during triage. Don't retry it; escalate if you can't tell without it.` });
+        if (!meta.viaPromptTool || triage.cliMode !== "default") return escalate(meta.reason);
+        const command = toolName === "Bash" && typeof (input as { command?: unknown } | null)?.command === "string" ? (input as { command: string }).command : "";
+        const hard = command ? hardDenyReason(command) : null;
+        if (hard) {
+          this.logPermission(ctx.session.id, ctx.runId, { tool: toolName, decision: "deny", source: "policy", mode: "auto", summary: summarizeToolInput(input, 200), reason: `Blocked by policy: ${hard}.` });
+          return { behavior: "deny", message: `Blocked by policy: ${hard}. This action is never allowed; do something else.` };
         }
-        return { behavior: "deny", message: `${meta.reason ? `${meta.reason} ` : ""}No human is available to approve this during triage. Don't retry it; escalate if you can't tell without it.` };
+        if (triageDecision(toolName, input).behavior === "allow") {
+          this.logPermission(ctx.session.id, ctx.runId, { tool: toolName, decision: "allow", source: "policy", mode: "auto", summary: summarizeToolInput(input, 200), reason: "read-only" });
+          return { behavior: "allow", updatedInput: input };
+        }
+        const d = await this.gate.judge(toolName, input, this.gateEnv(ctx, null, "auto"));
+        return d.behavior === "allow" ? { behavior: "allow", updatedInput: input } : d;
       }
       const d = triageDecision(toolName, input);
       this.logPermission(ctx.session.id, ctx.runId, { tool: toolName, decision: d.behavior, source: "policy", mode: "read_only", summary: summarizeToolInput(input, 200), reason: d.behavior === "allow" ? "read-only" : d.message });
@@ -5038,7 +5052,8 @@ ${numberLines(r.body)}`;
   async checkPermission(ctx: ToolContext, toolName: string, input: unknown): Promise<{ behavior: "allow" } | { behavior: "deny"; message: string }> {
     const ticket = ctx.ticket ? this.store.tickets.get(ctx.ticket.id) : null;
     // Plan and triage runs are read-only for every driver (claude-code runs plan runs in
-    // --permission-mode plan).
+    // --permission-mode plan). A native-tool driver's triage therefore ignores the triage
+    // permission setting (auto); only claude-code's prompt tool path (requestApproval) honours it.
     const mode: PermissionMode = READ_ONLY_RUNS.includes(ctx.runKind) ? "read_only" : this.permissionModeFor(ticket);
     return this.gate.check(toolName, input, this.gateEnv(ctx, ticket ?? null, mode));
   }
@@ -5061,7 +5076,7 @@ ${numberLines(r.body)}`;
       log: (entry) => this.logPermission(ctx.session.id, ctx.runId, entry),
       context: () => ({
         ticket: ticket ? { key: ticket.key, title: ticket.title, spec: ticket.spec } : null,
-        transcript: this.recentTranscript(ctx.session.id),
+        transcript: this.recentTranscript(ctx.session.id, ctx.runKind === "triage"),
       }),
     };
   }
@@ -5074,12 +5089,12 @@ ${numberLines(r.body)}`;
   }
 
   /** The last few transcript entries as short lines, for the classifier's sense of intent. */
-  private recentTranscript(sessionId: string, max = 16): string[] {
+  private recentTranscript(sessionId: string, untrustedUser = false, max = 16): string[] {
     const entries = this.store.transcript.list(sessionId).slice(-60);
     const lines: string[] = [];
     for (const e of entries) {
       const c = e.content;
-      if (c.type === "text") lines.push(`[${e.role === "user" ? "human" : e.role}] ${c.text}`);
+      if (c.type === "text") lines.push(`[${e.role === "user" ? (untrustedUser ? "untrusted event text" : "human") : e.role}] ${c.text}`);
       else if (c.type === "tool_call") lines.push(`[tool_call ${c.name}] ${summarizeToolInput(c.input, 300)}`);
       else if (c.type === "tool_result") {
         const text = c.output.map((o) => (o.type === "text" ? o.text : `[${o.type}]`)).join(" ");
@@ -6055,6 +6070,11 @@ ${numberLines(r.body)}`;
       case "status":
         this.appendStatus(run.sessionId, run.id, ev.text);
         return null;
+      case "effective_permission_mode": {
+        const triage = run.kind === "triage" ? this.triageRuns.get(run.sessionId) : undefined;
+        if (triage) triage.cliMode = ev.mode;
+        return null;
+      }
       case "permission":
         this.logPermission(run.sessionId, run.id, ev.log, ev.subagentId);
         return null;
