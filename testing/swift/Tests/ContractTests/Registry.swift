@@ -56,6 +56,7 @@ let codecs: [String: Codec] = [
         "BrowserState": .codable(BrowserState.self),
         "BrowserTab": .codable(BrowserTab.self),
         "ClassifierBackend": .codable(ClassifierBackend.self),
+        "TriagePermissionMode": .codable(TriagePermissionMode.self),
         "ClientMessage": .codable(ClientMessage.self),
         "CompleteBody": .codable(CompleteBody.self),
         "CompletionAction": .codable(CompletionAction.self),
@@ -160,6 +161,7 @@ let enumValues: [String: [String]] = [
         "BrowserDevice": BrowserDevice.allKnown.map(\.rawValue),
         "BrowserExtensionSource": BrowserExtensionSource.allKnown.map(\.rawValue),
         "ClassifierBackend": ClassifierBackend.allKnown.map(\.rawValue),
+        "TriagePermissionMode": TriagePermissionMode.allKnown.map(\.rawValue),
         "CompletionAction": CompletionAction.allKnown.map(\.rawValue),
         "ListenMode": ListenMode.allKnown.map(\.rawValue),
         "PermissionMode": PermissionMode.allKnown.map(\.rawValue),
@@ -185,6 +187,7 @@ let enumValues: [String: [String]] = [
 let constValues: [String: [String]] = [
         "ACTIVITY_KINDS": ActivityKind.allKnown.map(\.rawValue),
         "CLASSIFIER_BACKENDS": ClassifierBackend.allKnown.map(\.rawValue),
+        "TRIAGE_PERMISSION_MODES": TriagePermissionMode.allKnown.map(\.rawValue),
         "COMPLETION_ACTIONS": CompletionAction.allKnown.map(\.rawValue),
         "LISTEN_MODES": ListenMode.allKnown.map(\.rawValue),
         "PERMISSION_MODES": HarnessProtocol.permissionModes.map(\.rawValue),
