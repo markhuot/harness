@@ -3,6 +3,18 @@
 `bun run testing` runs the whole gate: nothing lands on `main` until it passes on the result. Its commands: `l0`, `mac`, `ios`, `walk`, `stress`, `lint`, and `fast` (everything that needs no simulator or Electron; `bun run test` runs it).
 `bun run testing lint` fails a test that imports another test file or a data folder.
 
+## One heavy run at a time (`queue-lock.ts`)
+
+Every command except `lint`, `l0` and `queue` takes the testing lock (`~/.harness/tmp/testing-lock`,
+shared by all worktrees). A run that finds it taken queues in arrival order, prints its position, and
+starts by itself with `testing: your turn started`; it never times out. A holder or waiter that is killed
+or crashes is dropped by its PID and start time, and SIGINT/SIGTERM kill the run's children before
+letting go. After the previous holder lets go, the next run waits up to 60 seconds while xcodebuild,
+simulator boot/shutdown, Electron or a high load average (only within that minute) persists, then goes
+regardless. `bun run testing queue` shows the holder and waiters. Commands the gate runs inherit
+`HARNESS_TESTING_LOCKED`, so a nested `bun run testing` doesn't queue behind its parent. The lock is
+always taken before a simulator slot.
+
 ## The shared world (`testing/world`)
 
 One small, fixed set of data the screens are drawn from (layers L4 and L5 only; logic tests build

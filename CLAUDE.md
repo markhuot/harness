@@ -20,6 +20,22 @@ the whole suite in `testing/` (its README describes each layer), runs every laye
 failed. There is no hosted CI; it runs on this Mac. A completion run (the one that merges a ticket)
 runs it on the merged result and fixes or reports what fails before anything lands on `main`.
 
+**One heavy run at a time.** Several agents running the suite at once overloaded this Mac and slowed
+every run to over an hour, so everything past `lint` and `l0` (`mac`, `ios`, `walk`, `stress`,
+`fast`, and the full gate) takes a lock shared by every worktree and the main checkout
+(`testing/queue-lock.ts`). A run that finds it taken queues in arrival order and waits inside the
+command. When its turn comes it prints `testing: your turn started`, then waits up to a minute for the
+previous run's leftovers (xcodebuild, simulators, Electron, high load) to settle before the first test.
+
+- Run the gate as a background command (`run_in_background`, `timeout: 7200000`) and end your turn
+  or do other work: you are woken when it exits. Never `sleep` or poll for it. To see your turn
+  start, Monitor its output for `your turn started`.
+- A queued command isn't hung or failed, and killing it to retry loses your place. `bun run testing queue`
+  shows the holder and the waiters. A killed or crashed run drops out of the line by itself.
+- Don't go around it with raw `cd testing && bun test`, `xcodebuild` or `dev-sim` for the full gate; a
+  single layer run through `bun run testing <layer>` is fine. Rebase onto `main` first if your
+  worktree has no `testing/queue-lock.ts`.
+
 A change isn't done until it has a test, `bun run testing` and `bun run typecheck` pass, and a
 visible change has screenshots in the spec's Status. A ticket worktree starts without
 `node_modules`: clone the main checkout's with `cp -Rc /Users/markhuot/Sites/harness/node_modules .`
