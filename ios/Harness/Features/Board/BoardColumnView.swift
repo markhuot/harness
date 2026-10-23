@@ -65,16 +65,26 @@ struct BoardStatusRail: View {
     @Environment(\.palette) private var c
 
     var body: some View {
-        GlassEffectContainer {
-            VStack(spacing: 2) {
-                ForEach(TicketStatus.allKnown, id: \.self) { s in tab(s) }
+        // The rail is the width of the system's bottom-bar buttons and takes the room above them,
+        // shrinking its tabs (then dropping counts) rather than running under them.
+        GeometryReader { geo in
+            let size = BoardScreenRules.railTab(
+                availableHeight: geo.size.height, wantsCounts: showsCounts, tabCount: TicketStatus.allKnown.count)
+            GlassEffectContainer {
+                VStack(spacing: 2) {
+                    ForEach(TicketStatus.allKnown, id: \.self) { s in tab(s, height: size.height, counts: size.counts) }
+                }
+                .padding(4)
+                .glassEffect(.regular, in: .capsule)
             }
-            .padding(4)
-            .glassEffect(.regular, in: .capsule)
+            .frame(width: BoardScreenRules.railWidth)
+            // Flush with the buttons' trailing edge, which the system sets a fixed gap in from the screen's.
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+            .padding(.trailing, BoardScreenRules.railTrailingGap)
         }
     }
 
-    private func tab(_ s: TicketStatus) -> some View {
+    private func tab(_ s: TicketStatus, height: Double, counts showsCounts: Bool) -> some View {
         let on = s == page
         let n = count(s)
         return Button { onTap(s) } label: {
@@ -87,7 +97,7 @@ struct BoardStatusRail: View {
                         .foregroundStyle(on ? c.text : c.text3)
                 }
             }
-            .frame(width: 44, height: showsCounts ? 46 : 38)
+            .frame(width: BoardScreenRules.railWidth - 8, height: height)
             .background(on ? c.bgElev : .clear, in: .capsule)
             .overlay(Capsule().strokeBorder(on ? c.border : .clear, lineWidth: 1 / 3))
             .contentShape(.capsule)

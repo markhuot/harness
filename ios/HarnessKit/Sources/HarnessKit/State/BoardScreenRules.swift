@@ -58,6 +58,24 @@ public enum BoardScreenRules {
     /// Whether the rail shows counts under its icons, by the margin it has.
     public static func railShowsCounts(trailingMargin: Double) -> Bool { trailingMargin >= railCountsMinMargin }
 
+    /// The rail's outer width: the same as the system's bottom-bar buttons beside it (Projects, Search,
+    /// CoS, New session), so the column of glass lines up.
+    public static let railWidth: Double = 49
+    /// The gap between the system's bottom-bar buttons and the screen's trailing edge on the Duo.
+    public static let railTrailingGap: Double = 24
+    /// The height the system's bottom-bar buttons take at the foot of the Duo's margin; the rail stays above it.
+    public static let railBottomReserve: Double = 216
+    private static let railPadding: Double = 4
+    private static let railTabSpacing: Double = 2
+
+    /// The tab height (and whether counts fit) for the room the rail has above the bottom-bar buttons:
+    /// the roomiest size that fits, shrinking the tabs, then dropping counts, before it would run under them.
+    public static func railTab(availableHeight: Double, wantsCounts: Bool, tabCount: Int) -> (height: Double, counts: Bool) {
+        let sizes: [(Double, Bool)] = (wantsCounts ? [(46, true)] : []) + [(38, false), (32, false), (26, false)]
+        let chrome = 2 * railPadding + railTabSpacing * Double(max(tabCount - 1, 0))
+        return sizes.first { $0.0 * Double(tabCount) + chrome <= availableHeight } ?? sizes[sizes.count - 1]
+    }
+
     /// A rail count: the number, capped at "99+" to fit the margin.
     public static func railCountLabel(_ n: Int) -> String { n > 99 ? "99+" : String(n) }
 

@@ -22,6 +22,9 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
+- On the iPhone Duo, the board's column selector is now the same width as the Projects, Search, CoS
+  and New session buttons beside it and stays above them instead of running behind them. It shrinks
+  its tabs, then drops the counts, when there isn't room.
 - A `gh` command with an unquoted brace, such as `gh api {repos/o/r/issues/1/comments,-XPOST,-fbody=x}`,
   is no longer treated as a read-only command: the shell turned it into a POST. This closes a gap on
   the Anthropic API driver, where read-only commands run without asking in every permission mode.

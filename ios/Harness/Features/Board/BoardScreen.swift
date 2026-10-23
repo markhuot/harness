@@ -77,6 +77,8 @@ struct BoardScreen: View {
                     BoardStatusRail(
                         page: page ?? .planning, count: { ctx.count($0) },
                         showsCounts: BoardScreenRules.railShowsCounts(trailingMargin: trailingMargin), onTap: goTo)
+                        // Stays above the system's bottom-bar buttons, which the Duo stacks at the foot of the margin.
+                        .padding(.bottom, BoardScreenRules.railBottomReserve)
                 }
                 .frame(width: trailingMargin)
                 .ignoresSafeArea(.container, edges: .trailing)
