@@ -8,11 +8,13 @@
 //   testing.lock        the holder; created by hard link, so only one process ever gets it (sim.ts's lock)
 //   queue/<ms>-<pid>    one file per waiter, ordered by name; only the head may try the lock
 //   last.json           when the previous holder let go and how long it held, for the cooldown
+//   held.json           written while a run holds the lock, removed when it lets go; one found by the next
+//                       holder means the previous run died without cleaning up, the only time orphans are reaped
 
 import { cpus, homedir, loadavg } from "node:os";
 import { basename, join } from "node:path";
-import { mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
-import { lockHolder, processStart, releaseLock, tryLock } from "../ios/Tools/sim";
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { isAlive, lockHolder, processStart, releaseLock, tryLock } from "../ios/Tools/sim";
 
 const NAME = "testing";
 const COOLDOWN_MS = 60_000;
@@ -25,7 +27,7 @@ interface Entry { pid: number; start: string; command: string; at: string }
 export interface Waiter extends Entry { name: string }
 interface Last { releasedAt: number; heldMs: number }
 
-const alive = (e: Entry) => processStart(e.pid) === e.start;
+const alive = (e: Entry) => isAlive(e.pid, e.start);
 
 function readEntry(path: string): Entry | null {
   try {
@@ -83,21 +85,22 @@ export function cooldownReason(s: { now: number; releasedAt: number | null; left
 export interface Proc { pid: number; command: string }
 
 /**
- * The processes in a `ps` listing that a test run starts and a finished or killed one can leave
- * behind: builds, simulator boots and shutdowns, and the Electron the walkthrough launches (the
- * checkout's own, under node_modules/electron, never an installed app such as Slack's). While this
- * process holds the lock nothing legitimate runs these, so whatever is found is an orphan.
+ * The processes in a `ps` listing that a killed test run can leave behind: xcodebuild and the
+ * Electron the walkthrough launches (the checkout's own, under node_modules/electron, never an
+ * installed app such as Slack's). Deliberately narrow: swift-build/swift-test (the ungated `l0`
+ * layer in another worktree) and simulator boots (other agents' own simulators) are legitimate
+ * work this lock doesn't govern, so they are never touched.
  */
 export function leftoverProcesses(procs: Proc[], ignore: number[] = []): Proc[] {
   return procs.filter(({ pid, command: c }) => {
     if (ignore.includes(pid)) return false;
     const first = basename(c.trim().split(/\s+/)[0] ?? "");
-    return ["xcodebuild", "swift-build", "swift-test"].includes(first) || /\bsimctl (boot|shutdown|bootstatus)\b/.test(c) || c.includes("node_modules/electron/dist/Electron.app");
+    return first === "xcodebuild" || c.includes("node_modules/electron/dist/Electron.app");
   });
 }
 
 function psProcs(): Proc[] {
-  const r = Bun.spawnSync(["ps", "-axo", "pid=,command="], { stdout: "pipe", stderr: "ignore" });
+  const r = Bun.spawnSync(["ps", "-axww", "-o", "pid=,command="], { stdout: "pipe", stderr: "ignore" });
   return r.stdout.toString().split("\n").flatMap((line) => {
     const m = /^\s*(\d+)\s+(.*)$/.exec(line);
     return m ? [{ pid: Number(m[1]), command: m[2]! }] : [];
@@ -115,7 +118,7 @@ function ancestry(): number[] {
   return out;
 }
 
-/** Kills the orphans of earlier runs (TERM, then KILL after 3 seconds) and shuts down simulators nobody holds. */
+/** Kills the orphans of a run that died without cleaning up (TERM, then KILL after 3 seconds) and shuts down simulators nobody holds. */
 export async function reapOrphans(log: (line: string) => void): Promise<void> {
   const orphans = leftoverProcesses(psProcs(), ancestry());
   if (orphans.length) {
@@ -128,12 +131,12 @@ export async function reapOrphans(log: (line: string) => void): Promise<void> {
 }
 
 /** After reaping, waits (at most a minute in all) while a leftover refuses to die or the machine is still loaded from the previous run. */
-async function settle(dir: string, log: (line: string) => void): Promise<void> {
+async function settle(dir: string, log: (line: string) => void, dirty: boolean): Promise<void> {
   const last = readLast(dir);
   const deadline = Date.now() + COOLDOWN_MS;
   let said = "";
   for (;;) {
-    const reason = cooldownReason({ now: Date.now(), releasedAt: last?.releasedAt ?? null, leftover: leftoverProcesses(psProcs(), ancestry()).map((p) => p.command), load1: loadavg()[0] ?? 0, cores: cpus().length });
+    const reason = cooldownReason({ now: Date.now(), releasedAt: last?.releasedAt ?? null, leftover: dirty ? leftoverProcesses(psProcs(), ancestry()).map((p) => p.command) : [], load1: loadavg()[0] ?? 0, cores: cpus().length });
     if (!reason || Date.now() >= deadline) return;
     if (reason !== said) log(`testing: waiting up to a minute for the previous run to settle: ${reason}`);
     said = reason;
@@ -151,20 +154,21 @@ export interface TestingLockOptions {
   log?: (line: string) => void;
 }
 
-/** Set for processes started under a held lock, so a nested `bun run testing` doesn't queue behind its own parent. */
+/** Set to the holder's pid for processes started under a held lock, so a nested `bun run testing` doesn't queue behind its own parent. */
 const ENV = "HARNESS_TESTING_LOCKED";
 
 /**
  * Waits its turn for the testing lock (no timeout) and returns the function that lets go. Under a
- * parent that holds it already (HARNESS_TESTING_LOCKED, or the holder is an ancestor process) it returns at once.
+ * parent that holds it already (HARNESS_TESTING_LOCKED names the live holder, or the holder is an ancestor process) it returns at once.
  */
 export async function acquireTesting(opts: TestingLockOptions = {}): Promise<() => void> {
-  if (process.env[ENV]) return () => {};
   const dir = opts.dir ?? queueDir();
   const holder = lockHolder(NAME, dir);
-  if (holder && ancestry().includes(holder.pid)) return () => {};
+  // The env var names the holder's pid; it only counts while that process still holds the lock.
+  if (holder && (holder.pid === Number(process.env[ENV]) || ancestry().includes(holder.pid))) return () => {};
   const log = opts.log ?? ((l: string) => console.log(l));
   const start = processStart(process.pid) ?? "";
+  const held = join(dir, "held.json");
   mkdirSync(join(dir, "queue"), { recursive: true });
 
   const entryName = `${String(Date.now()).padStart(15, "0")}-${process.pid}`;
@@ -178,6 +182,7 @@ export async function acquireTesting(opts: TestingLockOptions = {}): Promise<() 
   const release = () => {
     rmSync(entryPath, { force: true });
     if (!heldSince) return;
+    rmSync(held, { force: true });
     const heldMs = Date.now() - heldSince;
     heldSince = 0;
     try {
@@ -187,11 +192,17 @@ export async function acquireTesting(opts: TestingLockOptions = {}): Promise<() 
     delete process.env[ENV];
   };
   process.on("exit", release);
-  for (const sig of ["SIGINT", "SIGTERM"] as const) {
-    process.on(sig, () => {
-      // Children first, so the next holder doesn't inherit this run's simulators or Electron.
-      Bun.spawnSync(["pkill", "-TERM", "-P", String(process.pid)], { stdout: "ignore", stderr: "ignore" });
-      process.exit(128 + (sig === "SIGINT" ? 2 : 15));
+  let stopping = false;
+  for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
+    process.on(sig, async () => {
+      if (stopping) return;
+      stopping = true;
+      // Pass the signal to the children and give them (walk/run.ts cleans up its processes on it) up
+      // to 20 seconds to exit before letting go of the lock, so the next holder doesn't meet their leftovers.
+      const children = () => Bun.spawnSync(["pgrep", "-P", String(process.pid)], { stdout: "pipe", stderr: "ignore" }).stdout.toString().trim();
+      Bun.spawnSync(["pkill", `-${sig.slice(3)}`, "-P", String(process.pid)], { stdout: "ignore", stderr: "ignore" });
+      for (let i = 0; i < 80 && children(); i++) await Bun.sleep(250);
+      process.exit(128 + ({ SIGHUP: 1, SIGINT: 2, SIGTERM: 15 })[sig]);
     });
   }
 
@@ -201,6 +212,12 @@ export async function acquireTesting(opts: TestingLockOptions = {}): Promise<() 
   for (;;) {
     const line = waiters(dir);
     const place = line.findIndex((w) => w.name === entryName);
+    if (place === -1) {
+      // Our entry vanished (another run misjudged us dead): put it back under the same name, keeping our place.
+      writeFileSync(tmp, JSON.stringify(entry));
+      renameSync(tmp, entryPath);
+      continue;
+    }
     if (place === 0 && tryLock(NAME, dir)) break;
     const position = place + (lockHolder(NAME, dir) ? 1 : 0);
     if (position !== said) {
@@ -213,13 +230,15 @@ export async function acquireTesting(opts: TestingLockOptions = {}): Promise<() 
     await Bun.sleep(opts.pollMs ?? 500);
   }
   rmSync(entryPath, { force: true });
+  const dirty = existsSync(held);
+  writeFileSync(held, JSON.stringify({ pid: process.pid, at: new Date().toISOString() }));
   heldSince = Date.now();
-  process.env[ENV] = "1";
+  process.env[ENV] = String(process.pid);
   const waited = Math.round((Date.now() - arrived) / 1000);
   log(`testing: your turn started${waited >= 1 ? ` (waited ${waited}s)` : ""}`);
   if (opts.cooldown !== false) {
-    await reapOrphans(log);
-    await settle(dir, log);
+    if (dirty) await reapOrphans(log);
+    await settle(dir, log, dirty);
   }
   return release;
 }

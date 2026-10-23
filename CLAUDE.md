@@ -33,10 +33,11 @@ minute for the machine's load to settle before the first test.
   start, Monitor its output for `your turn started`.
 - A queued command isn't hung or failed, and killing it to retry loses your place. `bun run testing queue`
   shows the holder and the waiters. A killed or crashed run drops out of the line by itself.
-- Only the lock holder runs tests, so a leftover `xcodebuild`, `swift-build`, `node_modules/electron`
-  Electron or booted pool simulator you find while you hold the lock is an orphan: kill it (and
-  `bun run sim shutdown` for simulators) instead of working around it. The run does this itself
-  before it starts. Never kill processes of apps you didn't start (Slack, the installed Harness).
+- Only the lock holder runs tests, so a leftover `xcodebuild` or `node_modules/electron` Electron of
+  an earlier run you find while you hold the lock is an orphan: kill it (and `bun run sim shutdown`
+  for simulators) instead of working around it. The run does this itself, but only when the
+  previous holder died without letting go; it never touches `swift test` (the ungated `l0`), release
+  builds or other agents' own simulators. Never kill processes of apps you didn't start (Slack, the installed Harness).
 - Don't go around it with raw `cd testing && bun test`, `xcodebuild` or `dev-sim` for the full gate; a
   single layer run through `bun run testing <layer>` is fine. Rebase onto `main` first if your
   worktree has no `testing/queue-lock.ts`.

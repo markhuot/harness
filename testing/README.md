@@ -8,13 +8,14 @@
 Every command except `lint`, `l0` and `queue` takes the testing lock (`~/.harness/tmp/testing-lock`,
 shared by all worktrees). A run that finds it taken queues in arrival order, prints its position, and
 starts by itself with `testing: your turn started`; it never times out. A holder or waiter that is killed
-or crashes is dropped by its PID and start time, and SIGINT/SIGTERM kill the run's children before
-letting go. Once it has the lock, a run kills the orphans of earlier runs (xcodebuild, swift-build, the
-checkout's `node_modules/electron` Electron, simulator boot/shutdown) and shuts down simulators nobody
-holds, since nothing else legitimately runs while it holds the lock. Then, within a minute of the
+or crashes is dropped by its PID and start time (a `ps` that fails counts as alive), and SIGINT/SIGTERM/SIGHUP
+pass on to the run's children and wait up to 20 seconds for them before letting go. When the previous holder died
+without letting go (a hard kill leaves `held.json` behind), the next holder kills its orphans (xcodebuild and
+the checkout's `node_modules/electron` Electron) and shuts down simulators nobody holds; after a clean release it
+reaps nothing, so other worktrees' ungated `l0` runs, release builds and agents' own simulators are never touched. Then, within a minute of the
 previous holder letting go, it waits up to 60 seconds in all for a stubborn leftover or a high load
 average, then goes regardless. `bun run testing queue` shows the holder and waiters. Commands the gate runs inherit
-`HARNESS_TESTING_LOCKED`, so a nested `bun run testing` doesn't queue behind its parent. The lock is
+`HARNESS_TESTING_LOCKED` (the holder's pid, honoured only while that process holds the lock), so a nested `bun run testing` doesn't queue behind its parent. The lock is
 always taken before a simulator slot.
 
 ## The shared world (`testing/world`)

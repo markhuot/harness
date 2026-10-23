@@ -140,7 +140,21 @@ function readOwner(path: string): Owner | null {
   }
 }
 
-const alive = (o: Owner) => processStart(o.pid) === o.start;
+/**
+ * Whether the process that recorded `start` is still running. A `ps` that fails on a live PID (an
+ * overloaded machine) reads as alive, never dead: wrongly reaping a live owner is worse than keeping a dead one a moment longer.
+ */
+export function isAlive(pid: number, start: string): boolean {
+  try {
+    process.kill(pid, 0);
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "ESRCH") return false;
+  }
+  const now = processStart(pid);
+  return now === null || start === "" || now === start;
+}
+
+const alive = (o: Owner) => isAlive(o.pid, o.start);
 const mine = (o: Owner | null) => !!o && o.pid === process.pid && o.start === ownStart();
 
 /** Who holds the lock, or null when it's free or its holder is gone. */

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { cooldownReason, leftoverProcesses, queueStatus } from "../../queue-lock";
@@ -91,9 +91,36 @@ describe("testing lock", () => {
   test("a run started under a holder (HARNESS_TESTING_LOCKED) doesn't queue behind it", async () => {
     start("A", 60_000);
     await until("A holds", () => events.includes("GOT A"));
-    start("nested", 10, { HARNESS_TESTING_LOCKED: "1" });
+    start("nested", 10, { HARNESS_TESTING_LOCKED: String(queueStatus(dir).holder!.pid) });
     await until("nested ran", () => events.includes("DONE nested"));
     expect(queueStatus(dir).holder?.command).toContain("holder.fixture.ts A");
+  });
+
+  test("HARNESS_TESTING_LOCKED naming a process that doesn't hold the lock is no bypass", async () => {
+    start("A", 600);
+    await until("A holds", () => events.includes("GOT A"));
+    start("B", 10, { HARNESS_TESTING_LOCKED: "1" });
+    await until("B done", () => events.includes("DONE B"));
+    expect(events).toEqual(["GOT A", "DONE A", "GOT B", "DONE B"]);
+  });
+
+  test("a live waiter whose queue entry was deleted puts itself back and keeps its turn", async () => {
+    start("A", 600);
+    await until("A holds", () => events.includes("GOT A"));
+    start("B", 10);
+    await until("B queued", () => queueStatus(dir).waiters.length === 1);
+    for (const n of readdirSync(join(dir, "queue"))) rmSync(join(dir, "queue", n));
+    await until("B got its turn", () => events.includes("GOT B"));
+  });
+
+  test("a run that died holding the lock leaves held.json for the next holder to see, and a clean release leaves none", async () => {
+    const a = start("A", 60_000);
+    await until("A holds", () => events.includes("GOT A"));
+    expect(existsSync(join(dir, "held.json"))).toBe(true);
+    a.kill("SIGKILL");
+    start("B", 10);
+    await until("B done", () => events.includes("DONE B"));
+    expect(existsSync(join(dir, "held.json"))).toBe(false);
   });
 });
 
@@ -117,7 +144,7 @@ describe("cooldown", () => {
     expect(cooldownReason({ ...base, releasedAt: null, load1: 20, leftover: ["xcodebuild"] })).toBeNull();
   });
 
-  test("it picks out build, simulator and checkout-Electron processes, and ignores the rest and its own ancestry", () => {
+  test("it picks out xcodebuild and checkout-Electron processes, and ignores swift tests, simulator boots, the rest and its own ancestry", () => {
     const procs = [
       { pid: 1, command: "/usr/bin/xcodebuild -project ios/Harness.xcodeproj" },
       { pid: 2, command: "xcrun simctl shutdown harness-shared" },
@@ -127,7 +154,9 @@ describe("cooldown", () => {
       { pid: 6, command: "xcrun simctl list devices --json" },
       { pid: 7, command: "/Applications/Slack.app/Contents/Frameworks/Electron Framework.framework/Helpers/chrome_crashpad_handler" },
       { pid: 8, command: "xcodebuild -version" },
+      { pid: 9, command: "swift-test --package-path testing/swift" },
+      { pid: 10, command: "xcrun simctl boot harness-HARNESS-12" },
     ];
-    expect(leftoverProcesses(procs, [8]).map((p) => p.pid)).toEqual([1, 2, 3]);
+    expect(leftoverProcesses(procs, [8]).map((p) => p.pid)).toEqual([1, 3]);
   });
 });
