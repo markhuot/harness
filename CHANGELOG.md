@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261023.0929](https://github.com/markhuot/harness/releases/tag/app-20261023.0929) - 2026-10-23
+
 ### Added
 - Settings → Chief of staff now has a checkbox for each board column (Planning, In progress, Blocked, Review, Done), on the Mac, iPhone and iPad, and each project can inherit them or set its own. A chief of staff only gets events about tickets in a checked column, so a chief that only helps with Review, or only with Planning, no longer sees the rest.
 
