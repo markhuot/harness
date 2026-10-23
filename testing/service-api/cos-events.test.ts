@@ -11,6 +11,8 @@ afterEach(stopRigs);
  */
 async function inbox(tickets = 2) {
   const rig = await boot();
+  // Every column is checked, or no event would reach the chief at all (the default).
+  await rig.ok("PATCH", "/settings", { cosStatuses: ["planning", "in_progress", "blocked", "review", "done"] });
   const project = await rig.project("ACME");
   const made: Ticket[] = [];
   for (let i = 0; i < tickets; i++) made.push(await rig.ok<Ticket>("POST", "/tickets", { projectId: project.id, spec: `Ticket ${i}`, skipAgentReview: true, skipHumanReview: true }));

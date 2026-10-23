@@ -287,6 +287,8 @@ export function steps(start: Start, built: { app: string }): Step[] {
         const d = ctx.daemon;
         // From the project's board, the title-bar button is its group's chief.
         await d.call("PATCH", `/projects/${ctx.projectId}`, { group: COS_GROUP });
+        // No column is checked out of the box, so no event would reach the chief and the count would stay at zero.
+        await d.call("PATCH", "/settings", { cosStatuses: ["planning", "in_progress", "blocked", "review", "done"] });
         ctx.cos.groupId = (await d.call<{ id: string; name: string }[]>("GET", "/groups")).find((g) => g.name === COS_GROUP)!.id;
         await main.evaluate(`location.hash = '#/board/${ctx.projectId}'`);
         await main.waitFor("the Chief of Staff button, scoped to the group", `document.querySelector('[data-testid="cos-callout"]')?.dataset.scope === 'group:${ctx.cos.groupId}'`);
