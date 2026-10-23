@@ -160,10 +160,10 @@ struct CosChatView: View {
     /// nil until the first page loaded; then the next older page's cursor, nil when there is none.
     @State private var cursor: String??
     @State private var loading = false
-    @State private var draft = ""
     @State private var sending = false
+    @State private var focused = false
     @State private var failure: String?
-    @FocusState private var focused: Bool
+    @State private var uploader = PromptAttachmentUploader()
 
     private static let page = 30
     private static let bottom = "cos-chat-bottom"
@@ -171,6 +171,7 @@ struct CosChatView: View {
     var body: some View {
         let entries = store.cos.chat[chief.ticketId] ?? []
         let rows = CosLogic.rows(entries)
+        let attachTarget: (any PromptAttachmentTarget)? = chief.enabled ? store.messageDraft(forChief: chief).attachments : nil
         VStack(spacing: 0) {
             ScrollViewReader { proxy in
                 ScrollView {
@@ -200,6 +201,8 @@ struct CosChatView: View {
             composer
         }
         .task(id: "\(chief.ticketId)#\(store.epoch)") { await loadFirst() }
+        .modifier(PromptAttachmentDrop(target: attachTarget, uploader: uploader))
+        .modifier(PromptAttachmentPickers(target: attachTarget, uploader: uploader))
         .accessibilityIdentifier("cos-chat")
     }
 
@@ -215,13 +218,21 @@ struct CosChatView: View {
 
     @ViewBuilder private func rowView(_ row: CosLogic.ChatRow) -> some View {
         switch row {
-        case let .message(_, fromHuman, text):
+        case let .message(_, fromHuman, text, attachments):
             if fromHuman {
-                // Shrinks to fit a short message; a table or code block needs a definite width.
-                TranscriptBubbleWidth(fraction: 0.92, fill: MarkdownView.scrollsSideways(text)) {
-                    MarkdownView(text: text)
-                        .padding(11)
-                        .background(c.accentSoft, in: UnevenRoundedRectangle(topLeadingRadius: 14, bottomLeadingRadius: 14, bottomTrailingRadius: 14, topTrailingRadius: 4))
+                VStack(alignment: .trailing, spacing: 4) {
+                    // A message of only files has no bubble.
+                    if !TicketDetailLogic.trim(text).isEmpty || attachments.isEmpty {
+                        // Shrinks to fit a short message; a table or code block needs a definite width.
+                        TranscriptBubbleWidth(fraction: 0.92, fill: MarkdownView.scrollsSideways(text)) {
+                            MarkdownView(text: text)
+                                .padding(11)
+                                .background(c.accentSoft, in: UnevenRoundedRectangle(topLeadingRadius: 14, bottomLeadingRadius: 14, bottomTrailingRadius: 14, topTrailingRadius: 4))
+                        }
+                    }
+                    if !attachments.isEmpty {
+                        TranscriptMessageAttachments(list: attachments)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .trailing)
             } else {
@@ -238,46 +249,83 @@ struct CosChatView: View {
         }
     }
 
+    /// The ticket composer's pieces on the chief's hidden ticket: the glass field with /commands (no
+    /// @file: the chief's folder is the service home), (+) for Photos/Files/Paste, the tray of
+    /// uploaded files and Send. The text and files are the chief's message draft, saved as typed.
     private var composer: some View {
-        HStack(alignment: .bottom, spacing: 8) {
-            TextField(chief.enabled ? "Message the chief of staff" : "Switched off", text: $draft, axis: .vertical)
-                .lineLimit(1...6)
-                .focused($focused)
-                .disabled(!chief.enabled)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 9)
-                .background(c.bgSunken, in: .rect(cornerRadius: 18))
-                .accessibilityIdentifier("cos-composer")
-            Button(action: send) {
-                Image(systemName: "arrow.up.circle.fill").font(.system(size: 30)).foregroundStyle(canSend ? c.accent : c.text3)
+        let draft = store.messageDraft(forChief: chief)
+        let outgoing = draft.attachments
+        let empty = TicketDetailLogic.trim(draft.text).isEmpty
+        let canSend = chief.enabled && TicketDetailLogic.canSendMessage(text: draft.text, attachments: outgoing.count, uploading: uploader.pending.count,
+                                                                        sending: sending, approvalPending: false)
+        return VStack(spacing: 4) {
+            if !outgoing.isEmpty || !uploader.pending.isEmpty {
+                ComposerAttachmentTray(uploader: uploader, outgoing: outgoing, sending: sending)
             }
-            .disabled(!canSend)
-            .accessibilityLabel("Send")
-            .accessibilityIdentifier("cos-send")
+            HStack(alignment: .bottom, spacing: 8) {
+                if chief.enabled {
+                    ComposerAttachButton(uploader: uploader, outgoing: outgoing, sending: sending)
+                }
+                MentionTextEditor(text: Binding(get: { draft.text }, set: { draft.setText($0) }),
+                                  placeholder: chief.enabled ? "Message the chief of staff" : "Switched off",
+                                  ticketKey: chief.key,
+                                  minLines: 1,
+                                  maxLines: 6,
+                                  suggestionsEdge: .top,
+                                  suggestionsMaxHeight: 200,
+                                  search: { _ in [] },
+                                  fieldLabel: "Message the chief of staff",
+                                  onFocusChange: { now in
+                                      focused = now
+                                      draft.focus(now, stored: chief.messageDraft.optional)
+                                  },
+                                  fieldBox: MentionFieldBox(border: nil, cornerRadius: 22,
+                                                            padding: EdgeInsets(top: 11, leading: 16, bottom: 11, trailing: 16),
+                                                            glass: true),
+                                  onSubmit: { send() })
+                    .disabled(!chief.enabled)
+                    .accessibilityIdentifier("cos-composer")
+                ComposerSendButton(sending: sending, active: chief.enabled && (focused || !empty || !outgoing.isEmpty), disabled: !canSend,
+                                   hint: !uploader.pending.isEmpty ? "Wait for the attachments to upload" : "Write a message first") { send() }
+                    .accessibilityIdentifier("cos-send")
+            }
         }
+        .padding(.top, 6)
         .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(c.bg)
-        .overlay(alignment: .top) { Rectangle().fill(c.border).frame(height: 1 / 3) }
+        .padding(.bottom, 8)
+        .animation(.snappy, value: focused)
+        // Another device's edit (or its send) shows here, unless this one is being typed in.
+        .onChange(of: chief.messageDraft.optional, initial: true) { _, saved in draft.sync(saved) }
+        .onAppear { draft.onError = { _ in haptic(.error) } }
+        // Leaving the chat with the field focused sends no blur: the draft isn't being typed in anymore.
+        .onDisappear { draft.focus(false, stored: chief.messageDraft.optional) }
     }
 
-    private var canSend: Bool { chief.enabled && !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !sending }
-
     private func send() {
-        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard canSend else { return }
+        let draft = store.messageDraft(forChief: chief)
+        let outgoing = draft.attachments
+        guard chief.enabled, TicketDetailLogic.canSendMessage(text: draft.text, attachments: outgoing.count, uploading: uploader.pending.count,
+                                                              sending: sending, approvalPending: false) else { return }
+        let text = TicketDetailLogic.trim(draft.text)
+        let files = outgoing.list
+        let attachments = outgoing.inputs
+        let id = chief.ticketId
         sending = true
         failure = nil
         Task {
-            defer { sending = false }
+            // No draft save may land after the message: the service clears the draft when it goes.
+            await draft.beforeSend()
             do {
-                _ = try await store.connectedAPI().sendCosMessage(chief.ticketId, text: text)
-                // Text typed while the request was in flight stays.
-                if draft.trimmingCharacters(in: .whitespacesAndNewlines) == text { draft = "" }
+                _ = try await store.connectedAPI().sendCosMessage(id, text: text, attachments: attachments)
+                haptic(.success)
+                // Files attached while it was sending stay for the next message.
+                draft.sent(files: files)
             } catch {
                 haptic(.error)
                 failure = Connection.describeError(error, baseUrl: store.baseUrl)
+                draft.sendFailed()
             }
+            sending = false
         }
     }
 

@@ -91,10 +91,13 @@ public struct Cos: Codable, Sendable, Equatable, Identifiable {
     public var createdAt: Timestamp
     /// Why the triage in front of it can't run (its events escalate instead); nil when it can
     public var triageUnavailable: Patch<String>
+    /// The message being written to it (the chief's ticket draft), so another device can finish it
+    public var messageDraft: Patch<MessageDraft>
 
     public var id: String { ticketId }
 
-    public init(ticketId: String, key: String, scope: String, groupId: String? = nil, enabled: Bool = true, createdAt: Timestamp, triageUnavailable: Patch<String> = .absent) {
+    public init(ticketId: String, key: String, scope: String, groupId: String? = nil, enabled: Bool = true, createdAt: Timestamp, triageUnavailable: Patch<String> = .absent, messageDraft: Patch<MessageDraft> = .absent) {
+        self.messageDraft = messageDraft
         self.ticketId = ticketId
         self.key = key
         self.scope = scope
@@ -180,7 +183,7 @@ public struct CosBadge: Codable, Sendable, Equatable {
 /// One entry of a chief's chat (GET /cos/:id/transcript), discriminated by `kind`. An unknown
 /// `kind` decodes to `.unknown` and re-encodes unchanged.
 public enum CosChatEntry: Codable, Sendable, Equatable, Identifiable {
-    case message(id: String, cosId: String, createdAt: Timestamp, role: String, text: String)
+    case message(id: String, cosId: String, createdAt: Timestamp, role: String, text: String, attachments: [Attachment] = [])
     case ticketCreated(id: String, cosId: String, createdAt: Timestamp, key: String, title: String, status: String)
     case ticketMoved(id: String, cosId: String, createdAt: Timestamp, key: String, title: String, from: String, to: String)
     case eventBatch(id: String, cosId: String, createdAt: Timestamp, wakeId: String, eventIds: [String], digest: String)
@@ -188,7 +191,7 @@ public enum CosChatEntry: Codable, Sendable, Equatable, Identifiable {
 
     public var id: String {
         switch self {
-        case let .message(id, _, _, _, _), let .ticketCreated(id, _, _, _, _, _), let .ticketMoved(id, _, _, _, _, _, _),
+        case let .message(id, _, _, _, _, _), let .ticketCreated(id, _, _, _, _, _), let .ticketMoved(id, _, _, _, _, _, _),
              let .eventBatch(id, _, _, _, _, _), let .unknown(id, _, _, _, _):
             id
         }
@@ -196,7 +199,7 @@ public enum CosChatEntry: Codable, Sendable, Equatable, Identifiable {
 
     public var createdAt: Timestamp {
         switch self {
-        case let .message(_, _, t, _, _), let .ticketCreated(_, _, t, _, _, _), let .ticketMoved(_, _, t, _, _, _, _),
+        case let .message(_, _, t, _, _, _), let .ticketCreated(_, _, t, _, _, _), let .ticketMoved(_, _, t, _, _, _, _),
              let .eventBatch(_, _, t, _, _, _), let .unknown(_, _, t, _, _):
             t
         }
@@ -220,7 +223,8 @@ public enum CosChatEntry: Codable, Sendable, Equatable, Identifiable {
         let kind = try c.decode(String.self, forKey: "kind")
         switch kind {
         case "message":
-            self = .message(id: id, cosId: cosId, createdAt: at, role: try c.decode(String.self, forKey: "role"), text: try c.decode(String.self, forKey: "text"))
+            self = .message(id: id, cosId: cosId, createdAt: at, role: try c.decode(String.self, forKey: "role"), text: try c.decode(String.self, forKey: "text"),
+                attachments: try c.decodeIfPresent([Attachment].self, forKey: "attachments") ?? [])
         case "ticket_created":
             self = .ticketCreated(
                 id: id, cosId: cosId, createdAt: at, key: try c.decode(String.self, forKey: "key"), title: try c.decode(String.self, forKey: "title"),
@@ -243,9 +247,10 @@ public enum CosChatEntry: Codable, Sendable, Equatable, Identifiable {
         var c = encoder.container(keyedBy: AnyCodingKey.self)
         try c.encode(kind, forKey: "kind")
         switch self {
-        case let .message(id, cosId, at, role, text):
+        case let .message(id, cosId, at, role, text, attachments):
             try c.encode(id, forKey: "id"); try c.encode(cosId, forKey: "cosId"); try c.encode(at, forKey: "createdAt")
             try c.encode(role, forKey: "role"); try c.encode(text, forKey: "text")
+            if !attachments.isEmpty { try c.encode(attachments, forKey: "attachments") }
         case let .ticketCreated(id, cosId, at, key, title, status):
             try c.encode(id, forKey: "id"); try c.encode(cosId, forKey: "cosId"); try c.encode(at, forKey: "createdAt")
             try c.encode(key, forKey: "key"); try c.encode(title, forKey: "title"); try c.encode(status, forKey: "status")
@@ -308,7 +313,12 @@ public struct MemoryConflict: Codable, Sendable, Equatable {
 /// POST /cos/:id/messages
 public struct CosMessageBody: Codable, Sendable, Equatable {
     public var text: String
-    public init(text: String) { self.text = text }
+    /// The files going with it; left out of the JSON when there are none
+    public var attachments: [AttachmentInput]?
+    public init(text: String, attachments: [AttachmentInput] = []) {
+        self.text = text
+        self.attachments = attachments.isEmpty ? nil : attachments
+    }
 }
 
 /// POST /cos

@@ -50,6 +50,8 @@ export const cosChat: CosChatEntry[] = [
   { id: "chat-3", cosId: "cos-all", createdAt: minutesAgo(120), kind: "ticket_created", key: "HARNESS-204", title: "Follow up on the flaky palette test", status: "planning" },
   { id: "chat-4", cosId: "cos-all", createdAt: minutesAgo(30), kind: "ticket_moved", key: "HARNESS-203", title: "Reorder the settings sections", from: "in_progress", to: "review" },
   { id: "chat-5", cosId: "cos-all", createdAt: minutesAgo(5), kind: "event_batch", wakeId: "wake-2", eventIds: ["ev-handling"], digest: "ignored 3 routine moves" },
+  // A message of files: the human's bubble shows the uploads under it.
+  { ...m("chat-5b", 4.5, "user", "Does this match what you saw?"), attachments: [{ id: "att-cos-1", path: "/uploads/att-cos-1/migration-order.pdf", name: "migration-order.pdf", source: "upload", kind: "file", mimeType: "application/pdf", size: 48213 }] } as CosChatEntry,
   m("chat-6", 4, "assistant", "HARNESS-202 is blocked on a decision about the migration order. I can answer it the way you did last week if you'd like."),
 ];
 

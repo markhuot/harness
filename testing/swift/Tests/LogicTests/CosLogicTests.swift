@@ -261,6 +261,52 @@ private func project(_ id: String, group: String?) -> Project {
         #expect(again?["shiny"] as? Bool == true)
     }
 
+    @Test func aMessageEntryKeepsItsFilesThroughTheRowsAndTheWire() throws {
+        let raw = #"{"id":"m","cosId":"c1","createdAt":1,"kind":"message","role":"user","text":"","attachments":[{"id":"a1","path":"/u/a1/notes.txt","name":"notes.txt","source":"upload","kind":"file","mimeType":"text/plain"}]}"#
+        let entry: CosChatEntry = try decode(raw)
+        guard case let .message(_, _, _, _, _, files) = entry else { Issue.record("decoded as \(entry)"); return }
+        #expect(files.map(\.id) == ["a1"])
+        guard case let .message(_, fromHuman, _, rowFiles)? = CosLogic.rows([entry]).first else { Issue.record("no row"); return }
+        #expect(fromHuman)
+        #expect(rowFiles.map(\.name) == ["notes.txt"])
+        // An entry without files encodes without the key.
+        let plain = try JSONSerialization.jsonObject(with: JSONEncoder().encode(message("p", at: 1))) as? [String: Any]
+        #expect(plain?["attachments"] == nil)
+        let again = try JSONSerialization.jsonObject(with: JSONEncoder().encode(entry)) as? [String: Any]
+        #expect((again?["attachments"] as? [Any])?.count == 1)
+    }
+
+    @Test func aMessageToTheChiefSendsItsFilesAndOmitsTheKeyWithNone() throws {
+        func json(_ b: CosMessageBody) throws -> [String: Any] { try JSONSerialization.jsonObject(with: JSONEncoder().encode(b)) as? [String: Any] ?? [:] }
+        #expect(try json(CosMessageBody(text: "hi"))["attachments"] == nil)
+        let sent = try json(CosMessageBody(text: "", attachments: [AttachmentInput(id: "a1")]))
+        #expect((sent["attachments"] as? [[String: Any]])?.first?["id"] as? String == "a1")
+    }
+
+    @Test func theChiefsTicketUpsertingMovesItsDraftOntoTheChief() throws {
+        var state = CosState(chiefs: ["t1": Cos(ticketId: "t1", key: "COS-1", scope: "all", createdAt: 1)])
+        let draft = MessageDraft(text: "hi", attachments: [], origin: "phone", updatedAt: 5)
+        var t = Ticket(id: "t1", key: "COS-1", projectId: "p", title: "chief", spec: "", status: .inProgress, sessionId: "s", driver: "d", workdir: nil, draft: nil, createdAt: 0, updatedAt: 0)
+        t.kind = .cos
+        t.messageDraft = .value(draft)
+        state.applyChiefTicket(t)
+        #expect(state.chiefs["t1"]?.messageDraft.optional == draft)
+        t.messageDraft = .null
+        state.applyChiefTicket(t)
+        #expect(state.chiefs["t1"]?.messageDraft.optional == nil)
+        // A chief this client doesn't hold, and an ordinary ticket, change nothing.
+        var other = t
+        other.id = "t2"
+        other.messageDraft = .value(draft)
+        state.applyChiefTicket(other)
+        #expect(state.chiefs["t2"] == nil)
+        var board = t
+        board.kind = .task
+        board.messageDraft = .value(draft)
+        state.applyChiefTicket(board)
+        #expect(state.chiefs["t1"]?.messageDraft.optional == nil)
+    }
+
     @Test func theBusEventsComeOutOfAnUnknownHarnessEvent() throws {
         let badge: HarnessEvent = try decode(#"{"kind":"cos.badge","total":4,"byCos":{"c1":4}}"#)
         #expect(CosBusEvent(event: badge) == .badge(CosBadge(total: 4, byCos: ["c1": 4])))

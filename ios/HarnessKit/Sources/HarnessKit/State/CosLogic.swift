@@ -31,6 +31,16 @@ public struct CosState: Equatable, Sendable {
         chiefs = Dictionary(list.map { ($0.ticketId, $0) }, uniquingKeysWith: { _, b in b })
     }
 
+    /// The chief's own ticket upserted (it stays out of the board's tickets): its message draft rides
+    /// on the chief, for the composer.
+    public mutating func applyChiefTicket(_ t: Ticket) {
+        guard t.kind == .cos, var chief = chiefs[t.id] else { return }
+        let draft: Patch<MessageDraft> = Patch(t.messageDraft.optional)
+        guard chief.messageDraft.optional != draft.optional else { return }
+        chief.messageDraft = draft
+        chiefs[t.id] = chief
+    }
+
     public mutating func mergeEvents(_ page: [CosEvent]) {
         for e in page { events[e.id] = e }
     }
@@ -292,14 +302,14 @@ public enum CosLogic {
 
     /// One thing a chat shows: a message, a short line for what the chief did, or a ticket card.
     public enum ChatRow: Equatable, Sendable, Identifiable {
-        case message(id: String, fromHuman: Bool, text: String)
+        case message(id: String, fromHuman: Bool, text: String, attachments: [Attachment] = [])
         /// "Looked at 3 events: ignored 3 routine moves"; a wake is one line.
         case line(id: String, text: String)
         case ticket(id: String, key: String, title: String, status: String, moved: Bool)
 
         public var id: String {
             switch self {
-            case let .message(id, _, _), let .line(id, _), let .ticket(id, _, _, _, _): id
+            case let .message(id, _, _, _), let .line(id, _), let .ticket(id, _, _, _, _): id
             }
         }
     }
@@ -308,7 +318,7 @@ public enum CosLogic {
     public static func rows(_ entries: [CosChatEntry]) -> [ChatRow] {
         entries.compactMap { e in
             switch e {
-            case let .message(id, _, _, role, text): .message(id: id, fromHuman: role == "user", text: text)
+            case let .message(id, _, _, role, text, attachments): .message(id: id, fromHuman: role == "user", text: text, attachments: attachments)
             case let .ticketCreated(id, _, _, key, title, status): .ticket(id: id, key: key, title: title, status: status, moved: false)
             case let .ticketMoved(id, _, _, key, title, _, to): .ticket(id: id, key: key, title: title, status: to, moved: true)
             case let .eventBatch(id, _, _, _, eventIds, digest): .line(id: id, text: wakeLine(count: eventIds.count, digest: digest))

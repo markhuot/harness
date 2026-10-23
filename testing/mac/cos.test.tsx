@@ -148,7 +148,7 @@ describe("Chat", () => {
     const body = client.bodies.find((b) => b.request === "POST /cos/cos-all/messages")?.body as { text: string; attachments: { id: string }[] };
     expect(body.text).toBe("");
     expect(body.attachments.map((a) => a.id)).toEqual(["up-1"]);
-    await m.until("the file in the chat", () => text(byId(m, "cos-message-attachments")).includes("notes.txt"));
+    await m.until("the file in the chat", () => all(m.container, '[data-testid="cos-message-attachments"]').some((e) => text(e).includes("notes.txt")));
     expect(text(byId(m, "cos-composer")).includes("notes.txt")).toBe(false);
     expect(client.cos.chiefs[0]!.messageDraft ?? null).toBeNull();
   });

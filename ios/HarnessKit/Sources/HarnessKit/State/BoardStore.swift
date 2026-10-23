@@ -339,6 +339,7 @@ public final class BoardStore {
                 }
             }
         }
+        if case let .ticketUpserted(t) = event, t.kind == .cos { cos.applyChiefTicket(t) }
         switch event {
         case .usageUpdated(let u): usage = u
         case .terminalCreated, .terminalUpdated, .terminalRemoved: terminals = TerminalList.apply(terminals, event)
@@ -594,6 +595,28 @@ public final class BoardStore {
             timers: timers
         )
         messageDrafts[t.id] = made
+        return made
+    }
+
+    /// The chief's message draft: the same session as a ticket's, on the chief's hidden ticket (the
+    /// store holds no ticket for it, so its saves come back onto the chief).
+    public func messageDraft(forChief chief: Cos) -> MessageDraftSync {
+        if let had = messageDrafts[chief.ticketId] {
+            had.key = chief.key
+            return had
+        }
+        let client = client
+        let made = MessageDraftSync(
+            key: chief.key,
+            stored: chief.messageDraft.optional,
+            save: { key, body in
+                guard let api = client as? HarnessClient else { throw MessageDraftError.offline }
+                return try await api.saveMessageDraft(key, body)
+            },
+            onSaved: { [weak self] in self?.cos.applyChiefTicket($0) },
+            timers: timers
+        )
+        messageDrafts[chief.ticketId] = made
         return made
     }
 

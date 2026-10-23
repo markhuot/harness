@@ -453,8 +453,8 @@ public final class HarnessClient: Sendable {
     }
 
     /// A message to the chief; it skips triage.
-    public func sendCosMessage(_ id: String, text: String) async throws -> CosMessageSent {
-        try await request("POST", "/cos/\(id)/messages", body: CosMessageBody(text: text))
+    public func sendCosMessage(_ id: String, text: String, attachments: [AttachmentInput] = []) async throws -> CosMessageSent {
+        try await request("POST", "/cos/\(id)/messages", body: CosMessageBody(text: text, attachments: attachments))
     }
 
     public func getCosMemory(_ key: String) async throws -> CosMemory {

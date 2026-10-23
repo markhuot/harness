@@ -75,6 +75,19 @@ final class ScreenTests: ScreenTestCase {
         try await screen("cos-chat", router: router) { RootView() }
     }
 
+    /// The chief's composer holding a draft another device started: its text and a file in the tray
+    /// over the glass field, with (+) and Send.
+    func testCosChatDraft() async throws {
+        let draft = MessageDraft(
+            text: "Can you hold the migration until I answer?",
+            attachments: [Attachment(id: "att-draft", path: "/uploads/att-draft/notes.txt", name: "notes.txt", source: .upload, kind: .file, mimeType: "text/plain", size: 120)],
+            origin: "phone", updatedAt: 1)
+        world.store.updateCos { $0.chiefs["cos-all"]?.messageDraft = .value(draft) }
+        let router = Router()
+        router.openCos(scope: "all")
+        try await screen("cos-chat-draft", router: router) { RootView() }
+    }
+
     /// The Inbox in every state: waiting, handling, ignored with its reason and Escalate anyway,
     /// escalated, handled, and a watcher item and a schedule.
     func testCosInbox() async throws {

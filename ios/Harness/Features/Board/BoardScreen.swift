@@ -237,18 +237,23 @@ struct BoardScreen: View {
 
     // MARK: Toolbar
 
-    /// The system's bottom bar everywhere: Projects leading, search and New session trailing (those
-    /// two hide while a ticket panel covers them).
+    /// The system's bottom bar everywhere, left to right: one glass capsule with Projects and Search
+    /// (adjacent items share a capsule), a fixed spacer that splits off the CoS button's own capsule,
+    /// flexible space, then New session as the only glass element on the right. Search and New
+    /// session hide while a ticket panel covers them.
     @ToolbarContentBuilder private func toolbar(_ ctx: BoardContext) -> some ToolbarContent {
         ToolbarItem(placement: .bottomBar) { ProjectsButton(action: toggleProjects) }
-        ToolbarItem(placement: .bottomBar) { CosButton(scope: CosLogic.boardScope(filter: ctx.filter, projects: store.state.projects)) }
-        ToolbarSpacer(.flexible, placement: .bottomBar)
         if !panelCoversBar {
             ToolbarItem(placement: .bottomBar) {
                 Button("Command palette", systemImage: "magnifyingglass") { router.present(.palette(files: false)) }
                     .accessibilityHint("Search tickets or run a command in \(scopeName(ctx))")
                     .accessibilityIdentifier("palette-field")
             }
+        }
+        ToolbarSpacer(.fixed, placement: .bottomBar)
+        ToolbarItem(placement: .bottomBar) { CosButton(scope: CosLogic.boardScope(filter: ctx.filter, projects: store.state.projects)) }
+        ToolbarSpacer(.flexible, placement: .bottomBar)
+        if !panelCoversBar {
             ToolbarItem(placement: .bottomBar) { newSession(ctx) }
         }
     }
