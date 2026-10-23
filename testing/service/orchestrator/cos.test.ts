@@ -371,9 +371,9 @@ test("every operation that takes a key answers an out-of-scope key like a missin
     updateProject: (k) => ops.updateProject(ctx, k, { name: "x" }),
     deleteProject: (k) => ops.deleteProject(ctx, k),
   };
-  // Operations that take no reference to something with a scope of its own (or make something new).
+  // Operations that take no reference to something with a scope of its own (or make something new, or refuse a chief outright: the subscriptions are for work and conductor runs).
   const unkeyed = [
-    "postNote", "updateNotes", "wroteNotes", "statusLine", "readSpec", "editSpec", "updateSpec", "block", "unblock", "resumeWork", "returnToPlanning", "submitForReview", "updateBranch", "reviewDecision",
+    "postNote", "updateNotes", "wroteNotes", "statusLine", "readSpec", "editSpec", "updateSpec", "block", "unblock", "resumeWork", "returnToPlanning", "submitForReview", "updateBranch", "reviewDecision", "subscribeTicket", "unsubscribeTicket", "listSubscriptions",
     "listTickets", "searchTickets", "listProjects", "listInbox", "createTicket", "recordPullRequest", "requestApproval", "checkPermission", "fileOutputScope",
     "listWatchers", "getSettings", "listPrompts", "listDrivers", "createWatcher", "createProject", "updateSettings", "scheduleCreate", "scheduleList", "scheduleCancel", "queryActivity", "readMemory", "updateMemorySection", "recordEventOutcomes", "recordTriageVerdict", "listTerminals", "readTerminal", "writeTerminal", "arrangePanes",
   ];

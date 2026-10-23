@@ -398,7 +398,7 @@ public enum PromptId: OpenEnum {
     case systemChildren, systemBranches, systemFiles, systemTurns, systemSpec, systemNotes, systemFileLinks
     case systemBoard, systemBoardChanges, systemConfig, systemApprovals, systemBrowser
     case runWorkStart, runConductorStart, runReview, runCompleteMerge, runCompletePr, runCompleteCleanup, runCompleteCustom
-    case runConductorUpdate, runChangesRequested, runReopen, runUnblock, runReplan
+    case runConductorUpdate, runTicketEvents, runChangesRequested, runReopen, runUnblock, runReplan
     case unknown(String)
     /// PROMPT_IDS, in order
     public static let allKnown: [Self] = [
@@ -407,7 +407,7 @@ public enum PromptId: OpenEnum {
         .systemChildren, .systemBranches, .systemFiles, .systemTurns, .systemSpec, .systemNotes, .systemFileLinks,
         .systemBoard, .systemBoardChanges, .systemConfig, .systemApprovals, .systemBrowser,
         .runWorkStart, .runConductorStart, .runReview, .runCompleteMerge, .runCompletePr, .runCompleteCleanup, .runCompleteCustom,
-        .runConductorUpdate, .runChangesRequested, .runReopen, .runUnblock, .runReplan,
+        .runConductorUpdate, .runTicketEvents, .runChangesRequested, .runReopen, .runUnblock, .runReplan,
     ]
     public var rawValue: String {
         switch self {
@@ -445,6 +445,7 @@ public enum PromptId: OpenEnum {
         case .runCompleteCleanup: "run.complete_cleanup"
         case .runCompleteCustom: "run.complete_custom"
         case .runConductorUpdate: "run.conductor_update"
+        case .runTicketEvents: "run.ticket_events"
         case .runChangesRequested: "run.changes_requested"
         case .runReopen: "run.reopen"
         case .runUnblock: "run.unblock"

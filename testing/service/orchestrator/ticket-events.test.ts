@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 import { executeTool } from "../../../service/src/drivers/types";
-import { FakeDriver, gate, replyScript } from "../fake-driver";
+import { FakeDriver, gate, replyScript, type Step } from "../fake-driver";
 import { callTools, makeOrchestrator, stopAll } from "../orchestrator-harness";
 
 afterEach(stopAll);
@@ -8,10 +8,10 @@ afterEach(stopAll);
 const ONE_RUN = { skipAgentReview: true } as const;
 
 /** A run that holds open until `release`, collecting what the harness pushes into it. */
-function listening(seen: string[], release: ReturnType<typeof gate>) {
+function listening(seen: string[], release: ReturnType<typeof gate>): Step[] {
   return [
     {
-      run: async (req: { input: { pending: boolean; take(): { id: string; text: string }[]; delivered(id: string): boolean; onPush(cb: () => void): () => void } | null }) => {
+      run: async (req) => {
         const input = req.input!;
         for (;;) {
           if (!input.pending) await new Promise<void>((resolve) => input.onPush(resolve));
