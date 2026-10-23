@@ -1504,6 +1504,25 @@
       "digest": "ignored 3 routine moves"
     },
     {
+      "id": "chat-5b",
+      "cosId": "cos-all",
+      "createdAt": 1773500130000,
+      "kind": "message",
+      "role": "user",
+      "text": "Does this match what you saw?",
+      "attachments": [
+        {
+          "id": "att-cos-1",
+          "path": "/uploads/att-cos-1/migration-order.pdf",
+          "name": "migration-order.pdf",
+          "source": "upload",
+          "kind": "file",
+          "mimeType": "application/pdf",
+          "size": 48213
+        }
+      ]
+    },
+    {
       "id": "chat-6",
       "cosId": "cos-all",
       "createdAt": 1773500160000,

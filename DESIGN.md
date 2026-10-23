@@ -592,6 +592,13 @@ stops.
 send keeps it). An agent's `message_ticket` goes through the same delivery but leaves the human's
 draft alone.
 
+A chief of staff's chat uses the same composer on its hidden ticket. Clients hold no ticket for a
+chief, so `GET /cos` carries the chief's `messageDraft` and the reducers copy a `ticket.upserted` of
+the chief's ticket onto the chief. `POST /cos/:id/messages` takes `attachments` (text may then be
+empty), clears the draft like a ticket's send, and the chat entry carries the files. `/commands`
+work in the chief's composer (from the agent's global locations); `@file` doesn't, because the
+chief's folder is the service home.
+
 The composers (`app/src/renderer/state/messageDraftSession.ts`, HarnessKit's `MessageDraftSync`)
 keep one session per ticket for the life of the window or store, save edits as debounced PUTs one
 at a time, and tag each with an `origin`, a random id per session. When the store's copy changes,
