@@ -16,6 +16,7 @@ struct TicketDetailTabStrip: View {
 
     @Environment(BoardStore.self) private var store
     @Environment(\.palette) private var c
+    @Environment(\.ticketPanelTrailingInset) private var cornerInset
 
     private struct Item: Identifiable {
         let id: TicketTab
@@ -39,6 +40,8 @@ struct TicketDetailTabStrip: View {
             }
             .padding(.horizontal, 8)
         }
+        // The strip runs into the trailing safe area; the last tab can scroll clear of the corner.
+        .contentMargins(.trailing, cornerInset, for: .scrollContent)
         .scrollIndicators(.hidden)
         .overlay(alignment: .bottom) { Rectangle().fill(c.border).frame(height: 1 / 3) }
     }

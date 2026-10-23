@@ -43,12 +43,17 @@ private struct ConcentricBottomPadding: ViewModifier {
     let bottom: CGFloat
     @Environment(\.concentricScreen) private var screen
     @Environment(\.concentricBottomGap) private var bottomGap
+    @Environment(\.ticketPanelTrailingInset) private var cornerInset
 
     func body(content: Content) -> some View {
-        let p = (raised ? nil : ConcentricBar.padding(screen, barHeight: barHeight, bottomGap: bottomGap))
-            ?? ConcentricBar.Padding(horizontal: horizontal, bottom: bottom)
+        let own = ConcentricBar.Padding(horizontal: horizontal, bottom: bottom)
+        // Into the ticket panel's trailing inset, only that end is at the corner.
+        let corner = cornerInset > 0 && !raised
+            ? ConcentricBar.trailingCornerPadding(screen, barHeight: barHeight, bottomGap: bottomGap) : nil
+        let p = (raised ? nil : ConcentricBar.padding(screen, barHeight: barHeight, bottomGap: bottomGap)) ?? corner ?? own
         content
-            .padding(.horizontal, p.horizontal)
+            .padding(.leading, corner == nil ? p.horizontal : horizontal)
+            .padding(.trailing, p.horizontal)
             .padding(.bottom, p.bottom)
     }
 }

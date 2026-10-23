@@ -148,6 +148,7 @@ private struct TicketDetailBody: View {
     @State private var settling = PageSettling()
     @Environment(\.sheetResting) private var sheetResting
     @Environment(\.inTicketPanel) private var inTicketPanel
+    @Environment(\.ticketPanelTrailingInset) private var panelTrailingInset
     @Environment(DockedSheetInset.self) private var dockInset: DockedSheetInset?
     @Environment(Router.self) private var router
     /// The annotator a tab body opened (the Browser tab's Annotate): presented here, outside the
@@ -290,13 +291,16 @@ private struct TicketDetailBody: View {
                     }
                     .environment(\.ticketDetailHero, page == strip ? hero : nil)
                     .environment(\.scrollMemoryKey, "\(ticket.key)/\(page.rawValue)")
-                    .background { PagerYieldsToBackSwipe(hero: hero) }
+                    .background { PagerYieldsToBackSwipe(hero: hero, inset: panelTrailingInset) }
                     // Opaque, as the page slides over the hero on the pager's layer.
                     .background(c.bg)
                     .tag(page)
             }
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
+        // The page view keeps the offset of the width it first laid out at, so a panel that grows
+        // into the trailing inset (or rotates into it) would show it shifted by the inset: start over.
+        .id(panelTrailingInset)
         // No blur or fade under the composer: its glass is the only thing between it and the tab.
         .scrollEdgeEffectHidden(true, for: .bottom)
         // Down to the bottom of the screen, under the composer, so its glass shows the tab through
@@ -451,6 +455,9 @@ private struct TicketPinnedHeader: ViewModifier {
 /// automatic safe-area insets (see `hook`) and hands the pager to the hero collapse, which slides it.
 private struct PagerYieldsToBackSwipe: UIViewRepresentable {
     let hero: TicketDetailHeroCollapse
+    /// The panel's trailing inset: the pager is as wide as the panel, which UIKit may have first
+    /// inset by it (see `Probe.settle`), so a change takes another look.
+    var inset: CGFloat = 0
 
     func makeUIView(context: Context) -> Probe {
         let v = Probe()
@@ -459,16 +466,34 @@ private struct PagerYieldsToBackSwipe: UIViewRepresentable {
         return v
     }
 
-    func updateUIView(_ uiView: Probe, context: Context) { uiView.hero = hero }
+    func updateUIView(_ uiView: Probe, context: Context) {
+        uiView.hero = hero
+        if uiView.inset != inset {
+            uiView.inset = inset
+            DispatchQueue.main.async { [weak uiView] in uiView?.settle() }
+        }
+    }
 
     final class Probe: UIView {
         weak var hero: TicketDetailHeroCollapse?
+        var inset: CGFloat = 0
+
+        /// UIKit may have adjusted the pager's offset for a side safe area it ran into before the
+        /// adjustment was turned off (`hook`), leaving the page shifted by it: put it back on its page.
+        func settle() {
+            guard let pager = sequence(first: superview, next: { $0?.superview }).lazy.compactMap({ $0 as? UIScrollView }).first(where: \.isPagingEnabled),
+                  !pager.isTracking, !pager.isDragging, !pager.isDecelerating, pager.bounds.width > 0 else { return }
+            pager.contentInsetAdjustmentBehavior = .never
+            let w = pager.bounds.width
+            let page = (pager.contentOffset.x / w).rounded()
+            if abs(pager.contentOffset.x - page * w) > 0.5 { pager.contentOffset.x = page * w }
+        }
 
         override func didMoveToWindow() {
             super.didMoveToWindow()
             guard window != nil else { return }
             // The navigation controller is in the responder chain once the page is laid out in it.
-            DispatchQueue.main.async { [weak self] in self?.hook() }
+            DispatchQueue.main.async { [weak self] in self?.hook(); self?.settle() }
         }
 
         private func hook() {

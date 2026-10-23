@@ -22,6 +22,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
+- On the iPhone Duo open in landscape and on a Pro Max phone in landscape, the ticket panel now fills
+  the safe area on its trailing side instead of leaving a strip of the board beside it. The tabs, the
+  expanded title and the tab content run into that area, while the buttons and collapsed title stay
+  clear of the device corner and the message composer sits concentric with it.
 - On the iPhone Duo, the board's column selector is now the same width as the Projects, Search, CoS
   and New session buttons beside it and stays above them instead of running behind them. It shrinks
   its tabs, then drops the counts, when there isn't room.

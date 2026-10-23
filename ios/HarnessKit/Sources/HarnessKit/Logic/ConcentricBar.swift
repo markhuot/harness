@@ -69,4 +69,15 @@ public enum ConcentricBar {
         let margin = max(radius - barHeight / 2, minimumMargin)
         return Padding(horizontal: margin, bottom: margin - (bottomGap ?? screen.homeIndicator))
     }
+
+    /// The padding for a bar that runs to the screen's trailing edge in landscape (the ticket
+    /// panel over the safe area's trailing inset), where only the bottom-trailing corner is close:
+    /// `horizontal` is the gap on the trailing side, concentric with that corner like a portrait
+    /// bar's; the leading end is the caller's own. Nil in portrait (`padding` has it), for square
+    /// corners, or before the screen is measured.
+    public static func trailingCornerPadding(_ screen: Screen?, barHeight: CGFloat, bottomGap: CGFloat? = nil) -> Padding? {
+        guard let screen, !screen.portrait, let radius = displayCornerRadius(screen) else { return nil }
+        let margin = max(radius - barHeight / 2, minimumMargin)
+        return Padding(horizontal: margin, bottom: margin - (bottomGap ?? screen.homeIndicator))
+    }
 }

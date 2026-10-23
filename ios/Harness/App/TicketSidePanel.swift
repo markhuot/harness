@@ -25,6 +25,10 @@ struct TicketSidePanel<Content: View>: View {
     let onClose: () -> Void
     /// The panel's width as it lays out (resizing included), for what sits beside it.
     var onWidth: (CGFloat) -> Void = { _ in }
+    /// The window's trailing safe-area inset, which the panel runs into (the host lets it ignore
+    /// that edge): its background reaches the screen's edge, and the buttons, collapsed title and
+    /// composer keep clear of the corner.
+    var trailingInset: CGFloat = 0
     @ViewBuilder let content: () -> Content
 
     @Environment(\.palette) private var c
@@ -42,12 +46,12 @@ struct TicketSidePanel<Content: View>: View {
 
     var body: some View {
         GeometryReader { geo in
-            let window = geo.size.width
-            let width = dragWidth ?? TicketPanelWidth.width(windowWidth: window, stored: widthFraction)
+            let layout = TicketPanelWidth.layout(totalWidth: geo.size.width, inset: trailingInset, stored: widthFraction, dragged: dragWidth.map { Double($0) })
+            let window = layout.window, width = layout.width
             panel(width: width, window: window)
-                .frame(width: width)
+                .frame(width: layout.frameWidth)
                 .onChange(of: width, initial: true) { onWidth(width) }
-                .offset(x: docked ? width + Self.shadowReach : flingOffset)
+                .offset(x: docked ? layout.slideAway(shadowReach: Self.shadowReach) : flingOffset)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
         }
         // Docked, nothing in it answers a tap, a key command (Escape included) or VoiceOver.
@@ -79,6 +83,7 @@ struct TicketSidePanel<Content: View>: View {
             // panel is a fixed width and only slides, so it never reflows mid-drag.
             .ignoresSafeArea(.container, edges: .horizontal)
             .environment(\.ticketPanelTitleInset, Self.buttonSize * (canPopOut ? 3 : 2) + 8)
+            .environment(\.ticketPanelTrailingInset, trailingInset)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .overlay(alignment: .top) { flingStrip(width: width, window: window) }
             .overlay(alignment: .topTrailing) { buttons(width: width, window: window) }
@@ -108,7 +113,7 @@ struct TicketSidePanel<Content: View>: View {
                 // Escape on a hardware keyboard closes the panel, focused or not.
                 .keyboardShortcut(docked ? nil : .cancelAction)
         }
-        .padding(.trailing, 8)
+        .padding(.trailing, 8 + trailingInset)
         .padding(.top, 4)
         .contentShape(.rect)
         .gesture(fling(width: width, window: window))
@@ -165,7 +170,8 @@ struct TicketSidePanel<Content: View>: View {
                 let dock = hold.takeIntent()
                 let closes = PanelRelease.closes(translation: value.translation.width,
                                                  predictedEnd: value.predictedEndTranslation.width, width: width)
-                let away = width + Self.shadowReach
+                let away = TicketPanelWidth.layout(totalWidth: window + trailingInset, inset: trailingInset, stored: nil, dragged: width)
+                    .slideAway(shadowReach: Self.shadowReach)
                 let velocity = value.velocity.width
                 if dock || closes {
                     withAnimation(Self.slide(velocity: velocity, distance: away - flingOffset)) {
@@ -294,7 +300,7 @@ struct TicketPanelHost: View {
                                     docked: docked, widthFraction: width,
                                     onDock: { router.dockSheet() }, onPopOut: { router.popOutSheet() },
                                     onClose: { if !closer.close() { router.dismissSheet() } },
-                                    onWidth: { panelWidth = $0 }) {
+                                    onWidth: { panelWidth = $0 }, trailingInset: geo.safeAreaInsets.trailing) {
                         ZStack {
                             ForEach(router.liveSheets) { s in
                                 let isTop = s.id == sheet.id
@@ -313,7 +319,8 @@ struct TicketPanelHost: View {
                         }
                     }
                     // Down to the window's bottom edge; the content keeps the home indicator clear.
-                    .ignoresSafeArea(.container, edges: .bottom)
+                    // And out to the trailing edge, so a Duo's or Pro Max's side inset is the panel's too.
+                    .ignoresSafeArea(.container, edges: [.bottom, .trailing])
                     .transition(.ticketPanel)
                 }
                 // The hold is armed: a ghost dock card takes the stack's bottom slot, the cards

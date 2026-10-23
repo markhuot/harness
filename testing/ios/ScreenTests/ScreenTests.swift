@@ -166,6 +166,20 @@ final class ScreenTests: ScreenTestCase {
         try await screen("ticket-spec", router: ticket("HARNESS-5", .spec)) { RootView() }
     }
 
+    /// A Duo open in landscape or a Pro Max: regular width with a safe area on the trailing side, so the
+    /// ticket is the side panel, and it fills that side. The expanded title and the tab content run
+    /// into the inset; the buttons stay clear of the corner and the composer is concentric with it.
+    func testTicketPanelTrailingInset() async throws {
+        try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .pad, "the iPad has no side inset")
+        try await screen("ticket-panel-inset", router: ticket("HARNESS-5", .spec), landscape: true, regularWidth: true, requiresTrailingInset: true) { RootView() }
+    }
+
+    /// The same panel with the title collapsed (any tab but the Spec): its row and the buttons keep out of the inset.
+    func testTicketPanelTrailingInsetCollapsed() async throws {
+        try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .pad, "the iPad has no side inset")
+        try await screen("ticket-panel-inset-collapsed", router: ticket("HARNESS-5", .activity), landscape: true, regularWidth: true, requiresTrailingInset: true) { RootView() }
+    }
+
     func testTicketActivity() async throws {
         try await screen("ticket-activity", router: ticket("HARNESS-5", .activity)) { RootView() }
     }

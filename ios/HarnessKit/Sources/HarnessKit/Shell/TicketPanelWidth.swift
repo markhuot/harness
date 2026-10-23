@@ -47,4 +47,31 @@ public enum TicketPanelWidth {
         guard windowWidth > 0 else { return 0 }
         return windowWidth * fraction(forWidth: width, windowWidth: windowWidth)
     }
+
+    /// How the panel lays out against a window whose trailing safe-area inset it runs into (a
+    /// phone in landscape with a camera housing or a rounded corner on that side: the Duo open,
+    /// a Pro Max). `width` is what the person sized, measured from the safe edge like the stored
+    /// fraction, so a rotation keeps the same meaning; the panel's frame adds `inset` so its
+    /// background reaches the screen's edge.
+    public struct Layout: Equatable, Sendable {
+        /// The window's width without the trailing inset: what the stored fraction is of.
+        public var window: Double
+        /// The panel's width from the safe edge, the one reported to what sits beside it.
+        public var width: Double
+        public var inset: Double
+
+        /// The panel's frame: the width plus the overhang into the inset.
+        public var frameWidth: Double { width + inset }
+
+        /// How far a docked or flung panel travels to leave no sliver on screen, shadow included.
+        public func slideAway(shadowReach: Double) -> Double { width + inset + shadowReach }
+    }
+
+    /// The layout in a frame `totalWidth` wide that already includes `inset` points of trailing
+    /// safe area. `dragged` is a width being dragged, which wins over `stored`.
+    public static func layout(totalWidth: Double, inset: Double, stored: Double?, dragged: Double? = nil) -> Layout {
+        let inset = max(0, inset.isFinite ? inset : 0)
+        let window = max(0, totalWidth - inset)
+        return Layout(window: window, width: dragged ?? width(windowWidth: window, stored: stored), inset: inset)
+    }
 }

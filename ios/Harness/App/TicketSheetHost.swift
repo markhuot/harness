@@ -101,6 +101,7 @@ struct TicketSheetContent: View {
     var toBottomEdge = false
     @Environment(Router.self) private var router
     @Environment(\.palette) private var c
+    @Environment(\.ticketPanelTrailingInset) private var panelInset
 
     /// The store wraps the whole stack: pushed screens take their environment from the stack.
     var body: some View {
@@ -125,6 +126,9 @@ struct TicketSheetContent: View {
     }
 
     @ViewBuilder private func bottomEdge(_ screen: some View) -> some View {
+        // Inside the panel the stack's screens take their safe area from the window, not from the
+        // panel that already runs into it: the ones that draw into the trailing inset ignore it again.
+        let screen = panelInset > 0 ? AnyView(screen.ignoresSafeArea(.container, edges: .trailing)) : AnyView(screen)
         if toBottomEdge { screen.ignoresSafeArea(.container, edges: .bottom) } else { screen }
     }
 
@@ -156,6 +160,10 @@ extension EnvironmentValues {
     /// How far the panel's buttons reach in from the trailing edge: the root ticket's hero title
     /// wraps before them. 0 outside the panel.
     @Entry var ticketPanelTitleInset: CGFloat = 0
+    /// The window's trailing safe-area inset the panel runs into (a phone in landscape with the
+    /// inset on that side): the panel's content draws into it, and the pieces near the corner
+    /// (collapsed hero, composer) keep clear. 0 outside the panel.
+    @Entry var ticketPanelTrailingInset: CGFloat = 0
 }
 
 /// Where the docked cards float, as last measured. The dock is in a window of its own, so this

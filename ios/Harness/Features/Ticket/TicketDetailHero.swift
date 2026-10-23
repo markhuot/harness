@@ -18,6 +18,7 @@ struct TicketDetailHero: View {
     @Environment(\.inTicketSheet) private var inTicketSheet
     @Environment(\.inTicketPanel) private var inTicketPanel
     @Environment(\.ticketPanelTitleInset) private var panelInset
+    @Environment(\.ticketPanelTrailingInset) private var cornerInset
     @Environment(\.dismiss) private var dismiss
     @Environment(\.isPresented) private var isPresented
     @Environment(Actions.self) private var actions
@@ -184,7 +185,9 @@ struct TicketDetailHero: View {
             }
             // The iPad panel's buttons float over the ticket's top corner; the row is as tall as
             // they are, so the title, its chevron and the buttons share one middle.
-            .padding(.trailing, inTicketPanel ? panelInset : 0)
+            // The buttons sit that far inside the screen's corner, so the title keeps clear of them
+            // by the trailing safe area too.
+            .padding(.trailing, inTicketPanel ? panelInset + cornerInset : 0)
             // Both states use 14pt to align with the Spec tab's 14pt padding. Expanded gets 5pt
             // more above, clear of the sheet's rounded corner. The hero's 14pt horizontal padding
             // is the space on both sides, so the title adds none extra.
