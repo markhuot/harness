@@ -275,27 +275,52 @@ const GH_API_VALUE_FLAGS = new Set(["--jq", "-q", "--cache"]);
 /** A jq program that reads the process environment or other input (`env`, `$ENV`, `input`). */
 const JQ_ENV = /\b(env|ENV|input|inputs|input_filename)\b/;
 
+/** gh api flags that add a request field: its `key=value` is the next word. */
+const GH_API_FIELD_FLAGS = new Set(["-f", "-F", "--field", "--raw-field"]);
+/** A GraphQL document that changes something (a mutation) or holds a connection open (a subscription). */
+const GRAPHQL_WRITE = /\b(mutation|subscription)\b/;
+
 function ghReadOnly(args: string[]): boolean {
   // A flag before the subcommand (`gh -R owner/repo pr view`) isn't accounted for: not read-only.
   const [group, sub] = args;
-  if (!group || group.startsWith("-") || args.some((a) => GH_BAD_FLAG.test(a))) return false;
+  if (!group || group.startsWith("-")) return false;
   // A URL (another host) only when it points at github.com; the jq program of --jq can't read the environment.
   if (args.some((a, i) => (/:\/\//.test(a) && !a.startsWith("https://github.com/")) || ((args[i - 1] === "--jq" || args[i - 1] === "-q") && JQ_ENV.test(a)) || (/^--jq=/.test(a) && JQ_ENV.test(a)))) return false;
-  if (group === "api") {
-    // `gh api` becomes a POST by itself once it has a field or an input (denied above); graphql is always a POST.
-    const endpoints: string[] = [];
-    const rest = args.slice(1);
-    for (let i = 0; i < rest.length; i++) {
-      const a = rest[i]!;
-      if (a.startsWith("-")) {
-        if (GH_API_VALUE_FLAGS.has(a)) i++;
-        else if (!GH_API_FLAGS.has(a) && !/^--(jq|cache)=/.test(a)) return false;
-      } else endpoints.push(a);
-    }
-    const [endpoint] = endpoints;
-    return endpoints.length === 1 && !!endpoint && !/^\/?graphql/.test(endpoint) && !endpoint.includes("//");
+  if (group === "api") return ghApiReadOnly(args.slice(1));
+  return !args.some((a) => GH_BAD_FLAG.test(a)) && !!sub && !!GH_READ_ONLY[group]?.has(sub);
+}
+
+/**
+ * `gh api` with one endpoint and only the flags that shape the response. A field makes it a POST, so
+ * only `graphql` takes fields: a `query` that is a query (no mutation or subscription) and its
+ * variables, none of them read from a file (`-F key=@path`).
+ */
+function ghApiReadOnly(rest: string[]): boolean {
+  const endpoints: string[] = [];
+  const fields: { flag: string; key: string; value: string }[] = [];
+  for (let i = 0; i < rest.length; i++) {
+    const a = rest[i]!;
+    const inline = /^--(field|raw-field)=(.*)$/.exec(a);
+    const field = inline ? inline[2]! : GH_API_FIELD_FLAGS.has(a) ? rest[++i] : null;
+    if (field != null) {
+      const eq = field.indexOf("=");
+      if (eq <= 0) return false;
+      fields.push({ flag: inline ? `--${inline[1]}` : a, key: field.slice(0, eq), value: field.slice(eq + 1) });
+    } else if (a.startsWith("-")) {
+      if (GH_API_VALUE_FLAGS.has(a)) i++;
+      else if (!GH_API_FLAGS.has(a) && !/^--(jq|cache)=/.test(a)) return false;
+    } else endpoints.push(a);
   }
-  return !!sub && !!GH_READ_ONLY[group]?.has(sub);
+  const [endpoint] = endpoints;
+  if (endpoints.length !== 1 || !endpoint || endpoint.includes("//")) return false;
+  if (!/^\/?graphql/.test(endpoint)) return fields.length === 0;
+  const queries = fields.filter((f) => f.key === "query");
+  return (
+    /^\/?graphql$/.test(endpoint) &&
+    queries.length === 1 &&
+    !GRAPHQL_WRITE.test(queries[0]!.value) &&
+    fields.every((f) => !((f.flag === "-F" || f.flag === "--field") && f.value.startsWith("@")))
+  );
 }
 
 /** A path that reaches outside the working folder (the folder is empty, so a relative path reads nothing). */

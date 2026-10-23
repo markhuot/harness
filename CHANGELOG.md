@@ -9,6 +9,16 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- Triage can now look up a pull request's review threads (and whether each one is resolved) with
+  `gh api graphql -f query='query { … }'`, as GitHub watcher guidance asks. Before, these reads were
+  refused because GraphQL sends a POST. Mutations, subscriptions and fields read from a file are
+  still refused. Plan runs and other read-only runs accept the same queries.
+- Triage's instructions now spell out the three arguments every `triage_verdict` call needs (id,
+  verdict, reason) and show an example call, so a triage run no longer sends an empty verdict
+  that gets refused.
+
 ## [app-20261023.1152](https://github.com/markhuot/harness/releases/tag/app-20261023.1152) - 2026-10-23
 
 ### Added

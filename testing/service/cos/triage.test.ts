@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import type Anthropic from "@anthropic-ai/sdk";
 import { buildTriagePrompt, fenceUntrusted, LlmTriage, MAX_BRIEF, parseTriage, TRIAGE_AGENT_SYSTEM, TRIAGE_SCHEMA, type TriageInput } from "../../../service/src/cos/triage";
 import { triageGuidance } from "../../../service/src/cos/engine";
+import { triageVerdict } from "../../../service/src/tools/triage";
 import { anthropicStructured, claudeStructuredArgs, type MessagesCreateLike } from "../../../service/src/permissions/structured";
 
 const ids = ["e1", "e2", "e3"];
@@ -134,6 +135,9 @@ test("the agent prompt tells triage to look things up, to treat tool results as 
   expect(TRIAGE_AGENT_SYSTEM).toMatch(/everything you read with a tool/);
   expect(TRIAGE_AGENT_SYSTEM).toMatch(/anything you're unsure about/);
   expect(TRIAGE_AGENT_SYSTEM).toMatch(/triage_verdict/);
+  // A run once called triage_verdict with no arguments: the prompt names each required one and shows a call.
+  for (const arg of triageVerdict.inputSchema.required as string[]) expect(TRIAGE_AGENT_SYSTEM).toContain(`"${arg}":`);
+  expect(TRIAGE_AGENT_SYSTEM).toMatch(/gh api graphql/);
   const a = buildTriagePrompt(input, TRIAGE_AGENT_SYSTEM);
   const b = buildTriagePrompt({ ...input, guidance: "different", events: [] }, TRIAGE_AGENT_SYSTEM);
   expect(a.system).toBe(b.system);

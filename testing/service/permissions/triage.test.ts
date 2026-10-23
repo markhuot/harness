@@ -37,7 +37,6 @@ test("gh calls that write, post or leave the repo are not", () => {
     "gh api -X DELETE repos/x/y/issues/1",
     "gh api --method=POST repos/x/y/issues",
     "gh api repos/x/y -H 'X-HTTP-Method-Override: DELETE'",
-    "gh api graphql -f query='{ viewer { login } }'",
     "gh api /graphql",
     "gh api repos/x/y --hostname evil.example",
     "gh api",
@@ -52,6 +51,37 @@ test("gh calls that write, post or leave the repo are not", () => {
     "gh pr view $(gh auth token)",
     "gh pr view 1 > /tmp/out",
   ]) expect(isReadOnlyCommand(c)).toBe(false);
+});
+
+test("gh api graphql runs a query, but no mutation, subscription, file or other endpoint", () => {
+  // The lookup a GitHub watcher's guidance asks for (review threads and isResolved), as triage ran it.
+  const threads = `gh api graphql -f query='query{repository(owner:"o",name:"r"){pullRequest(number:1286){reviewThreads(first:100){nodes{isResolved comments(first:50){nodes{author{login} body}}}}}}}' 2>&1 | head -c 12000`;
+  for (const c of [
+    threads,
+    "gh api graphql -f query='{ viewer { login } }'",
+    "gh api graphql --raw-field query='query($n: Int!) { repository(owner: \"o\", name: \"r\") { pullRequest(number: $n) { title } } }' -F n=1286",
+    "gh api graphql --field=owner=o -f query='query($owner: String!) { user(login: $owner) { login } }' --jq .data",
+    "gh api graphql --paginate -f query='query($endCursor: String) { viewer { repositories(first: 10, after: $endCursor) { nodes { name } pageInfo { hasNextPage endCursor } } } }'",
+  ]) expect([c, isTriageCommand(c)]).toEqual([c, true]);
+  for (const c of [
+    "gh api graphql -f query='mutation { addComment(input: {subjectId: \"x\", body: \"hi\"}) { clientMutationId } }'",
+    "gh api graphql -f query='subscription { x }'",
+    "gh api graphql -F query=@q.graphql",
+    "gh api graphql -f query='{ viewer { login } }' -F token=@/Users/me/.harness/token",
+    "gh api graphql --field=x=@/etc/passwd -f query='{ viewer { login } }'",
+    "gh api graphql",
+    "gh api graphql -f owner=o",
+    "gh api graphql -f query='{ a }' -f query='mutation { b }'",
+    "gh api graphql -fquery='{ viewer { login } }'",
+    "gh api graphql -f query='{ viewer { login } }' -X DELETE",
+    "gh api graphql -f query='{ viewer { login } }' --hostname evil.example",
+    "gh api graphql -f query='{ viewer { login } }' -H 'X: y'",
+    "gh api graphql -f query='{ viewer { login } }' --input body.json",
+    "gh api graphqlx -f query='{ viewer { login } }'",
+    "gh api repos/o/r/issues -f query='{ viewer { login } }'",
+    "gh api graphql -f",
+  ]) expect([c, isTriageCommand(c)]).toEqual([c, false]);
+  expect(bash(threads)).toBe("allow");
 });
 
 test("triage Bash can't read outside its empty folder", () => {

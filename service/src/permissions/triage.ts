@@ -22,7 +22,7 @@ export function triageDecision(tool: string, input: unknown): TriageDecision {
   if (tool === "Bash") {
     const command = typeof (input as { command?: unknown } | null)?.command === "string" ? (input as { command: string }).command : "";
     if (isTriageCommand(command)) return { behavior: "allow" };
-    return { behavior: "deny", message: "Triage is read-only: only gh reads (pr view, pr diff, pr checks, issue view, api GET...) and plain read commands run here. Don't retry this one; escalate if you can't tell without it." };
+    return { behavior: "deny", message: "Triage is read-only: only gh reads (pr view, pr diff, pr checks, issue view, api GETs, api graphql queries) piped through jq, grep, head, tail, wc, sort, cut, tr or uniq run here. Don't retry this one; escalate if you can't tell without it." };
   }
   const mcp = mcpToolName(tool);
   if (mcp !== null) {
