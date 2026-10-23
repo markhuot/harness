@@ -14,7 +14,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - A half-written message to the chief of staff is saved as you type, so you can finish it on another device and it survives a relaunch.
 
 ### Changed
-- On iPhone and iPad the board's bottom bar now has Projects and Search in one glass capsule, the Chief of Staff button in its own, and New session as the only glass element on the right.
+- On iPhone and iPad the board's bottom bar now has Projects and Search in one glass capsule, the Chief of Staff button in its own (just the star, without its name or Inbox count), and New session as the only glass element on the right.
 
 ## [app-20261023.0929](https://github.com/markhuot/harness/releases/tag/app-20261023.0929) - 2026-10-23
 

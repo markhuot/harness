@@ -291,8 +291,9 @@ struct CosChatView: View {
             }
         }
         .padding(.top, 6)
-        .padding(.horizontal, 12)
-        .padding(.bottom, 8)
+        // Inset and concentric with the phone's corners at rest, over the keyboard while writing,
+        // as the ticket composer is.
+        .concentricBottomPadding(barHeight: DockMetrics.barHeight, raised: focused, horizontal: 12, bottom: 8)
         .animation(.snappy, value: focused)
         // Another device's edit (or its send) shows here, unless this one is being typed in.
         .onChange(of: chief.messageDraft.optional, initial: true) { _, saved in draft.sync(saved) }
@@ -764,36 +765,22 @@ struct CosMemorySheet: View {
 
 // MARK: The board's button
 
-/// "Chief of Staff" beside the Projects button on the board's bar: opens the chief of the board's
-/// scope, with the count of events awaiting a verdict or being handled. There is no on/off switch
-/// here: the app and per-project defaults live in Settings.
+/// The Chief of Staff star in its own capsule on the board's bar: opens the chief of the board's
+/// scope (VoiceOver reads the count of events awaiting a verdict or being handled; nothing is drawn).
+/// There is no on/off switch here: the app and per-project defaults live in Settings.
 struct CosButton: View {
     let scope: String
 
     @Environment(BoardStore.self) private var store
     @Environment(Router.self) private var router
     @Environment(Actions.self) private var actions
-    @Environment(\.palette) private var c
 
     var body: some View {
         let count = CosLogic.badgeCount(store.cos.badge, cosId: store.cos.chief(scope: scope)?.ticketId)
         Button {
             openCos(scope: scope, store: store, router: router, actions: actions)
         } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "sparkle")
-                Text("Chief of Staff").font(.scaled(size: 15, weight: .medium))
-                if let text = CosLogic.badgeText(count) {
-                    Text(text)
-                        .font(.scaled(size: 11, weight: .bold))
-                        .monospacedDigit()
-                        .foregroundStyle(c.onAmber)
-                        .padding(.horizontal, 5)
-                        .frame(minWidth: 17, minHeight: 17)
-                        .background(c.amber, in: .capsule)
-                        .accessibilityIdentifier("cos-callout-badge")
-                }
-            }
+            Image(systemName: "sparkle")
         }
         .accessibilityLabel("Chief of Staff")
         .accessibilityValue(count > 0 ? "\(count) waiting" : "")
