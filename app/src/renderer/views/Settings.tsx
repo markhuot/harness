@@ -2,13 +2,13 @@
 // (each project's own settings live on its Project settings screen).
 
 import { useEffect, useState, type ReactNode } from "react";
-import type { PhaseChoice, Project, PublicSettings, Settings, TicketStatus } from "@harness/shared";
-import { DEFAULT_BASE_BRANCH, DEFAULT_BROWSER_IDLE_TAB_MINUTES, DEFAULT_CONTEXT_GAUGE_LIMIT, MAX_BROWSER_IDLE_TAB_MINUTES, resolveCosChoice, resolveCosStatuses, TICKET_STATUSES } from "@harness/shared";
+import type { PhaseChoice, Project, PublicSettings, Settings, TicketStatus, TriagePermissionMode } from "@harness/shared";
+import { DEFAULT_BASE_BRANCH, DEFAULT_BROWSER_IDLE_TAB_MINUTES, DEFAULT_CONTEXT_GAUGE_LIMIT, MAX_BROWSER_IDLE_TAB_MINUTES, resolveCosChoice, resolveCosStatuses, resolveTriagePermissionMode, TICKET_STATUSES, TRIAGE_PERMISSION_MODE_LABELS, TRIAGE_PERMISSION_MODES, triageDefaultModel, triageDriver } from "@harness/shared";
 import { limitError, parseLimit } from "../state/contextGauge";
 import { useAction, useStore } from "../state/store";
 import { modelName, sortedProjects } from "@harness/shared/state";
 import { useDriverModels } from "../state/models";
-import { DriverModelSelect } from "../components/ModelSelect";
+import { DriverModelSelect, ModelSelect } from "../components/ModelSelect";
 import { Icon } from "../components/Icon";
 import "./settings.css";
 import { relativeTime, STATUS_LABEL, Switch } from "../components/bits";
@@ -267,6 +267,7 @@ export function CosModelRow({ value, settings, project, onChange }: { value: Pha
 function CosSection({ settings }: { settings: PublicSettings }) {
   const { client } = useStore();
   const act = useAction();
+  const triageMode = resolveTriagePermissionMode(settings);
   return (
     <Section id="cos" title="Chief of staff" desc="A chief of staff triages what happens on a board and acts on it. These settings apply to every chief; a project can override each of them.">
       <div className="card-surface settings-card">
@@ -279,6 +280,20 @@ function CosSection({ settings }: { settings: PublicSettings }) {
           <CosStatusBoxes testId="cosStatuses" value={resolveCosStatuses(null, settings)} onChange={(cosStatuses) => void act(() => client.updateSettings({ cosStatuses }))} />
         </Row>
         <CosModelRow value={settings.cosModel} settings={settings} onChange={(c) => void act(() => client.updateSettings({ cosModel: c }))} />
+        <Row title="Triage model" sub="Reads each batch of events and decides which ones wake a chief. Haiku unless you choose another. Applies to the next batch.">
+          <span data-testid="cosTriageModel">
+            <ModelSelect driver={triageDriver(settings)} value={settings.cosTriageModel ?? null} inherited={triageDefaultModel(settings)} onChange={(cosTriageModel) => void act(() => client.updateSettings({ cosTriageModel }))} />
+          </span>
+        </Row>
+        <Row title="Triage permissions" sub={TRIAGE_PERMISSION_MODE_LABELS[triageMode].description}>
+          <select className="select" aria-label="Triage permissions" data-testid="cosTriagePermissionMode" value={triageMode} onChange={(e) => void act(() => client.updateSettings({ cosTriagePermissionMode: e.target.value as TriagePermissionMode }))}>
+            {TRIAGE_PERMISSION_MODES.map((m) => (
+              <option key={m} value={m}>
+                {TRIAGE_PERMISSION_MODE_LABELS[m].label}
+              </option>
+            ))}
+          </select>
+        </Row>
       </div>
     </Section>
   );

@@ -1,6 +1,6 @@
 // Permission-mode resolution, shared by the service and the app (DESIGN.md "Permissions").
 
-import type { PermissionMode } from "./protocol";
+import type { PermissionMode, TriagePermissionMode } from "./protocol";
 
 /** Where an effective permission mode came from. */
 export type PermissionModeSource = "ticket" | "project" | "settings";
@@ -20,4 +20,13 @@ export const PERMISSION_MODE_LABELS: Record<PermissionMode, { label: string; des
   auto: { label: "Auto", description: "A classifier approves routine actions and asks you about risky ones." },
   ask: { label: "Ask", description: "Edits inside the working directory run; everything else asks you first." },
   read_only: { label: "Read only", description: "The agent can read and run read-only commands, but can't change anything." },
+};
+
+/** The triage permission modes as Settings shows them: there is no human to ask, so a call neither allows makes triage escalate. */
+export const TRIAGE_PERMISSION_MODE_LABELS: Record<TriagePermissionMode, { label: string; description: string }> = {
+  read_only: { label: "Read only", description: "Triage may run gh reads and read-only tools from a fixed list. Anything else is refused, and triage escalates the event instead." },
+  auto: {
+    label: "Auto",
+    description: "A classifier judges each lookup: Claude Code's own when the triage model supports auto mode, Harness's when it doesn't (Haiku). Anything it won't allow is refused, and triage escalates the event instead.",
+  },
 };

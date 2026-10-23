@@ -540,6 +540,38 @@ describe("settings", () => {
     expect(sent[0]!.cosModel.driver).toBeTruthy();
   });
 
+  test("triage shows Haiku as its default model and read-only as its default mode; picking either saves it", async () => {
+    const w = edited((x) => void (x.settings.cosTriageModel = null));
+    const m = await mount(<SettingsView />, { hash: "#/settings", world: w });
+    m.client.overrides.set("PATCH /settings", () => m.client.world.settings);
+    await m.until("the triage rows", () => !!byId(m, "cosTriageModel")?.querySelector("select") && !!byId(m, "cosTriagePermissionMode"));
+    const model = byId(m, "cosTriageModel")!.querySelector("select")!;
+    const mode = byId(m, "cosTriagePermissionMode") as unknown as HTMLSelectElement;
+    expect(model.closest("[data-driver]")?.getAttribute("data-driver")).toBe("claude-code");
+    expect(text(all(model, "option")[0])).toBe("Default (haiku)");
+    expect(model.value).toBe("");
+    expect(mode.value).toBe("read_only");
+    expect(all(mode, "option").map((o) => text(o))).toEqual(["Read only", "Auto"]); // no Ask: triage has nobody to ask
+    const choose = (s: HTMLSelectElement, v: string) =>
+      m.settle(() => {
+        Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(s, v);
+        s.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+    await choose(model, "claude-opus-5-5");
+    await choose(model, "");
+    await choose(mode, "auto");
+    expect(patched(m, "PATCH /settings")).toEqual([{ cosTriageModel: "claude-opus-5-5" }, { cosTriageModel: null }, { cosTriagePermissionMode: "auto" }]);
+  });
+
+  test("with the API classifier, triage's default model is the API's Haiku", async () => {
+    const w = edited((x) => void (x.settings.classifier = "anthropic-api"));
+    const m = await mount(<SettingsView />, { hash: "#/settings", world: w });
+    await m.until("the triage model", () => !!byId(m, "cosTriageModel")?.querySelector("select"));
+    const model = byId(m, "cosTriageModel")!.querySelector("select")!;
+    expect(model.closest("[data-driver]")?.getAttribute("data-driver")).toBe("anthropic-api");
+    expect(text(all(model, "option")[0])).toBe("Default (claude-haiku-5-5)");
+  });
+
   test("a driver that can't run a chief isn't offered, unless it is the one already picked", async () => {
     const w = edited((x) => void (x.drivers[0]!.runsCos = false));
     const m = await mount(<SettingsView />, { hash: "#/settings", world: w });

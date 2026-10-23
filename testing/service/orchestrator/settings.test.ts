@@ -150,7 +150,7 @@ test("applySettingsPatch folds legacy fields into phaseModels", () => {
 test("the triage model and permission mode: a model name or null, read-only or auto or null", () => {
   expect(validateSettingsPatch({ cosTriageModel: "  sonnet " })).toEqual({ cosTriageModel: "sonnet" });
   expect(validateSettingsPatch({ cosTriageModel: "" })).toEqual({ cosTriageModel: null });
-  for (const mode of ["auto", "read_only", null]) expect(validateSettingsPatch({ cosTriagePermissionMode: mode })).toEqual({ cosTriagePermissionMode: mode });
+  for (const mode of ["auto", "read_only", null] as const) expect(validateSettingsPatch({ cosTriagePermissionMode: mode })).toEqual({ cosTriagePermissionMode: mode });
   // There is no human to ask during triage.
   for (const v of ["ask", "yolo", true]) bad(() => validateSettingsPatch({ cosTriagePermissionMode: v }), /cosTriagePermissionMode must be one of read_only, auto/);
 });
