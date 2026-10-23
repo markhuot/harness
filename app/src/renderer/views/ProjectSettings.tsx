@@ -4,7 +4,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { CompletionAction, Project } from "@harness/shared";
-import { offeredCompletionActions, projectCompletionDefault, projectGroups, resolveBaseBranch } from "@harness/shared";
+import { offeredCompletionActions, projectCompletionDefault, projectGroups, resolveBaseBranch, resolveCosStatuses } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import { inheritedBaseLabel, inheritedLabel, previewProjectKey, tildify, triStateOf, triStateValue, type TriState } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
@@ -12,7 +12,7 @@ import { Switch } from "../components/bits";
 import { BranchSelect } from "../components/BranchSelect";
 import { GroupSelect } from "../components/GroupSelect";
 import { ProjectColorPicker, ProjectKey } from "../components/ProjectKey";
-import { COS_SWITCHES, CosModelRow, DraftInput, Row, Section } from "./Settings";
+import { COS_STATUSES_SUB, COS_STATUSES_TITLE, COS_SWITCHES, CosModelRow, CosStatusBoxes, DraftInput, Row, Section } from "./Settings";
 import "./settings.css";
 import { ProjectModelRow } from "./settings/ModelSettings";
 import { ProjectPermissionRow } from "./settings/PermissionSettings";
@@ -189,6 +189,28 @@ function ProjectSettings({ project }: { project: Project }) {
                   </select>
                 </Row>
               ))}
+              {state.settings && (
+                <Row title={COS_STATUSES_TITLE} sub={COS_STATUSES_SUB}>
+                  <span style={{ display: "inline-flex", gap: 12, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                    <select
+                      className="select"
+                      aria-label={COS_STATUSES_TITLE}
+                      data-testid="project-cosStatuses-mode"
+                      value={project.cosStatuses ? "custom" : "inherit"}
+                      onChange={(e) => void save({ cosStatuses: e.target.value === "custom" ? [...resolveCosStatuses(null, state.settings!)] : null })}
+                    >
+                      <option value="inherit">Inherit</option>
+                      <option value="custom">Custom</option>
+                    </select>
+                    <CosStatusBoxes
+                      testId="project-cosStatuses"
+                      value={resolveCosStatuses(project, state.settings)}
+                      disabled={!project.cosStatuses}
+                      onChange={(cosStatuses) => void save({ cosStatuses })}
+                    />
+                  </span>
+                </Row>
+              )}
               {state.settings && <CosModelRow project value={project.cosModel} settings={state.settings} onChange={(cosModel) => void save({ cosModel })} />}
             </div>
           </Section>

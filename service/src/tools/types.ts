@@ -550,8 +550,8 @@ export interface ProjectView {
   baseBranch: string | null;
   /** Whether a chief of staff handles the project; null → settings.cosEnabled */
   cosEnabled: boolean | null;
-  /** Whether a chief of staff may answer the project's blocked tickets; null → settings.cosCanUnblock */
-  cosCanUnblock: boolean | null;
+  /** The columns whose events reach a chief of staff; null → settings.cosStatuses */
+  cosStatuses: TicketStatus[] | null;
   /** The driver and model a chief woken for the project's events alone runs on; null → settings.cosModel */
   cosModel: PhaseChoice | null;
   /** What approving a ticket does by default: merge, pr (a GitHub pull request) or custom */

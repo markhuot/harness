@@ -1,20 +1,36 @@
 // Chief of staff (CoS) shapes shared by the service and its clients (DESIGN.md "Chief of staff").
 
-import type { HarnessEvent, PhaseChoice, Project, Settings } from "./protocol";
+import type { HarnessEvent, PhaseChoice, Project, Settings, TicketStatus } from "./protocol";
 import { settingsPhaseChoice } from "./phases";
 
-/** The two settings a project may override of the app's (Project.cosEnabled, Project.cosCanUnblock). */
-export type CosSettingKey = "cosEnabled" | "cosCanUnblock";
+/** The setting a project may override of the app's (Project.cosEnabled). */
+export type CosSettingKey = "cosEnabled";
 
 /** What the app's settings say when nothing was saved. */
-export const COS_SETTING_DEFAULTS: Readonly<Record<CosSettingKey, boolean>> = { cosEnabled: true, cosCanUnblock: false };
+export const COS_SETTING_DEFAULTS: Readonly<Record<CosSettingKey, boolean>> = { cosEnabled: true };
+
+/** The columns whose events reach a chief when nothing was saved: none, so a person opts in to what their chief handles. */
+export const COS_STATUS_DEFAULTS: readonly TicketStatus[] = [];
 
 /**
  * A CoS setting for one project: the project's own value, else the app's, else the default. The one
- * place that resolves it: ownership of a project's events and the unblock tools both read it.
+ * place that resolves it: ownership of a project's events reads it.
  */
-export function resolveCosSetting(project: Pick<Project, "cosEnabled" | "cosCanUnblock"> | null | undefined, settings: Pick<Settings, "cosEnabled" | "cosCanUnblock">, key: CosSettingKey): boolean {
+export function resolveCosSetting(project: Pick<Project, "cosEnabled"> | null | undefined, settings: Pick<Settings, "cosEnabled">, key: CosSettingKey): boolean {
   return project?.[key] ?? settings[key] ?? COS_SETTING_DEFAULTS[key];
+}
+
+/** The columns whose tickets a chief sees: the project's own set, else the app's, else none. */
+export function resolveCosStatuses(project: Pick<Project, "cosStatuses"> | null | undefined, settings: Pick<Settings, "cosStatuses">): readonly TicketStatus[] {
+  return project?.cosStatuses ?? settings.cosStatuses ?? COS_STATUS_DEFAULTS;
+}
+
+/**
+ * Whether a chief sees events on a ticket in `status`. The one place that decides it: the event feed
+ * drops what it says no to, and Blocked is also what lets a chief answer or move a blocked ticket.
+ */
+export function cosSeesStatus(project: Pick<Project, "cosStatuses"> | null | undefined, settings: Pick<Settings, "cosStatuses">, status: string): boolean {
+  return (resolveCosStatuses(project, settings) as readonly string[]).includes(status);
 }
 
 /**
@@ -221,7 +237,7 @@ export function ownerOf(
   settings: Pick<Settings, "cosEnabled">,
   chiefs: readonly CosChief[],
 ): string | null {
-  if (!resolveCosSetting(project, { ...settings, cosCanUnblock: false }, "cosEnabled")) return null;
+  if (!resolveCosSetting(project, settings, "cosEnabled")) return null;
   const group = project?.groupId ? chiefs.find((c) => c.enabled && c.scope === `group:${project.groupId}`) : undefined;
   return (group ?? chiefs.find((c) => c.enabled && c.scope === "all"))?.ticketId ?? null;
 }

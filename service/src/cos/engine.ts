@@ -7,7 +7,7 @@
 // events left mid-flight, catches the activity cursor up and re-arms the timer from the rows.
 
 import type { CosBadge, CosBusEvent, CosEvent, CosEventStatus, CosChief, Project, Settings, Ticket } from "@harness/shared";
-import { COS_HOUR_MS, COS_OUTCOME_KINDS, routineActivityReason, collapseMoves, nextWakeAllowedAt, nextWakeAt, ownerOf } from "@harness/shared";
+import { COS_HOUR_MS, COS_OUTCOME_KINDS, routineActivityReason, collapseMoves, nextWakeAllowedAt, nextWakeAt, ownerOf, cosSeesStatus } from "@harness/shared";
 import { isSilentReply, QUIET_REPLY } from "./chat";
 import { memorySection, TRIAGE_GUIDANCE } from "./memory";
 import type { Store } from "../store";
@@ -168,6 +168,7 @@ export class CosEngine {
           if (!ticket || !project) filtered = "not about a ticket on the board";
           else if (actor?.startsWith("cos:")) filtered = "caused by a chief of staff";
           else if (ticket.kind === "cos" || store.projects.isInternal(project.id)) filtered = "a chief of staff's own ticket";
+          else if (!cosSeesStatus(project, this.d.settings(), ticket.status)) filtered = `${ticket.status} isn't a column the chief of staff handles`;
           // Routine events keep their owner, so they show in its Inbox with the reason like any ignored one.
           const routine = filtered ? undefined : routineActivityReason({ kind: entry.kind, from: entry.meta.from ?? null, to: entry.meta.to ?? null }, ticket!.status) ?? undefined;
           const ev = store.cosEvents.insert({

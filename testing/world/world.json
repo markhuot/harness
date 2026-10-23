@@ -1536,7 +1536,7 @@
     "baseBranch": "main",
     "anthropicApiKeySet": false,
     "cosEnabled": true,
-    "cosCanUnblock": false
+    "cosStatuses": []
   },
   "drivers": [
     {

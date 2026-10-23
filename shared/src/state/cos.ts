@@ -88,7 +88,7 @@ export function triStateOf(v: boolean | null | undefined): TriState {
   return v === true ? "on" : v === false ? "off" : "inherit";
 }
 
-/** The `Project.cosEnabled`/`cosCanUnblock` a choice saves: null clears the override. */
+/** The `Project.cosEnabled` a choice saves: null clears the override. */
 export function triStateValue(t: TriState): boolean | null {
   return t === "on" ? true : t === "off" ? false : null;
 }

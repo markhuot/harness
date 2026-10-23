@@ -11,7 +11,7 @@ export const settings: PublicSettings = {
   baseBranch: "main",
   anthropicApiKeySet: false,
   cosEnabled: true,
-  cosCanUnblock: false,
+  cosStatuses: [],
 };
 
 export const drivers: DriverInfo[] = [

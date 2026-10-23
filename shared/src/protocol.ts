@@ -94,8 +94,8 @@ export interface Project {
    * older payloads type-check.
    */
   cosEnabled?: boolean | null;
-  /** Whether a chief of staff may answer this project's blocked tickets. null → inherit settings.cosCanUnblock. */
-  cosCanUnblock?: boolean | null;
+  /** The columns whose tickets' events reach a chief of staff (Blocked also lets it answer them). null → inherit settings.cosStatuses. */
+  cosStatuses?: TicketStatus[] | null;
   /** The driver and model a chief of staff runs on when woken for this project's events alone. null → inherit settings.cosModel. */
   cosModel: PhaseChoice | null;
   createdAt: number;
@@ -1017,10 +1017,10 @@ export interface Settings {
    */
   cosEnabled?: boolean;
   /**
-   * Whether a chief of staff may answer blocked tickets of projects that don't say
-   * (Project.cosCanUnblock). Default false. Optional like cosEnabled.
+   * The columns whose tickets' events reach a chief of staff in projects that don't say
+   * (Project.cosStatuses); Blocked also lets it answer blocked tickets. Default none. Optional like cosEnabled.
    */
-  cosCanUnblock?: boolean;
+  cosStatuses?: TicketStatus[];
   /**
    * The driver and model a chief of staff runs on in every project that doesn't say (Project.cosModel).
    * null or absent → the Work choice. Resolve with `resolveCosChoice`. Optional like cosEnabled.
@@ -1703,8 +1703,8 @@ export interface CreateProjectBody {
   baseBranch?: string | null;
   /** Project.cosEnabled; null clears the override (inherit settings.cosEnabled) */
   cosEnabled?: boolean | null;
-  /** Project.cosCanUnblock; null clears the override (inherit settings.cosCanUnblock) */
-  cosCanUnblock?: boolean | null;
+  /** Project.cosStatuses; null clears the override (inherit settings.cosStatuses) */
+  cosStatuses?: TicketStatus[] | null;
   /** Project.cosModel; null clears the override (inherit settings.cosModel) */
   cosModel?: PhaseChoice | null;
   /** The default completion action; must be one the project offers. Default "merge". */

@@ -2,8 +2,8 @@
 // (each project's own settings live on its Project settings screen).
 
 import { useEffect, useState, type ReactNode } from "react";
-import type { PhaseChoice, Project, PublicSettings, Settings } from "@harness/shared";
-import { DEFAULT_BASE_BRANCH, DEFAULT_BROWSER_IDLE_TAB_MINUTES, DEFAULT_CONTEXT_GAUGE_LIMIT, MAX_BROWSER_IDLE_TAB_MINUTES, resolveCosChoice } from "@harness/shared";
+import type { PhaseChoice, Project, PublicSettings, Settings, TicketStatus } from "@harness/shared";
+import { DEFAULT_BASE_BRANCH, DEFAULT_BROWSER_IDLE_TAB_MINUTES, DEFAULT_CONTEXT_GAUGE_LIMIT, MAX_BROWSER_IDLE_TAB_MINUTES, resolveCosChoice, resolveCosStatuses, TICKET_STATUSES } from "@harness/shared";
 import { limitError, parseLimit } from "../state/contextGauge";
 import { useAction, useStore } from "../state/store";
 import { modelName, sortedProjects } from "@harness/shared/state";
@@ -11,7 +11,7 @@ import { useDriverModels } from "../state/models";
 import { DriverModelSelect } from "../components/ModelSelect";
 import { Icon } from "../components/Icon";
 import "./settings.css";
-import { relativeTime, Switch } from "../components/bits";
+import { relativeTime, STATUS_LABEL, Switch } from "../components/bits";
 import { ProjectKey } from "../components/ProjectKey";
 import { DriversSection } from "./settings/DriverSettings";
 import { PermissionsSection } from "./settings/PermissionSettings";
@@ -202,8 +202,33 @@ function GeneralSection({ settings }: { settings: PublicSettings }) {
 
 export const COS_SWITCHES = [
   { key: "cosEnabled", title: "Chief of staff enabled", sub: "Chiefs of staff triage ticket moves, watcher items and schedules for the projects they cover. Off, no chief gets events or runs.", fallback: true },
-  { key: "cosCanUnblock", title: "Chief of staff can unblock tickets", sub: "A chief may answer a blocked ticket itself, learning from how you answered before. Off, it only tells you.", fallback: false },
 ] as const;
+
+/**
+ * One checkbox per board column: the columns whose tickets' events reach a chief of staff. Blocked also lets it
+ * answer blocked tickets. `testId` tells the app's group from a project's.
+ */
+export function CosStatusBoxes({ value, disabled, testId, onChange }: { value: readonly TicketStatus[]; disabled?: boolean; testId: string; onChange: (next: TicketStatus[]) => void }) {
+  return (
+    <span data-testid={testId} style={{ display: "inline-flex", gap: 12, flexWrap: "wrap", justifyContent: "flex-end" }}>
+      {TICKET_STATUSES.map((s) => (
+        <label key={s} style={{ display: "inline-flex", gap: 4, alignItems: "center" }}>
+          <input
+            type="checkbox"
+            aria-label={STATUS_LABEL[s]}
+            checked={value.includes(s)}
+            disabled={disabled}
+            onChange={(e) => onChange(TICKET_STATUSES.filter((x) => (x === s ? e.target.checked : value.includes(x))))}
+          />
+          {STATUS_LABEL[s]}
+        </label>
+      ))}
+    </span>
+  );
+}
+
+export const COS_STATUSES_TITLE = "Columns the chief of staff handles";
+export const COS_STATUSES_SUB = "Events on tickets in a checked column reach a chief of staff; unchecked columns are left alone. Checking Blocked also lets a chief answer blocked tickets itself.";
 
 /** What a model pick means as a PhaseChoice; null (the Default row) clears it. */
 function choiceOf(c: { driver: string | null; model: string | null }): PhaseChoice | null {
@@ -243,13 +268,16 @@ function CosSection({ settings }: { settings: PublicSettings }) {
   const { client } = useStore();
   const act = useAction();
   return (
-    <Section id="cos" title="Chief of staff" desc="A chief of staff triages what happens on a board and acts on it. These switches apply to every chief; a project can override each of them.">
+    <Section id="cos" title="Chief of staff" desc="A chief of staff triages what happens on a board and acts on it. These settings apply to every chief; a project can override each of them.">
       <div className="card-surface settings-card">
         {COS_SWITCHES.map((s) => (
           <Row key={s.key} title={s.title} sub={s.sub}>
             <Switch checked={settings[s.key] ?? s.fallback} ariaLabel={s.title} onChange={(v) => void act(() => client.updateSettings({ [s.key]: v }))} />
           </Row>
         ))}
+        <Row title={COS_STATUSES_TITLE} sub={COS_STATUSES_SUB}>
+          <CosStatusBoxes testId="cosStatuses" value={resolveCosStatuses(null, settings)} onChange={(cosStatuses) => void act(() => client.updateSettings({ cosStatuses }))} />
+        </Row>
         <CosModelRow value={settings.cosModel} settings={settings} onChange={(c) => void act(() => client.updateSettings({ cosModel: c }))} />
       </div>
     </Section>

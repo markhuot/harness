@@ -919,6 +919,17 @@ export const MIGRATIONS: string[] = [
   `
   ALTER TABLE cos_wakes DROP COLUMN reported;
   `,
+  // 54: the columns whose tickets a chief sees (settings.cosStatuses, JSON list of statuses; projects.cos_statuses
+  //     overrides it, NULL: inherit) replace "can unblock". An install that allowed unblocking keeps Blocked on; every
+  //     other column starts off, as does a project's own override.
+  `
+  ALTER TABLE projects ADD COLUMN cos_statuses TEXT;
+  UPDATE projects SET cos_statuses = CASE WHEN cos_can_unblock = 1 THEN '["blocked"]' ELSE '[]' END WHERE cos_can_unblock IS NOT NULL;
+  ALTER TABLE projects DROP COLUMN cos_can_unblock;
+  INSERT OR REPLACE INTO settings (key, value)
+  SELECT 'cosStatuses', CASE WHEN value = 'true' THEN '["blocked"]' ELSE '[]' END FROM settings WHERE key = 'cosCanUnblock';
+  DELETE FROM settings WHERE key = 'cosCanUnblock';
+  `,
 ];
 
 /** Where the files migrations look at live (HarnessPaths); by default next to the database file. */

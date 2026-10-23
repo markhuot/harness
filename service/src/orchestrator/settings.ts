@@ -1,5 +1,5 @@
-import type { ListenSetting, NotificationSettings, PhaseChoice, PhaseModels, PhaseModelsPatch, PromptId, PublicSettings, Settings } from "@harness/shared";
-import { COS_SETTING_DEFAULTS, applyLegacySettings, legacySettingsFields, mergePhaseModels, PHASES, DEFAULT_NOTIFICATION_SETTINGS, NOTIFICATION_CATEGORIES, branchNameError, CLASSIFIER_BACKENDS, DEFAULT_BASE_BRANCH, DEFAULT_BROWSER_IDLE_TAB_MINUTES, DEFAULT_CONTEXT_GAUGE_LIMIT, MAX_BROWSER_IDLE_TAB_MINUTES, MAX_CONTEXT_GAUGE_LIMIT, MIN_CONTEXT_GAUGE_LIMIT, LISTEN_MODES, PERMISSION_MODES, PROMPT_IDS, RENAMED_PROMPT_IDS } from "@harness/shared";
+import type { ListenSetting, NotificationSettings, PhaseChoice, PhaseModels, PhaseModelsPatch, PromptId, PublicSettings, Settings, TicketStatus } from "@harness/shared";
+import { COS_SETTING_DEFAULTS, COS_STATUS_DEFAULTS, TICKET_STATUSES,applyLegacySettings, legacySettingsFields, mergePhaseModels, PHASES, DEFAULT_NOTIFICATION_SETTINGS, NOTIFICATION_CATEGORIES, branchNameError, CLASSIFIER_BACKENDS, DEFAULT_BASE_BRANCH, DEFAULT_BROWSER_IDLE_TAB_MINUTES, DEFAULT_CONTEXT_GAUGE_LIMIT, MAX_BROWSER_IDLE_TAB_MINUTES, MAX_CONTEXT_GAUGE_LIMIT, MIN_CONTEXT_GAUGE_LIMIT, LISTEN_MODES, PERMISSION_MODES, PROMPT_IDS, RENAMED_PROMPT_IDS } from "@harness/shared";
 import { badRequest } from "./errors";
 import { isPromptId, promptTemplateError } from "./prompt-templates";
 
@@ -21,7 +21,7 @@ export const DEFAULT_SETTINGS: Settings = {
   watcherDriver: null,
   watcherModels: {},
   cosEnabled: COS_SETTING_DEFAULTS.cosEnabled,
-  cosCanUnblock: COS_SETTING_DEFAULTS.cosCanUnblock,
+  cosStatuses: [...COS_STATUS_DEFAULTS],
   cosModel: null,
   cosTriageModel: null,
   anthropicApiKey: null,
@@ -48,6 +48,17 @@ export function validateBranchName(field: string, value: unknown, nullable = tru
   const error = branchNameError(name);
   if (error) throw badRequest(`${field} "${name}" isn't a valid branch name: ${error}`);
   return name;
+}
+
+/** A list of board columns from a request body, de-duplicated in board order. null clears an override when `nullable`. */
+export function validateCosStatuses(field: string, value: unknown, nullable: true): TicketStatus[] | null;
+export function validateCosStatuses(field: string, value: unknown, nullable: false): TicketStatus[];
+export function validateCosStatuses(field: string, value: unknown, nullable: boolean): TicketStatus[] | null {
+  if (value === null && nullable) return null;
+  if (!Array.isArray(value) || value.some((s) => !(TICKET_STATUSES as readonly unknown[]).includes(s))) {
+    throw badRequest(`${field} must be a list of columns (${TICKET_STATUSES.join(", ")})${nullable ? " or null" : ""}`);
+  }
+  return TICKET_STATUSES.filter((s) => value.includes(s));
 }
 
 /**
@@ -220,9 +231,11 @@ export function validateSettingsPatch(body: unknown, knownDrivers?: string[], cu
         out.watcherDriver = (value as string) || null;
         break;
       case "cosEnabled":
-      case "cosCanUnblock":
         if (typeof value !== "boolean") throw badRequest(`${key} must be true or false`);
         out[key] = value;
+        break;
+      case "cosStatuses":
+        out.cosStatuses = validateCosStatuses("cosStatuses", value, false);
         break;
       case "cosModel":
         out.cosModel = validateCosModel("cosModel", value, knownDrivers);

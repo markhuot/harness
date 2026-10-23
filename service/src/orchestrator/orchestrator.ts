@@ -104,7 +104,7 @@ import {
   HAIKU_MODELS,
   cosScopeKey,
   parseCosScopeKey,
-  resolveCosSetting,
+  cosSeesStatus,
   type Cos,
   type CosBadge,
   type CosChatPage,
@@ -187,6 +187,7 @@ import {
   validateBranchName,
   validateModelId,
   validateCosModel,
+  validateCosStatuses,
   validateModelMap,
   validatePhaseModels,
   validateSettingsPatch,
@@ -518,11 +519,11 @@ function nullableBoolean(name: string, value: unknown): boolean | null | undefin
 }
 
 /** The chief-of-staff overrides of a project create / PATCH body (only the fields it carries). */
-function projectCosFields(body: Partial<CreateProjectBody>, knownDrivers: string[]): { cosEnabled?: boolean | null; cosCanUnblock?: boolean | null; cosModel?: PhaseChoice | null } {
+function projectCosFields(body: Partial<CreateProjectBody>, knownDrivers: string[]): { cosEnabled?: boolean | null; cosStatuses?: TicketStatus[] | null; cosModel?: PhaseChoice | null } {
   const cosEnabled = nullableBoolean("cosEnabled", body.cosEnabled);
-  const cosCanUnblock = nullableBoolean("cosCanUnblock", body.cosCanUnblock);
+  const cosStatuses = body.cosStatuses === undefined ? undefined : validateCosStatuses("cosStatuses", body.cosStatuses, true);
   const cosModel = body.cosModel === undefined ? undefined : validateCosModel("cosModel", body.cosModel, knownDrivers);
-  return { ...(cosEnabled !== undefined && { cosEnabled }), ...(cosCanUnblock !== undefined && { cosCanUnblock }), ...(cosModel !== undefined && { cosModel }) };
+  return { ...(cosEnabled !== undefined && { cosEnabled }), ...(cosStatuses !== undefined && { cosStatuses }), ...(cosModel !== undefined && { cosModel }) };
 }
 
 /** Validate a completion action from a request body (omitted / null → undefined). */
@@ -1215,7 +1216,7 @@ export class Orchestrator {
       baseBranch: rawBase,
       completionAction: rawAction,
       cosEnabled: _cosEnabled,
-      cosCanUnblock: _cosCanUnblock,
+      cosStatuses: _cosStatuses,
       cosModel: _cosModel,
       skipAgentReview: _skipAgent,
       skipHumanReview: _skipHuman,
@@ -4091,16 +4092,16 @@ ${numberLines(r.body)}`;
 
   /**
    * A chief of staff acting on a blocked ticket is answering it. That is the project's call: with
-   * "CoS can unblock" off for the ticket's project (cosCanUnblock, else the app's) the write tools
+   * the Blocked column unchecked for the ticket's project (cosStatuses, else the app's) the write tools
    * refuse, and reading and reporting on it stay available. Every board write passes through
    * boardTarget, so this is the one place a chief of staff's actions on a blocked ticket are gated.
    */
   private cosMayAct(actor: Ticket, target: Ticket) {
     if (actor.kind !== "cos" || target.status !== "blocked") return;
     const project = this.store.projects.get(target.projectId);
-    if (resolveCosSetting(project, this.settings(), "cosCanUnblock")) return;
+    if (cosSeesStatus(project, this.settings(), "blocked")) return;
     throw new Error(
-      `${target.key} is blocked and waiting on a human: "CoS can unblock" is off for ${project?.key ?? "its project"} (Settings, or the project's settings), so a chief of staff doesn't answer its tickets. You can still read it and report what it asks. ${
+      `${target.key} is blocked and waiting on a human: "Blocked" isn't a column the chief of staff handles for ${project?.key ?? "its project"} (Settings, or the project's settings), so a chief of staff doesn't answer its tickets. You can still read it and report what it asks. ${
         target.blockedReason ? `It asks: ${target.blockedReason}` : ""
       }`.trim(),
     );
@@ -4554,7 +4555,7 @@ ${numberLines(r.body)}`;
       groupId: p.groupId ?? null,
       baseBranch: p.baseBranch ?? null,
       cosEnabled: p.cosEnabled ?? null,
-      cosCanUnblock: p.cosCanUnblock ?? null,
+      cosStatuses: p.cosStatuses ?? null,
       cosModel: p.cosModel ?? null,
       completionAction: p.completionAction ?? "merge",
       completionActions: p.completionActions ?? offeredCompletionActions(p),
