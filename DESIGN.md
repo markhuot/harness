@@ -1117,11 +1117,15 @@ Delivery reuses the parent's path: `notifySubscribers` (called from `transition`
 approval and `addActivity` for notes and spec revisions) buffers a change for the subscriber, and
 `flushConductor` pushes it into its live run or starts a run with `ticketEventsPrompt`. Guard rails:
 a change the subscriber's own tool call caused is skipped (`callerContext`, set around every run's
-tool calls); a subscriber is woken at most 8 times per 5 minutes (`SUBSCRIPTION_WAKE_LIMIT`), so two
-tickets subscribed to each other can't loop; and a subscriber's rows are deleted when its ticket
-goes to review, done or planning, or its runs are cancelled (an event must not restart an agent
-someone stopped). A ticket with subscriptions that ends its turn isn't auto-submitted, since it is
-waiting for events: it calls `submit_for_review` when it is done.
+tool calls and cleared again when a queued run starts, so a run the call queued isn't "its" change); a
+subscriber is woken at most 8 times per 5 minutes (`SUBSCRIPTION_WAKE_LIMIT`, counted per delivered
+message), so two tickets subscribed to each other can't loop, and events past the limit stay buffered
+and arrive together once the window has room; and a subscriber's rows are deleted when its ticket
+leaves in progress and blocked, or its runs are cancelled (an event must not restart an agent someone
+stopped). A ticket that ends its turn with a subscription on a ticket that isn't done, or with an
+event still buffered, isn't auto-submitted, since it is waiting for events: it calls
+`submit_for_review` when it is done. A done ticket can't be subscribed to, and its subscribers' rows
+are dropped once they have heard it is done, so no ticket waits on something that can't change.
 
 ### Watchers
 

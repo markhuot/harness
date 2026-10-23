@@ -65,4 +65,8 @@ export class SubscriptionRepo {
   deleteBySubscriber(subscriberId: string): void {
     this.db.query("DELETE FROM ticket_subscriptions WHERE subscriber_id = $subscriberId").run({ subscriberId });
   }
+
+  deleteByTarget(targetId: string): void {
+    this.db.query("DELETE FROM ticket_subscriptions WHERE target_id = $targetId").run({ targetId });
+  }
 }

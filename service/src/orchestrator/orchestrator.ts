@@ -604,7 +604,7 @@ export class Orchestrator {
   /** ticketId → the timer that pushes its buffered updates into its live run (flushConductor) */
   private livePushTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private liveDebounceMs: number;
-  /** subscriberId → when subscriptions woke it lately (takeSubscriptionWake) */
+  /** subscriberId → when subscriptions woke it lately (recordSubscriptionWake) */
   private subscriptionWakes = new Map<string, number[]>();
   private starting = new Set<string>();
   private watcherRunner: WatcherSupervisor | null;
@@ -4433,6 +4433,7 @@ ${numberLines(r.body)}`;
     if (target.parentId === own.id && chosen.every((e) => e === "status")) {
       throw new Error(`${target.key} is your child: its status changes already wake you. Pass events ["note"] or ["spec"] to follow more.`);
     }
+    if (target.status === "done") throw new Error(`${target.key} is done: it won't change again.`);
     if (own.status !== "in_progress") throw new Error(`${own.key} is ${own.status}: only an in-progress ticket waits for events.`);
     const sub = this.store.subscriptions.upsert(own.id, target.id, mode, [...new Set(chosen)]);
     return { ...sub, key: target.key };
@@ -5204,7 +5205,9 @@ ${numberLines(r.body)}`;
       }
       this.notifySubscribers(t, { key: t.key, title: t.title, from, to, note, specRevision: t.specRevision });
       // Waiting on events is over once the ticket is no longer in progress; reopened work subscribes again.
-      if (to === "review" || to === "done" || to === "planning") this.store.subscriptions.deleteBySubscriber(t.id);
+      if (to !== "in_progress" && to !== "blocked") this.store.subscriptions.deleteBySubscriber(t.id);
+      // Nothing follows a ticket that is over; its subscribers were told above.
+      if (to === "done") this.store.subscriptions.deleteByTarget(t.id);
       if (to === "done") this.conductorBuffer.delete(t.id);
       if (to === "in_progress" && this.conductorBuffer.has(t.id)) queueMicrotask(() => this.flushConductor(t.id));
       if (to === "review") this.track(this.refreshHasChanges(t));
@@ -5522,24 +5525,31 @@ ${numberLines(r.body)}`;
         this.store.subscriptions.deleteBySubscriber(sub.subscriberId);
         continue;
       }
-      if (!this.takeSubscriptionWake(subscriber.id)) continue;
       if (sub.mode === "once") this.store.subscriptions.delete(sub.subscriberId, sub.targetId);
       this.notifyConductor(subscriber.id, { ...change, event, subscribed: true });
     }
   }
 
-  /** Count a subscription wake for `subscriberId`; false once it was woken SUBSCRIPTION_WAKE_LIMIT times within the window. */
-  private takeSubscriptionWake(subscriberId: string): boolean {
+  /** Whether `subscriberId` may be woken by subscriptions again: fewer than SUBSCRIPTION_WAKE_LIMIT wakes within the window. */
+  private subscriptionWakeAllowed(subscriberId: string): boolean {
+    return this.recentSubscriptionWakes(subscriberId).length < SUBSCRIPTION_WAKE_LIMIT;
+  }
+
+  private recentSubscriptionWakes(subscriberId: string): number[] {
     const now = this.now();
     const recent = (this.subscriptionWakes.get(subscriberId) ?? []).filter((at) => now - at < SUBSCRIPTION_WAKE_WINDOW_MS);
-    if (recent.length >= SUBSCRIPTION_WAKE_LIMIT) {
-      this.subscriptionWakes.set(subscriberId, recent);
-      this.log(`subscription wake dropped for ${subscriberId}: ${SUBSCRIPTION_WAKE_LIMIT} wakes within ${SUBSCRIPTION_WAKE_WINDOW_MS / 60_000} minutes`);
-      return false;
-    }
-    recent.push(now);
-    this.subscriptionWakes.set(subscriberId, recent);
-    return true;
+    if (recent.length) this.subscriptionWakes.set(subscriberId, recent);
+    else this.subscriptionWakes.delete(subscriberId);
+    return recent;
+  }
+
+  private recordSubscriptionWake(subscriberId: string): void {
+    this.subscriptionWakes.set(subscriberId, [...this.recentSubscriptionWakes(subscriberId), this.now()]);
+  }
+
+  /** Whether `conductorId` has a subscription event waiting to be delivered. */
+  private hasBufferedSubscriptionEvent(conductorId: string): boolean {
+    return !!this.conductorBuffer.get(conductorId)?.some((c) => c.subscribed);
   }
 
   /** The message a ticket gets for its buffered child changes and subscription events. */
@@ -5554,7 +5564,9 @@ ${numberLines(r.body)}`;
    * as one run when the ticket is idle, and into its run when that is still going (a run waiting on a
    * background task stays live for hours), after a short debounce so a burst is one message. Held
    * back while the ticket isn't in progress or a run is queued, or when the live run can't take
-   * input: afterRun flushes once the run is over.
+   * input: afterRun flushes once a work or conductor run is over. A subscriber woken
+   * SUBSCRIPTION_WAKE_LIMIT times lately keeps its subscription events buffered (they arrive together
+   * in one message) until the window has room again.
    */
   private flushConductor(conductorId: string, debounced = false) {
     const buf = this.conductorBuffer.get(conductorId);
@@ -5566,6 +5578,18 @@ ${numberLines(r.body)}`;
     }
     if (c.status !== "in_progress") return; // keep buffered until it is back in progress
     if (this.queue.pendingFor(c.sessionId).length) return;
+    if (this.hasBufferedSubscriptionEvent(c.id) && !this.subscriptionWakeAllowed(c.id)) {
+      const key = `wake:${c.id}`;
+      if (!this.livePushTimers.has(key)) {
+        const oldest = Math.min(...this.recentSubscriptionWakes(c.id));
+        this.log(`subscription events held for ${c.id}: ${SUBSCRIPTION_WAKE_LIMIT} wakes within ${SUBSCRIPTION_WAKE_WINDOW_MS / 60_000} minutes`);
+        this.livePushTimers.set(key, setTimeout(() => {
+          this.livePushTimers.delete(key);
+          this.flushConductor(c.id);
+        }, Math.max(1000, oldest + SUBSCRIPTION_WAKE_WINDOW_MS - this.now() + 1)));
+      }
+      return;
+    }
     const active = [...this.active.values()].find((a) => a.run.sessionId === c.sessionId);
     if (active) {
       const input = active.input;
@@ -5580,11 +5604,13 @@ ${numberLines(r.body)}`;
       const text = this.conductorMessage(buf);
       if (!input.push(text)) return;
       this.conductorBuffer.delete(conductorId);
+      if (buf.some((b) => b.subscribed)) this.recordSubscriptionWake(c.id);
       this.append(c.sessionId, active.run.id, "user", messageContent({ text, attachments: [] }));
       this.touchSession(c.sessionId);
       return;
     }
     this.conductorBuffer.delete(conductorId);
+    if (buf.some((b) => b.subscribed)) this.recordSubscriptionWake(c.id);
     this.enqueueRun(c.sessionId, this.workKind(c), this.conductorMessage(buf));
   }
 
@@ -5644,7 +5670,8 @@ ${numberLines(r.body)}`;
 
   /** One queued run. It starts with no actor, so a run a chief's tool call queued doesn't inherit the chief's stamp (see `asActor`). */
   private execute(job: QueuedJob): Promise<void> {
-    return this.actorContext.run(null, () => this.executeRun(job));
+    // Neither stamp carries over from the tool call that queued the run: it isn't that caller's change (see notifySubscribers).
+    return this.callerContext.exit(() => this.actorContext.run(null, () => this.executeRun(job)));
   }
 
   /**
@@ -6170,19 +6197,28 @@ ${numberLines(r.body)}`;
     if (active.submitted) {
       if (ticket.status === "review") this.enqueueReview(ticket);
     } else if (ticket.status === "in_progress") {
-      const moreWork = this.queue.pendingFor(ticket.sessionId).some((j) => RUNNABLE_WORK.includes(j.kind));
+      // A subscription event still buffered (debounce, rate limit) is more work too: it would otherwise sit unread in review.
+      const moreWork = this.queue.pendingFor(ticket.sessionId).some((j) => RUNNABLE_WORK.includes(j.kind)) || this.hasBufferedSubscriptionEvent(ticket.id);
       if (!moreWork && run.kind !== "conductor" && endsWithQuestion(active.lastText)) {
         // The agent is asking the human something: block with its question instead of submitting.
         const question = active.lastText!.trim();
         this.addActivity(ticket, "blocked", "agent", question, { question, ...this.moveMeta(ticket, "blocked") });
         this.transition(ticket, "blocked", { blockedReason: question }, "Blocked: the agent asked a question", question);
-      } else if (!moreWork && this.allChildrenDone(ticket) && !this.store.subscriptions.listBySubscriber(ticket.id).length) {
+      } else if (!moreWork && this.allChildrenDone(ticket) && !this.awaitsEvents(ticket)) {
         // A ticket subscribed to others is waiting for their events, not finished: it ends its turn and is woken.
         this.submit(ticket, active.lastText?.trim() || "Work finished.", "system");
         this.enqueueReview(this.store.tickets.get(ticket.id)!);
       }
     }
     this.flushConductor(ticket.id);
+  }
+
+  /** Whether `ticket` waits on a subscription: a target that is done (or gone) will never change again, so it doesn't count. */
+  private awaitsEvents(ticket: Ticket): boolean {
+    return this.store.subscriptions.listBySubscriber(ticket.id).some((sub) => {
+      const target = this.store.tickets.get(sub.targetId);
+      return !!target && target.status !== "done";
+    });
   }
 
   /** HarnessOps facade handed to tools (maps conductor and chief of staff op names onto internals). */

@@ -129,7 +129,9 @@ test("a change the subscriber makes itself doesn't wake it", async () => {
   expect(results.map((r) => r.isError)).toEqual([false, false]);
   expect(h.ticket(other.key).status).toBe("done");
   expect(wakes(h)).toHaveLength(0);
-  expect(h.store.subscriptions.listBySubscriber(me.id)).toHaveLength(1);
+  // Its target is over, so there is nothing left to wait for: the row is gone and the ticket was submitted.
+  expect(h.store.subscriptions.listBySubscriber(me.id)).toHaveLength(0);
+  expect(h.ticket(me.key).status).toBe("review");
 });
 
 test("only the events a subscription asked for wake the ticket", async () => {
@@ -148,7 +150,7 @@ test("a subscription is dropped when its subscriber's run is cancelled, so an ev
   expect(wakes(h)).toHaveLength(0);
 });
 
-test("two tickets can't keep each other awake forever: a subscriber is woken at most eight times in a window", async () => {
+test("a subscriber is woken at most eight times in a window; the events past that are held, not lost, and arrive together once there is room", async () => {
   const { h, other } = await subscriber((key) => [["subscribe_ticket", { key, mode: "forever" }]]);
   await h.orch.startTicket(other.key);
   await h.settle();
@@ -157,12 +159,64 @@ test("two tickets can't keep each other awake forever: a subscriber is woken at 
     await h.settle();
   }
   expect(wakes(h)).toHaveLength(8);
-  expect(h.logs.some((l) => l.includes("subscription wake dropped"))).toBe(true);
-  // The window passes: it can be woken again.
+  expect(h.logs.some((l) => l.includes("subscription events held"))).toBe(true);
+  // The window passes: the next change wakes it once, with every held change in the message.
   h.clock.advance(5 * 60_000 + 1);
   await h.orch.updateTicket(other.key, { status: "blocked" });
   await h.settle();
   expect(wakes(h)).toHaveLength(9);
+  expect(wakes(h)[8]!.prompt.match(/^\d+\. /gm)!.length).toBeGreaterThan(1);
+});
+
+test("a change the subscriber's own tool call set going doesn't hide the target's later change from it", async () => {
+  // start_ticket queues the target's run from inside the subscriber's tool call; that run's own moves are the target's.
+  const { h, other, results } = await subscriber((key) => [["subscribe_ticket", { key, mode: "forever" }], ["start_ticket", { key }]]);
+  expect(results.map((r) => r.isError)).toEqual([false, false]);
+  expect(h.ticket(other.key).status).toBe("review");
+  // Its start was the subscriber's own doing; the run's submit for review wasn't.
+  expect(wakes(h)).toHaveLength(1);
+  expect(wakes(h)[0]!.prompt).toContain("in_progress → review");
+});
+
+test("subscribe_ticket refuses a ticket that is done", async () => {
+  const h = makeOrchestrator({ tools: undefined, liveDebounceMs: 0 });
+  const other = await h.orch.createTicket({ projectId: h.project.id, spec: "Other", start: false });
+  await h.orch.updateTicket(other.key, { status: "done" });
+  await h.settle();
+  const { steps, results } = callTools([["subscribe_ticket", { key: other.key }]]);
+  h.driver.script(steps);
+  const me = await h.orch.createTicket({ projectId: h.project.id, spec: "Me", ...ONE_RUN });
+  await h.settle();
+  expect(results[0]).toMatchObject({ isError: true });
+  expect(results[0]!.text).toMatch(/is done/);
+  expect(h.store.subscriptions.listBySubscriber(me.id)).toHaveLength(0);
+});
+
+test("a forever subscription ends with its target: the done event wakes the subscriber, the row goes, and the ticket is submitted instead of waiting for good", async () => {
+  const { h, other, me } = await subscriber((key) => [["subscribe_ticket", { key, mode: "forever" }]]);
+  await h.orch.updateTicket(other.key, { status: "done" });
+  await h.settle();
+  expect(wakes(h)).toHaveLength(1);
+  expect(h.store.subscriptions.listBySubscriber(me.id)).toHaveLength(0);
+  expect(h.ticket(me.key).status).toBe("review");
+});
+
+test("a subscription event still waiting in the debounce when the run ends is delivered, not left unread behind an auto-submit", async () => {
+  const driver = new FakeDriver({ supportsSteering: true });
+  const h = makeOrchestrator({ driver, tools: undefined, liveDebounceMs: 60_000 });
+  const other = await h.orch.createTicket({ projectId: h.project.id, spec: "Other", start: false });
+  await h.settle();
+  const hold = gate();
+  const { steps } = callTools([["subscribe_ticket", { key: other.key }]]);
+  driver.script([...steps, { wait: hold }, ...replyScript("waiting")]);
+  const me = await h.orch.createTicket({ projectId: h.project.id, spec: "Waiting on other", ...ONE_RUN });
+  await driver.runStarted();
+  await h.orch.startTicket(other.key);
+  // The event is buffered behind the debounce; the run ends before it is pushed.
+  hold.open();
+  await h.settle();
+  expect(wakes(h)).toHaveLength(1);
+  expect(wakes(h)[0]!.prompt).toContain(other.key);
 });
 
 test("subscribe_ticket refuses your own ticket, a redundant child status subscription, bad modes and unknown tickets; list and unsubscribe round-trip", async () => {
