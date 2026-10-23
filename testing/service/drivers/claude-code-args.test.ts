@@ -42,3 +42,13 @@ test("a triage run reads: Bash only, the user's MCP servers loaded, no sub-agent
   // Runs that set no limit pass none.
   expect(args("work")).not.toContain("--max-turns");
 });
+
+test("triage runs in the CLI's auto mode only when its own setting says auto, never from the app's default mode", () => {
+  const triage = (permissionMode?: "auto" | "read_only") => buildClaudeArgs({ kind: "triage", systemPrompt: "sys", permissionMode, mcp: { url: "http://127.0.0.1:1/mcp", headers: {} } }, { ...DEFAULT_SETTINGS, permissionMode: "auto" }, null);
+  const mode = (a: string[]) => a[a.indexOf("--permission-mode") + 1];
+  expect(mode(triage("auto"))).toBe("auto");
+  expect(mode(triage("read_only"))).toBe("default");
+  expect(mode(triage())).toBe("default");
+  // Either way the prompt tool stays, so what the CLI doesn't judge itself reaches the harness.
+  for (const a of [triage("auto"), triage("read_only")]) expect(a[a.indexOf("--permission-prompt-tool") + 1]).toMatch(/permission_prompt$/);
+});

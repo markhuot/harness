@@ -1,5 +1,5 @@
 import type { ListenSetting, NotificationSettings, PhaseChoice, PhaseModels, PhaseModelsPatch, PromptId, PublicSettings, Settings, TicketStatus } from "@harness/shared";
-import { COS_SETTING_DEFAULTS, COS_STATUS_DEFAULTS, TICKET_STATUSES,applyLegacySettings, legacySettingsFields, mergePhaseModels, PHASES, DEFAULT_NOTIFICATION_SETTINGS, NOTIFICATION_CATEGORIES, branchNameError, CLASSIFIER_BACKENDS, DEFAULT_BASE_BRANCH, DEFAULT_BROWSER_IDLE_TAB_MINUTES, DEFAULT_CONTEXT_GAUGE_LIMIT, MAX_BROWSER_IDLE_TAB_MINUTES, MAX_CONTEXT_GAUGE_LIMIT, MIN_CONTEXT_GAUGE_LIMIT, LISTEN_MODES, PERMISSION_MODES, PROMPT_IDS, RENAMED_PROMPT_IDS } from "@harness/shared";
+import { COS_SETTING_DEFAULTS, COS_STATUS_DEFAULTS, TICKET_STATUSES,applyLegacySettings, legacySettingsFields, mergePhaseModels, PHASES, DEFAULT_NOTIFICATION_SETTINGS, NOTIFICATION_CATEGORIES, branchNameError, CLASSIFIER_BACKENDS, DEFAULT_BASE_BRANCH, DEFAULT_BROWSER_IDLE_TAB_MINUTES, DEFAULT_CONTEXT_GAUGE_LIMIT, MAX_BROWSER_IDLE_TAB_MINUTES, MAX_CONTEXT_GAUGE_LIMIT, MIN_CONTEXT_GAUGE_LIMIT, LISTEN_MODES, PERMISSION_MODES, PROMPT_IDS, RENAMED_PROMPT_IDS, TRIAGE_PERMISSION_MODES } from "@harness/shared";
 import { badRequest } from "./errors";
 import { isPromptId, promptTemplateError } from "./prompt-templates";
 
@@ -24,6 +24,7 @@ export const DEFAULT_SETTINGS: Settings = {
   cosStatuses: [...COS_STATUS_DEFAULTS],
   cosModel: null,
   cosTriageModel: null,
+  cosTriagePermissionMode: null,
   anthropicApiKey: null,
   claudeOauthToken: null,
   copilotGithubToken: null,
@@ -243,6 +244,10 @@ export function validateSettingsPatch(body: unknown, knownDrivers?: string[], cu
       case "cosTriageModel":
         if (value !== null && typeof value !== "string") throw badRequest("cosTriageModel must be a model name or null");
         out.cosTriageModel = (value as string | null)?.trim() || null;
+        break;
+      case "cosTriagePermissionMode":
+        if (value !== null && !(TRIAGE_PERMISSION_MODES as readonly unknown[]).includes(value)) throw badRequest(`cosTriagePermissionMode must be one of ${TRIAGE_PERMISSION_MODES.join(", ")}, or null`);
+        out.cosTriagePermissionMode = value as Settings["cosTriagePermissionMode"];
         break;
       case "defaultModels":
       case "reviewModels":

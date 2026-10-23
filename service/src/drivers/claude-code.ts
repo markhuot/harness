@@ -217,8 +217,10 @@ export const CLI_PERMISSION_MODES: Record<PermissionMode, string> = { auto: "aut
 export function cliPermissionMode(req: Pick<RunRequest, "kind" | "permissionMode">, settings: Pick<Settings, "permissionMode">): string {
   if (req.kind === "plan") return "plan";
   // Triage has no human: "default" asks the permission prompt tool about everything the CLI doesn't
-  // allow itself, and the harness answers read-only (permissions/triage.ts).
-  if (req.kind === "triage") return "default";
+  // allow itself, and the harness answers read-only (permissions/triage.ts). In auto (the triage
+  // setting) the CLI's classifier judges first; on a model without auto mode the CLI falls back to
+  // "default" by itself and the harness's classifier answers the prompt tool instead.
+  if (req.kind === "triage") return req.permissionMode === "auto" ? "auto" : "default";
   return CLI_PERMISSION_MODES[req.permissionMode ?? settings.permissionMode] ?? "acceptEdits";
 }
 

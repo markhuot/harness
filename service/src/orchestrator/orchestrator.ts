@@ -101,8 +101,10 @@ import { ScopedStore, SpecConflictError, type GroupRepo, type Store } from "../s
 import { SUBSCRIPTION_EVENTS, type Subscription, type SubscriptionEvent, type SubscriptionMode } from "../store/subscriptions";
 import {
   COS_EVENT_STATUSES,
-  HAIKU_MODELS,
   cosScopeKey,
+  resolveTriageModel,
+  resolveTriagePermissionMode,
+  type TriagePermissionMode,
   parseCosScopeKey,
   cosSeesStatus,
   type Cos,
@@ -635,7 +637,7 @@ export class Orchestrator {
   private readonly macRequests: MacRequests | undefined;
   private cosOpts: Pick<OrchestratorOptions, "cosTriage">;
   /** The triage agent runs in flight, by their session: what each was asked and the verdicts it has recorded (runTriage) */
-  private triageRuns = new Map<string, { cosId: string; system: string; model: string; ids: string[]; verdicts: Map<string, TriageVerdict> }>();
+  private triageRuns = new Map<string, { cosId: string; system: string; model: string; permissionMode: TriagePermissionMode; ids: string[]; verdicts: Map<string, TriageVerdict> }>();
   private cosOff: (() => void)[] = [];
   /** Who caused the activity written in this async context ("cos:<ticket id>" inside a chief's run) */
   /** The project the latest wake of each chief (by ticket id) was about, when every event in it was; a chat message clears it. */
@@ -1339,7 +1341,8 @@ export class Orchestrator {
       cwd,
       title: `Triage of ${req.ids.length} event${req.ids.length === 1 ? "" : "s"}`,
     });
-    const state = { cosId: req.cosId, system: req.system, model: req.model, ids: req.ids, verdicts: new Map<string, TriageVerdict>() };
+    // The mode is fixed for the run: a settings change applies to the next batch.
+    const state = { cosId: req.cosId, system: req.system, model: req.model, permissionMode: resolveTriagePermissionMode(this.settings()), ids: req.ids, verdicts: new Map<string, TriageVerdict>() };
     this.triageRuns.set(session.id, state);
     try {
       const run = this.enqueueRun(session.id, "triage", req.prompt, undefined, { skipTranscript: false });
@@ -1398,7 +1401,7 @@ export class Orchestrator {
     const settings = this.settings();
     if (settings.classifier === "off") return { unavailable: "the classifier is switched off in Settings, and triage uses its backend" };
     if (process.env.NODE_ENV === "test") return { unavailable: "no real model under bun test" };
-    const model = () => settings.cosTriageModel?.trim() || HAIKU_MODELS[settings.classifier] || HAIKU_MODELS["claude-code"]!;
+    const model = () => resolveTriageModel(this.settings());
     if (settings.classifier === "anthropic-api") {
       const apiKey = () => this.settings().anthropicApiKey ?? process.env.ANTHROPIC_API_KEY ?? null;
       if (!apiKey()) return { unavailable: "no Anthropic API key" };
@@ -4721,8 +4724,19 @@ ${numberLines(r.body)}`;
     input: unknown,
     meta: ApprovalMeta = {},
   ): Promise<{ behavior: "allow"; updatedInput: unknown } | { behavior: "deny"; message: string }> {
-    // Triage has no human and no ticket: Harness's own read-only policy answers (permissions/triage.ts).
+    // Triage has no human and no ticket. In auto mode a call reaches here when Claude Code's own
+    // classifier isn't there to judge it (a model without auto mode, like Haiku): Harness's
+    // classifier judges it as it would an auto-mode ticket's. What it can't allow would ask a human,
+    // and with none, triage is refused and escalates. Read-only mode answers from Harness's own
+    // read-only policy (permissions/triage.ts).
     if (ctx.runKind === "triage") {
+      if (this.triageRuns.get(ctx.session.id)?.permissionMode === "auto") {
+        if (meta.viaPromptTool) {
+          const d = await this.gate.judge(toolName, input, this.gateEnv(ctx, null, "auto"));
+          return d.behavior === "allow" ? { behavior: "allow", updatedInput: input } : d;
+        }
+        return { behavior: "deny", message: `${meta.reason ? `${meta.reason} ` : ""}No human is available to approve this during triage. Don't retry it; escalate if you can't tell without it.` };
+      }
       const d = triageDecision(toolName, input);
       this.logPermission(ctx.session.id, ctx.runId, { tool: toolName, decision: d.behavior, source: "policy", mode: "read_only", summary: summarizeToolInput(input, 200), reason: d.behavior === "allow" ? "read-only" : d.message });
       return d.behavior === "allow" ? { behavior: "allow", updatedInput: input } : d;
@@ -5874,7 +5888,7 @@ ${numberLines(r.body)}`;
           runContext: triage ? undefined : this.prompts().runContext(promptInfo),
           cwd,
           model,
-          permissionMode: this.permissionModeFor(ticket, project),
+          permissionMode: triage ? triage.permissionMode : this.permissionModeFor(ticket, project),
           grants: this.runGrants(run.kind, ticket, project, active),
           state: FRESH_RUN_KINDS.has(run.kind) ? null : this.store.sessions.getDriverState(session.id, run.driver),
           tools,

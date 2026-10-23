@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { Cos, CosChatEntry, CosEvent } from "../../../shared/src/cos";
+import { resolveTriageModel, resolveTriagePermissionMode, triageDriver, type Cos, type CosChatEntry, type CosEvent } from "../../../shared/src/cos";
 import { anchoredScrollTop, canEscalate, cosBadgeCount, COS_TABS, inboxState, isCosTab, mergeChat, mergeEvents, nearTop, openEventCount, sortChiefs, triStateOf, triStateValue } from "../../../shared/src/state/cos";
 import { applyEvent, initialState, reducer } from "../../../shared/src/state/reducer";
 
@@ -162,5 +162,20 @@ describe("store", () => {
     const c: Cos = { ticketId: "t1", key: "COS-1", scope: "all", groupId: null, enabled: true, createdAt: 1 };
     const s = reducer(reducer(initialState, { type: "chiefs", chiefs: [c] }), { type: "chief", chief: { ...c, enabled: false } });
     expect(Object.values(s.chiefs)).toEqual([{ ...c, enabled: false }]);
+  });
+});
+
+describe("triage settings", () => {
+  test("the model is the setting, else the triage driver's Haiku: the API's when the classifier uses the API", () => {
+    expect(resolveTriageModel({ classifier: "claude-cli", cosTriageModel: null })).toBe("haiku");
+    expect(resolveTriageModel({ classifier: "anthropic-api", cosTriageModel: "  " })).toBe("claude-haiku-5-5");
+    expect(resolveTriageModel({ classifier: "claude-cli", cosTriageModel: "sonnet" })).toBe("sonnet");
+    expect(triageDriver({ classifier: "off" })).toBe("claude-code");
+  });
+
+  test("the permission mode is read-only unless set", () => {
+    expect(resolveTriagePermissionMode({})).toBe("read_only");
+    expect(resolveTriagePermissionMode({ cosTriagePermissionMode: null })).toBe("read_only");
+    expect(resolveTriagePermissionMode({ cosTriagePermissionMode: "auto" })).toBe("auto");
   });
 });

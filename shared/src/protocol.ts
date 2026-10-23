@@ -118,6 +118,13 @@ export interface Group {
  */
 export const PERMISSION_MODES = ["auto", "ask", "read_only"] as const;
 export type PermissionMode = (typeof PERMISSION_MODES)[number];
+/**
+ * The modes a chief's triage run may use (settings.cosTriagePermissionMode). Triage has no human to
+ * ask, so there is no "ask": "read_only" answers from Harness's read-only policy, "auto" from Claude
+ * Code's classifier, then Harness's, and a call neither allows is refused (triage escalates instead).
+ */
+export const TRIAGE_PERMISSION_MODES = ["read_only", "auto"] as const satisfies readonly PermissionMode[];
+export type TriagePermissionMode = (typeof TRIAGE_PERMISSION_MODES)[number];
 
 /** Who judges actions in auto mode for native-tool drivers ("off": ask a human instead). */
 export const CLASSIFIER_BACKENDS = ["claude-cli", "anthropic-api", "off"] as const;
@@ -1026,8 +1033,10 @@ export interface Settings {
    * null or absent → the Work choice. Resolve with `resolveCosChoice`. Optional like cosEnabled.
    */
   cosModel?: PhaseChoice | null;
-  /** The model that triages a chief's events before it wakes (empty or absent: the backend's Haiku). Optional like cosEnabled. */
+  /** The model that triages a chief's events before it wakes (empty or absent: the backend's Haiku, `triageDefaultModel`). Optional like cosEnabled. */
   cosTriageModel?: string | null;
+  /** How a triage run's lookups are judged (null or absent: "read_only"). Resolve with `resolveTriagePermissionMode`. Optional like cosEnabled. */
+  cosTriagePermissionMode?: TriagePermissionMode | null;
   /**
    * Model per driver id for triage sessions of watchers that don't pick one. Missing / null →
    * defaultModels. PATCH merges per driver; null clears. Optional like watcherDriver.

@@ -2,6 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { TRIAGE_AGENT_SYSTEM, TriageIncomplete, type AgentTriageRequest } from "../../../service/src/cos/triage";
+import type { Classifier } from "../../../service/src/permissions/classifier";
 import { toolsForRun } from "../../../service/src/tools";
 import { FakeDriver, failScript, toolCall, type Step } from "../fake-driver";
 import { makeOrchestrator, stopAll } from "../orchestrator-harness";
@@ -67,6 +68,57 @@ test("a lookup goes through the gate: gh reads and read-only MCP tools run, writ
   expect(answers["gh-read"]!.behavior).toBe("allow");
   expect(answers["jira-read"]!.behavior).toBe("allow");
   for (const k of ["gh-merge", "gh-post", "jira-write", "edit"]) expect(answers[k]!.behavior).toBe("deny");
+});
+
+/** A classifier that answers by the command: allow `curl`, soft-deny `gh pr comment`, hard-deny the rest. */
+function fakeClassifier(seen: string[]): Classifier {
+  return {
+    backend: "fake",
+    async classify(req) {
+      const command = (req.input as { command?: string }).command ?? "";
+      seen.push(command);
+      if (command.startsWith("curl")) return { decision: "allow", reason: "a read" };
+      if (command.startsWith("gh pr comment")) return { decision: "soft_deny", reason: "posts a comment" };
+      return { decision: "hard_deny", reason: "destructive" };
+    },
+  };
+}
+
+async function decideAll(mode: "auto" | "read_only" | null, commands: Record<string, string>) {
+  const seen: string[] = [];
+  const driver = new FakeDriver({ id: "claude-code", usesPermissionPromptTool: true });
+  const h = makeOrchestrator({ driver, tools: toolsForRun, classifier: fakeClassifier(seen) });
+  const chief = h.orch.openCos("all");
+  h.orch.updateSettings({ cosTriagePermissionMode: mode });
+  const answers: Record<string, { behavior: string; message?: string }> = {};
+  driver.script([
+    ...Object.entries(commands).flatMap(([key, command]) =>
+      toolCall("permission_prompt", { tool_name: "Bash", input: { command }, tool_use_id: key }, (r) => (answers[key] = JSON.parse((r.content[0] as { text: string }).text))),
+    ),
+    ...verdictCall("e1", "ignore"),
+  ]);
+  await h.orch.runTriage({ system: TRIAGE_AGENT_SYSTEM, prompt: "events", cosId: chief.ticketId, model: "haiku", ids: ["e1"], timeoutMs: 60_000 }, new AbortController().signal);
+  return { answers, seen, req: driver.requests[0]! };
+}
+
+test("in auto mode, what the CLI asks about is judged by Harness's classifier; what would need a human is refused", async () => {
+  const { answers, seen, req } = await decideAll("auto", { read: "curl -s https://api.github.com/repos/o/r/pulls/1", post: "gh pr comment 1 --body hi", wipe: "rm -rf ~" });
+  expect(req.permissionMode).toBe("auto");
+  expect(seen).toEqual(["curl -s https://api.github.com/repos/o/r/pulls/1", "gh pr comment 1 --body hi", "rm -rf ~"]);
+  expect(answers.read!.behavior).toBe("allow"); // the read-only policy would refuse curl
+  expect(answers.post).toMatchObject({ behavior: "deny" });
+  expect(answers.post!.message).toMatch(/posts a comment.*No human is available.*escalate/s);
+  expect(answers.wipe!.behavior).toBe("deny");
+});
+
+test("in read-only mode (the default) the read-only policy answers and the classifier is never asked", async () => {
+  for (const mode of ["read_only", null] as const) {
+    const { answers, seen, req } = await decideAll(mode, { gh: "gh pr view 1", curl: "curl -s https://api.github.com/repos/o/r/pulls/1" });
+    expect(req.permissionMode).toBe("read_only");
+    expect(seen).toEqual([]);
+    expect(answers.gh!.behavior).toBe("allow");
+    expect(answers.curl!.behavior).toBe("deny");
+  }
 });
 
 test("a verdict for an id the run wasn't asked about, or a bad verdict, is refused and not recorded", async () => {

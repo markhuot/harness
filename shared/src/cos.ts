@@ -1,7 +1,27 @@
 // Chief of staff (CoS) shapes shared by the service and its clients (DESIGN.md "Chief of staff").
 
-import type { Attachment, HarnessEvent, MessageDraft, PhaseChoice, Project, Settings, TicketStatus } from "./protocol";
-import { settingsPhaseChoice } from "./phases";
+import type { Attachment, HarnessEvent, MessageDraft, PhaseChoice, Project, Settings, TicketStatus, TriagePermissionMode } from "./protocol";
+import { HAIKU_MODELS, settingsPhaseChoice } from "./phases";
+
+/** The driver whose models triage runs on: the API's when the classifier uses the API, else Claude Code's. */
+export function triageDriver(settings: Pick<Settings, "classifier">): string {
+  return settings.classifier === "anthropic-api" ? "anthropic-api" : "claude-code";
+}
+
+/** The model triage runs on when settings.cosTriageModel is empty: that driver's Haiku. */
+export function triageDefaultModel(settings: Pick<Settings, "classifier">): string {
+  return HAIKU_MODELS[triageDriver(settings)]!;
+}
+
+/** The model triage runs on: settings.cosTriageModel, else the driver's Haiku. */
+export function resolveTriageModel(settings: Pick<Settings, "classifier" | "cosTriageModel">): string {
+  return settings.cosTriageModel?.trim() || triageDefaultModel(settings);
+}
+
+/** How triage's lookups are judged: settings.cosTriagePermissionMode, else read-only. */
+export function resolveTriagePermissionMode(settings: Pick<Settings, "cosTriagePermissionMode">): TriagePermissionMode {
+  return settings.cosTriagePermissionMode ?? "read_only";
+}
 
 /** The setting a project may override of the app's (Project.cosEnabled). */
 export type CosSettingKey = "cosEnabled";
