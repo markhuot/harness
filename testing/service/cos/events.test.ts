@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { COS_CEILING_MS, COS_HOUR_MS, COS_QUIET_MS, COS_STALL_AFTER_MS, COS_STALL_REPEAT_MS, COS_STALL_RETRY_MS, COS_WAKES_PER_HOUR } from "../../../shared/src/cos";
+import { COS_CEILING_MS, COS_HOUR_MS, COS_QUIET_MS, COS_WAKES_PER_HOUR } from "../../../shared/src/cos";
 import { isSilentReply, WAKE_PROMPT_PREFIX } from "../../../service/src/cos/chat";
 import type { CosEngine } from "../../../service/src/cos/engine";
 import { LlmTriage, type CosTriage, type TriageInput, type TriageResult, type TriageVerdict } from "../../../service/src/cos/triage";
@@ -510,31 +510,27 @@ test("a watcher's output is an event with no project; triage's proposed project 
 });
 
 // ---------------------------------------------------------------------------
-// Open conditions, human messages, escalate anyway, retention
+// Waiting tickets, human messages, escalate anyway, retention
 // ---------------------------------------------------------------------------
 
-test("tickets still blocked ride along with every triage batch and wake, but never make one", async () => {
+test("tickets blocked or in review for days never wake the chief, and no timer is armed for them", async () => {
   const s = await quiet();
   const stuck = await s.ticket(s.h.project.id, "waiting on an answer");
   s.h.store.tickets.update(stuck.id, { status: "blocked", blockedReason: "needs the API key" });
+  const waiting = await s.ticket(s.h.project.id, "waiting for review");
+  s.h.store.tickets.update(waiting.id, { status: "review" });
   await s.after(6 * MIN);
   s.scripted!.calls.splice(0);
   s.h.driver.requests.splice(0);
 
-  await s.after(3 * 60 * MIN); // hours pass, and they alone wake nothing
+  await s.after(7 * 24 * 60 * MIN); // a week passes, and they alone wake nothing
   expect(s.scripted!.calls).toHaveLength(0);
   expect(s.h.driver.requests).toHaveLength(0);
-
-  s.scripted!.answers.push(escalating("marker-open"));
-  s.happen(s.t, "marker-open");
-  await s.after(MIN);
-  expect(s.scripted!.calls[0]!.openConditions.join("\n")).toContain(`${stuck.key} "waiting on an answer" is blocked: needs the API key`);
-  // Three hours is a stall triage should know about, but not one the user is told about yet.
-  expect(s.h.driver.requests.at(-1)!.prompt).not.toContain("Stalled for a long time");
+  expect(wakeCount(s)).toBe(0);
 });
 
 // ---------------------------------------------------------------------------
-// Quiet by default: the chief messages the user only for a change, an attention item or a long stall
+// Quiet by default: the chief messages the user only for a change, or an attention item
 // ---------------------------------------------------------------------------
 
 const wakeCount = (s: { h: { store: { cosEvents: { wakeTimes(c: string, k: "wake", since: number): number[] } } }; chief: { ticketId: string } }) => s.h.store.cosEvents.wakeTimes(s.chief.ticketId, "wake", 0).length;
@@ -569,83 +565,6 @@ test("a failed wake run still shows its batch card, and a reply mixing text with
   expect(chatOf(s).filter((e) => e.kind === "event_batch")).toHaveLength(1);
   expect(isSilentReply("[quiet] but also: ACME-1 is blocked")).toBe(false);
   expect(isSilentReply("  \n")).toBe(true);
-});
-
-async function blockedTicket() {
-  const s = await quiet();
-  const stuck = await s.ticket(s.h.project.id, "waiting on an answer");
-  s.h.store.tickets.update(stuck.id, { status: "blocked", blockedReason: "needs the API key" });
-  s.happen(stuck, "blocked", { kind: "moved", from: "in_progress", to: "blocked" });
-  await s.after(6 * MIN);
-  s.h.driver.requests.splice(0);
-  return { ...s, stuck };
-}
-
-test("a stall wakes a quiet board once when it crosses the threshold, and again only after the repeat interval", async () => {
-  const s = await blockedTicket();
-  const before = wakeCount(s);
-  await s.after(COS_STALL_AFTER_MS - 30 * MIN);
-  expect(wakeCount(s)).toBe(before);
-
-  s.h.driver.script(replyScript("ACME-2 has been blocked for hours."));
-  await s.after(40 * MIN);
-  expect(wakeCount(s)).toBe(before + 1);
-  expect(s.h.driver.requests.at(-1)!.prompt).toContain(`Stalled for a long time and not yet reported to the user:`);
-  expect(s.h.driver.requests.at(-1)!.prompt).toContain(`${s.stuck.key} "waiting on an answer" is blocked: needs the API key`);
-  expect(chatOf(s).filter((e) => e.kind === "message").map((e) => e.text)).toContain("ACME-2 has been blocked for hours.");
-  expect(chatOf(s).filter((e) => e.kind === "event_batch")).toHaveLength(0); // no events came with it
-
-  // Unchanged, it is not re-reported on later wakes, however many.
-  for (let i = 0; i < 3; i++) {
-    s.scripted!.answers.push(escalating(`marker-s${i}`));
-    s.happen(s.t, `marker-s${i}`);
-    await s.after(20 * MIN);
-  }
-  expect(s.h.driver.requests.filter((r) => r.prompt.includes("Stalled for a long time"))).toHaveLength(1);
-  await s.after(COS_STALL_REPEAT_MS - 2 * 60 * MIN - 60 * MIN);
-  expect(s.h.driver.requests.filter((r) => r.prompt.includes("Stalled for a long time"))).toHaveLength(1);
-
-  // Past the repeat interval it is told again.
-  await s.after(4 * 60 * MIN);
-  expect(s.h.driver.requests.filter((r) => r.prompt.includes("Stalled for a long time"))).toHaveLength(2);
-});
-
-test("a stalled item comes back when its status or blocked reason changes", async () => {
-  const s = await blockedTicket();
-  await s.after(COS_STALL_AFTER_MS);
-  const told = () => s.h.driver.requests.filter((r) => r.prompt.includes("Stalled for a long time")).length;
-  expect(told()).toBe(1);
-  s.h.store.tickets.update(s.stuck.id, { title: "waiting on an answer (edited)" }); // an edit alone isn't a change
-  await s.after(COS_STALL_RETRY_MS + MIN);
-  expect(told()).toBe(1);
-  s.h.store.tickets.update(s.stuck.id, { blockedReason: "needs the API key and a hostname" });
-  await s.after(COS_STALL_RETRY_MS + MIN);
-  expect(told()).toBe(2);
-  expect(s.h.driver.requests.at(-1)!.prompt).toContain("needs the API key and a hostname");
-});
-
-test("a stall is aged from when the ticket entered its status, not from its last edit", async () => {
-  const s = await quiet();
-  const stuck = await s.ticket(s.h.project.id, "moved long ago");
-  s.h.store.tickets.update(stuck.id, { status: "blocked", blockedReason: "waiting" });
-  s.happen(stuck, "blocked", { kind: "moved", from: "in_progress", to: "blocked" });
-  await s.after(COS_STALL_AFTER_MS - 10 * MIN);
-  s.h.store.tickets.update(stuck.id, { title: "moved long ago (edited)" }); // bumps updatedAt
-  s.h.driver.requests.splice(0);
-  await s.after(15 * MIN);
-  expect(s.h.driver.requests.filter((r) => r.prompt.includes("Stalled for a long time"))).toHaveLength(1);
-});
-
-test("a stall wake whose run fails reports nothing, so the stall is sent again", async () => {
-  const s = await blockedTicket();
-  s.h.driver.script([{ throw: new Error("boom") }]);
-  await s.after(COS_STALL_AFTER_MS);
-  const told = () => s.h.driver.requests.filter((r) => r.prompt.includes("Stalled for a long time")).length;
-  expect(told()).toBe(1);
-  await s.after(COS_STALL_RETRY_MS - MIN); // retries are spaced out
-  expect(told()).toBe(1);
-  await s.after(2 * MIN);
-  expect(told()).toBe(2);
 });
 
 test("a human's message to a chief goes straight to its run, with no triage", async () => {
@@ -916,7 +835,7 @@ test("a fail-open wake and a model's brief or reason keep outside text inside th
   expect(outsideFences(open)).not.toContain("marker-hostile");
 });
 
-test("Haiku's brief and reason, the digest and open conditions are fenced in a wake too", async () => {
+test("Haiku's brief and reason, and the digest are fenced in a wake too", async () => {
   const s = await quiet();
   s.happen(s.t, "marker-earlier");
   s.scripted!.answers.push((i) => i.events.map((e) => verdict(e.id, "ignore", { reason: "DIGEST-HOSTILE" })));
@@ -936,9 +855,9 @@ test("a ticket's title in the triage prompt sits inside a fence", async () => {
   s.happen(s.t, "marker-title");
   await s.after(MIN);
   const { buildTriagePrompt } = await import("../../../service/src/cos/triage");
-  const user = buildTriagePrompt({ cosId: "c1", guidance: "", projects: [], openConditions: ["T-1 \"TITLE-HOSTILE\" is blocked"], events: [{ id: "e1", source: "activity", actor: "a", title: "t", project: null, ticket: 'T-1 "TICKET-HOSTILE" (blocked)', body: "b" }] }).user;
+  const user = buildTriagePrompt({ cosId: "c1", guidance: "", projects: [], events: [{ id: "e1", source: "activity", actor: "a", title: "t", project: null, ticket: 'T-1 "TICKET-HOSTILE" (blocked)', body: "b" }] }).user;
   expect(outsideFences(user)).not.toMatch(/HOSTILE/);
-  expect(user).toContain("TITLE-HOSTILE");
+  expect(user).toContain("TICKET-HOSTILE");
 });
 
 test("a chief's wake never inlines files named by @mentions in watcher output", async () => {

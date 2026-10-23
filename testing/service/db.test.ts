@@ -42,8 +42,8 @@ test("a database from a newer service is refused rather than downgraded", () => 
 
 test("a failing migration rolls back whole and leaves the version where it was", () => {
   const db = dbAt(SCHEMA_VERSION - 1);
-  // Break the last migration's target: it creates a table that already exists.
-  db.exec("CREATE TABLE ticket_subscriptions (x)");
+  // Break the last migration's target: it drops a column that is already gone.
+  db.exec("ALTER TABLE cos_wakes DROP COLUMN reported");
   expect(() => migrate(db, paths())).toThrow();
   expect(version(db)).toBe(SCHEMA_VERSION - 1);
 });
@@ -317,4 +317,13 @@ test("deleting a group's chief hands its watchers to All (cos_id goes NULL)", ()
   db.exec("UPDATE watchers SET cos_id = 'g'");
   db.exec("DELETE FROM cos WHERE ticket_id = 'g'");
   expect((db.query("SELECT cos_id FROM watchers WHERE id = 'w'").get() as { cos_id: string | null }).cos_id).toBeNull();
+});
+
+test("migration 53 drops cos_wakes.reported and keeps the wakes", () => {
+  const db = dbAt(52);
+  db.exec(`INSERT INTO cos_wakes (id, cos_id, kind, started_at, event_count, run_id, outcome, reported) VALUES ('w1', 'chief', 'wake', 5, 2, 'r1', 'spoke', '{"t1":"blocked:x"}')`);
+  expect(columns(db, "cos_wakes")).toContain("reported");
+  migrate(db, paths());
+  expect(columns(db, "cos_wakes")).not.toContain("reported");
+  expect(db.query("SELECT id, event_count, run_id, outcome FROM cos_wakes").all()).toEqual([{ id: "w1", event_count: 2, run_id: "r1", outcome: "spoke" }]);
 });

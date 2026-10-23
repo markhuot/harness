@@ -463,7 +463,7 @@ test("a wake about one project runs on that project's chief model", async () => 
   expect(alt.requests.map((r) => r.model)).toEqual(["alt-model"]);
 });
 
-test("a wake that spans projects or holds only stalls (no project) runs on the app's model", async () => {
+test("a wake that spans projects (no project) runs on the app's model", async () => {
   const { h, alt, wake } = await modelRig();
   await wake(null);
   expect(alt.requests).toHaveLength(0);

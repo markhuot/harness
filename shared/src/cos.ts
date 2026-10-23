@@ -207,11 +207,6 @@ export const COS_CEILING_MS = 5 * 60_000;
 /** Full wakes per chief per hour; more join one later wake. */
 export const COS_WAKES_PER_HOUR = 6;
 export const COS_HOUR_MS = 60 * 60_000;
-/** A blocked ticket or waiting review is a stall worth telling the user about once it has sat this long; it is told again after COS_STALL_REPEAT_MS, or sooner if its status or blocked reason changes. */
-export const COS_STALL_AFTER_MS = 4 * COS_HOUR_MS;
-export const COS_STALL_REPEAT_MS = 24 * COS_HOUR_MS;
-/** The soonest a chief is woken again on a timer for stalls alone, so a failing run isn't retried in a loop. */
-export const COS_STALL_RETRY_MS = 15 * 60_000;
 
 /** A chief as ownership sees it. */
 export type CosChief = Pick<Cos, "ticketId" | "scope" | "groupId" | "enabled">;

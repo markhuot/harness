@@ -915,6 +915,10 @@ export const MIGRATIONS: string[] = [
   );
   CREATE INDEX ticket_subscriptions_target ON ticket_subscriptions(target_id);
   `,
+  // 53: the chief no longer reports stalled tickets, so cos_wakes.reported (the stalls a wake carried) has no reader.
+  `
+  ALTER TABLE cos_wakes DROP COLUMN reported;
+  `,
 ];
 
 /** Where the files migrations look at live (HarnessPaths); by default next to the database file. */

@@ -9,6 +9,9 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Removed
+- The chief of staff no longer reports stalled tickets. Nothing wakes it because a ticket has sat blocked or in review for hours, so the "Several tickets need you…" messages and the "Unknown event for this wake: open-conditions" error are gone; it wakes only for escalated events and its own schedules. Triage also no longer gets a list of waiting tickets as context, so it judges each event on its own and may escalate repeat events on an already blocked ticket a little more often. The old record of which stalls were reported is deleted from the database, so clearing a chief's wake history can't re-announce anything.
+
 ## [app-20261023.0302](https://github.com/markhuot/harness/releases/tag/app-20261023.0302) - 2026-10-23
 
 ### Added

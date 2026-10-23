@@ -221,7 +221,7 @@ export function CosModelRow({ value, settings, project, onChange }: { value: Pha
       title={title}
       sub={
         project
-          ? "For a wake about this project alone. Chat, stall-only and multi-project wakes use the app default. Next run."
+          ? "For a wake about this project alone. Chat and multi-project wakes use the app default. Next run."
           : "The model every chief runs on. A project can choose its own. Applies to the next run, not one in progress."
       }
     >

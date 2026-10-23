@@ -135,8 +135,6 @@ export interface WakeLog {
   tokensOut?: number | null;
   /** The run the wake went to */
   runId?: string | null;
-  /** The stalled items it carried: ticket id → fingerprint */
-  reported?: Record<string, string>;
 }
 
 export type WakeOutcome = "spoke" | "quiet" | "failed";
@@ -283,7 +281,7 @@ export class CosEventRepo {
   addWake(log: WakeLog): string {
     const id = newId();
     this.db
-      .query("INSERT INTO cos_wakes (id, cos_id, kind, started_at, event_count, digest, model, tokens_in, tokens_out, run_id, reported) VALUES ($id, $cosId, $kind, $t, $n, $digest, $model, $tin, $tout, $runId, $reported)")
+      .query("INSERT INTO cos_wakes (id, cos_id, kind, started_at, event_count, digest, model, tokens_in, tokens_out, run_id) VALUES ($id, $cosId, $kind, $t, $n, $digest, $model, $tin, $tout, $runId)")
       .run({
         id,
         cosId: log.cosId,
@@ -295,7 +293,6 @@ export class CosEventRepo {
         tin: log.tokensIn ?? null,
         tout: log.tokensOut ?? null,
         runId: log.runId ?? null,
-        reported: log.reported && Object.keys(log.reported).length ? JSON.stringify(log.reported) : null,
       });
     return id;
   }
@@ -314,14 +311,6 @@ export class CosEventRepo {
 
   setWakeOutcome(id: string, outcome: WakeOutcome) {
     this.db.query("UPDATE cos_wakes SET outcome = $outcome WHERE id = $id").run({ id, outcome });
-  }
-
-  /** Per stalled ticket, the fingerprint and time of its latest report: wakes that carried it and didn't fail (one still running counts, so it isn't sent twice). */
-  reportedStalls(cosId: string): Map<string, { fingerprint: string; at: number }> {
-    const out = new Map<string, { fingerprint: string; at: number }>();
-    const rows = this.db.query("SELECT started_at, reported FROM cos_wakes WHERE cos_id = $cosId AND kind = 'wake' AND reported IS NOT NULL AND (outcome IS NULL OR outcome <> 'failed') ORDER BY started_at").all({ cosId }) as { started_at: number; reported: string }[];
-    for (const r of rows) for (const [key, fingerprint] of Object.entries(fromJson<Record<string, string>>(r.reported, {}))) out.set(key, { fingerprint, at: r.started_at });
-    return out;
   }
 
   /** Token counts of a full wake, known once its run reports them. */
