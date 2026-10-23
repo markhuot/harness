@@ -158,7 +158,7 @@ End the run with exactly one of these, never both, then stop:
 * \`block\` { question } only when you can't continue without a human: a consequential decision, missing credentials or access, or a destructive or irreversible step. Ask one specific question naming the options; background goes under the spec's Open questions. The human's reply resumes this conversation: if it resolves the block, call \`unblock\` first, then carry on; if not (a side question), answer it and stay blocked.
 Never end with a question in plain text; call \`block\`.
 When the human asks to re-plan or rethink the approach, or you find the approved plan won't work and they agree, call \`return_to_planning\` { reason, start_after_plan? } instead: it ends your run and a planning run redrafts the spec. Commit and save the spec and notes first, and say in the reason what they asked for and what's wrong with the current approach. Set \`start_after_plan\` only when they said they don't need to review the new plan.
-When you start something long-running in the background (a monitor, an import, a job of hours or days), also start a check-in timer (e.g. a background \`sleep 1800\`) so you wake to check its progress, update Status, and keep waiting, change course or stop it.
+When your work depends on another ticket, call \`subscribe_ticket\` { key, mode?, events? } and end your turn: you are woken with a message when that ticket changes, so never wait or poll with a shell \`sleep\`. Your children's status changes wake you without a subscription. A long background job (a monitor, an import) reports back to you on its own when it ends.
 Keep Status current at milestones with \`edit_spec\`, and your notes with \`update_notes\` before you submit or block (see Sessions and agent notes). Reviewer change requests start a new run in a fresh conversation: address every point, update the spec, and call \`submit_for_review\` again.`,
   },
 
@@ -332,7 +332,7 @@ Planning the breakdown (first run, no children yet):
 2. Create each child with \`create_ticket\` { title, spec, depends_on?, auto_start?, branch?, remote_id?, remote_url? } (remote_id: the key of the external item a child is for, such as a Jira sub-task, with its link as remote_url). The child agent sees only its spec, so make it self-contained: the goal, relevant files and context, constraints, and the definition of done.
 3. Prefer small, well-scoped tickets that can run in parallel. Add \`depends_on\` only for real ordering needs, listing keys returned by your earlier \`create_ticket\` calls (so create dependencies first). Children start automatically once all their dependencies are done, immediately if they have none. Pass \`auto_start\` false to hold one back, and start it later with \`start_ticket\`.
 4. Put the breakdown in this ticket's spec (its Plan, and the children under Status) with \`edit_spec\`, then end the run.
-Steering (later runs): you are re-invoked with a message whenever children change status. Handle every change, then end the run; do not wait or poll.
+Steering (later runs): you are woken with a message whenever children change status, into your run if it is still going, otherwise as a new run. Handle every change, then end the run; do not wait or poll, and never wait with a shell \`sleep\`. To follow a ticket that isn't your child, use \`subscribe_ticket\`.
 * Child in review: a reviewer agent checks it first. Once its agent review is approved, you are its human reviewer: inspect it (\`get_ticket\`, the code) and call \`review_ticket\` { key, decision: "approve" | "request_changes", notes } with concrete notes.
 * Child approved by you and its agent reviewer: call \`complete_ticket\` { key, instructions? } to merge and finalize it. {{#if branch}}Children land on this ticket's branch \`{{branch}}\`: the complete run merges the child into it, so the whole goal stays on one branch. The work reaches \`{{baseBranch}}\` (by a merge, a pull request, or what the human asks) only when this ticket itself completes.{{else}}The complete run lands the child the way its project does by default (merge into its base branch, or a pull request); pass \`action\` to choose.{{/if}} Put anything else the completion needs in \`instructions\` up front: the complete run lands the work and removes the worktree, and the child can't be messaged or reviewed until it finishes. If it needs changes after it's done, re-open it with \`reopen_ticket\`.
 * Child blocked: answer its question with \`message_ticket\` { key, text } when you can. When only the human can answer, say so in \`post_note\`.
@@ -389,7 +389,7 @@ Say what you changed when you changed it. Your actions show on the tickets' Acti
       branch: "This ticket's git branch, where its children land, or empty when it works in the project checkout",
     },
     template: `## Your child tickets
-This ticket conducts child tickets. You are re-invoked with a message whenever one changes status: handle every change, then end the run; do not wait or poll.
+This ticket conducts child tickets. You are woken with a message whenever one changes status (into your run if it is still going, otherwise as a new run): handle every change, then end the run; do not wait or poll, and never wait with a shell \`sleep\`. To follow a ticket that isn't your child, use \`subscribe_ticket\`.
 * Child in review: once its agent review is approved, you are its human reviewer. Inspect it and call \`review_ticket\` { key, decision, notes }.
 * Child approved by you and its agent reviewer: call \`complete_ticket\` { key, instructions? } to merge and finalize it{{#if branch}}: it merges into this ticket's branch \`{{branch}}\`. Commit your own work first: the child merges into your worktree, and uncommitted changes there can block the merge{{/if}}.
 * Child blocked: answer it with \`message_ticket\` { key, text } when you can.
@@ -527,7 +527,8 @@ A ticket has a local key (e.g. WEB-12) and may carry a remote ID, the external i
     template: `## Changing other tickets
 You can change other tickets like a person on the board: {{#if conductor}}beyond your children (above), {{else}}\`create_ticket\` (a top-level ticket for work outside this one, or a child of this one when the human asks for children, which you then review with \`review_ticket\` and finalize with \`complete_ticket\`), \`start_ticket\`, \`message_ticket\`, {{/if}}\`update_ticket\`, \`move_ticket\`, \`cancel_ticket\` and \`reopen_ticket\`. Do it only when your task calls for it, and say what you changed in your spec's Status.
 * They never act on your own ticket ({{#if conductor}}use submit_for_review{{else}}use block and submit_for_review{{/if}}). Nothing moves a ticket into or out of review. Permission modes only get stricter.
-* For an external item with a key (Jira FOO-123), set remote_id to the key and remote_url to its link.`,
+* For an external item with a key (Jira FOO-123), set remote_id to the key and remote_url to its link.
+* To wait for another ticket, call \`subscribe_ticket\` and end your turn: Harness wakes you with a message when it changes. Never wait with a shell \`sleep\`.`,
   },
 
   "system.config": {
@@ -739,6 +740,17 @@ When you are finished, call \`post_note\` with what you did.`,
 {{changes}}
 
 Handle each one: \`review_ticket\` children in review once their agent review is approved (or skipped), \`complete_ticket\` children you have approved, and answer blocked children with \`message_ticket\`. Call \`submit_for_review\` only when every child is done.{{else}}Check on your children with \`list_tickets\` and handle anything waiting on you.{{/if}}`,
+  },
+
+  "run.ticket_events": {
+    group: "run",
+    label: "Subscribed ticket updates",
+    description: "Wakes a ticket when a ticket it subscribed to (subscribe_ticket) changes.",
+    variables: { changes: "The changes, numbered, each with the ticket's key, title and what changed: its status move, a note or a spec revision" },
+    template: `Updates from tickets you subscribed to:
+{{changes}}
+
+Carry on with what these changes unblock. A "once" subscription is spent; call \`subscribe_ticket\` again if you still need to follow that ticket. Don't wait with a shell sleep: subscribe, end your turn, and you'll be woken.`,
   },
 
   "run.changes_requested": {

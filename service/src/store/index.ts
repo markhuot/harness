@@ -15,6 +15,7 @@ import { WatcherRepo } from "./watchers";
 import { CounterRepo, SeenRepo, SettingsRepo } from "./misc";
 import { BrowserTabRepo } from "./browser-tabs";
 import { DeviceRepo } from "./devices";
+import { SubscriptionRepo } from "./subscriptions";
 import { type Clock, systemClock } from "../clock";
 import { resolveSettings } from "../orchestrator/settings";
 
@@ -38,6 +39,7 @@ export class Store {
   readonly counters: CounterRepo;
   readonly browserTabs: BrowserTabRepo;
   readonly devices: DeviceRepo;
+  readonly subscriptions: SubscriptionRepo;
 
   constructor(readonly db: Database, now: Clock = systemClock) {
     this.projects = new ProjectRepo(db, now);
@@ -60,6 +62,7 @@ export class Store {
     this.counters = new CounterRepo(db);
     this.browserTabs = new BrowserTabRepo(db, now);
     this.devices = new DeviceRepo(db, now);
+    this.subscriptions = new SubscriptionRepo(db, now);
   }
 
   transaction<T>(fn: () => T): T {
@@ -67,7 +70,7 @@ export class Store {
   }
 }
 
-export { ProjectRepo, GroupRepo, CosRepo, CosEventRepo, ScheduleRepo, TicketRepo, SessionRepo, RunRepo, TranscriptRepo, ActivityRepo, AttachmentRepo, SpecRepo, SubagentRepo, WatcherRepo, SeenRepo, SettingsRepo, CounterRepo, BrowserTabRepo, DeviceRepo };
+export { ProjectRepo, GroupRepo, CosRepo, CosEventRepo, ScheduleRepo, TicketRepo, SessionRepo, RunRepo, TranscriptRepo, ActivityRepo, AttachmentRepo, SpecRepo, SubagentRepo, WatcherRepo, SeenRepo, SettingsRepo, CounterRepo, BrowserTabRepo, DeviceRepo, SubscriptionRepo };
 export { normalizeProjectKey } from "./projects";
 export { SpecConflictError } from "./spec";
 export { ScopedStore, type Scope } from "./scope";

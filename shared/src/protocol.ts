@@ -1131,6 +1131,7 @@ export const PROMPT_IDS = [
   "run.complete_cleanup",
   "run.complete_custom",
   "run.conductor_update",
+  "run.ticket_events",
   "run.changes_requested",
   "run.reopen",
   "run.unblock",

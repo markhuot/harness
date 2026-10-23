@@ -1095,6 +1095,34 @@ automatically; while any child isn't done, a run that ends without submitting le
 progress, and `submit_for_review` is refused (a parent in review or done would strand children
 whose reviews and merges are its job).
 
+Child changes reach the parent in one of two ways (`flushConductor`). A parent with no run going
+gets one run, with every buffered change in it. A parent whose run is still going (it may sit for
+hours waiting on a background task) gets the changes pushed into that run through the run's input,
+after a short debounce (`liveDebounceMs`, default 1s) so a burst is one message; the push is
+recorded in the run's transcript, not queued as a run. When the run can't take input (its driver
+has none, or it is cancelled or ending) the changes stay buffered and `afterRun` flushes them. The
+buffer also waits while the parent isn't in progress.
+
+### Ticket subscriptions
+
+A work or conductor run subscribes to another ticket with `subscribe_ticket` { key, mode, events }
+to be woken when it changes, instead of waiting with a shell `sleep` (no prompt recommends that).
+`mode` is `once` (the row is deleted at the first delivery, the default) or `forever`; `events` are
+`status` (moves, review approvals; the default), `note` and `spec`. Rows live in
+`ticket_subscriptions` (subscriber, target, mode, events); `unsubscribe_ticket` and
+`list_subscriptions` complete the set. A parent is an implicit subscriber to its children's status
+changes (no row, so it can't drift); subscribing to your own child's status is refused.
+
+Delivery reuses the parent's path: `notifySubscribers` (called from `transition`, the review
+approval and `addActivity` for notes and spec revisions) buffers a change for the subscriber, and
+`flushConductor` pushes it into its live run or starts a run with `ticketEventsPrompt`. Guard rails:
+a change the subscriber's own tool call caused is skipped (`callerContext`, set around every run's
+tool calls); a subscriber is woken at most 8 times per 5 minutes (`SUBSCRIPTION_WAKE_LIMIT`), so two
+tickets subscribed to each other can't loop; and a subscriber's rows are deleted when its ticket
+goes to review, done or planning, or its runs are cancelled (an event must not restart an agent
+someone stopped). A ticket with subscriptions that ends its turn isn't auto-submitted, since it is
+waiting for events: it calls `submit_for_review` when it is done.
+
 ### Watchers
 
 A watcher is **any command that prints text**. Nothing about the output's shape is required: JSON,

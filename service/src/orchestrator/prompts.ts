@@ -632,6 +632,20 @@ export function conductorUpdatePrompt(
   return renderPrompt("run.conductor_update", { changes: lines.join("\n") }, overrides);
 }
 
+/** A ticket woken by the tickets it subscribed to (subscribe_ticket): what changed, one numbered line each. */
+export function ticketEventsPrompt(
+  changes: { key: string; title: string; from: TicketStatus; to: TicketStatus; note?: string; specRevision?: number; event?: "status" | "note" | "spec" }[],
+  overrides?: PromptOverrides | null,
+): string {
+  const lines = changes.map((c, i) => {
+    const rev = c.specRevision ? ` (spec revision ${c.specRevision})` : "";
+    const what = c.event === "note" ? "posted a note" : c.event === "spec" ? "revised its spec" : c.from === c.to ? `still ${c.to}` : `${c.from} → ${c.to}`;
+    const head = `${i + 1}. ${c.key} ${quote(c.title)}: ${what}${rev}`;
+    return c.note?.trim() && c.event !== "spec" ? `${head}\n   Note: ${c.note.trim().replace(/\n/g, "\n   ")}` : head;
+  });
+  return renderPrompt("run.ticket_events", { changes: lines.join("\n") }, overrides);
+}
+
 export function changesRequestedPrompt(notes: string, by: "agent" | "human" | "conductor", specRevision = 1, overrides?: PromptOverrides | null): string {
   return renderPrompt(
     "run.changes_requested",
@@ -708,6 +722,7 @@ export function promptsWith(overrides: PromptOverrides | null | undefined) {
     completePrompt: (ticket: Ticket, instructions?: string, branches?: BranchContext, project: Project | null = null) =>
       completePrompt(ticket, instructions, branches, project, overrides),
     conductorUpdatePrompt: (changes: Parameters<typeof conductorUpdatePrompt>[0]) => conductorUpdatePrompt(changes, overrides),
+    ticketEventsPrompt: (changes: Parameters<typeof ticketEventsPrompt>[0]) => ticketEventsPrompt(changes, overrides),
     changesRequestedPrompt: (notes: string, by: "agent" | "human" | "conductor", specRevision?: number) => changesRequestedPrompt(notes, by, specRevision, overrides),
     reopenPrompt: (ticket: Ticket, notes: string, base?: string) => reopenPrompt(ticket, notes, base, overrides),
     unblockPrompt: (ticket: Ticket, notes: string) => unblockPrompt(ticket, notes, overrides),

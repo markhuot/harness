@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { PROMPT_IDS, parseTemplate, type ActivityEntry } from "@harness/shared";
 import { isPromptId, promptTemplateError, PROMPTS, renderPrompt } from "../../../service/src/orchestrator/prompt-templates";
-import { activityLines, changesRequestedPrompt, completePrompt, conductorUpdatePrompt, pullRequestList, reopenPrompt, replanPrompt, reviewPrompt, systemPrompt, unblockPrompt, workStartPrompt } from "../../../service/src/orchestrator/prompts";
+import { activityLines, changesRequestedPrompt, completePrompt, conductorUpdatePrompt, pullRequestList, ticketEventsPrompt, reopenPrompt, replanPrompt, reviewPrompt, systemPrompt, unblockPrompt, workStartPrompt } from "../../../service/src/orchestrator/prompts";
 import { makeTicket } from "../../builders/ticket";
 
 test("every prompt id has a definition, and the registry holds nothing else", () => {
@@ -101,6 +101,30 @@ test("a conductor's update numbers each child change with its note indented unde
   ]);
   expect(out).toContain('1. A-1 "One": in_progress → review (spec revision 2)\n   Note: line1\n   line2');
   expect(out).toContain('2. A-2 "Two": review → done');
+});
+
+test("a subscriber's update says what each ticket did: a move, a note, or a spec revision", () => {
+  const out = ticketEventsPrompt([
+    { key: "A-1", title: "One", from: "in_progress", to: "review", note: "ready", specRevision: 2 },
+    { key: "A-2", title: "Two", from: "in_progress", to: "in_progress", note: "halfway", event: "note" },
+    { key: "A-3", title: "Three", from: "review", to: "review", note: "Rev note", event: "spec", specRevision: 4 },
+  ]);
+  expect(out).toContain('1. A-1 "One": in_progress → review (spec revision 2)\n   Note: ready');
+  expect(out).toContain('2. A-2 "Two": posted a note\n   Note: halfway');
+  expect(out).toContain('3. A-3 "Three": revised its spec (spec revision 4)');
+  expect(out).not.toContain("Rev note");
+});
+
+test("no prompt tells an agent to wait with a sleep; the system prompt points at subscribe_ticket instead", () => {
+  const session = { key: "ACME-1", title: "t", cwd: "/p" };
+  for (const kind of ["work", "conductor"] as const) {
+    const ticket = makeTicket({ status: "in_progress", key: "ACME-1", kind: kind === "conductor" ? "conductor" : "task" });
+    expect(systemPrompt({ kind, ticket, project: null, session } as never), kind).toContain("subscribe_ticket");
+  }
+  for (const [id, def] of Object.entries(PROMPTS)) {
+    expect(def.template, id).not.toMatch(/sleep \d/);
+    expect(def.template, id).not.toMatch(/check-in timer/);
+  }
 });
 
 test("reopen and replan prompts carry the human's words and the ticket's context", () => {

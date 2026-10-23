@@ -900,6 +900,21 @@ export const MIGRATIONS: string[] = [
   `
   ALTER TABLE projects ADD COLUMN cos_model TEXT;
   `,
+  // 52: ticket subscriptions (DESIGN.md "Ticket subscriptions"). A subscriber ticket is woken when its
+  //     target changes: mode 'once' is deleted after the first delivery, 'forever' stays until the
+  //     subscriber unsubscribes or ends. events is a comma list of 'status', 'note' and 'spec'. A parent
+  //     hears about its children without a row.
+  `
+  CREATE TABLE ticket_subscriptions (
+    subscriber_id TEXT NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+    target_id TEXT NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+    mode TEXT NOT NULL,
+    events TEXT NOT NULL DEFAULT 'status',
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (subscriber_id, target_id)
+  );
+  CREATE INDEX ticket_subscriptions_target ON ticket_subscriptions(target_id);
+  `,
 ];
 
 /** Where the files migrations look at live (HarnessPaths); by default next to the database file. */

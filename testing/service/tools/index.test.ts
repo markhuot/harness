@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
 import type { RunKind } from "@harness/shared";
+import { SUBSCRIPTION_EVENTS } from "../../../service/src/store/subscriptions";
 import { toolsForRun } from "../../../service/src/tools/index";
+import { subscribeTicket } from "../../../service/src/tools/subscriptions";
 
 const RUN_KINDS: RunKind[] = ["plan", "work", "review", "complete", "conductor", "chat", "compact", "cos"];
 const names = (kind: RunKind, driver = { hasBuiltinTools: true, usesPermissionPromptTool: false }, ticket: { kind: "task" | "conductor" | "cos" } | null = null) => toolsForRun(kind, driver, ticket).map((t) => t.name);
@@ -136,4 +138,12 @@ test("only a chief of staff can arrange the Mac's panes, whatever the run kind o
   expect(RUN_KINDS.filter((k) => has(k))).toEqual(["cos"]);
   expect(has("chat", { kind: "cos" })).toBe(true);
   expect(has("work", { kind: "task" })).toBe(false);
+});
+
+test("subscriptions are offered to the runs that work on a ticket (a chat run is refused by the service), and subscribe_ticket offers exactly the events the store knows", () => {
+  for (const tool of ["subscribe_ticket", "unsubscribe_ticket", "list_subscriptions"]) {
+    expect(RUN_KINDS.filter((k) => names(k).includes(tool)), tool).toEqual(["work", "conductor", "chat"]);
+  }
+  const events = (subscribeTicket.inputSchema.properties as { events: { items: { enum: string[] } } }).events;
+  expect(events.items.enum).toEqual([...SUBSCRIPTION_EVENTS]);
 });

@@ -20,6 +20,7 @@ import {
   browserWait,
 } from "./browser";
 import { browserRun, browserRunStatus, browserRunStop } from "./browser-run";
+import { listSubscriptions, subscribeTicket, unsubscribeTicket } from "./subscriptions";
 import { cancelTicket, createTicket, messageTicket, moveTicket, reopenTicket, startTicket, updateTicket } from "./board-write";
 import { configReadTools, configWriteTools, listWatchers, watcherWriteTools } from "./config";
 import { completeTicket, reviewTicket } from "./conductor";
@@ -76,6 +77,8 @@ export const boardTools: ToolDefinition[] = [listTickets, getTicket, getTicketAg
 export const boardWriteTools: ToolDefinition[] = [createTicket, updateTicket, moveTicket, startTicket, messageTicket, cancelTicket, reopenTicket];
 /** Reviewing and completing the caller's own children: work and conductor runs (any ticket may have children). */
 export const conductorTools: ToolDefinition[] = [reviewTicket, completeTicket];
+/** Waking on another ticket's changes: work and conductor runs (DESIGN.md "Ticket subscriptions"). */
+export const subscriptionTools: ToolDefinition[] = [subscribeTicket, unsubscribeTicket, listSubscriptions];
 /** A chief of staff's watcher tools: the reads, and the human-gated writes (a group's chief reaches only its own watchers). */
 export const watcherTools: ToolDefinition[] = [listWatchers, ...watcherWriteTools];
 
@@ -136,13 +139,13 @@ export const specTools: ToolDefinition[] = [readSpec, editSpec, updateSpec];
 const RUN_TOOLS: Record<Exclude<RunKind, "chat" | "compact">, { harness: ToolDefinition[]; native: "full" | "read" | "none" }> = {
   plan: { harness: [postNote, ...specTools, updateNotes, updateTicket, ...boardTools, ...configReadTools, ...browserTools], native: "read" },
   work: {
-    harness: [postNote, ...specTools, updateNotes, block, unblock, resumeWork, returnToPlanning, submitForReview, updateBranch, ...boardTools, ...boardWriteTools, ...conductorTools, ...configReadTools, ...configWriteTools, ...browserTools],
+    harness: [postNote, ...specTools, updateNotes, block, unblock, resumeWork, returnToPlanning, submitForReview, updateBranch, ...boardTools, ...boardWriteTools, ...conductorTools, ...subscriptionTools, ...configReadTools, ...configWriteTools, ...browserTools],
     native: "full",
   },
   review: { harness: [postNote, readSpec, editSpec, reviewDecision, ...boardTools, ...configReadTools, ...browserTools], native: "read" },
   complete: { harness: [postNote, ...specTools, block, resumeWork, recordPullRequest, ...boardTools, ...configReadTools], native: "full" },
   conductor: {
-    harness: [postNote, ...specTools, updateNotes, unblock, resumeWork, returnToPlanning, submitForReview, updateBranch, ...boardTools, ...boardWriteTools, ...conductorTools, ...configReadTools, ...configWriteTools, ...browserTools],
+    harness: [postNote, ...specTools, updateNotes, unblock, resumeWork, returnToPlanning, submitForReview, updateBranch, ...boardTools, ...boardWriteTools, ...conductorTools, ...subscriptionTools, ...configReadTools, ...configWriteTools, ...browserTools],
     native: "read",
   },
   // A chief of staff drives the app: it reads the board, changes tickets and writes its own notes. It

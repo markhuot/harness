@@ -438,6 +438,14 @@ export interface HarnessOps {
   /** Send a done ticket back to in progress with notes. */
   reopenTicket(ctx: ToolContext, key: string, notes: string): Promise<Ticket>;
 
+  // --- subscriptions (work and conductor runs; DESIGN.md "Ticket subscriptions") ---
+
+  /** Wake the caller when another ticket changes. Replaces an earlier subscription to the same ticket. */
+  subscribeTicket(ctx: ToolContext, key: string, mode: "once" | "forever", events?: ("status" | "note" | "spec")[]): { key: string; mode: "once" | "forever"; events: ("status" | "note" | "spec")[] };
+  /** False when there was no subscription to remove. */
+  unsubscribeTicket(ctx: ToolContext, key: string): boolean;
+  listSubscriptions(ctx: ToolContext): { key: string; title: string; status: TicketStatus; mode: "once" | "forever"; events: ("status" | "note" | "spec")[] }[];
+
   // --- conductor runs (act on child tickets) ---
   /** Conductor stands in for the human reviewer of its children. */
   /** `action`, with approve: how the child's work lands once it completes (DESIGN.md "Completion"). */
