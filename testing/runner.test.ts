@@ -20,7 +20,7 @@ describe("runner", () => {
   test("an unknown command fails and lists the real ones", async () => {
     const r = await runner("nope");
     expect(r.code).toBe(2);
-    expect(r.err).toContain("stress, ios, walk, lint, fast");
+    expect(r.err).toContain("stress, ios, walk, lint, queue, fast");
   });
 
   test("lint passes on the real tree", async () => {

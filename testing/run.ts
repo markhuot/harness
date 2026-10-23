@@ -6,6 +6,7 @@
 //   walk    L5 the walkthrough: Mac, iPhone and iPad  (--out=dir for the screenshots; see walk/run.ts)
 //   lint    the test-import lint
 //   fast    the layers that need no simulator and no Electron: lint, L0, L1–L2, L4 Mac (`bun run test`)
+//   queue   who holds the testing lock and who waits for it
 //   (none)  the full gate: lint, L0, L1–L2, ios, walk. Nothing lands on main until it passes.
 
 import { cpus } from "node:os";
@@ -15,6 +16,7 @@ import { formatViolations, lintTestImports } from "./lint/imports";
 import { ios } from "./ios";
 import { walk } from "./walk/run";
 import { stress } from "./stress";
+import { acquireTesting, queueStatus } from "./queue-lock";
 
 const dir = import.meta.dir;
 
@@ -95,7 +97,28 @@ async function runStress(args: string[]): Promise<number> {
   return failed.length ? 1 : 0;
 }
 
+/** `lint` and `l0` take seconds and run without a simulator, so they don't wait in line; these (and the full gate) take the testing lock. */
+const HEAVY = new Set(["walk", "stress", "mac", "ios", "fast"]);
+
+function queue(): number {
+  const { holder, waiters } = queueStatus();
+  console.log(holder ? `testing lock: held by pid ${holder.pid} since ${holder.at}: ${holder.command}` : "testing lock: free");
+  waiters.forEach((w, i) => console.log(`  ${i + 1}. pid ${w.pid} since ${w.at}: ${w.command}`));
+  return 0;
+}
+
 export async function main(args: string[]): Promise<number> {
+  const [cmd] = args;
+  if (cmd !== undefined && !HEAVY.has(cmd)) return dispatch(args);
+  const release = await acquireTesting();
+  try {
+    return await dispatch(args);
+  } finally {
+    release();
+  }
+}
+
+async function dispatch(args: string[]): Promise<number> {
   const [cmd, ...rest] = args;
   if (cmd === undefined || cmd === "fast") {
     const fast: [string, () => number | Promise<number>][] = [
@@ -118,6 +141,7 @@ async function run(cmd: string, args: string[] = []): Promise<number> {
   if (cmd === "walk") return walk(args);
   if (cmd === "stress") return runStress(args);
   if (cmd === "lint") return lint();
+  if (cmd === "queue") return queue();
   if (cmd === "l0") return l0();
   if (cmd === "mac") return mac();
   if (cmd === "ios") {
@@ -128,7 +152,7 @@ async function run(cmd: string, args: string[] = []): Promise<number> {
       return 2;
     }
   }
-  console.error(`Unknown command "${cmd}". Commands: l0, mac, stress, ios, walk, lint, fast (none runs the full gate).`);
+  console.error(`Unknown command "${cmd}". Commands: l0, mac, stress, ios, walk, lint, queue, fast (none runs the full gate).`);
   return 2;
 }
 
