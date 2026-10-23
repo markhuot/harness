@@ -48,7 +48,7 @@ export function cosChat(store: Store, cosId: string, rawCursor: string | null, l
   for (const m of store.transcript.messagesBefore(ticket.sessionId, cursor, fetch, WAKE_PROMPT_PREFIX)) {
     if (m.content.type !== "text") continue;
     if (m.role !== "user" && isSilentReply(m.content.text)) continue;
-    found.push({ id: m.id, cosId, createdAt: m.createdAt, kind: "message", role: m.role === "user" ? "user" : "assistant", text: m.content.text });
+    found.push({ id: m.id, cosId, createdAt: m.createdAt, kind: "message", role: m.role === "user" ? "user" : "assistant", text: m.content.text, ...(m.content.attachments?.length ? { attachments: m.content.attachments } : {}) });
   }
 
   for (const a of store.activity.listByActor(`cos:${cosId}`, cursor, fetch)) {

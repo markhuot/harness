@@ -346,7 +346,14 @@ export function applyEvent(state: State, event: ClientEvent): State {
       return { ...state, projects: without(state.projects, event.id), tickets };
     }
     case "ticket.upserted": {
-      if (isHiddenKind(event.ticket)) return state;
+      if (isHiddenKind(event.ticket)) {
+        // The chief's ticket stays out of the board, but its message draft rides on the chief.
+        const chief = state.chiefs[event.ticket.id];
+        if (!chief) return state;
+        const messageDraft = event.ticket.messageDraft ?? null;
+        if ((chief.messageDraft ?? null) === messageDraft) return state;
+        return { ...state, chiefs: { ...state.chiefs, [chief.ticketId]: { ...chief, messageDraft } } };
+      }
       const list = state.specRevisions[event.ticket.id];
       const marked = list ? withBaseline(list, event.ticket.specBaselineRevision) : list;
       return {

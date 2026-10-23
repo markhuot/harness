@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import type { Cos, CosBadge, CosChatPage, CosEvent, CosEventPage, Ticket } from "@harness/shared";
+import type { Attachment, Cos, CosBadge, CosChatPage, CosEvent, CosEventPage, Ticket } from "@harness/shared";
 import { boot, stopRigs } from "./boot";
 
 afterEach(stopRigs);
@@ -80,6 +80,26 @@ test("POST /cos/:id/messages answers with the new transcript entry, which GET /c
   const page = await rig.ok<CosChatPage>("GET", `/cos/${cos.ticketId}/transcript`);
   expect(page.entries.find((e) => e.id === entryId)).toMatchObject({ kind: "message", role: "user", text: "good morning", cosId: cos.ticketId });
   expect(await rig.call("GET", "/cos/missing/transcript")).toMatchObject({ status: 404 });
+});
+
+test("a chief's message draft rides on GET /cos, and a send with files and no text carries them into the chat and clears the draft", async () => {
+  const { rig, cos } = await inbox(1);
+  const up = await fetch(`${rig.harness.url}/uploads?name=notes.txt`, { method: "POST", headers: { authorization: `Bearer ${rig.harness.token}`, "content-type": "text/plain" }, body: "hello" });
+  const file = ((await up.json()) as { data: Attachment }).data;
+  const draft = (await rig.ok<Cos[]>("GET", "/cos")).find((c) => c.ticketId === cos.ticketId)!.messageDraft;
+  expect(draft ?? null).toBeNull();
+
+  await rig.ok("PUT", `/tickets/${cos.key}/message-draft`, { text: "half a thought", attachments: [file], origin: "a" });
+  const saved = (await rig.ok<Cos[]>("GET", "/cos")).find((c) => c.ticketId === cos.ticketId)!.messageDraft;
+  expect(saved).toMatchObject({ text: "half a thought", origin: "a" });
+  expect(saved!.attachments.map((a) => a.id)).toEqual([file.id]);
+
+  const { entryId } = await rig.ok<{ entryId: string }>("POST", `/cos/${cos.ticketId}/messages`, { text: "", attachments: [file] });
+  const page = await rig.ok<CosChatPage>("GET", `/cos/${cos.ticketId}/transcript`);
+  const entry = page.entries.find((e) => e.id === entryId);
+  expect(entry).toMatchObject({ kind: "message", role: "user", text: "" });
+  expect(entry!.kind === "message" && entry!.attachments?.map((a) => a.id)).toEqual([file.id]);
+  expect(((await rig.ok<Cos[]>("GET", "/cos")).find((c) => c.ticketId === cos.ticketId)!.messageDraft ?? null)).toBeNull();
 });
 
 test("watcher output injected over the API is a pending event for the All chief, deduped, and in its Inbox with the watcher as the actor", async () => {

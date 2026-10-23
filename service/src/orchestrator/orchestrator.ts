@@ -745,7 +745,7 @@ export class Orchestrator {
         if (m.role === "assistant" && isSilentReply(m.content.text)) return;
         const cosId = this.store.sessions.get(m.sessionId)?.ticketId;
         if (!cosId || !this.store.cos.get(cosId)) return;
-        this.bus.emit({ kind: "cos.transcript.appended", cosId, entry: { id: m.id, cosId, createdAt: m.createdAt, kind: "message", role: m.role, text: m.content.text } });
+        this.bus.emit({ kind: "cos.transcript.appended", cosId, entry: { id: m.id, cosId, createdAt: m.createdAt, kind: "message", role: m.role, text: m.content.text, ...(m.content.attachments?.length ? { attachments: m.content.attachments } : {}) } });
       }),
       this.bus.onKind("run.upserted", (e) => {
         if (e.run.kind === "cos" && (e.run.status === "succeeded" || e.run.status === "failed" || e.run.status === "cancelled")) this.cosEngine.runEnded(e.run.id, e.run.status);
@@ -1251,7 +1251,7 @@ export class Orchestrator {
 
   listCos(): Cos[] {
     const triageUnavailable = this.cosEngine.triageUnavailable;
-    return this.store.cos.list().map((c) => ({ ...c, triageUnavailable }));
+    return this.store.cos.list().map((c) => ({ ...c, triageUnavailable, messageDraft: this.store.tickets.get(c.ticketId)?.messageDraft ?? null }));
   }
 
   /** Events changed owner (a chief on or off, a project's setting or group): pending ones find their owner again, and anything due is handled. */
@@ -1306,7 +1306,7 @@ export class Orchestrator {
     const ticket = cos ? this.store.tickets.get(cos.ticketId) : null;
     if (!cos || !ticket) throw notFound(`Unknown chief of staff: ${cosId}`);
     const after = this.store.transcript.lastSeq(ticket.sessionId);
-    await this.sendMessage(ticket.key, body.text as string, { attachments: body.attachments });
+    await this.sendMessage(ticket.key, body.text as string, { attachments: body.attachments, fromApp: true });
     const entry = this.store.transcript.list(ticket.sessionId, after).find((e) => e.role === "user" && e.content.type === "text");
     if (!entry) throw conflict(`${ticket.key} didn't take the message`);
     return { entryId: entry.id };

@@ -1,6 +1,6 @@
 // Chief of staff (CoS) shapes shared by the service and its clients (DESIGN.md "Chief of staff").
 
-import type { HarnessEvent, PhaseChoice, Project, Settings, TicketStatus } from "./protocol";
+import type { Attachment, HarnessEvent, MessageDraft, PhaseChoice, Project, Settings, TicketStatus } from "./protocol";
 import { settingsPhaseChoice } from "./phases";
 
 /** The setting a project may override of the app's (Project.cosEnabled). */
@@ -78,6 +78,8 @@ export interface Cos {
   createdAt: number;
   /** Why the Haiku triage in front of it can't run (its events escalate instead); absent or null when it can */
   triageUnavailable?: string | null;
+  /** The message being written to it (the chief's ticket draft), so another device can finish it; null or absent when none */
+  messageDraft?: MessageDraft | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -152,7 +154,7 @@ interface CosChatBase {
 
 /** One entry of a chief's chat (GET /cos/:id/transcript). */
 export type CosChatEntry =
-  | (CosChatBase & { kind: "message"; role: "user" | "assistant"; text: string })
+  | (CosChatBase & { kind: "message"; role: "user" | "assistant"; text: string; attachments?: Attachment[] })
   | (CosChatBase & { kind: "ticket_created"; key: string; title: string; status: string })
   | (CosChatBase & { kind: "ticket_moved"; key: string; title: string; from: string; to: string })
   | (CosChatBase & { kind: "event_batch"; wakeId: string; eventIds: string[]; digest: string });

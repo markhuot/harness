@@ -308,8 +308,8 @@ export class HarnessClient {
     return this.request<CosChatPage>("GET", `/cos/${id}/transcript${query({ before: opts.before, limit: opts.limit })}`);
   }
   /** A message to the chief; it skips triage. */
-  sendCosMessage(id: string, text: string) {
-    return this.request<{ entryId: string }>("POST", `/cos/${id}/messages`, { text });
+  sendCosMessage(id: string, text: string, opts: { attachments?: AttachmentInput[] } = {}) {
+    return this.request<{ entryId: string }>("POST", `/cos/${id}/messages`, { text, ...(opts.attachments?.length ? { attachments: opts.attachments } : {}) });
   }
   humanReview(key: string, body: HumanReviewBody) {
     return this.request<Ticket>("POST", `/tickets/${key}/review`, body);
