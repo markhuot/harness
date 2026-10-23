@@ -114,12 +114,14 @@ final class ScreenTests: ScreenTestCase {
         try await screen("cos-memory") { CosMemorySheet(chief: chief) }
     }
 
-    /// The chief of staff's switches and model: the app's (Default is the Work model), and a project that
-    /// switched its chief off and chose its own model (the app's value beside Inherit on the other switch).
+    /// The chief of staff's switch, column boxes and model: the app's (Review checked; Default is the Work model),
+    /// and a project that chose its own columns and model.
     func testCosSettings() async throws {
-        let settings = try XCTUnwrap(world.store.state.settings)
+        var settings = try XCTUnwrap(world.store.state.settings)
+        settings.cosStatuses = [.review]
         var notes = try XCTUnwrap(world.store.state.projects["project-NOTES"])
         notes.cosModel = PhaseChoice(driver: "claude-code", model: "haiku")
+        notes.cosStatuses = .value([.blocked, .done])
         try await screen("cos-settings") {
             Form {
                 SettingsCosSection(settings: settings)
