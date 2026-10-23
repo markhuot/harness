@@ -9,9 +9,11 @@ Every command except `lint`, `l0` and `queue` takes the testing lock (`~/.harnes
 shared by all worktrees). A run that finds it taken queues in arrival order, prints its position, and
 starts by itself with `testing: your turn started`; it never times out. A holder or waiter that is killed
 or crashes is dropped by its PID and start time, and SIGINT/SIGTERM kill the run's children before
-letting go. After the previous holder lets go, the next run waits up to 60 seconds while xcodebuild,
-simulator boot/shutdown, Electron or a high load average (only within that minute) persists, then goes
-regardless. `bun run testing queue` shows the holder and waiters. Commands the gate runs inherit
+letting go. Once it has the lock, a run kills the orphans of earlier runs (xcodebuild, swift-build, the
+checkout's `node_modules/electron` Electron, simulator boot/shutdown) and shuts down simulators nobody
+holds, since nothing else legitimately runs while it holds the lock. Then, within a minute of the
+previous holder letting go, it waits up to 60 seconds in all for a stubborn leftover or a high load
+average, then goes regardless. `bun run testing queue` shows the holder and waiters. Commands the gate runs inherit
 `HARNESS_TESTING_LOCKED`, so a nested `bun run testing` doesn't queue behind its parent. The lock is
 always taken before a simulator slot.
 

@@ -112,15 +112,17 @@ describe("cooldown", () => {
     expect(cooldownReason({ ...base, releasedAt: null, load1: 20, leftover: ["xcodebuild"] })).toBeNull();
   });
 
-  test("it picks out build and simulator processes and ignores the rest", () => {
-    const ps = [
-      "/usr/bin/xcodebuild -project ios/Harness.xcodeproj",
-      "xcrun simctl shutdown harness-shared",
-      "/x/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron app",
-      "bun testing/run.ts mac",
-      "vim xcodebuild-notes.md",
-      "xcrun simctl list devices --json",
+  test("it picks out build, simulator and checkout-Electron processes, and ignores the rest and its own ancestry", () => {
+    const procs = [
+      { pid: 1, command: "/usr/bin/xcodebuild -project ios/Harness.xcodeproj" },
+      { pid: 2, command: "xcrun simctl shutdown harness-shared" },
+      { pid: 3, command: "/x/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron app" },
+      { pid: 4, command: "bun testing/run.ts mac" },
+      { pid: 5, command: "vim xcodebuild-notes.md" },
+      { pid: 6, command: "xcrun simctl list devices --json" },
+      { pid: 7, command: "/Applications/Slack.app/Contents/Frameworks/Electron Framework.framework/Helpers/chrome_crashpad_handler" },
+      { pid: 8, command: "xcodebuild -version" },
     ];
-    expect(leftoverProcesses(ps)).toEqual(ps.slice(0, 3));
+    expect(leftoverProcesses(procs, [8]).map((p) => p.pid)).toEqual([1, 2, 3]);
   });
 });

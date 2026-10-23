@@ -80,25 +80,60 @@ export function cooldownReason(s: { now: number; releasedAt: number | null; left
   return null;
 }
 
-/** The commands in a `ps` listing that a finished run leaves winding down. */
-export function leftoverProcesses(commands: string[]): string[] {
-  return commands.filter((c) => {
+export interface Proc { pid: number; command: string }
+
+/**
+ * The processes in a `ps` listing that a test run starts and a finished or killed one can leave
+ * behind: builds, simulator boots and shutdowns, and the Electron the walkthrough launches (the
+ * checkout's own, under node_modules/electron, never an installed app such as Slack's). While this
+ * process holds the lock nothing legitimate runs these, so whatever is found is an orphan.
+ */
+export function leftoverProcesses(procs: Proc[], ignore: number[] = []): Proc[] {
+  return procs.filter(({ pid, command: c }) => {
+    if (ignore.includes(pid)) return false;
     const first = basename(c.trim().split(/\s+/)[0] ?? "");
-    return ["xcodebuild", "swift-build", "swift-test"].includes(first) || /\bsimctl (boot|shutdown|bootstatus)\b/.test(c) || c.includes("Electron.app/Contents/MacOS/Electron");
+    return ["xcodebuild", "swift-build", "swift-test"].includes(first) || /\bsimctl (boot|shutdown|bootstatus)\b/.test(c) || c.includes("node_modules/electron/dist/Electron.app");
   });
 }
 
-function psCommands(): string[] {
-  const r = Bun.spawnSync(["ps", "-axo", "command="], { stdout: "pipe", stderr: "ignore" });
-  return r.stdout.toString().split("\n").filter(Boolean);
+function psProcs(): Proc[] {
+  const r = Bun.spawnSync(["ps", "-axo", "pid=,command="], { stdout: "pipe", stderr: "ignore" });
+  return r.stdout.toString().split("\n").flatMap((line) => {
+    const m = /^\s*(\d+)\s+(.*)$/.exec(line);
+    return m ? [{ pid: Number(m[1]), command: m[2]! }] : [];
+  });
 }
 
+/** This process and its parents (`bun run` and the shell around it), which are never orphans. */
+function ancestry(): number[] {
+  const out = [process.pid];
+  for (let pid = process.ppid; pid > 1 && out.length < 10; ) {
+    out.push(pid);
+    const r = Bun.spawnSync(["ps", "-o", "ppid=", "-p", String(pid)], { stdout: "pipe", stderr: "ignore" });
+    pid = Number(r.stdout.toString().trim()) || 0;
+  }
+  return out;
+}
+
+/** Kills the orphans of earlier runs (TERM, then KILL after 3 seconds) and shuts down simulators nobody holds. */
+export async function reapOrphans(log: (line: string) => void): Promise<void> {
+  const orphans = leftoverProcesses(psProcs(), ancestry());
+  if (orphans.length) {
+    log(`testing: stopping ${orphans.length} leftover process${orphans.length === 1 ? "" : "es"} from earlier runs (${[...new Set(orphans.map((o) => basename(o.command.split(" ")[0]!)))].join(", ")})`);
+    for (const o of orphans) try { process.kill(o.pid, "SIGTERM"); } catch {}
+    await Bun.sleep(3000);
+    for (const o of leftoverProcesses(psProcs(), ancestry())) try { process.kill(o.pid, "SIGKILL"); } catch {}
+  }
+  Bun.spawnSync(["bun", join(import.meta.dir, "..", "ios", "Tools", "sim.ts"), "shutdown"], { stdout: "ignore", stderr: "ignore" });
+}
+
+/** After reaping, waits (at most a minute in all) while a leftover refuses to die or the machine is still loaded from the previous run. */
 async function settle(dir: string, log: (line: string) => void): Promise<void> {
   const last = readLast(dir);
   const deadline = Date.now() + COOLDOWN_MS;
   let said = "";
   for (;;) {
-    const reason = cooldownReason({ now: Date.now(), releasedAt: last?.releasedAt ?? null, leftover: leftoverProcesses(psCommands()), load1: loadavg()[0] ?? 0, cores: cpus().length });
+    const reason = cooldownReason({ now: Date.now(), releasedAt: last?.releasedAt ?? null, leftover: leftoverProcesses(psProcs(), ancestry()).map((p) => p.command), load1: loadavg()[0] ?? 0, cores: cpus().length });
     if (!reason || Date.now() >= deadline) return;
     if (reason !== said) log(`testing: waiting up to a minute for the previous run to settle: ${reason}`);
     said = reason;
@@ -180,6 +215,9 @@ export async function acquireTesting(opts: TestingLockOptions = {}): Promise<() 
   process.env[ENV] = "1";
   const waited = Math.round((Date.now() - arrived) / 1000);
   log(`testing: your turn started${waited >= 1 ? ` (waited ${waited}s)` : ""}`);
-  if (opts.cooldown !== false) await settle(dir, log);
+  if (opts.cooldown !== false) {
+    await reapOrphans(log);
+    await settle(dir, log);
+  }
   return release;
 }
