@@ -9,12 +9,22 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- Settings → Chief of staff has a **Triage model** row on the Mac, iPhone and iPad. It shows Haiku as
+  the default, and you can pick another model for triage to read your chiefs' events with.
+- Settings → Chief of staff also has **Triage permissions**. Read only (the default) keeps triage on
+  Harness's fixed list of gh reads and read-only tools. Auto lets a classifier judge each lookup:
+  Claude Code's own when the triage model supports auto mode, otherwise Harness's (as with Haiku).
+  Either way, a lookup that isn't allowed is refused and triage escalates the event to the chief.
+
 ### Fixed
 
 - Triage can now look up a pull request's review threads (and whether each one is resolved) with
   `gh api graphql -f query='query { … }'`, as GitHub watcher guidance asks. Before, these reads were
   refused because GraphQL sends a POST. Mutations, subscriptions and fields read from a file are
-  still refused. Plan runs and other read-only runs accept the same queries.
+  still refused. On the Anthropic API driver, these queries now count as read-only commands too,
+  so they run without asking in every permission mode, just like `gh pr view`.
 - Triage's instructions now spell out the three arguments every `triage_verdict` call needs (id,
   verdict, reason) and show an example call, so a triage run no longer sends an empty verdict
   that gets refused.

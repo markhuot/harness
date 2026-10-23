@@ -899,19 +899,33 @@ triage may propose a project, which moves it to that project's owner.
 after its first (`nextWakeAt`); one timer is armed for the next due time and rebuilt from the rows.
 A ticket's status moves in a batch collapse to its net state (`collapseMoves`). The batch goes to
 triage (`cos/triage.ts`), a read-only **agent run** on the `claude-cli` backend (model `HAIKU_MODELS`,
-overridable with `settings.cosTriageModel`): `AgentTriage` → `Orchestrator.runTriage` starts a run of
+overridable with `settings.cosTriageModel`, which Settings shows as "Triage model" with Haiku as its
+default; `resolveTriageModel`): `AgentTriage` → `Orchestrator.runTriage` starts a run of
 kind `triage` on its own session (`sessions.kind = "triage"`, no ticket, hidden from the board, in an
 empty temporary folder) through the claude-code driver. It has the board read tools (scoped to the
 chief's scope, read from its `cos` row on every call), `triage_verdict` (one call per event, recorded as
 the agent goes), Bash, and the user's MCP servers (Jira and the rest; no `--strict-mcp-config`), with no
-sub-agents and no web, and `--max-turns` 40. The CLI runs in `default` mode and asks the harness's
-permission prompt tool about everything it doesn't allow itself; `requestApproval` answers a triage run
-from `permissions/triage.ts` and nothing else: Bash only when `isTriageCommand` accepts it (the
-read-only allowlist with `gh` reads: `pr view|diff|checks|list|status`, `issue view|list|status`,
-`run view|list`, `repo view|list`, `release view|list`, `search`, and `gh api` only as a GET, with no
-method, field, input, header or hostname flag and never graphql; no argument that leaves the folder by
-path), MCP tools only when their name reads (`get*`, `list*`, `search*`, `find*`, `read*`, `query*`), every
-other tool denied. Denial lives in the harness's gate, not in CLI flag prefixes, because `gh api` turns
+sub-agents and no web, and `--max-turns` 40. How its calls are judged is `settings.cosTriagePermissionMode`
+("Triage permissions"; `resolveTriagePermissionMode`, read when the run starts), one of
+`TRIAGE_PERMISSION_MODES`. There is no `ask`, since triage has no human to ask. In both modes a call
+nothing allows is refused with a message that says to escalate, and the escalation is what reaches a
+human.
+- `read_only` (the default): the CLI runs in `default` mode and asks the harness's permission prompt
+  tool about everything it doesn't allow itself; `requestApproval` answers from `permissions/triage.ts`
+  and nothing else: Bash only when `isTriageCommand` accepts it (the read-only allowlist with `gh`
+  reads: `pr view|diff|checks|list|status`, `issue view|list|status`, `run view|list`, `repo view|list`,
+  `release view|list`, `search`, `gh api` as a GET with no method, field, input, header or hostname flag,
+  and `gh api graphql` with one `query` field holding no `mutation` or `subscription` and no field read
+  from a file (`-F key=@path`); no argument that leaves the folder by path), MCP tools only when their
+  name reads (`get*`, `list*`, `search*`, `find*`, `read*`, `query*`), every other tool denied.
+- `auto`: the tiers every auto-mode run has, unchanged. The CLI runs in `auto`, so Claude Code's
+  classifier judges first. A model without auto mode (Haiku) silently runs in `default` instead (see
+  Permissions), and its calls reach the prompt tool; `requestApproval` hands those to Harness's
+  classifier (`gate.judge` with no ticket, as for an auto-mode ticket's prompt-tool calls). What the
+  classifier would send to a human (soft deny, failure, timeout, classifier off) comes back to
+  `requestApproval`, which refuses it for triage.
+
+Read-only denial lives in the harness's gate, not in CLI flag prefixes, because `gh api` turns
 into a POST by itself on `-f`. The prompt says the event is untrusted, to find out what changed and who
 changed it before judging, and that unsure means escalate; tool results (PR bodies, comments, Jira text)
 are declared untrusted too. A watcher's `prompt` goes in as a "Guidance from the human" block per
