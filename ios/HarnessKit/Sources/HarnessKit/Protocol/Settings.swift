@@ -69,6 +69,10 @@ public struct Settings: Codable, Sendable, Equatable {
     public var cosStatuses: [TicketStatus]?
     /// The driver and model every chief of staff runs on (projects may override it). nil → the Work choice.
     public var cosModel: Patch<PhaseChoice>
+    /// The model that triages a chief's events; absent or null → the triage driver's Haiku (`CosSettings.triageDefaultModel`).
+    public var cosTriageModel: Patch<String>
+    /// How triage's lookups are judged; absent or null → read only (`CosSettings.triageMode`).
+    public var cosTriagePermissionMode: Patch<TriagePermissionMode>
 
     public init(
         phaseModels: PhaseModels? = nil, defaultDriver: String, maxConcurrentRuns: Int, permissionMode: PermissionMode, classifier: ClassifierBackend,
@@ -77,11 +81,14 @@ public struct Settings: Codable, Sendable, Equatable {
         anthropicApiKey: String? = nil, claudeOauthToken: String? = nil, copilotGithubToken: String? = nil, baseBranch: String? = nil,
         listen: ListenSetting? = nil, browserIdleTabMinutes: Int? = nil, prompts: [String: String?]? = nil,
         notifications: NotificationSettings? = nil, contextGaugeLimit: Int? = nil, saveOnBlur: Bool? = nil,
-        cosEnabled: Bool? = nil, cosStatuses: [TicketStatus]? = nil, cosModel: Patch<PhaseChoice> = .absent
+        cosEnabled: Bool? = nil, cosStatuses: [TicketStatus]? = nil, cosModel: Patch<PhaseChoice> = .absent,
+        cosTriageModel: Patch<String> = .absent, cosTriagePermissionMode: Patch<TriagePermissionMode> = .absent
     ) {
         self.cosEnabled = cosEnabled
         self.cosStatuses = cosStatuses
         self.cosModel = cosModel
+        self.cosTriageModel = cosTriageModel
+        self.cosTriagePermissionMode = cosTriagePermissionMode
         self.contextGaugeLimit = contextGaugeLimit
         self.saveOnBlur = saveOnBlur
         self.phaseModels = phaseModels
@@ -141,6 +148,9 @@ public struct PublicSettings: Codable, Sendable, Equatable {
     public var cosStatuses: [TicketStatus]?
     /// Settings.cosModel; absent or null when none is chosen (and from an older service).
     public var cosModel: Patch<PhaseChoice>
+    /// Settings.cosTriageModel / cosTriagePermissionMode; absent or null when unset (and from an older service).
+    public var cosTriageModel: Patch<String>
+    public var cosTriagePermissionMode: Patch<TriagePermissionMode>
     /// Whether an API key for the anthropic-api driver is stored
     public var anthropicApiKeySet: Bool
     /// Whether a long-lived Claude token for the claude-code driver is stored. Services from before
@@ -156,11 +166,14 @@ public struct PublicSettings: Codable, Sendable, Equatable {
         listen: ListenSetting? = nil, browserIdleTabMinutes: Int? = nil, prompts: [String: String?]? = nil,
         notifications: NotificationSettings? = nil,
         anthropicApiKeySet: Bool, claudeOauthTokenSet: Bool? = nil, copilotGithubTokenSet: Bool? = nil, contextGaugeLimit: Int? = nil, saveOnBlur: Bool? = nil,
-        cosEnabled: Bool? = nil, cosStatuses: [TicketStatus]? = nil, cosModel: Patch<PhaseChoice> = .absent
+        cosEnabled: Bool? = nil, cosStatuses: [TicketStatus]? = nil, cosModel: Patch<PhaseChoice> = .absent,
+        cosTriageModel: Patch<String> = .absent, cosTriagePermissionMode: Patch<TriagePermissionMode> = .absent
     ) {
         self.cosEnabled = cosEnabled
         self.cosStatuses = cosStatuses
         self.cosModel = cosModel
+        self.cosTriageModel = cosTriageModel
+        self.cosTriagePermissionMode = cosTriagePermissionMode
         self.contextGaugeLimit = contextGaugeLimit
         self.saveOnBlur = saveOnBlur
         self.phaseModels = phaseModels

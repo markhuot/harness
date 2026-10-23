@@ -226,6 +226,22 @@ private func project(_ id: String, group: String?) -> Project {
         #expect(CosSettings.model(project: nil, settings: settings(cosModel: app)) == app)
     }
 
+    @Test func triageRunsOnTheClassifierBackendsHaikuAndReadOnlyUntilSet() throws {
+        func settings(_ classifier: ClassifierBackend, mode: TriagePermissionMode? = nil) -> PublicSettings {
+            PublicSettings(defaultDriver: "claude-code", maxConcurrentRuns: 4, permissionMode: .auto, classifier: classifier, anthropicApiKeySet: false, cosTriagePermissionMode: Patch(mode))
+        }
+        #expect(CosSettings.triageDriver(settings(.claudeCli)) == "claude-code")
+        #expect(CosSettings.triageDefaultModel(settings(.claudeCli)) == "haiku")
+        #expect(CosSettings.triageDriver(settings(.anthropicApi)) == "anthropic-api")
+        #expect(CosSettings.triageDefaultModel(settings(.anthropicApi)) == "claude-haiku-5-5")
+        #expect(CosSettings.triageMode(settings(.claudeCli)) == .readOnly, "an install that never chose one stays read only")
+        #expect(CosSettings.triageMode(settings(.claudeCli, mode: .auto)) == .auto)
+        #expect(TriagePermissionMode.allKnown.allSatisfy { CosSettings.triageModeLabels[$0] != nil })
+        let patch = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(SettingsPatch(cosTriageModel: Patch(nil), cosTriagePermissionMode: .value(.auto)))) as? [String: Any])
+        #expect(patch["cosTriageModel"] is NSNull, "Default clears the triage model")
+        #expect(patch["cosTriagePermissionMode"] as? String == "auto")
+    }
+
     @Test func theChiefPickerLeavesOutDriversThatCantRunAChief() throws {
         func driver(_ id: String, runsCos: Bool?) -> DriverInfo {
             DriverInfo(id: id, name: id, description: "", available: true, authenticated: true, detail: "", supportsLogin: false, runsCos: runsCos)

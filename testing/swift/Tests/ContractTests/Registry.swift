@@ -22,9 +22,6 @@ let ignoredFields: [String: String] = [
     "Ticket.blockedHead": "Swift has no property for it, and no iPhone screen reads it",
     "Ticket.startAfterPlanBy": "Swift has no property for it, and no iPhone screen reads it",
     "WatcherBody.cosId": "Swift has no property for it: no iPhone screen creates a watcher (the chief of staff does, with its own tools)",
-    "Settings.cosTriageModel": "Swift has no property for it, and no iPhone screen reads it (the Mac app sets the triage model)",
-    "PublicSettings.cosTriageModel": "Swift has no property for it, and no iPhone screen reads it (the Mac app sets the triage model)",
-    "SettingsPatch.cosTriageModel": "Swift has no property for it, and no iPhone screen reads it (the Mac app sets the triage model)",
 ]
 
 /// TS type name → Swift type, round-tripped through its own Codable.

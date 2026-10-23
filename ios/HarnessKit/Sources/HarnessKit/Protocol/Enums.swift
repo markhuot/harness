@@ -23,6 +23,21 @@ public enum PermissionMode: OpenEnum {
     }
 }
 
+/// TRIAGE_PERMISSION_MODES: how a chief's triage run's lookups are judged. No "ask": triage has no
+/// human to ask, so a call neither mode allows makes it escalate the event.
+public enum TriagePermissionMode: OpenEnum {
+    case readOnly, auto
+    case unknown(String)
+    public static let allKnown: [Self] = [.readOnly, .auto]
+    public var rawValue: String {
+        switch self {
+        case .readOnly: "read_only"
+        case .auto: "auto"
+        case let .unknown(r): r
+        }
+    }
+}
+
 /// Who judges actions in auto mode for native-tool drivers ("off": ask a human instead).
 public enum ClassifierBackend: OpenEnum {
     case claudeCli, anthropicApi, off

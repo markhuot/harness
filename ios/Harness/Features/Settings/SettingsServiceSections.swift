@@ -2,7 +2,7 @@ import HarnessKit
 import SwiftUI
 
 // Settings sections that edit the service: Drivers (with the per-phase models), General,
-// Permissions, Triage.
+// Permissions, Chief of staff (with triage).
 
 /// Every driver with its status, each opening its own settings (DriverSettingsScreen), and the
 /// app's per-phase models right under them. The screen reloads the list on every reconnect.
@@ -183,6 +183,23 @@ struct SettingsCosSection: View {
                     defaultLabel: "Use Work model",
                     forCos: true
                 ) { save(SettingsPatch(cosModel: CosSettings.patch($0))) }
+            }
+            SettingsRow(label: "Triage model", hint: "Reads each batch of events and decides which ones wake a chief. Haiku unless you choose another. Applies to the next batch.") {
+                ModelPicker(
+                    driver: CosSettings.triageDriver(settings),
+                    value: settings.cosTriageModel.optional,
+                    inherited: CosSettings.triageDefaultModel(settings),
+                    title: "Triage model"
+                ) { save(SettingsPatch(cosTriageModel: Patch($0))) }
+            }
+            let triageMode = CosSettings.triageMode(settings)
+            SettingsRow(label: "Triage permissions", hint: CosSettings.triageModeLabels[triageMode]?.description) {
+                SelectMenu(
+                    value: triageMode,
+                    options: TriagePermissionMode.allKnown.map { PickerOption(value: $0, label: CosSettings.triageModeLabels[$0]?.label ?? $0.rawValue) },
+                    title: "Triage permissions",
+                    accessibilityName: "Triage permissions"
+                ) { save(SettingsPatch(cosTriagePermissionMode: .value($0))) }
             }
         } header: {
             Text("Chief of staff")

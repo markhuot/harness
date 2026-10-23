@@ -478,6 +478,10 @@ public struct SettingsPatch: Codable, Sendable, Equatable {
     public var cosStatuses: [TicketStatus]?
     /// The chief of staff's driver and model for every project that doesn't say; null → the Work choice
     public var cosModel: Patch<PhaseChoice>
+    /// The triage model; null → the triage driver's Haiku
+    public var cosTriageModel: Patch<String>
+    /// How triage's lookups are judged; null → read only
+    public var cosTriagePermissionMode: Patch<TriagePermissionMode>
 
     public init(
         phaseModels: PhaseModelsPatch? = nil, defaultDriver: String? = nil, maxConcurrentRuns: Int? = nil, permissionMode: PermissionMode? = nil,
@@ -486,11 +490,14 @@ public struct SettingsPatch: Codable, Sendable, Equatable {
         watcherModels: [String: String?]? = nil, anthropicApiKey: Patch<String> = .absent,
         claudeOauthToken: Patch<String> = .absent, copilotGithubToken: Patch<String> = .absent, baseBranch: String? = nil, listen: ListenSetting? = nil, browserIdleTabMinutes: Int? = nil,
         prompts: [String: String?]? = nil, notifications: NotificationSettingsPatch? = nil, contextGaugeLimit: Int? = nil, saveOnBlur: Bool? = nil,
-        cosEnabled: Bool? = nil, cosStatuses: [TicketStatus]? = nil, cosModel: Patch<PhaseChoice> = .absent
+        cosEnabled: Bool? = nil, cosStatuses: [TicketStatus]? = nil, cosModel: Patch<PhaseChoice> = .absent,
+        cosTriageModel: Patch<String> = .absent, cosTriagePermissionMode: Patch<TriagePermissionMode> = .absent
     ) {
         self.cosEnabled = cosEnabled
         self.cosStatuses = cosStatuses
         self.cosModel = cosModel
+        self.cosTriageModel = cosTriageModel
+        self.cosTriagePermissionMode = cosTriagePermissionMode
         self.contextGaugeLimit = contextGaugeLimit
         self.saveOnBlur = saveOnBlur
         self.phaseModels = phaseModels

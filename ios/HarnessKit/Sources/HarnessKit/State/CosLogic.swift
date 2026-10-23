@@ -164,6 +164,30 @@ public enum CosSettings {
         TicketStatus.allKnown.filter { $0 == status ? on : current.contains($0) }
     }
 
+    /// triageDriver: the API's when the classifier uses the API, else Claude Code's.
+    public static func triageDriver(_ settings: PublicSettings?) -> String {
+        settings?.classifier == .anthropicApi ? "anthropic-api" : "claude-code"
+    }
+
+    /// triageDefaultModel (HAIKU_MODELS): the triage driver's Haiku, what an empty cosTriageModel runs on.
+    public static func triageDefaultModel(_ settings: PublicSettings?) -> String {
+        triageDriver(settings) == "anthropic-api" ? "claude-haiku-5-5" : "haiku"
+    }
+
+    /// resolveTriagePermissionMode: the setting, else read only.
+    public static func triageMode(_ settings: PublicSettings?) -> TriagePermissionMode {
+        settings?.cosTriagePermissionMode.optional ?? .readOnly
+    }
+
+    /// TRIAGE_PERMISSION_MODE_LABELS.
+    public static let triageModeLabels: [TriagePermissionMode: Permissions.Label] = [
+        .readOnly: Permissions.Label(label: "Read only", description: "Triage may run gh reads and read-only tools from a fixed list. Anything else is refused, and triage escalates the event instead."),
+        .auto: Permissions.Label(
+            label: "Auto",
+            description: "A classifier judges each lookup: Claude Code's own when the triage model supports auto mode, Harness's when it doesn't (Haiku). Anything it won't allow is refused, and triage escalates the event instead."
+        ),
+    ]
+
     /// The driver and model a chief of staff runs on when its wake isn't about a project that chose one (resolveCosChoice):
     /// the app's CoS choice, else the app's Work choice.
     public static func appModel(_ settings: PublicSettings?) -> PhaseChoice {
