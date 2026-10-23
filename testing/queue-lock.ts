@@ -156,11 +156,13 @@ const ENV = "HARNESS_TESTING_LOCKED";
 
 /**
  * Waits its turn for the testing lock (no timeout) and returns the function that lets go. Under a
- * parent that holds it already (HARNESS_TESTING_LOCKED) it returns at once.
+ * parent that holds it already (HARNESS_TESTING_LOCKED, or the holder is an ancestor process) it returns at once.
  */
 export async function acquireTesting(opts: TestingLockOptions = {}): Promise<() => void> {
   if (process.env[ENV]) return () => {};
   const dir = opts.dir ?? queueDir();
+  const holder = lockHolder(NAME, dir);
+  if (holder && ancestry().includes(holder.pid)) return () => {};
   const log = opts.log ?? ((l: string) => console.log(l));
   const start = processStart(process.pid) ?? "";
   mkdirSync(join(dir, "queue"), { recursive: true });

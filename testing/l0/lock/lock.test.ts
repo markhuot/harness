@@ -21,8 +21,8 @@ afterEach(() => {
 });
 
 /** Starts a process that takes the lock, holds it `holdMs` and lets go; its GOT and DONE lines land in `events`. */
-function start(label: string, holdMs: number, env: Record<string, string> = {}) {
-  const p = Bun.spawn(["bun", fixture, label, String(holdMs)], { env: { ...process.env, HARNESS_TESTING_LOCK_DIR: dir, ...env }, stdout: "pipe", stderr: "inherit" });
+function start(label: string, holdMs: number, env: Record<string, string> = {}, child?: string) {
+  const p = Bun.spawn(["bun", fixture, label, String(holdMs), ...(child ? [child] : [])], { env: { ...process.env, HARNESS_TESTING_LOCKED: "", HARNESS_TESTING_LOCK_DIR: dir, ...env }, stdout: "pipe", stderr: "inherit" });
   procs.push(p);
   (async () => {
     const decoder = new TextDecoder();
@@ -81,6 +81,11 @@ describe("testing lock", () => {
     await until("B got its turn", () => events.includes("GOT B"));
     // A let go itself on the signal (a hard kill leaves no release record behind).
     expect(existsSync(join(dir, "last.json"))).toBe(true);
+  });
+
+  test("a run started by the holder, with no environment passed down, doesn't queue behind it", async () => {
+    start("A", 60_000, {}, "nested");
+    await until("nested ran under A", () => events.includes("DONE nested"));
   });
 
   test("a run started under a holder (HARNESS_TESTING_LOCKED) doesn't queue behind it", async () => {
