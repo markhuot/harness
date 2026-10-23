@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261023.0302](https://github.com/markhuot/harness/releases/tag/app-20261023.0302) - 2026-10-23
+
 ### Added
 
 - An agent can now subscribe to another ticket and be woken when it changes, with the new `subscribe_ticket`, `unsubscribe_ticket` and `list_subscriptions` tools (work and conductor runs). A subscription is one-time or forever and follows status changes, and optionally notes and spec revisions. The message arrives in the agent's run if it is still going, otherwise as a new run, and a ticket subscribed to others stays in progress when it ends its turn instead of being submitted. An agent's own changes don't wake it, one ticket is woken at most 8 times in 5 minutes (further events are held and arrive together, not dropped), a done ticket can't be subscribed to and subscriptions on a ticket end once it is done, and a ticket's own subscriptions end when it leaves in progress and blocked or is cancelled.
