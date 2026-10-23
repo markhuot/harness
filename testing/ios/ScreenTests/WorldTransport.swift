@@ -29,6 +29,8 @@ final class WorldTransport: HTTPTransport, @unchecked Sendable {
             let body = try JSONSerialization.data(withJSONObject: ["data": data])
             return HTTPResponse(status: 200, body: body)
         }
+        // A file sent in a message is still there: the attachment list checks with a HEAD.
+        if request.method == "HEAD", request.url.path.hasPrefix("/attachments/") { return HTTPResponse(status: 200, body: Data()) }
         // The store asks for plan usage on every refresh; the world has none, and an unreported usage is a valid state.
         if request.url.path != "/usage" { lock.withLock { _unrouted.append("\(request.method) \(request.url.path)") } }
         return HTTPResponse(status: 404, body: Data(#"{"error":"the world has no such route"}"#.utf8))
