@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261023.1152](https://github.com/markhuot/harness/releases/tag/app-20261023.1152) - 2026-10-23
+
 ### Added
 - The chief of staff's chat on the Mac, iPhone and iPad now uses the same message box as a ticket: attach photos, files or a pasted image with (+), see them in a tray over the field, and send them with or without text. Files you send show in the chat. Type `/` to pick one of the agent's commands or skills (`@file` isn't offered, since the chief has no project folder).
 - A half-written message to the chief of staff is saved as you type, so you can finish it on another device and it survives a relaunch.
