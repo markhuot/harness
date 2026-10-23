@@ -6,7 +6,7 @@
 import { HarnessApiError, HarnessClient } from "@harness/shared";
 import { COS_OPEN_STATUSES, type ClientEvent, type Cos, type CosBadge, type CosChatEntry, type CosChatPage, type CosEventPage, type MemoryConflict, type PutCosMemoryBody } from "@harness/shared";
 import { chiefs, cosChat, cosEvents } from "../world/cos";
-import type { CreateTicketBody, DriverModels, FileWriteResult, SubmitTicketBody, UpdateTicketBody, HarnessSocket, WriteFileRequest, NetworkStatus, NotificationStatus, PairingInfo, SpecRevisionInfo, Ticket, TicketStatus } from "@harness/shared";
+import type { Attachment, MessageDraftBody, CreateTicketBody, DriverModels, FileWriteResult, SubmitTicketBody, UpdateTicketBody, HarnessSocket, WriteFileRequest, NetworkStatus, NotificationStatus, PairingInfo, SpecRevisionInfo, Ticket, TicketStatus } from "@harness/shared";
 import { world as defaultWorld, type World } from "../world";
 
 type Handlers = Parameters<HarnessClient["connect"]>[0];
@@ -215,10 +215,25 @@ export class FakeClient extends HarnessClient {
     }
     m = p.match(/^\/cos\/([^/]+)\/messages$/);
     if (method === "POST" && m) {
-      const entry: CosChatEntry = { id: `chat-sent-${c.chat.length + 1}`, cosId: m[1]!, createdAt: this.world.now, kind: "message", role: "user", text: (body as { text: string }).text };
+      const b = body as { text: string; attachments?: Attachment[] };
+      const entry: CosChatEntry = { id: `chat-sent-${c.chat.length + 1}`, cosId: m[1]!, createdAt: this.world.now, kind: "message", role: "user", text: b.text, ...(b.attachments?.length ? { attachments: b.attachments } : {}) };
       c.chat.push(entry);
+      // Like the service, a send uses up the chief's draft.
+      const chief = c.chiefs.find((x) => x.ticketId === m![1]);
+      if (chief) chief.messageDraft = null;
       return { entryId: entry.id };
     }
+    // The chief's message draft: saved on its ticket, which shows on the chief.
+    m = p.match(/^\/tickets\/([^/]+)\/message-draft$/);
+    if (method === "PUT" && m && c.chiefs.some((x) => x.key === m![1])) {
+      const chief = c.chiefs.find((x) => x.key === m![1])!;
+      const b = body as MessageDraftBody;
+      const attachments = (b.attachments ?? []) as Attachment[];
+      chief.messageDraft = b.text || attachments.length ? { text: b.text, attachments, origin: b.origin ?? null, updatedAt: this.world.now } : null;
+      return { id: chief.ticketId, key: chief.key, kind: "cos", messageDraft: chief.messageDraft } as unknown as Ticket;
+    }
+    m = p.match(/^\/tickets\/([^/]+)\/commands$/);
+    if (method === "GET" && m && c.chiefs.some((x) => x.key === m![1])) return [{ name: "review", description: "Review the work" }];
     m = p.match(/^\/tickets\/([^/]+)\/memory$/);
     if (m && method === "GET") return c.memory;
     if (m && method === "PUT") {
@@ -229,6 +244,15 @@ export class FakeClient extends HarnessClient {
     }
     return NO_ROUTE;
   }
+
+  /** An upload: the file registered under a fresh id, like the service's POST /uploads. */
+  override async uploadAttachment(data: Blob | ArrayBuffer | Uint8Array, name: string, mimeType?: string): Promise<Attachment> {
+    this.requests.push(`POST /uploads?name=${name}`);
+    const n = this.uploads++;
+    const kind = (mimeType ?? "").startsWith("image/") ? "image" : "file";
+    return { id: `up-${n}`, path: `/uploads/up-${n}/${name}`, name, source: "upload", kind, mimeType: mimeType ?? "", size: data instanceof Blob ? data.size : (data as ArrayBuffer).byteLength };
+  }
+  private uploads = 1;
 
   private page(tickets: Ticket[], q: URLSearchParams): Ticket[] {
     const limit = Number(q.get("limit") ?? tickets.length);

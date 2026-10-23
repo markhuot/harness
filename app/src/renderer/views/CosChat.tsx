@@ -2,13 +2,18 @@
 // as the reader scrolls up (the scroller keeps what was on screen where it was), live entries
 // arrive on the socket, and the composer posts a message that skips triage.
 
-import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { Cos, CosChatEntry } from "@harness/shared";
-import { anchoredScrollTop, nearTop, ticketByKey } from "@harness/shared/state";
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import type { Attachment, Cos, CosChatEntry } from "@harness/shared";
+import { anchoredScrollTop, attachmentInputs, nearTop, ticketByKey } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import { Markdown } from "../components/Markdown";
-import { MOD, relativeTime, STATUS_LABEL, StatusDot } from "../components/bits";
+import { MenuButton, MOD, relativeTime, STATUS_LABEL, StatusDot } from "../components/bits";
 import { useStickToBottom } from "../components/stickToBottom";
+import { MentionTextarea } from "../components/MentionTextarea";
+import { PaperclipIcon, PromptAttachmentList } from "../components/PromptAttachments";
+import { usePromptAttachmentInput } from "../components/usePromptAttachmentInput";
+import { messageDraftSession } from "../state/messageDraftSession";
+import { composerCanSend } from "../state/promptAttachmentFiles";
 import { useAction, useStore } from "../state/store";
 
 const PAGE = 30;
@@ -100,7 +105,12 @@ const ChatEntry = memo(function ChatEntry({ entry }: { entry: CosChatEntry }) {
             <Icon name="user" size={12} /> You <span className="t-time">{relativeTime(entry.createdAt)}</span>
           </div>
           <div className="t-bubble">
-            <Markdown text={entry.text} />
+            {entry.text && <Markdown text={entry.text} />}
+            {!!entry.attachments?.length && (
+              <div className="t-attachments" data-testid="cos-message-attachments">
+                <PromptAttachmentList items={entry.attachments} />
+              </div>
+            )}
           </div>
         </div>
       ) : (
@@ -148,36 +158,117 @@ function TicketCard({ ticketKey, title, status, what }: { ticketKey: string; tit
   );
 }
 
+/**
+ * The chief's message box: the ticket composer's pieces (draft session, attach menu, tray, send) on
+ * the chief's hidden ticket. The text and files are the chief's saved message draft, so another
+ * device sees them. `/commands` work; `@file` doesn't (the chief's folder is the service home).
+ */
 function Composer({ chief, onSent }: { chief: Cos; onSent: () => void }) {
-  const { client } = useStore();
+  const { client, dispatch, toast } = useStore();
   const act = useAction();
-  const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
-  const canSend = chief.enabled && !sending && text.trim().length > 0;
+  const chiefRef = useRef(chief);
+  chiefRef.current = chief;
+  const draft = messageDraftSession(
+    { id: chief.ticketId, key: chief.key, messageDraft: chief.messageDraft },
+    {
+      save: (key, body) => client.saveMessageDraft(key, body),
+      upsert: (t) => dispatch({ type: "event", event: { kind: "ticket.upserted", ticket: t } }),
+      error: (m) => toast(m, "error"),
+      keepalive: (path, body) =>
+        void fetch(client.baseUrl + path, {
+          method: "PUT",
+          keepalive: true,
+          headers: { authorization: `Bearer ${client.token}`, "content-type": "application/json" },
+          body: JSON.stringify(body),
+        }).catch(() => {}),
+    },
+  );
+  useSyncExternalStore(draft.subscribe, () => draft.version);
+  const { text, attachments } = draft.value;
+  useEffect(() => draft.sync(chief.messageDraft), [draft, chief.messageDraft]);
+  useEffect(() => () => draft.focus(false, chiefRef.current.messageDraft), [draft]);
+  const listRef = useRef(attachments);
+  listRef.current = attachments;
+  const setList = (next: Attachment[]) => {
+    listRef.current = next;
+    draft.edit({ attachments: next });
+  };
+  const ref = useRef<HTMLTextAreaElement>(null);
+  const searchFiles = useCallback(async () => [], []);
+  const searchCommands = useCallback((q: string) => client.ticketCommands(chief.key, q), [client, chief.key]);
+  const attach = usePromptAttachmentInput({ target: { get: () => listRef.current, set: setList }, enabled: chief.enabled, what: "a message" });
+  const canSend = chief.enabled && composerCanSend({ text, attachments: attachments.length, pending: attach.pending.length, sending, approvalPending: false });
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 220) + "px";
+  }, [text]);
 
   const send = async () => {
     if (!canSend) return;
+    const files = attachments;
     setSending(true);
-    const ok = await act(() => client.sendCosMessage(chief.ticketId, text.trim()));
+    await draft.beforeSend();
+    const ok = await act(() => client.sendCosMessage(chief.ticketId, text.trim(), { attachments: attachmentInputs(files) }));
     setSending(false);
     if (ok) {
-      setText("");
+      draft.sent(files);
       onSent();
-    }
+    } else draft.sendFailed();
   };
 
   return (
-    <div className="composer" data-testid="cos-composer">
+    <div className={`composer ${attach.dropping ? "dropping" : ""}`} data-testid="cos-composer" {...attach.dropProps}>
+      <PromptAttachmentList items={attachments} onRemove={attach.remove} pending={attach.pending} />
       <div className="composer-row">
-        <textarea
-          className="composer-input"
+        <MenuButton
+          align="left"
+          trigger={(toggle, open) => (
+            <button
+              type="button"
+              disabled={!chief.enabled}
+              className="btn btn-ghost btn-icon composer-attach"
+              data-testid="cos-attach"
+              aria-expanded={open}
+              onClick={toggle}
+              title="Attach files (or drop them here, or paste an image)"
+              aria-label="Attach"
+            >
+              <Icon name="plus" size={16} strokeWidth={2} />
+            </button>
+          )}
+        >
+          {(closeMenu) => (
+            <>
+              <button data-testid="cos-attach-files" onClick={() => (closeMenu(), attach.pickFiles())}>
+                <PaperclipIcon /> Choose files…
+              </button>
+              <button data-testid="cos-attach-paste" onClick={() => (closeMenu(), void attach.pasteFromClipboard())}>
+                <Icon name="image" /> Paste image
+              </button>
+            </>
+          )}
+        </MenuButton>
+        <input ref={attach.fileInput} type="file" multiple hidden data-testid="cos-attach-input" onChange={attach.onFilesPicked} />
+        <MentionTextarea
+          ref={ref}
           rows={1}
+          className="composer-input"
           data-testid="cos-composer-input"
           aria-label="Message the chief of staff"
           placeholder={chief.enabled ? "Message the chief of staff" : "Turn the chief of staff on to talk to it"}
           disabled={!chief.enabled}
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onValueChange={(t) => draft.edit({ text: t })}
+          onFocus={() => draft.focus(true, chief.messageDraft)}
+          onBlur={() => draft.focus(false, chiefRef.current.messageDraft)}
+          search={searchFiles}
+          searchCommands={searchCommands}
+          placement="above"
+          onPaste={attach.onPaste}
           onKeyDown={(e) => {
             if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
               e.preventDefault();
@@ -192,6 +283,12 @@ function Composer({ chief, onSent }: { chief: Cos; onSent: () => void }) {
           </span>
         </button>
       </div>
+      {attach.dropping && (
+        <div className="draft-drop-hint" data-testid="cos-drop-hint" aria-hidden>
+          <PaperclipIcon size={18} />
+          Drop to attach
+        </div>
+      )}
     </div>
   );
 }

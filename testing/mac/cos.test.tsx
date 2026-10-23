@@ -132,6 +132,42 @@ describe("Chat", () => {
     expect(input.value).toBe("");
   });
 
+  test("files attach through the ticket composer, go with the message and show in the chat; the draft is the chief's, and clears once sent", async () => {
+    const client = new FakeClient();
+    const m = await open("#/cos/all", client);
+    await m.until("the chat", () => msgs(m).length > 0);
+    const input = byId(m, "cos-attach-input") as HTMLInputElement;
+    const file = new File(["hello"], "notes.txt", { type: "text/plain" });
+    Object.defineProperty(input, "files", { value: [file], configurable: true });
+    await m.settle(() => void input.dispatchEvent(new Event("change", { bubbles: true })));
+    await m.until("the tray", () => text(byId(m, "cos-composer")).includes("notes.txt"));
+    // Files alone are enough to send.
+    const send = byId(m, "cos-send") as HTMLButtonElement;
+    expect(send.disabled).toBe(false);
+    await click(m, send);
+    const body = client.bodies.find((b) => b.request === "POST /cos/cos-all/messages")?.body as { text: string; attachments: { id: string }[] };
+    expect(body.text).toBe("");
+    expect(body.attachments.map((a) => a.id)).toEqual(["up-1"]);
+    await m.until("the file in the chat", () => text(byId(m, "cos-message-attachments")).includes("notes.txt"));
+    expect(text(byId(m, "cos-composer")).includes("notes.txt")).toBe(false);
+    expect(client.cos.chiefs[0]!.messageDraft ?? null).toBeNull();
+  });
+
+  test("a draft another device saved on the chief shows in the composer", async () => {
+    const client = new FakeClient();
+    client.cos.chiefs[0]!.messageDraft = { text: "from my phone", attachments: [], origin: "phone", updatedAt: 1 };
+    const m = await open("#/cos/all", client);
+    await m.until("the draft", () => (byId(m, "cos-composer-input") as HTMLTextAreaElement | null)?.value === "from my phone");
+  });
+
+  test("typing is saved as the chief's message draft", async () => {
+    const m = await open();
+    await m.until("the chat", () => msgs(m).length > 0);
+    await type(m, byId(m, "cos-composer-input") as HTMLTextAreaElement, "half a thought");
+    await m.settle(() => new Promise<void>((r) => setTimeout(r, 650)));
+    await m.until("the save", () => m.client.cos.chiefs[0]!.messageDraft?.text === "half a thought");
+  });
+
   test("a switched-off chief can't be written to", async () => {
     const client = new FakeClient();
     client.cos.chiefs[0]!.enabled = false;
