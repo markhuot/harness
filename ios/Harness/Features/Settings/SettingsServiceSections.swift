@@ -173,12 +173,8 @@ struct SettingsCosSection: View {
                     .tint(c.accent)
                     .accessibilityLabel("CoS enabled")
             }
-            SettingsRow(label: "CoS can unblock", hint: "A chief of staff may answer a blocked ticket's question itself. Projects can override it.") {
-                Toggle("CoS can unblock", isOn: Binding(get: { CosSettings.canUnblock(settings) }, set: { save(SettingsPatch(cosCanUnblock: $0)) }))
-                    .labelsHidden()
-                    .tint(c.accent)
-                    .accessibilityLabel("CoS can unblock")
-            }
+            SettingsRow(label: "Columns the CoS handles", hint: CosStatusCopy.hint) { EmptyView() }
+            CosStatusRows(statuses: CosSettings.statuses(settings)) { save(SettingsPatch(cosStatuses: $0)) }
             SettingsRow(label: "CoS model", hint: "The model every chief of staff runs on. A project can choose its own. Applies to the next run, not one in progress.") {
                 DriverModelPicker(
                     value: CosSettings.pickerChoice(settings.cosModel.optional),

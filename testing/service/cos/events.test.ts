@@ -1,6 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { TICKET_STATUSES } from "../../../shared/src/protocol";
 import { COS_CEILING_MS, COS_HOUR_MS, COS_QUIET_MS, COS_WAKES_PER_HOUR } from "../../../shared/src/cos";
 import { isSilentReply, WAKE_PROMPT_PREFIX } from "../../../service/src/cos/chat";
 import type { CosEngine } from "../../../service/src/cos/engine";
@@ -99,6 +100,8 @@ async function setup(opts: { triage?: CosTriage | { unavailable: string }; drive
     await engine.tick();
     await h.settle();
   };
+  // Every column is checked so these tests see events as they always did; the column filter has its own test.
+  h.orch.updateSettings({ cosStatuses: [...TICKET_STATUSES] });
   h.orch.start();
   return { h, engine, triage, scripted, timers, project, ticket, happen, events, eventOf, after };
 }
@@ -240,6 +243,41 @@ test("activity a chief caused is filtered before triage: stamped at the write po
   expect(s.eventOf("marker-human")).toMatchObject({ verdict: "pending", status: "pending" });
 });
 
+test("events on a ticket in an unchecked column are filtered before triage; the app's boxes and a project's own set decide", async () => {
+  const s = await quiet();
+  const move = (to: string) => {
+    s.h.store.tickets.update(s.t.id, { status: to as never });
+    s.happen(s.t, `marker-${to}`, { kind: "moved", from: "planning", to });
+    s.engine.drain();
+    return s.eventOf(`marker-${to}`);
+  };
+  // The app checks only Review: a move into In progress is dropped, one into Review reaches triage.
+  s.h.orch.updateSettings({ cosStatuses: ["review"] });
+  expect(move("in_progress")).toMatchObject({ verdict: "filtered", status: "ignored", cosId: null, reason: "in_progress isn't a column the chief of staff handles" });
+  expect(move("review")).toMatchObject({ verdict: "pending", status: "pending" });
+
+  // A project's own set replaces the app's, an empty one drops everything, and null inherits again.
+  s.h.orch.updateProject(s.h.project.id, { cosStatuses: ["blocked"] });
+  expect(move("blocked")).toMatchObject({ verdict: "pending" });
+  s.h.store.tickets.update(s.t.id, { status: "review" });
+  s.happen(s.t, "marker-own-set");
+  s.engine.drain();
+  expect(s.eventOf("marker-own-set")).toMatchObject({ verdict: "filtered" });
+  s.h.orch.updateProject(s.h.project.id, { cosStatuses: null });
+  s.happen(s.t, "marker-inherit");
+  s.engine.drain();
+  expect(s.eventOf("marker-inherit")).toMatchObject({ verdict: "pending" });
+
+  // Nothing checked (the out-of-the-box default): nothing reaches triage.
+  s.h.orch.updateSettings({ cosStatuses: [] });
+  s.happen(s.t, "marker-none");
+  s.engine.drain();
+  expect(s.eventOf("marker-none")).toMatchObject({ verdict: "filtered" });
+  await s.after(10 * MIN);
+  expect(s.scripted!.calls.flatMap((c) => c.events).map((e) => e.title)).not.toContain(expect.stringContaining("marker-none"));
+  expect(s.scripted!.calls.flatMap((c) => c.events).some((e) => e.title.includes("marker-in_progress"))).toBe(false);
+});
+
 test("a chief's own ticket and activity with no ticket never reach triage", async () => {
   const s = await quiet();
   const own = s.h.store.tickets.get(s.chief.ticketId)!;
@@ -264,6 +302,7 @@ test("the same source never makes two events, and a restart's catch-up reads eac
 test("activity written while the service was down is read at startup, and events left mid-triage start over", async () => {
   const triage = new ScriptedTriage();
   const h = makeOrchestrator({ cosTriage: triage, cosTimers: fakeTimers() });
+  h.orch.updateSettings({ cosStatuses: [...TICKET_STATUSES] });
   const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x", start: false });
   await h.settle();
   h.store.activity.add({ sessionId: t.sessionId, ticketId: t.id, kind: "note", author: "agent", body: "marker-offline" });

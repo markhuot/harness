@@ -13,8 +13,16 @@ struct ProjectCosSection: View {
             row("CoS enabled", hint: "Whether chiefs of staff handle this project's events. Inherit follows the app setting.", value: project.cosEnabled, app: CosSettings.enabled(settings)) {
                 save(UpdateProjectBody(cosEnabled: $0))
             }
-            row("CoS can unblock", hint: "Whether a chief of staff may answer this project's blocked tickets itself. Inherit follows the app setting.", value: project.cosCanUnblock, app: CosSettings.canUnblock(settings)) {
-                save(UpdateProjectBody(cosCanUnblock: $0))
+            SettingsRow(label: "Columns the CoS handles", hint: CosStatusCopy.hint) {
+                SelectMenu(
+                    value: project.cosStatuses.optional == nil ? "inherit" : "custom",
+                    options: [PickerOption(value: "inherit", label: "Inherit"), PickerOption(value: "custom", label: "Custom")],
+                    title: "Columns the CoS handles",
+                    accessibilityName: "Columns the CoS handles"
+                ) { save(UpdateProjectBody(cosStatuses: $0 == "custom" ? .value(CosSettings.statuses(settings)) : .null)) }
+            }
+            CosStatusRows(statuses: CosSettings.statuses(project, settings), disabled: project.cosStatuses.optional == nil) {
+                save(UpdateProjectBody(cosStatuses: .value($0)))
             }
             SettingsRow(label: "CoS model", hint: "For a wake about this project alone. Chat and multi-project wakes use the app default. Next run.") {
                 DriverModelPicker(

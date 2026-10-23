@@ -126,7 +126,7 @@ public enum CosTriState: String, CaseIterable, Sendable, Hashable {
         }
     }
 
-    /// The `Project.cosEnabled` / `cosCanUnblock` a choice saves: `.null` clears the override.
+    /// The `Project.cosEnabled` a choice saves: `.null` clears the override.
     public var patch: Patch<Bool> {
         switch self {
         case .on: .value(true)
@@ -139,10 +139,20 @@ public enum CosTriState: String, CaseIterable, Sendable, Hashable {
 public enum CosSettings {
     /// COS_SETTING_DEFAULTS
     public static let defaultEnabled = true
-    public static let defaultCanUnblock = false
+    /// COS_STATUS_DEFAULTS: no column, so a person opts in to what their chief handles
+    public static let defaultStatuses: [TicketStatus] = []
 
     public static func enabled(_ settings: PublicSettings?) -> Bool { settings?.cosEnabled ?? defaultEnabled }
-    public static func canUnblock(_ settings: PublicSettings?) -> Bool { settings?.cosCanUnblock ?? defaultCanUnblock }
+    /// resolveCosStatuses for the app (no project override)
+    public static func statuses(_ settings: PublicSettings?) -> [TicketStatus] { settings?.cosStatuses ?? defaultStatuses }
+
+    /// resolveCosStatuses: the project's own columns, else the app's.
+    public static func statuses(_ project: Project, _ settings: PublicSettings?) -> [TicketStatus] { project.cosStatuses.optional ?? statuses(settings) }
+
+    /// What a checkbox change saves: the columns in board order.
+    public static func toggled(_ status: TicketStatus, on: Bool, in current: [TicketStatus]) -> [TicketStatus] {
+        TicketStatus.allKnown.filter { $0 == status ? on : current.contains($0) }
+    }
 
     /// The driver and model a chief of staff runs on when its wake isn't about a project that chose one (resolveCosChoice):
     /// the app's CoS choice, else the app's Work choice.

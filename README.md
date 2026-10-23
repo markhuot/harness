@@ -195,8 +195,8 @@ instead of showing a stale bar.
   screens on iPhone and iPad. A group's chief only sees and changes tickets in its group. A cheap
   model reads each event first, looking things up read-only when the event is only a pointer, and wakes the chief only for what needs it. A chief can create and
   start tickets, remind you or wake itself on a schedule, keep a memory you can edit, look at
-  terminals in the tickets it covers, and, only where **CoS can unblock** is on, answer blocked
-  tickets. Chiefs of staff and **CoS can unblock** are set in Settings, with a per-project override.
+  terminals in the tickets it covers, and, only where the **Blocked** column is checked, answer blocked
+  tickets. A chief only gets events about tickets in the columns checked under Settings → Chief of staff (none until you check them), with a per-project override.
 - **Watchers** are any command that prints text. The command runs in your login shell, so a
   `watch-jira` poller works, and so does a loop like `while true; do curl -s …/events; sleep 60; done`.
   Examples are in `service/examples/watchers/`. In interval mode, each run's output becomes an

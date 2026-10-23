@@ -473,16 +473,19 @@ describe("the sidebar", () => {
 describe("settings", () => {
   const patched = (m: M, request: string) => m.client.bodies.filter((b) => b.request === request).map((b) => b.body);
 
-  test("the app's two switches show the service's values (enabled by default, unblocking off) and save", async () => {
+  test("the app's switch and column boxes show the service's values (enabled, no column checked) and save", async () => {
     const m = await mount(<SettingsView />, { hash: "#/settings" });
     m.client.overrides.set("PATCH /settings", () => m.client.world.settings);
     await m.until("the section", () => text(m.container).includes("Chief of staff enabled"));
     const sw = (label: string) => m.container.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`)!;
     expect(sw("Chief of staff enabled").checked).toBe(true);
-    expect(sw("Chief of staff can unblock tickets").checked).toBe(false);
-    await click(m, sw("Chief of staff can unblock tickets"));
+    const box = (label: string) => m.container.querySelector<HTMLInputElement>(`[data-testid="cosStatuses"] input[aria-label="${label}"]`)!;
+    expect(["Planning", "In progress", "Blocked", "Review", "Done"].map((l) => box(l).checked)).toEqual([false, false, false, false, false]);
+    await click(m, box("Review"));
+    await click(m, box("Blocked"));
     await click(m, sw("Chief of staff enabled"));
-    expect(patched(m, "PATCH /settings")).toEqual([{ cosCanUnblock: true }, { cosEnabled: false }]);
+    // Each box saves the whole set, in board order, from what the service last said (the stub doesn't change it).
+    expect(patched(m, "PATCH /settings")).toEqual([{ cosStatuses: ["review"] }, { cosStatuses: ["blocked"] }, { cosEnabled: false }]);
   });
 
   test("the app's chief-of-staff model defaults to the Work model, and picking one saves it", async () => {
@@ -543,7 +546,6 @@ describe("settings", () => {
     const sel = (key: string) => byId(m, `project-${key}`) as unknown as HTMLSelectElement;
     expect(sel("cosEnabled").value).toBe("inherit");
     expect(all(sel("cosEnabled"), "option").map((o) => text(o))).toEqual(["Inherit (off)", "On", "Off"]);
-    expect(all(sel("cosCanUnblock"), "option")[0]!.textContent).toBe("Inherit (off)");
 
     const choose = (s: HTMLSelectElement, v: string) =>
       m.settle(() => {
@@ -551,17 +553,41 @@ describe("settings", () => {
         s.dispatchEvent(new Event("change", { bubbles: true }));
       });
     await choose(sel("cosEnabled"), "on");
-    await choose(sel("cosCanUnblock"), "off");
     await choose(sel("cosEnabled"), "inherit");
-    expect(patched(m, `PATCH /projects/${id}`)).toEqual([{ cosEnabled: true }, { cosCanUnblock: false }, { cosEnabled: null }]);
+    expect(patched(m, `PATCH /projects/${id}`)).toEqual([{ cosEnabled: true }, { cosEnabled: null }]);
+  });
+
+  test("a project's columns inherit the app's boxes (disabled), start a custom set from them, and clear with Inherit", async () => {
+    const id = world.projects[0]!.id;
+    const w = edited((x) => void (x.settings.cosStatuses = ["review", "done"]));
+    const m = await mount(<ProjectSettingsView />, { hash: `#/project/${id}/settings`, world: w });
+    m.client.overrides.set(`PATCH /projects/${id}`, () => m.client.world.projects[0]);
+    await m.until("the page", () => !!byId(m, "project-cosStatuses"));
+    const boxes = () => all(byId(m, "project-cosStatuses")!, "input") as unknown as HTMLInputElement[];
+    const mode = byId(m, "project-cosStatuses-mode") as unknown as HTMLSelectElement;
+    const choose = (v: string) =>
+      m.settle(() => {
+        Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(mode, v);
+        mode.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+    expect(mode.value).toBe("inherit");
+    expect(boxes().map((b) => b.checked)).toEqual([false, false, false, true, true]);
+    expect(boxes().every((b) => b.disabled)).toBe(true);
+    await choose("custom");
+    await choose("inherit");
+    expect(patched(m, `PATCH /projects/${id}`)).toEqual([{ cosStatuses: ["review", "done"] }, { cosStatuses: null }]);
   });
 
   test("a project's override shows as selected", async () => {
     const id = world.projects[0]!.id;
-    const w = edited((x) => void (x.projects[0]!.cosCanUnblock = true));
+    const w = edited((x) => {
+      x.projects[0]!.cosEnabled = true;
+      x.projects[0]!.cosStatuses = ["blocked"];
+    });
     const m = await mount(<ProjectSettingsView />, { hash: `#/project/${id}/settings`, world: w });
-    await m.until("the page", () => !!byId(m, "project-cosCanUnblock"));
-    expect((byId(m, "project-cosCanUnblock") as unknown as HTMLSelectElement).value).toBe("on");
-    expect((byId(m, "project-cosEnabled") as unknown as HTMLSelectElement).value).toBe("inherit");
+    await m.until("the page", () => !!byId(m, "project-cosStatuses"));
+    expect((byId(m, "project-cosStatuses-mode") as unknown as HTMLSelectElement).value).toBe("custom");
+    expect((all(byId(m, "project-cosStatuses")!, "input") as unknown as HTMLInputElement[]).map((b) => b.checked)).toEqual([false, false, true, false, false]);
+    expect((byId(m, "project-cosEnabled") as unknown as HTMLSelectElement).value).toBe("on");
   });
 });

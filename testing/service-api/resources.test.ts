@@ -164,11 +164,14 @@ test("a chief of staff is listed only once opened, POST /cos is idempotent, and 
 test("a project's CoS overrides come back from the API and clear with null", async () => {
   const rig = await boot();
   const project = await rig.project("ACME");
-  expect(project).toMatchObject({ cosEnabled: null, cosCanUnblock: null });
-  expect(await rig.ok<Project>("PATCH", `/projects/${project.id}`, { cosCanUnblock: true })).toMatchObject({ cosEnabled: null, cosCanUnblock: true });
-  expect(await rig.ok<Project>("PATCH", `/projects/${project.id}`, { cosCanUnblock: null })).toMatchObject({ cosCanUnblock: null });
+  expect(project).toMatchObject({ cosEnabled: null, cosStatuses: null });
+  expect(await rig.ok<Project>("PATCH", `/projects/${project.id}`, { cosStatuses: ["review", "blocked"] })).toMatchObject({ cosEnabled: null, cosStatuses: ["blocked", "review"] });
+  expect(await rig.ok<Project>("PATCH", `/projects/${project.id}`, { cosStatuses: [] })).toMatchObject({ cosStatuses: [] });
+  expect(await rig.call("PATCH", `/projects/${project.id}`, { cosStatuses: ["nope"] })).toMatchObject({ status: 400 });
+  expect(await rig.ok<Project>("PATCH", `/projects/${project.id}`, { cosStatuses: null })).toMatchObject({ cosStatuses: null });
   expect(await rig.call("PATCH", `/projects/${project.id}`, { cosEnabled: "yes" })).toMatchObject({ status: 400 });
-  expect(await rig.ok<PublicSettings>("PATCH", "/settings", { cosEnabled: false })).toMatchObject({ cosEnabled: false, cosCanUnblock: false });
+  expect(await rig.ok<PublicSettings>("PATCH", "/settings", { cosEnabled: false })).toMatchObject({ cosEnabled: false, cosStatuses: [] });
+  expect(await rig.ok<PublicSettings>("PATCH", "/settings", { cosStatuses: ["done"] })).toMatchObject({ cosStatuses: ["done"] });
 });
 
 test("the chief-of-staff model is saved on the app and on a project, and clears with null", async () => {

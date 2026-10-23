@@ -42,8 +42,8 @@ test("a database from a newer service is refused rather than downgraded", () => 
 
 test("a failing migration rolls back whole and leaves the version where it was", () => {
   const db = dbAt(SCHEMA_VERSION - 1);
-  // Break the last migration's target: it drops a column that is already gone.
-  db.exec("ALTER TABLE cos_wakes DROP COLUMN reported");
+  // Break the last migration's target: it adds a column that is already there.
+  db.exec("ALTER TABLE projects ADD COLUMN cos_statuses TEXT");
   expect(() => migrate(db, paths())).toThrow();
   expect(version(db)).toBe(SCHEMA_VERSION - 1);
 });
@@ -326,4 +326,28 @@ test("migration 53 drops cos_wakes.reported and keeps the wakes", () => {
   migrate(db, paths());
   expect(columns(db, "cos_wakes")).not.toContain("reported");
   expect(db.query("SELECT id, event_count, run_id, outcome FROM cos_wakes").all()).toEqual([{ id: "w1", event_count: 2, run_id: "r1", outcome: "spoke" }]);
+});
+
+test("migration 54 keeps an old CoS can-unblock choice as the Blocked box, every other column off, for the app and per project", () => {
+  const seed = (settingValue: string | null) => {
+    const db = dbAt(53);
+    if (settingValue !== null) db.query("INSERT INTO settings (key, value) VALUES ('cosCanUnblock', $v)").run({ v: settingValue });
+    for (const [id, unblock] of [["yes", 1], ["no", 0], ["inherit", null]] as const) {
+      db.query(`INSERT INTO projects (id, key, name, path, next_seq, cos_can_unblock, default_models, created_at, updated_at) VALUES ($id, $id, $id, '/' || $id, 1, $unblock, '{}', 0, 0)`).run({ id, unblock });
+    }
+    migrate(db, paths());
+    return db;
+  };
+  const setting = (db: Database, key: string) => db.query("SELECT value FROM settings WHERE key = $key").get({ key }) as { value: string } | null;
+
+  const on = seed("true");
+  expect(JSON.parse(setting(on, "cosStatuses")!.value)).toEqual(["blocked"]);
+  expect(setting(on, "cosCanUnblock")).toBeNull();
+  expect(columns(on, "projects")).not.toContain("cos_can_unblock");
+  const store = new Store(on);
+  expect([store.projects.get("yes")!.cosStatuses, store.projects.get("no")!.cosStatuses, store.projects.get("inherit")!.cosStatuses]).toEqual([["blocked"], [], null]);
+
+  expect(JSON.parse(setting(seed("false"), "cosStatuses")!.value)).toEqual([]);
+  // An install that never saved the setting has nothing to carry over: it stays unset and resolves to no column.
+  expect(setting(seed(null), "cosStatuses")).toBeNull();
 });

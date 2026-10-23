@@ -40,8 +40,8 @@ public struct CreateProjectBody: Codable, Sendable, Equatable {
 
     /// Project.cosEnabled: its own value; null → inherit settings.cosEnabled
     public var cosEnabled: Patch<Bool>
-    /// Project.cosCanUnblock: its own value; null → inherit settings.cosCanUnblock
-    public var cosCanUnblock: Patch<Bool>
+    /// Project.cosStatuses: its own columns; null → inherit settings.cosStatuses
+    public var cosStatuses: Patch<[TicketStatus]>
     /// Project.cosModel; null → inherit settings.cosModel
     public var cosModel: Patch<PhaseChoice>
 
@@ -51,10 +51,10 @@ public struct CreateProjectBody: Codable, Sendable, Equatable {
         color: Patch<String> = .absent, group: Patch<String> = .absent, groupId: Patch<String> = .absent, permissionMode: Patch<PermissionMode> = .absent,
         phaseModels: PhaseModelsPatch? = nil, defaultModels: [String: String?]? = nil, baseBranch: Patch<String> = .absent,
         completionAction: CompletionAction? = nil,
-        cosEnabled: Patch<Bool> = .absent, cosCanUnblock: Patch<Bool> = .absent, cosModel: Patch<PhaseChoice> = .absent
+        cosEnabled: Patch<Bool> = .absent, cosStatuses: Patch<[TicketStatus]> = .absent, cosModel: Patch<PhaseChoice> = .absent
     ) {
         self.cosEnabled = cosEnabled
-        self.cosCanUnblock = cosCanUnblock
+        self.cosStatuses = cosStatuses
         self.cosModel = cosModel
         self.path = path
         self.name = name
@@ -108,8 +108,8 @@ public struct UpdateProjectBody: Codable, Sendable, Equatable {
 
     /// Project.cosEnabled: its own value; null → inherit settings.cosEnabled
     public var cosEnabled: Patch<Bool>
-    /// Project.cosCanUnblock: its own value; null → inherit settings.cosCanUnblock
-    public var cosCanUnblock: Patch<Bool>
+    /// Project.cosStatuses: its own columns; null → inherit settings.cosStatuses
+    public var cosStatuses: Patch<[TicketStatus]>
     /// Project.cosModel; null → inherit settings.cosModel
     public var cosModel: Patch<PhaseChoice>
 
@@ -119,10 +119,10 @@ public struct UpdateProjectBody: Codable, Sendable, Equatable {
         color: Patch<String> = .absent, group: Patch<String> = .absent, groupId: Patch<String> = .absent, permissionMode: Patch<PermissionMode> = .absent,
         phaseModels: PhaseModelsPatch? = nil, defaultModels: [String: String?]? = nil, baseBranch: Patch<String> = .absent,
         completionAction: CompletionAction? = nil,
-        cosEnabled: Patch<Bool> = .absent, cosCanUnblock: Patch<Bool> = .absent, cosModel: Patch<PhaseChoice> = .absent
+        cosEnabled: Patch<Bool> = .absent, cosStatuses: Patch<[TicketStatus]> = .absent, cosModel: Patch<PhaseChoice> = .absent
     ) {
         self.cosEnabled = cosEnabled
-        self.cosCanUnblock = cosCanUnblock
+        self.cosStatuses = cosStatuses
         self.cosModel = cosModel
         self.path = path
         self.name = name
@@ -475,7 +475,7 @@ public struct SettingsPatch: Codable, Sendable, Equatable {
     /// Merged over the stored notifications block (categories per category).
     public var notifications: NotificationSettingsPatch?
     public var cosEnabled: Bool?
-    public var cosCanUnblock: Bool?
+    public var cosStatuses: [TicketStatus]?
     /// The chief of staff's driver and model for every project that doesn't say; null → the Work choice
     public var cosModel: Patch<PhaseChoice>
 
@@ -486,10 +486,10 @@ public struct SettingsPatch: Codable, Sendable, Equatable {
         watcherModels: [String: String?]? = nil, anthropicApiKey: Patch<String> = .absent,
         claudeOauthToken: Patch<String> = .absent, copilotGithubToken: Patch<String> = .absent, baseBranch: String? = nil, listen: ListenSetting? = nil, browserIdleTabMinutes: Int? = nil,
         prompts: [String: String?]? = nil, notifications: NotificationSettingsPatch? = nil, contextGaugeLimit: Int? = nil, saveOnBlur: Bool? = nil,
-        cosEnabled: Bool? = nil, cosCanUnblock: Bool? = nil, cosModel: Patch<PhaseChoice> = .absent
+        cosEnabled: Bool? = nil, cosStatuses: [TicketStatus]? = nil, cosModel: Patch<PhaseChoice> = .absent
     ) {
         self.cosEnabled = cosEnabled
-        self.cosCanUnblock = cosCanUnblock
+        self.cosStatuses = cosStatuses
         self.cosModel = cosModel
         self.contextGaugeLimit = contextGaugeLimit
         self.saveOnBlur = saveOnBlur

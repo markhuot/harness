@@ -86,7 +86,7 @@ deep link, on both phones), and the title-bar count pill agrees with the service
 The logic behind the steps is tested lower down, not here: the New Ticket form and the chief's
 composer (Mac views), the editor's dirty mark, Save and a failed write (`mac/file.test.tsx`) and the
 file routes (`service-api/files.test.ts`), pane widths, groups, wrap and the view menu (L0 and Mac
-views), and the chief's scope, can-unblock, hand-off, schedules and badge counts (service). Nothing
+views), and the chief's scope, column filter and Blocked write gate, hand-off, schedules and badge counts (service). Nothing
 types into the Mac app but the palette's query: tickets, chief messages and the shell's command go
 in through the API, so no step depends on which window has the keyboard focus.
 

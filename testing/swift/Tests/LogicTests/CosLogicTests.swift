@@ -167,9 +167,24 @@ private func project(_ id: String, group: String?) -> Project {
 
     // MARK: Settings
 
-    @Test func theAppDefaultsAreOnForTheChiefAndOffForUnblocking() {
+    @Test func theAppDefaultsAreOnForTheChiefAndNoColumns() {
         #expect(CosSettings.enabled(nil))
-        #expect(!CosSettings.canUnblock(nil))
+        #expect(CosSettings.statuses(nil).isEmpty)
+    }
+
+    @Test func aProjectsColumnsAreItsOwnElseTheApps() throws {
+        func project(_ statuses: String) throws -> Project {
+            try JSONDecoder().decode(Project.self, from: Data(#"{"id":"p","key":"A","name":"A","path":"/a","nextSeq":1,"useWorktrees":true,"defaultModels":{},"cosStatuses":\#(statuses),"createdAt":1,"updatedAt":1}"#.utf8))
+        }
+        let app = PublicSettings(defaultDriver: "claude-code", maxConcurrentRuns: 4, permissionMode: .auto, classifier: .claudeCli, anthropicApiKeySet: false, cosStatuses: [.review])
+        #expect(CosSettings.statuses(try project("null"), app) == [.review], "null inherits")
+        #expect(CosSettings.statuses(try project(#"["blocked","done"]"#), app) == [.blocked, .done])
+        #expect(CosSettings.statuses(try project("[]"), app).isEmpty, "an empty override is its own choice, not inherit")
+    }
+
+    @Test func aToggleKeepsBoardOrder() {
+        #expect(CosSettings.toggled(.planning, on: true, in: [.done, .blocked]) == [.planning, .blocked, .done])
+        #expect(CosSettings.toggled(.blocked, on: false, in: [.blocked, .review]) == [.review])
     }
 
     @Test func theTriStateSavesNullToInherit() {
@@ -191,8 +206,9 @@ private func project(_ id: String, group: String?) -> Project {
         #expect(try json(UpdateProjectBody()).isEmpty)
         let off = try json(UpdateProjectBody(cosEnabled: .value(false)))
         #expect(off["cosEnabled"] as? Bool == false)
-        #expect(off["cosCanUnblock"] == nil)
-        #expect(try json(UpdateProjectBody(cosCanUnblock: .null))["cosCanUnblock"] is NSNull, "Inherit sends an explicit null")
+        #expect(off["cosStatuses"] == nil)
+        #expect(try json(UpdateProjectBody(cosStatuses: .null))["cosStatuses"] is NSNull, "Inherit sends an explicit null")
+        #expect(try json(UpdateProjectBody(cosStatuses: .value([.inProgress, .blocked])))["cosStatuses"] as? [String] == ["in_progress", "blocked"])
     }
 
     @Test func theChiefModelResolvesProjectThenAppThenWork() throws {
@@ -205,7 +221,7 @@ private func project(_ id: String, group: String?) -> Project {
         #expect(CosSettings.appModel(settings(cosModel: nil)) == work, "an install that never chose one runs on Work")
         #expect(CosSettings.appModel(settings(cosModel: app)) == app)
         #expect(CosSettings.appModel(nil) == PhaseChoice(driver: "claude-code", model: nil))
-        let project = try JSONDecoder().decode(Project.self, from: Data(#"{"id":"p","key":"A","name":"A","path":"/a","nextSeq":1,"useWorktrees":true,"defaultModels":{},"cosEnabled":null,"cosCanUnblock":null,"cosModel":{"driver":"claude-code","model":"haiku"},"createdAt":1,"updatedAt":1}"#.utf8))
+        let project = try JSONDecoder().decode(Project.self, from: Data(#"{"id":"p","key":"A","name":"A","path":"/a","nextSeq":1,"useWorktrees":true,"defaultModels":{},"cosEnabled":null,"cosStatuses":null,"cosModel":{"driver":"claude-code","model":"haiku"},"createdAt":1,"updatedAt":1}"#.utf8))
         #expect(CosSettings.model(project: project, settings: settings(cosModel: app)) == own)
         #expect(CosSettings.model(project: nil, settings: settings(cosModel: app)) == app)
     }

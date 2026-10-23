@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { resolveCosSetting, type Cos, type CosScope } from "@harness/shared";
+import { resolveCosSetting, resolveCosStatuses, type Cos, type CosScope } from "@harness/shared";
 import { FakeDriver } from "../fake-driver";
 import { callTools, makeOrchestrator, stopAll } from "../orchestrator-harness";
 
@@ -151,7 +151,7 @@ test("the scope is read from the chief's row on every call, so moving a project 
   expect(keep.groupId).toBe(scope.group);
 });
 
-test("with can-unblock off a chief refuses to touch a blocked ticket but still reports it; on, it answers", async () => {
+test("with Blocked unchecked a chief refuses to touch a blocked ticket but still reports it; on, it answers", async () => {
   const { h, asCos, a, groupOf } = await board();
   h.store.tickets.update(a.id, { status: "blocked", blockedReason: "Which database?" });
   const calls: [string, unknown][] = [["get_ticket", { key: a.key }], ["message_ticket", { key: a.key, text: "Postgres" }], ["move_ticket", { key: a.key, status: "planning" }]];
@@ -160,21 +160,21 @@ test("with can-unblock off a chief refuses to touch a blocked ticket but still r
   expect(json(off[0]!.text)).toMatchObject({ key: a.key, status: "blocked", blockedReason: "Which database?" });
   for (const r of off.slice(1)) {
     expect(r.isError).toBe(true);
-    expect(r.text).toContain("CoS can unblock");
+    expect(r.text).toContain("Blocked");
     expect(r.text).toContain("Which database?");
   }
   expect(h.ticket(a.key).status).toBe("blocked");
 
   // The app turns it on; the project overrides it off; the project override wins either way.
-  h.orch.updateSettings({ cosCanUnblock: true });
+  h.orch.updateSettings({ cosStatuses: ["blocked"] });
   expect((await asCos("all", [calls[1]!]))[0]!.isError).toBe(false);
   h.store.tickets.update(a.id, { status: "blocked", blockedReason: "Again?" });
-  h.orch.updateProject(h.project.id, { cosCanUnblock: false });
-  expect((await asCos("all", [calls[1]!]))[0]!.text).toContain("CoS can unblock");
-  h.orch.updateProject(h.project.id, { cosCanUnblock: null });
+  h.orch.updateProject(h.project.id, { cosStatuses: ["review"] });
+  expect((await asCos("all", [calls[1]!]))[0]!.text).toContain("Blocked");
+  h.orch.updateProject(h.project.id, { cosStatuses: null });
   expect((await asCos("all", [calls[1]!]))[0]!.isError).toBe(false);
-  // A ticket that isn't blocked is unaffected by the setting being off.
-  h.orch.updateSettings({ cosCanUnblock: false });
+  // A ticket that isn't blocked is unaffected by Blocked being unchecked.
+  h.orch.updateSettings({ cosStatuses: [] });
   const planning = await h.orch.createTicket({ projectId: h.project.id, spec: "Other", start: false });
   await h.settle();
   expect((await asCos({ group: groupOf("Work") }, [])).length).toBe(0);
@@ -187,7 +187,7 @@ test("an unblock by a chief shows in the ticket's Activity as the chief, and onl
   const block = (t: { id: string }, why: string) => h.store.tickets.update(t.id, { status: "blocked", blockedReason: why });
   const bodies = (t: { key: string }) => h.store.activity.listBySession(h.ticket(t.key).sessionId).map((e) => e.body);
   // ACME turns it on for itself, the app default stays off: WORK1's blocked ticket is not touched.
-  h.orch.updateProject(h.project.id, { cosCanUnblock: true });
+  h.orch.updateProject(h.project.id, { cosStatuses: ["blocked"] });
   block(a, "Which database?");
   block(w, "Which cache?");
   const r = await asCos("all", [["message_ticket", { key: a.key, text: "Postgres" }], ["message_ticket", { key: w.key, text: "Redis" }], ["move_ticket", { key: w.key, status: "planning" }]]);
@@ -201,7 +201,7 @@ test("an unblock by a chief shows in the ticket's Activity as the chief, and onl
   expect(h.ticket(a.key).status).toBe("planning");
   expect(bodies(a)).toContain(`Chief of staff (${key()}) moved it to planning`);
   // A group's chief can't reach another group's blocked ticket even where the app allows unblocking.
-  h.orch.updateSettings({ cosCanUnblock: true });
+  h.orch.updateSettings({ cosStatuses: ["blocked"] });
   block(w, "Which queue?");
   const scoped = await asCos({ group: groupOf("Home") }, [["message_ticket", { key: w.key, text: "SQS" }]]);
   expect(scoped[0]!.isError).toBe(true);
@@ -221,22 +221,24 @@ test("a project inherits the app's CoS settings, overrides them, and goes back t
   const { h } = await board();
   const read = () => {
     const p = h.orch.listProjects().find((x) => x.key === "ACME")!;
-    return { enabled: resolveCosSetting(p, h.orch.settings(), "cosEnabled"), unblock: resolveCosSetting(p, h.orch.settings(), "cosCanUnblock"), own: [p.cosEnabled, p.cosCanUnblock] };
+    return { enabled: resolveCosSetting(p, h.orch.settings(), "cosEnabled"), statuses: resolveCosStatuses(p, h.orch.settings()), own: [p.cosEnabled, p.cosStatuses] };
   };
-  expect(read()).toEqual({ enabled: true, unblock: false, own: [null, null] });
-  h.orch.updateSettings({ cosEnabled: false, cosCanUnblock: true });
-  expect(read()).toEqual({ enabled: false, unblock: true, own: [null, null] });
-  h.orch.updateProject(h.project.id, { cosEnabled: true, cosCanUnblock: false });
-  expect(read()).toEqual({ enabled: true, unblock: false, own: [true, false] });
+  expect(read()).toEqual({ enabled: true, statuses: [], own: [null, null] });
+  h.orch.updateSettings({ cosEnabled: false, cosStatuses: ["done", "blocked"] });
+  expect(read()).toEqual({ enabled: false, statuses: ["blocked", "done"], own: [null, null] });
+  h.orch.updateProject(h.project.id, { cosEnabled: true, cosStatuses: [] });
+  expect(read()).toEqual({ enabled: true, statuses: [], own: [true, []] });
   // Another field's PATCH leaves the overrides alone; null resets one.
   h.orch.updateProject(h.project.id, { name: "Renamed" });
-  expect(read().own).toEqual([true, false]);
+  expect(read().own).toEqual([true, []]);
   h.orch.updateProject(h.project.id, { cosEnabled: null });
-  expect(read()).toEqual({ enabled: false, unblock: false, own: [null, false] });
-  h.orch.updateProject(h.project.id, { cosCanUnblock: null });
-  expect(read()).toEqual({ enabled: false, unblock: true, own: [null, null] });
+  expect(read()).toEqual({ enabled: false, statuses: [], own: [null, []] });
+  h.orch.updateProject(h.project.id, { cosStatuses: null });
+  expect(read()).toEqual({ enabled: false, statuses: ["blocked", "done"], own: [null, null] });
   expect(() => h.orch.updateProject(h.project.id, { cosEnabled: "yes" as unknown as boolean })).toThrow(/cosEnabled must be true, false or null/);
-  expect(() => h.orch.updateSettings({ cosCanUnblock: "no" as unknown as boolean })).toThrow(/cosCanUnblock must be true or false/);
+  expect(() => h.orch.updateSettings({ cosStatuses: ["blocked", "nope"] as unknown as never })).toThrow(/cosStatuses must be a list of columns/);
+  expect(() => h.orch.updateSettings({ cosStatuses: "blocked" as unknown as never })).toThrow(/cosStatuses must be a list of columns/);
+  expect(() => h.orch.updateProject(h.project.id, { cosStatuses: ["nope"] as unknown as never })).toThrow(/cosStatuses must be a list of columns/);
 });
 
 test("a chief of staff is made when first asked for, once per scope, outside every project list", async () => {

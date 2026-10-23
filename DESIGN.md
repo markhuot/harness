@@ -824,10 +824,12 @@ returns the same one after; GET never creates. When a group's last project leave
 `ticket.deleted` and `session.deleted` sent, files removed; `pruneCos`), and only then the store drops the group. HTTP: `GET /cos`, `POST /cos { scope }` (opens; idempotent),
 `PATCH /cos/:ticketId { enabled }`. A switched-off CoS refuses new messages (409); a run under way ends.
 
-**Settings.** `settings.cosEnabled` (default true) and `settings.cosCanUnblock` (default false) are
-the app's values; a project's `cosEnabled` / `cosCanUnblock` are nullable overrides (null inherits;
-PATCH `null` resets). `resolveCosSetting` in `shared/src/cos.ts` is the one place that resolves
-project-else-app-else-default.
+**Settings.** `settings.cosEnabled` (default true) and `settings.cosStatuses` (a list of board
+columns, default none) are the app's values; a project's `cosEnabled` / `cosStatuses` are nullable
+overrides (null inherits, and an empty list is its own choice; PATCH `null` resets).
+`resolveCosSetting` and `resolveCosStatuses` in `shared/src/cos.ts` resolve project-else-app-else-default,
+and `cosSeesStatus` answers whether a column is checked. Migration 54 turned the old `cosCanUnblock`
+into `["blocked"]` (true) or `[]` (false), per app and per project.
 
 **Model.** A CoS run has its own `{ driver, model }` choice, not a fifth phase: `settings.cosModel`
 for every chief, and a project's nullable `cosModel` (the `projects.cos_model` column) for a wake whose
@@ -858,8 +860,8 @@ project) and takes no `child`. Its system prompt (`system.cos`, static, so the p
 byte-identical across wakes) says to create tickets, conductors for several parts, for anything deeper
 than a lookup or board action.
 
-**Unblocking.** Every board write goes through `boardTarget`, which calls `cosMayAct`: with the
-ticket's project's `cosCanUnblock` off, a CoS's write to a blocked ticket is refused, naming the
+**Unblocking.** Every board write goes through `boardTarget`, which calls `cosMayAct`: with
+Blocked unchecked in the ticket's project's `cosStatuses` (else the app's), a CoS's write to a blocked ticket is refused, naming the
 setting and the ticket's question; reading it stays available. Human-only approvals are not bypassed
 (`noPendingApproval`). What a CoS changes on a ticket is added to that ticket's Activity as "Chief of
 staff (KEY) …".
@@ -874,8 +876,8 @@ ticket is not an event (the human is already there); a message to a CoS goes str
 `activity.actor` (`cos:<ticket id>` or null; older rows are null, never a CoS) is stamped once in
 `addActivity` from an `AsyncLocalStorage` scoped to a chief's tool call (the tools of a `cos` run are
 wrapped, so it holds in-process and over `POST /mcp/:token`, which starts a fresh async root; `execute()`
-clears it for every run and timers never inherit it), not by callers. Events caused by a chief, on a chief's own ticket, or with
-no ticket are stored `verdict=filtered` and never triaged, which also audits the filter. Events nobody
+clears it for every run and timers never inherit it), not by callers. Events caused by a chief, on a chief's own ticket, with
+no ticket, or on a ticket whose column (its status at drain time) isn't in the project's resolved `cosStatuses` are stored `verdict=filtered` and never triaged, which also audits the filter. Events nobody
 could own are bounded: the newest 200, none older than a day.
 
 **One owner.** `ownerOf` (`shared/src/cos.ts`, pure): the project's group's CoS when it is on and the
@@ -965,7 +967,7 @@ All chief when the project has no group. A click makes the chief if it doesn't e
 `state/paneModel.ts`; one chief pane at a time, so another scope replaces it and the same one comes
 forward). The pane has the header (title, Memory, close) and a **Chat** and an **Inbox** tab, and no
 on/off switch: a chief is switched on or off in Settings (app-wide) and a project's settings
-(per project), which is also where "can unblock" lives. The store holds `chiefs`, `cosEvents` (by
+(per project), which is also where its column checkboxes live. The store holds `chiefs`, `cosEvents` (by
 id, so a pushed event replaces its row), `cosChat` (oldest first, merged by id so a page and a live
 push never show an entry twice) and `cosBadge`; the pure rules (tab set, merges, inbox states, the
 tri-state of a project's override, the scroll anchor kept when an older page loads) are in

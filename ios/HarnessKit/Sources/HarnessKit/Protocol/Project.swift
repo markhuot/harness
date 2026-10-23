@@ -60,8 +60,8 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
     /// Whether chiefs of staff handle this project's events: its own value, or `.null`/absent to
     /// inherit settings.cosEnabled. Read it with `CosSettings.enabled`.
     public var cosEnabled: Patch<Bool>
-    /// Whether a chief of staff may unblock this project's tickets; `.null`/absent inherits settings.cosCanUnblock.
-    public var cosCanUnblock: Patch<Bool>
+    /// The columns whose tickets reach a chief of staff (Blocked also lets it answer them); `.null`/absent inherits settings.cosStatuses.
+    public var cosStatuses: Patch<[TicketStatus]>
     /// The driver and model a chief of staff woken for this project's events alone runs on; nil inherits settings.cosModel. Absent from older payloads.
     @Nullable public var cosModel: PhaseChoice?
     public var createdAt: Timestamp
@@ -74,10 +74,10 @@ public struct Project: Codable, Sendable, Equatable, Identifiable {
         permissionMode: PermissionMode? = nil, baseBranch: Patch<String> = .absent,
         completionAction: CompletionAction? = nil, completionActions: [CompletionAction]? = nil,
         pullRequestHost: Patch<String> = .absent, color: String? = nil, group: String? = nil, groupId: String? = nil,
-        cosEnabled: Patch<Bool> = .absent, cosCanUnblock: Patch<Bool> = .absent, cosModel: PhaseChoice? = nil, createdAt: Timestamp, updatedAt: Timestamp
+        cosEnabled: Patch<Bool> = .absent, cosStatuses: Patch<[TicketStatus]> = .absent, cosModel: PhaseChoice? = nil, createdAt: Timestamp, updatedAt: Timestamp
     ) {
         self.cosEnabled = cosEnabled
-        self.cosCanUnblock = cosCanUnblock
+        self.cosStatuses = cosStatuses
         self.cosModel = cosModel
         self.id = id
         self.key = key

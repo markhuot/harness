@@ -65,8 +65,8 @@ public struct Settings: Codable, Sendable, Equatable {
     public var notifications: NotificationSettings?
     /// Whether chiefs of staff run (projects may override it). nil → `CosSettings.defaultEnabled`.
     public var cosEnabled: Bool?
-    /// Whether a chief of staff may unblock tickets (projects may override it). nil → `CosSettings.defaultCanUnblock`.
-    public var cosCanUnblock: Bool?
+    /// The columns whose tickets reach a chief of staff (projects may override it). nil → none.
+    public var cosStatuses: [TicketStatus]?
     /// The driver and model every chief of staff runs on (projects may override it). nil → the Work choice.
     public var cosModel: Patch<PhaseChoice>
 
@@ -77,10 +77,10 @@ public struct Settings: Codable, Sendable, Equatable {
         anthropicApiKey: String? = nil, claudeOauthToken: String? = nil, copilotGithubToken: String? = nil, baseBranch: String? = nil,
         listen: ListenSetting? = nil, browserIdleTabMinutes: Int? = nil, prompts: [String: String?]? = nil,
         notifications: NotificationSettings? = nil, contextGaugeLimit: Int? = nil, saveOnBlur: Bool? = nil,
-        cosEnabled: Bool? = nil, cosCanUnblock: Bool? = nil, cosModel: Patch<PhaseChoice> = .absent
+        cosEnabled: Bool? = nil, cosStatuses: [TicketStatus]? = nil, cosModel: Patch<PhaseChoice> = .absent
     ) {
         self.cosEnabled = cosEnabled
-        self.cosCanUnblock = cosCanUnblock
+        self.cosStatuses = cosStatuses
         self.cosModel = cosModel
         self.contextGaugeLimit = contextGaugeLimit
         self.saveOnBlur = saveOnBlur
@@ -136,9 +136,9 @@ public struct PublicSettings: Codable, Sendable, Equatable {
     public var prompts: [String: String?]?
     /// nil from services older than notifications (Settings hides its Notifications switches then).
     public var notifications: NotificationSettings?
-    /// Settings.cosEnabled / cosCanUnblock; nil from an older service (read the defaults then).
+    /// Settings.cosEnabled / cosStatuses; nil from an older service (read the defaults then).
     public var cosEnabled: Bool?
-    public var cosCanUnblock: Bool?
+    public var cosStatuses: [TicketStatus]?
     /// Settings.cosModel; absent or null when none is chosen (and from an older service).
     public var cosModel: Patch<PhaseChoice>
     /// Whether an API key for the anthropic-api driver is stored
@@ -156,10 +156,10 @@ public struct PublicSettings: Codable, Sendable, Equatable {
         listen: ListenSetting? = nil, browserIdleTabMinutes: Int? = nil, prompts: [String: String?]? = nil,
         notifications: NotificationSettings? = nil,
         anthropicApiKeySet: Bool, claudeOauthTokenSet: Bool? = nil, copilotGithubTokenSet: Bool? = nil, contextGaugeLimit: Int? = nil, saveOnBlur: Bool? = nil,
-        cosEnabled: Bool? = nil, cosCanUnblock: Bool? = nil, cosModel: Patch<PhaseChoice> = .absent
+        cosEnabled: Bool? = nil, cosStatuses: [TicketStatus]? = nil, cosModel: Patch<PhaseChoice> = .absent
     ) {
         self.cosEnabled = cosEnabled
-        self.cosCanUnblock = cosCanUnblock
+        self.cosStatuses = cosStatuses
         self.cosModel = cosModel
         self.contextGaugeLimit = contextGaugeLimit
         self.saveOnBlur = saveOnBlur

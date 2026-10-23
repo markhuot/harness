@@ -9,7 +9,15 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+- Settings → Chief of staff now has a checkbox for each board column (Planning, In progress, Blocked, Review, Done), on the Mac, iPhone and iPad, and each project can inherit them or set its own. A chief of staff only gets events about tickets in a checked column, so a chief that only helps with Review, or only with Planning, no longer sees the rest.
+
+### Changed
+- Out of the box no column is checked, so a chief of staff gets no events until you check the columns it should handle. A ticket moving to In progress no longer reaches the chief unless In progress is checked. An install that had "CoS can unblock" on keeps Blocked checked and starts with the other columns off, and so does a project that overrode it.
+- A chief of staff answers or moves a blocked ticket only where the Blocked box is checked; its refusal now says so.
+
 ### Removed
+- The "CoS can unblock" setting, replaced by the Blocked checkbox.
 - The chief of staff no longer reports stalled tickets. Nothing wakes it because a ticket has sat blocked or in review for hours, so the "Several tickets need you…" messages and the "Unknown event for this wake: open-conditions" error are gone; it wakes only for escalated events and its own schedules. Triage also no longer gets a list of waiting tickets as context, so it judges each event on its own and may escalate repeat events on an already blocked ticket a little more often. The old record of which stalls were reported is deleted from the database, so clearing a chief's wake history can't re-announce anything.
 
 ## [app-20261023.0302](https://github.com/markhuot/harness/releases/tag/app-20261023.0302) - 2026-10-23

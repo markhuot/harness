@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { COS_CEILING_MS, COS_HOUR_MS, COS_QUIET_MS, collapseMoves, nextWakeAllowedAt, nextWakeAt, ownerOf, routineActivityReason, type CosChief } from "../../../shared/src/cos";
+import { COS_CEILING_MS, COS_HOUR_MS, COS_QUIET_MS, collapseMoves, nextWakeAllowedAt, nextWakeAt, ownerOf, cosSeesStatus, resolveCosStatuses, routineActivityReason, type CosChief } from "../../../shared/src/cos";
 
 const chief = (ticketId: string, scope: CosChief["scope"], enabled = true): CosChief => ({ ticketId, scope, groupId: scope === "all" ? null : scope.slice(6), enabled });
 const all = chief("all-1", "all");
@@ -108,5 +108,24 @@ describe("routineActivityReason", () => {
   test("blocks, failures, answers, requested changes and ordinary moves are never routine", () => {
     for (const kind of ["blocked", "failed", "answered", "answer", "changes_requested", "message", "reopened", "system", "permission", "submitted"]) expect(routineActivityReason(act(kind), "review")).toBeNull();
     expect(routineActivityReason(act("moved", "in_progress", "blocked"), "blocked")).toBeNull();
+  });
+});
+
+describe("cosSeesStatus", () => {
+  test("nothing is checked until someone checks a column", () => {
+    for (const status of ["planning", "in_progress", "blocked", "review", "done"]) expect(cosSeesStatus(null, {}, status)).toBe(false);
+  });
+
+  test("a column is seen only when it is in the set; the project's own set replaces the app's", () => {
+    const app = { cosStatuses: ["review" as const, "done" as const] };
+    expect(cosSeesStatus({ cosStatuses: null }, app, "review")).toBe(true);
+    expect(cosSeesStatus({ cosStatuses: null }, app, "in_progress")).toBe(false);
+    expect(cosSeesStatus({ cosStatuses: ["in_progress"] }, app, "in_progress")).toBe(true);
+    expect(cosSeesStatus({ cosStatuses: ["in_progress"] }, app, "review")).toBe(false);
+  });
+
+  test("an empty project set is its own choice, not inherit", () => {
+    expect(resolveCosStatuses({ cosStatuses: [] }, { cosStatuses: ["done"] })).toEqual([]);
+    expect(resolveCosStatuses({ cosStatuses: null }, { cosStatuses: ["done"] })).toEqual(["done"]);
   });
 });
