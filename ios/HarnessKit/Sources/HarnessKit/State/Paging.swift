@@ -62,11 +62,15 @@ public enum Paging {
 
     // MARK: Reducer pieces
 
+    /// The chief of staff's own ticket (kind "cos") is plumbing: clients never hold it in ticket state.
+    public static func isHidden(_ t: Ticket) -> Bool { t.kind == .cos }
+
     /// Merge fetched tickets into the map. A live event may have delivered a strictly newer
     /// version while the request was in flight; that one wins.
     public static func mergeTickets(_ existing: [String: Ticket], _ incoming: [Ticket]) -> [String: Ticket] {
         var next = existing
         for t in incoming {
+            if isHidden(t) { continue }
             if let cur = next[t.id], cur.updatedAt > t.updatedAt { continue }
             next[t.id] = t
         }

@@ -1,8 +1,8 @@
 import { afterEach, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { COS_CEILING_MS, COS_HOUR_MS, COS_QUIET_MS, COS_WAKES_PER_HOUR } from "../../../shared/src/cos";
-import { WAKE_PROMPT_PREFIX } from "../../../service/src/cos/chat";
+import { COS_CEILING_MS, COS_HOUR_MS, COS_QUIET_MS, COS_STALL_AFTER_MS, COS_STALL_REPEAT_MS, COS_STALL_RETRY_MS, COS_WAKES_PER_HOUR } from "../../../shared/src/cos";
+import { isSilentReply, WAKE_PROMPT_PREFIX } from "../../../service/src/cos/chat";
 import type { CosEngine } from "../../../service/src/cos/engine";
 import { LlmTriage, type CosTriage, type TriageInput, type TriageResult, type TriageVerdict } from "../../../service/src/cos/triage";
 import type { StoredCosEvent } from "../../../service/src/store/cos-events";
@@ -85,7 +85,7 @@ async function setup(opts: { triage?: CosTriage | { unavailable: string }; drive
     return t;
   };
   /** Something happened on a ticket (an activity row, as the orchestrator writes them). */
-  const happen = (t: { id: string; sessionId: string }, body: string, extra: { kind?: "note" | "moved" | "blocked"; actor?: string; from?: string; to?: string } = {}) =>
+  const happen = (t: { id: string; sessionId: string }, body: string, extra: { kind?: "note" | "moved" | "blocked" | "review_approved" | "approved" | "failed"; actor?: string; from?: string; to?: string } = {}) =>
     h.store.activity.add({ sessionId: t.sessionId, ticketId: t.id, kind: extra.kind ?? "note", author: "agent", body, actor: extra.actor, meta: extra.from ? { from: extra.from as never, to: extra.to as never } : {} });
   const events = () => h.store.cosEvents.list({ limit: 500 }).reverse();
   const eventOf = (marker: string): StoredCosEvent => {
@@ -529,7 +529,123 @@ test("tickets still blocked ride along with every triage batch and wake, but nev
   s.happen(s.t, "marker-open");
   await s.after(MIN);
   expect(s.scripted!.calls[0]!.openConditions.join("\n")).toContain(`${stuck.key} "waiting on an answer" is blocked: needs the API key`);
-  expect(s.h.driver.requests.at(-1)!.prompt).toMatch(new RegExp(`Still open:\\n<untrusted-event id="open-conditions">\\n- ${stuck.key}`));
+  // Three hours is a stall triage should know about, but not one the user is told about yet.
+  expect(s.h.driver.requests.at(-1)!.prompt).not.toContain("Stalled for a long time");
+});
+
+// ---------------------------------------------------------------------------
+// Quiet by default: the chief messages the user only for a change, an attention item or a long stall
+// ---------------------------------------------------------------------------
+
+const wakeCount = (s: { h: { store: { cosEvents: { wakeTimes(c: string, k: "wake", since: number): number[] } } }; chief: { ticketId: string } }) => s.h.store.cosEvents.wakeTimes(s.chief.ticketId, "wake", 0).length;
+const chatOf = (s: { h: { orch: { cosTranscript(id: string, q: { limit: string }): { entries: { kind: string; text?: string }[] } } }; chief: { ticketId: string } }) => s.h.orch.cosTranscript(s.chief.ticketId, { limit: "100" }).entries;
+const liveOf = (s: { h: { events: { kind: string }[] } }) => s.h.events.flatMap((e) => (e.kind === "cos.transcript.appended" ? [(e as unknown as { entry: { kind: string; text?: string } }).entry] : []));
+
+test("a wake with nothing to tell the user leaves the chat empty, live and in history; one with something shows its reply and batch", async () => {
+  const s = await quiet();
+  s.h.driver.script(replyScript("[quiet]"), replyScript("ACME-1 moved to review and needs your decision."), replyScript("`[quiet]`"));
+  for (const marker of ["marker-q1", "marker-q2", "marker-q3"]) {
+    s.scripted!.answers.push(escalating(marker));
+    s.happen(s.t, marker);
+    await s.after(MIN);
+  }
+  expect(wakeCount(s)).toBe(3);
+  expect(s.h.driver.requests.at(-1)!.prompt).toContain("reply with exactly [quiet]");
+  for (const entries of [chatOf(s), liveOf(s)]) {
+    expect(entries.filter((e) => e.kind === "message").map((e) => e.text)).toEqual(["ACME-1 moved to review and needs your decision."]);
+    expect(entries.filter((e) => e.kind === "event_batch")).toHaveLength(1);
+  }
+  // The raw transcript keeps the silent replies.
+  const texts = s.h.store.transcript.tail(s.h.store.tickets.get(s.chief.ticketId)!.sessionId, 50, ["text"]).map((m) => (m.content as { text: string }).text);
+  expect(texts).toContain("[quiet]");
+});
+
+test("a failed wake run still shows its batch card, and a reply mixing text with the sentinel isn't silent", async () => {
+  const s = await quiet();
+  s.h.driver.script([{ throw: new Error("boom") }]);
+  s.scripted!.answers.push(escalating("marker-fail"));
+  s.happen(s.t, "marker-fail");
+  await s.after(MIN);
+  expect(chatOf(s).filter((e) => e.kind === "event_batch")).toHaveLength(1);
+  expect(isSilentReply("[quiet] but also: ACME-1 is blocked")).toBe(false);
+  expect(isSilentReply("  \n")).toBe(true);
+});
+
+async function blockedTicket() {
+  const s = await quiet();
+  const stuck = await s.ticket(s.h.project.id, "waiting on an answer");
+  s.h.store.tickets.update(stuck.id, { status: "blocked", blockedReason: "needs the API key" });
+  s.happen(stuck, "blocked", { kind: "moved", from: "in_progress", to: "blocked" });
+  await s.after(6 * MIN);
+  s.h.driver.requests.splice(0);
+  return { ...s, stuck };
+}
+
+test("a stall wakes a quiet board once when it crosses the threshold, and again only after the repeat interval", async () => {
+  const s = await blockedTicket();
+  const before = wakeCount(s);
+  await s.after(COS_STALL_AFTER_MS - 30 * MIN);
+  expect(wakeCount(s)).toBe(before);
+
+  s.h.driver.script(replyScript("ACME-2 has been blocked for hours."));
+  await s.after(40 * MIN);
+  expect(wakeCount(s)).toBe(before + 1);
+  expect(s.h.driver.requests.at(-1)!.prompt).toContain(`Stalled for a long time and not yet reported to the user:`);
+  expect(s.h.driver.requests.at(-1)!.prompt).toContain(`${s.stuck.key} "waiting on an answer" is blocked: needs the API key`);
+  expect(chatOf(s).filter((e) => e.kind === "message").map((e) => e.text)).toContain("ACME-2 has been blocked for hours.");
+  expect(chatOf(s).filter((e) => e.kind === "event_batch")).toHaveLength(0); // no events came with it
+
+  // Unchanged, it is not re-reported on later wakes, however many.
+  for (let i = 0; i < 3; i++) {
+    s.scripted!.answers.push(escalating(`marker-s${i}`));
+    s.happen(s.t, `marker-s${i}`);
+    await s.after(20 * MIN);
+  }
+  expect(s.h.driver.requests.filter((r) => r.prompt.includes("Stalled for a long time"))).toHaveLength(1);
+  await s.after(COS_STALL_REPEAT_MS - 2 * 60 * MIN - 60 * MIN);
+  expect(s.h.driver.requests.filter((r) => r.prompt.includes("Stalled for a long time"))).toHaveLength(1);
+
+  // Past the repeat interval it is told again.
+  await s.after(4 * 60 * MIN);
+  expect(s.h.driver.requests.filter((r) => r.prompt.includes("Stalled for a long time"))).toHaveLength(2);
+});
+
+test("a stalled item comes back when its status or blocked reason changes", async () => {
+  const s = await blockedTicket();
+  await s.after(COS_STALL_AFTER_MS);
+  const told = () => s.h.driver.requests.filter((r) => r.prompt.includes("Stalled for a long time")).length;
+  expect(told()).toBe(1);
+  s.h.store.tickets.update(s.stuck.id, { title: "waiting on an answer (edited)" }); // an edit alone isn't a change
+  await s.after(COS_STALL_RETRY_MS + MIN);
+  expect(told()).toBe(1);
+  s.h.store.tickets.update(s.stuck.id, { blockedReason: "needs the API key and a hostname" });
+  await s.after(COS_STALL_RETRY_MS + MIN);
+  expect(told()).toBe(2);
+  expect(s.h.driver.requests.at(-1)!.prompt).toContain("needs the API key and a hostname");
+});
+
+test("a stall is aged from when the ticket entered its status, not from its last edit", async () => {
+  const s = await quiet();
+  const stuck = await s.ticket(s.h.project.id, "moved long ago");
+  s.h.store.tickets.update(stuck.id, { status: "blocked", blockedReason: "waiting" });
+  s.happen(stuck, "blocked", { kind: "moved", from: "in_progress", to: "blocked" });
+  await s.after(COS_STALL_AFTER_MS - 10 * MIN);
+  s.h.store.tickets.update(stuck.id, { title: "moved long ago (edited)" }); // bumps updatedAt
+  s.h.driver.requests.splice(0);
+  await s.after(15 * MIN);
+  expect(s.h.driver.requests.filter((r) => r.prompt.includes("Stalled for a long time"))).toHaveLength(1);
+});
+
+test("a stall wake whose run fails reports nothing, so the stall is sent again", async () => {
+  const s = await blockedTicket();
+  s.h.driver.script([{ throw: new Error("boom") }]);
+  await s.after(COS_STALL_AFTER_MS);
+  const told = () => s.h.driver.requests.filter((r) => r.prompt.includes("Stalled for a long time")).length;
+  expect(told()).toBe(1);
+  await s.after(COS_STALL_RETRY_MS - MIN); // retries are spaced out
+  expect(told()).toBe(1);
+  await s.after(2 * MIN);
+  expect(told()).toBe(2);
 });
 
 test("a human's message to a chief goes straight to its run, with no triage", async () => {
@@ -820,7 +936,7 @@ test("a ticket's title in the triage prompt sits inside a fence", async () => {
   s.happen(s.t, "marker-title");
   await s.after(MIN);
   const { buildTriagePrompt } = await import("../../../service/src/cos/triage");
-  const user = buildTriagePrompt({ guidance: "", projects: [], openConditions: ["T-1 \"TITLE-HOSTILE\" is blocked"], events: [{ id: "e1", source: "activity", actor: "a", title: "t", project: null, ticket: 'T-1 "TICKET-HOSTILE" (blocked)', body: "b" }] }).user;
+  const user = buildTriagePrompt({ cosId: "c1", guidance: "", projects: [], openConditions: ["T-1 \"TITLE-HOSTILE\" is blocked"], events: [{ id: "e1", source: "activity", actor: "a", title: "t", project: null, ticket: 'T-1 "TICKET-HOSTILE" (blocked)', body: "b" }] }).user;
   expect(outsideFences(user)).not.toMatch(/HOSTILE/);
   expect(user).toContain("TITLE-HOSTILE");
 });
@@ -883,4 +999,252 @@ test("a chief whose runs keep failing isn't woken for the same event forever", a
   for (let i = 0; i < 5; i++) await s.after(COS_HOUR_MS / COS_WAKES_PER_HOUR);
   expect(s.h.driver.requests.filter((r) => r.prompt.includes("marker-doomed"))).toHaveLength(WAKE_MAX_ATTEMPTS);
   expect(s.eventOf("marker-doomed")).toMatchObject({ status: "ignored", reason: expect.stringContaining("failed 3 times") });
+});
+
+// ---------------------------------------------------------------------------
+// Outcomes and routine activity
+// ---------------------------------------------------------------------------
+
+/** A wake whose scripted run records `outcomes` for the events whose titles hold each marker (ids are known only once the wake is made). */
+function recording(s: Awaited<ReturnType<typeof quiet>>, entries: [marker: string, kind: string, text: string][], opts: { fail?: boolean } = {}) {
+  const input = { outcomes: [] as { event_id: string; kind: string; text: string }[] };
+  const { steps, results } = callTools([["record_event_outcomes", input]]);
+  s.h.driver.script([{ run: () => void (input.outcomes = entries.map(([m, kind, text]) => ({ event_id: m.startsWith("ev:") ? m.slice(3) : s.eventOf(m).id, kind, text }))) }, ...steps, ...(opts.fail ? [{ throw: new Error("boom") }] : replyScript("done"))]);
+  return results;
+}
+
+test("the chief's recorded outcome is stored on each event it was woken for and sent on the wire; an event it recorded nothing for has none", async () => {
+  const s = await quiet();
+  const results = recording(s, [
+    ["marker-a", "acted", "Moved the ticket back to planning."],
+    ["marker-b", "no_action", "The agent review approved it; it already waits for you."],
+    ["marker-c", "needs_user", "Pick the release tag."],
+    ["ev:not-an-event", "acted", "invented"],
+  ]);
+  s.scripted!.answers.push((i) => i.events.map((e) => verdict(e.id, "escalate")));
+  for (const m of ["marker-a", "marker-b", "marker-c", "marker-d"]) s.happen(s.t, m);
+  await s.after(MIN);
+  expect(results[0]!.text).toContain("Recorded 3 of 4 outcomes.");
+  expect(results[0]!.text).toContain("not-an-event");
+  const wire = (m: string) => s.h.orch.cosEvents(s.chief.ticketId, {}).items.find((e) => e.id === s.eventOf(m).id)!;
+  expect(wire("marker-a")).toMatchObject({ status: "handled", outcome: { kind: "acted", text: "Moved the ticket back to planning." } });
+  expect(wire("marker-b").outcome).toEqual({ kind: "no_action", text: "The agent review approved it; it already waits for you." });
+  expect(wire("marker-c").outcome?.kind).toBe("needs_user");
+  expect(wire("marker-d")).toMatchObject({ status: "handled", outcome: null });
+  expect(JSON.stringify(wire("marker-a"))).not.toContain("payload");
+});
+
+test("an outcome is refused for an event another run was given, a bad kind or empty text, and the rest are kept", async () => {
+  const s = await quiet();
+  // An escalated event nobody is handling yet can't be recorded against.
+  s.scripted!.answers.push(escalating("marker-mine"));
+  const idle = s.engine.addExternal({ sourceKind: "watcher", sourceRef: "w:1", actor: "watcher:x", title: "marker-foreign", body: "x" })!;
+  const results = recording(s, [
+    ["marker-mine", "acted", "ok"],
+    [`ev:${idle.id}`, "acted", "not mine"],
+    ["marker-mine", "bogus", "bad kind"],
+    ["marker-mine", "acted", "   "],
+  ]);
+  s.happen(s.t, "marker-mine");
+  await s.after(MIN);
+  expect(results[0]!.text).toContain("Recorded 1 of 4 outcomes.");
+  expect(s.eventOf("marker-mine").outcome).toEqual({ kind: "acted", text: "ok" });
+  expect(s.eventOf("marker-foreign").outcome).toBeNull();
+});
+
+test("a failed run leaves no outcome behind, so the next successful run can't inherit it", async () => {
+  const s = await quiet();
+  recording(s, [["marker-f", "acted", "Did a thing"]], { fail: true });
+  s.scripted!.answers.push(escalating("marker-f"));
+  s.happen(s.t, "marker-f");
+  await s.after(MIN);
+  expect(s.eventOf("marker-f")).toMatchObject({ status: "escalated", outcome: null });
+  await s.after(COS_HOUR_MS / COS_WAKES_PER_HOUR);
+  expect(s.eventOf("marker-f")).toMatchObject({ status: "handled", outcome: null });
+});
+
+test("routine activity is filtered before triage: an agent review's approval of a ticket waiting on a human, and a ticket that completed as planned; real changes still reach triage", async () => {
+  const s = await quiet();
+  s.h.store.tickets.update(s.t.id, { status: "review" });
+  s.happen(s.t, "marker-approved-review", { kind: "review_approved" });
+  s.happen(s.t, "marker-done", { kind: "moved", from: "review", to: "done" });
+  s.happen(s.t, "marker-human-approved", { kind: "approved" });
+  s.happen(s.t, "marker-blocked", { kind: "blocked" });
+  s.happen(s.t, "marker-failed", { kind: "failed" });
+  s.happen(s.t, "marker-to-blocked", { kind: "moved", from: "in_progress", to: "blocked" });
+  await s.after(MIN);
+  for (const m of ["marker-approved-review", "marker-done", "marker-human-approved"]) expect(s.eventOf(m)).toMatchObject({ status: "ignored", verdict: "filtered" });
+  expect(s.eventOf("marker-approved-review").reason).toContain("agent review approved");
+  const asked = s.scripted!.calls.flatMap((c) => c.events.map((e) => e.title));
+  expect(asked.filter((t) => /marker-(blocked|failed|to-blocked)/.test(t))).toHaveLength(3);
+  expect(asked.some((t) => t.includes("marker-approved-review") || t.includes("marker-done"))).toBe(false);
+  // An approval of a ticket that isn't waiting on a human (a stale or reopened one) goes to triage.
+  s.h.store.tickets.update(s.t.id, { status: "in_progress" });
+  s.happen(s.t, "marker-approved-elsewhere", { kind: "review_approved" });
+  await s.after(MIN);
+  expect(s.eventOf("marker-approved-elsewhere").verdict).not.toBe("filtered");
+});
+
+// ---- Triage as an agent run ---------------------------------------------------------------------
+
+/** What an agent triage reports about itself: smaller batches, more time, a transcript. */
+class AgentLike extends ScriptedTriage {
+  readonly limits = { chunk: 2, perPass: 30, timeoutMs: 240_000 };
+  sessionId: string | null = "triage-session-1";
+  override async triage(input: TriageInput, signal: AbortSignal): Promise<TriageResult> {
+    const res = await super.triage(input, signal);
+    return { ...res, sessionId: this.sessionId };
+  }
+}
+
+test("a triage that brings its own limits gets batches of that size and that long to answer", async () => {
+  const agent = new AgentLike();
+  const s = await quiet({ triage: agent });
+  const before = agent.calls.length;
+  for (const n of [1, 2, 3, 4, 5]) s.happen(s.t, `marker-batch-${n}`);
+  await s.after(MIN);
+  expect(agent.calls.slice(before).map((c) => c.events.length)).toEqual([2, 2, 1]);
+  // The timeout is the triage's own (4 minutes for an agent run), not the one-shot minute.
+  const hang: CosTriage = { backend: "fake", model: "m", limits: { chunk: 5, perPass: 30, timeoutMs: 240_000 }, triage: (_i, signal) => new Promise((_, reject) => signal.addEventListener("abort", () => reject(new Error("aborted")))) };
+  const t = await quiet({ triage: hang });
+  t.happen(t.t, "marker-slow");
+  t.h.clock.advance(MIN);
+  const tick = t.engine.tick();
+  await until(() => [...t.timers.pending.values()].some((x) => x.ms === 240_000));
+  t.timers.fire(240_000);
+  await tick;
+  await t.h.settle();
+  expect(t.eventOf("marker-slow").reason).toBe("triage timed out");
+});
+
+test("an escalation the human makes while an earlier chunk is out for triage is not overwritten by a later chunk", async () => {
+  let s!: Awaited<ReturnType<typeof quiet>>;
+  let call = 0;
+  const agent: CosTriage = {
+    backend: "fake",
+    model: "m",
+    limits: { chunk: 1, perPass: 30, timeoutMs: 240_000 },
+    triage: async (input) => {
+      // While the first chunk is out, the human escalates an event that waits in a later one.
+      if (call++ === 0) expect(s.engine.escalate(s.eventOf("marker-later").id)).toHaveProperty("event");
+      return { verdicts: input.events.map((e) => ({ id: e.id, verdict: "ignore" as const, reason: "noise", brief: null, project: null })), model: "m", tokensIn: 0, tokensOut: 0 };
+    },
+  };
+  s = await quiet({ triage: agent });
+  s.happen(s.t, "marker-first");
+  s.happen(s.t, "marker-later");
+  await s.after(MIN);
+  expect(s.eventOf("marker-first").status).toBe("ignored");
+  expect(s.eventOf("marker-later").verdict).toBe("escalate");
+  expect(s.eventOf("marker-later").reason).toMatch(/^Escalated by you/);
+  expect(call).toBe(1);
+});
+
+test("an event keeps the session of the triage run that judged it, ignored or escalated", async () => {
+  const agent = new AgentLike();
+  agent.answers.push(escalating("marker-esc", "Copilot review on PR #1297; owning ticket ACME-1"));
+  const s = await quiet({ triage: agent });
+  s.happen(s.t, "marker-esc");
+  s.happen(s.t, "marker-ign");
+  await s.after(MIN);
+  expect(s.eventOf("marker-esc").triageSessionId).toBe("triage-session-1");
+  expect(s.eventOf("marker-ign").triageSessionId).toBe("triage-session-1");
+  expect(s.eventOf("marker-ign").status).toBe("ignored");
+  // The brief reaches the chief, inside the untrusted fence.
+  const wake = s.h.driver.requests.at(-1)!.prompt;
+  expect(wake).toContain("owning ticket ACME-1");
+});
+
+test("a triage run that ends early keeps the verdicts it recorded and escalates the rest", async () => {
+  const { TriageIncomplete } = await import("../../../service/src/cos/triage");
+  let ids: string[] = [];
+  const partial: CosTriage = {
+    backend: "fake",
+    model: "m",
+    async triage(input) {
+      ids = input.events.map((e) => e.id);
+      throw new TriageIncomplete("triage run failed: boom", [verdict(ids[0]!, "ignore")], "triage-session-2");
+    },
+  };
+  const s = await quiet({ triage: partial });
+  s.happen(s.t, "marker-first");
+  s.happen(s.t, "marker-second");
+  await s.after(MIN);
+  const [a, b] = [s.eventOf("marker-first"), s.eventOf("marker-second")];
+  const ignored = [a, b].find((e) => e.id === ids[0])!;
+  const escalated = [a, b].find((e) => e.id === ids[1])!;
+  expect(ignored.status).toBe("ignored");
+  expect(escalated.reason).toBe("triage failed: triage run failed: boom");
+  expect(escalated.triageSessionId).toBe("triage-session-2");
+});
+
+test("a one-shot triage with no lookup says so in its reasons", async () => {
+  const blind = new ScriptedTriage();
+  Object.assign(blind, { lookup: false });
+  blind.answers.push(escalating("marker-blind"));
+  const s = await quiet({ triage: blind });
+  s.happen(s.t, "marker-blind");
+  s.happen(s.t, "marker-other");
+  await s.after(MIN);
+  expect(s.eventOf("marker-blind").reason).toBe("needs the chief (triaged without lookup)");
+  expect(s.eventOf("marker-other").reason).toBe("routine (triaged without lookup)");
+});
+
+test("the watcher's prompt reaches triage with the events it printed, and only those", async () => {
+  const s = await quiet();
+  const feed = s.h.store.watchers.create({ name: "gh-notifications", command: "gh", prompt: "A thread line is only a pointer: read the PR with gh pr view and say who changed it." });
+  const plain = s.h.store.watchers.create({ name: "no-prompt", command: "true" });
+  const from = (w: { id: string }, title: string) => s.engine.addExternal({ sourceKind: "watcher", sourceRef: `${w.id}:sha256:${title}`, actor: "watcher:x", title, body: "b", cosId: s.chief.ticketId });
+  from(feed, "marker-with-prompt");
+  from(plain, "marker-without-prompt");
+  await s.after(MIN);
+  const input = s.scripted!.calls.flatMap((c) => c.events);
+  expect(input.find((e) => e.title === "marker-with-prompt")!.watcher).toEqual({ name: "gh-notifications", prompt: expect.stringContaining("read the PR") });
+  expect(input.find((e) => e.title === "marker-without-prompt")!.watcher).toEqual({ name: "no-prompt", prompt: "" });
+});
+
+// ---------------------------------------------------------------------------
+// Deleted tickets
+// ---------------------------------------------------------------------------
+
+test("deleting a ticket tells its chief, with the key and title, after reading the activity not yet drained", async () => {
+  const s = await quiet();
+  const doomed = await s.ticket(s.h.project.id, "A doomed ticket");
+  s.happen(doomed, "marker-last-words");
+  await s.h.orch.deleteTicket(doomed.key);
+  // The activity written just before the delete wasn't read yet, and went with the ticket: it is an event anyway.
+  expect(s.eventOf("marker-last-words")).toMatchObject({ verdict: "pending" });
+  const ev = s.eventOf(`${doomed.key} deleted`);
+  expect(ev).toMatchObject({ kind: "deleted", ticketId: null, ticketKey: null, cosId: s.chief.ticketId, verdict: "pending", status: "pending", actor: "human" });
+  expect(ev.title).toContain(doomed.title);
+  expect(ev.payload).toMatchObject({ key: doomed.key, title: doomed.title });
+  // It goes to triage like any event, and a re-read of the feed makes no second one.
+  s.engine.drain();
+  expect(s.events().filter((e) => e.title.includes(`${doomed.key} deleted`))).toHaveLength(1);
+  await s.after(MIN);
+  expect(s.scripted!.calls.flatMap((c) => c.events).some((e) => e.title.includes(`${doomed.key} deleted`))).toBe(true);
+});
+
+test("a deletion a chief caused is recorded as ignored and never triaged", async () => {
+  const s = await quiet();
+  s.engine.addDeleted({ what: "ticket", id: "gone-1", label: "ACME-99", title: "Chief's doomed ticket", actor: `cos:${s.chief.ticketId}`, project: s.h.project, keepsProject: true });
+  expect(s.eventOf("ACME-99 deleted")).toMatchObject({ verdict: "filtered", status: "ignored", reason: "caused by a chief of staff" });
+  await s.after(10 * MIN);
+  expect(s.scripted!.calls.flatMap((c) => c.events).some((e) => e.title.includes("ACME-99 deleted"))).toBe(false);
+});
+
+test("deleting a project makes one event, not one per ticket", async () => {
+  const s = await quiet();
+  const p = await s.project("GONE");
+  await s.ticket(p.id, "first");
+  await s.ticket(p.id, "second");
+  await s.h.orch.deleteProject(p.id);
+  const deleted = s.events().filter((e) => e.kind === "deleted");
+  expect(deleted).toHaveLength(1);
+  expect(deleted[0]).toMatchObject({ ticketId: null, verdict: "pending" });
+  expect(deleted[0]!.title).toContain("GONE");
+  expect(deleted[0]!.title).toContain("2 tickets");
+  // The owner survives the project: a rehome keeps it with a live chief.
+  s.engine.rehome();
+  expect(s.events().find((e) => e.kind === "deleted")!.cosId).toBe(s.chief.ticketId);
 });

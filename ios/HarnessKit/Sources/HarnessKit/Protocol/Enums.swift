@@ -168,9 +168,9 @@ public enum TriageStatus: OpenEnum {
 /// chat: a human message to a blocked, review or done ticket, answered by its agent with the work
 /// tools (the agent moves the ticket itself).
 public enum RunKind: OpenEnum {
-    case plan, work, review, complete, conductor, chat, compact, cos
+    case plan, work, review, complete, conductor, chat, compact, cos, triage
     case unknown(String)
-    public static let allKnown: [Self] = [.plan, .work, .review, .complete, .conductor, .chat, .compact, .cos]
+    public static let allKnown: [Self] = [.plan, .work, .review, .complete, .conductor, .chat, .compact, .cos, .triage]
     public var rawValue: String {
         switch self {
         case .plan: "plan"
@@ -180,6 +180,7 @@ public enum RunKind: OpenEnum {
         case .conductor: "conductor"
         case .chat: "chat"
         case .compact: "compact"
+        case .triage: "triage"
         case .cos: "cos"
         case let .unknown(r): r
         }

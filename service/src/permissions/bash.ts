@@ -201,9 +201,9 @@ function redirectTarget(s: string, i: number, flag: (why: string) => void): numb
 /** Commands that only read, whatever their flags (no flag of theirs writes or executes). */
 const ALWAYS_READ_ONLY = new Set([
   "ls", "cat", "head", "tail", "wc", "pwd", "echo", "grep", "egrep", "fgrep", "which", "file", "stat", "du", "df",
-  "tree", "diff", "cmp", "cut", "tr", "basename", "dirname", "realpath", "readlink", "true", "false", "nl", "jq",
+  "diff", "cmp", "cut", "tr", "basename", "dirname", "realpath", "readlink", "true", "false", "nl", "jq",
   "whoami", "uname", "test", "[", "comm", "column", "md5", "md5sum", "shasum", "sha1sum", "sha256sum", "cd",
-  "type", "printf", "rev", "fold", "expand", "hexdump", "xxd", "od", "strings", "lsof",
+  "type", "printf", "rev", "fold", "expand", "hexdump", "od", "strings", "lsof",
 ]);
 
 const FIND_BAD = new Set(["-delete", "-exec", "-execdir", "-ok", "-okdir", "-fprint", "-fprint0", "-fprintf", "-fls"]);
@@ -253,6 +253,89 @@ function gitReadOnly(args: string[]): boolean {
   }
 }
 
+/** `gh` subcommands that only read. Anything not listed (merge, comment, edit, auth, extension...) is not read-only. */
+const GH_READ_ONLY: Record<string, ReadonlySet<string>> = {
+  pr: new Set(["view", "diff", "checks", "list", "status"]),
+  issue: new Set(["view", "list", "status"]),
+  run: new Set(["view", "list"]),
+  repo: new Set(["view", "list"]),
+  release: new Set(["view", "list"]),
+  search: new Set(["prs", "issues", "commits", "repos", "code"]),
+};
+/**
+ * Flags that give a `gh` call a body, a method override, another host, a template, a browser or a
+ * long-lived watch. Short flags combine (`-iXPOST`, `-iFbody=x`), so any short cluster holding one of
+ * f, F, X, H, w, t counts.
+ */
+const GH_BAD_FLAG = /^(-[a-zA-Z]*[fFXHwt]|--(field|raw-field|method|input|hostname|header|web|watch|template)(=|$))/;
+/** The only flags `gh api` may carry: the ones that read and shape the response. */
+const GH_API_FLAGS = new Set(["--paginate", "--slurp", "-i", "--include", "--silent"]);
+/** gh api flags whose value is the next word. */
+const GH_API_VALUE_FLAGS = new Set(["--jq", "-q", "--cache"]);
+/** A jq program that reads the process environment or other input (`env`, `$ENV`, `input`). */
+const JQ_ENV = /\b(env|ENV|input|inputs|input_filename)\b/;
+
+function ghReadOnly(args: string[]): boolean {
+  // A flag before the subcommand (`gh -R owner/repo pr view`) isn't accounted for: not read-only.
+  const [group, sub] = args;
+  if (!group || group.startsWith("-") || args.some((a) => GH_BAD_FLAG.test(a))) return false;
+  // A URL (another host) only when it points at github.com; the jq program of --jq can't read the environment.
+  if (args.some((a, i) => (/:\/\//.test(a) && !a.startsWith("https://github.com/")) || ((args[i - 1] === "--jq" || args[i - 1] === "-q") && JQ_ENV.test(a)) || (/^--jq=/.test(a) && JQ_ENV.test(a)))) return false;
+  if (group === "api") {
+    // `gh api` becomes a POST by itself once it has a field or an input (denied above); graphql is always a POST.
+    const endpoints: string[] = [];
+    const rest = args.slice(1);
+    for (let i = 0; i < rest.length; i++) {
+      const a = rest[i]!;
+      if (a.startsWith("-")) {
+        if (GH_API_VALUE_FLAGS.has(a)) i++;
+        else if (!GH_API_FLAGS.has(a) && !/^--(jq|cache)=/.test(a)) return false;
+      } else endpoints.push(a);
+    }
+    const [endpoint] = endpoints;
+    return endpoints.length === 1 && !!endpoint && !/^\/?graphql/.test(endpoint) && !endpoint.includes("//");
+  }
+  return !!sub && !!GH_READ_ONLY[group]?.has(sub);
+}
+
+/** A path that reaches outside the working folder (the folder is empty, so a relative path reads nothing). */
+const OUTSIDE_PATH = /^(~|\/|-.*=\/)|(^|\/)\.\.(\/|$)/;
+/** Commands a triage run may pipe `gh` output through. None of them is given a path to read. */
+const TRIAGE_FILTERS = new Set(["jq", "grep", "head", "tail", "wc", "sort", "cut", "tr", "echo", "uniq"]);
+const JQ_SAFE_FLAG = /^-[rcesnRSjaMC]+$/;
+
+function triageFilterOk(cmd: string, args: string[]): boolean {
+  if (cmd === "jq") {
+    // The one positional is the program (a second would be a file); a flag outside the list can load a file or an argument.
+    const positional = args.filter((a) => !a.startsWith("-"));
+    return args.filter((a) => a.startsWith("-")).every((a) => JQ_SAFE_FLAG.test(a)) && positional.length <= 1 && !args.some((a) => JQ_ENV.test(a));
+  }
+  if (args.some((a) => OUTSIDE_PATH.test(a))) return false;
+  // grep -f reads patterns from a file and -r walks directories.
+  if (cmd === "grep") return !args.some((a) => /^-[a-zA-Z]*[fFrR]|^--(file|recursive|dereference-recursive|exclude-from)/.test(a));
+  return true;
+}
+
+/**
+ * Unquoted `<` (input redirect), braces (brace expansion) and `*` (glob) in a command. The parser
+ * skips an input redirect's file name and doesn't expand braces, so a triage command has none.
+ */
+function hasUnquotedMeta(command: string): boolean {
+  let quote: string | null = null;
+  for (let i = 0; i < command.length; i++) {
+    const c = command[i]!;
+    if (quote) {
+      if (c === quote) quote = null;
+      else if (c === "\\" && quote === '"') i++;
+      continue;
+    }
+    if (c === "'" || c === '"') quote = c;
+    else if (c === "\\") i++;
+    else if (c === "<" || c === "{" || c === "}" || c === "*") return true;
+  }
+  return false;
+}
+
 function segmentReadOnly(argv: Segment): boolean {
   const [cmd, ...args] = argv;
   if (!cmd) return true;
@@ -268,11 +351,27 @@ function segmentReadOnly(argv: Segment): boolean {
       return !args.some((a) => a === "-o" || a.startsWith("--output") || /^-[a-zA-Z]*o/.test(a));
     case "uniq":
       return args.filter((a) => !a.startsWith("-")).length <= 1; // a second path is the output file
+    case "xxd":
+      return args.filter((a) => a === "-" || !a.startsWith("-")).length <= 1; // `xxd -r in out` writes its second path
+    case "tree":
+      return !args.some((a) => a === "-o" || a.startsWith("--output") || /^-[a-zA-Z]*o/.test(a)); // -o writes a file
     case "git":
       return gitReadOnly(args);
+    case "gh":
+      return ghReadOnly(args);
     default:
       return false;
   }
+}
+
+/**
+ * A command a triage run may run: `gh` reads (a short allowlist of subcommands and `gh api` flags,
+ * a relative endpoint) piped through a few filters that take no path. No input redirect, brace
+ * expansion or glob, so nothing reads outside the (empty) working folder or reaches another host.
+ */
+export function isTriageCommand(command: string): boolean {
+  if (!isReadOnlyCommand(command) || hasUnquotedMeta(command)) return false;
+  return parseCommand(command).segments.every(([cmd, ...args]) => cmd === "gh" || (!!cmd && TRIAGE_FILTERS.has(cmd) && triageFilterOk(cmd, args)));
 }
 
 /** True only when every part of the command is on the read-only allowlist. */

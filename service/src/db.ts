@@ -886,6 +886,20 @@ export const MIGRATIONS: string[] = [
   `
   ALTER TABLE watchers ADD COLUMN cos_id TEXT REFERENCES cos(ticket_id) ON DELETE SET NULL;
   `,
+  // 50: a wake that has nothing to tell the user is silent (DESIGN.md "Chief of staff"). cos_wakes records the run
+  //     that took the wake, how it ended (NULL while open; 'spoke', 'quiet' or 'failed': a quiet one's batch card is
+  //     hidden from the chat) and the stalled items it carried as JSON {ticket id: fingerprint}, which is what
+  //     "already reported" means. Wakes before this one count as having spoken.
+  `
+  ALTER TABLE cos_wakes ADD COLUMN run_id TEXT;
+  ALTER TABLE cos_wakes ADD COLUMN outcome TEXT;
+  ALTER TABLE cos_wakes ADD COLUMN reported TEXT;
+  UPDATE cos_wakes SET outcome = 'spoke' WHERE kind = 'wake';
+  `,
+  // 51: a project's own model for the chiefs woken for its events (JSON {driver, model}; NULL: inherit settings.cosModel).
+  `
+  ALTER TABLE projects ADD COLUMN cos_model TEXT;
+  `,
 ];
 
 /** Where the files migrations look at live (HarnessPaths); by default next to the database file. */

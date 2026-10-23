@@ -30,6 +30,9 @@ public struct Watcher: Codable, Sendable, Equatable, Identifiable {
     @Nullable public var lastError: String?
     public var createdAt: Timestamp
     public var updatedAt: Timestamp
+    /// The chief of staff (its ticket id) that owns the watcher and receives its output as events.
+    /// null: the All chief. Absent from an older service.
+    public var cosId: Patch<String>
     /// What the watcher's process is doing right now. Not stored: the service fills it in from its
     /// supervisor. Absent from services that don't report it (older builds, watchers switched off).
     public var live: WatcherLive?
@@ -38,7 +41,7 @@ public struct Watcher: Codable, Sendable, Equatable, Identifiable {
         id: String, name: String, command: String, args: [String] = [], prompt: String = "", cwd: String? = nil,
         env: [String: String] = [:], mode: WatcherMode, intervalSec: Int, enabled: Bool, driver: String? = nil,
         models: [String: String]? = nil, lastRunAt: Timestamp? = nil, lastError: String? = nil,
-        createdAt: Timestamp, updatedAt: Timestamp, live: WatcherLive? = nil
+        createdAt: Timestamp, updatedAt: Timestamp, cosId: Patch<String> = .absent, live: WatcherLive? = nil
     ) {
         self.id = id
         self.name = name
@@ -56,6 +59,7 @@ public struct Watcher: Codable, Sendable, Equatable, Identifiable {
         self.lastError = lastError
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.cosId = cosId
         self.live = live
     }
 }

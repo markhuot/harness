@@ -2,6 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { resolveCosSetting, type Cos, type CosScope } from "@harness/shared";
+import { FakeDriver } from "../fake-driver";
 import { callTools, makeOrchestrator, stopAll } from "../orchestrator-harness";
 
 afterEach(stopAll);
@@ -374,7 +375,7 @@ test("every operation that takes a key answers an out-of-scope key like a missin
   const unkeyed = [
     "postNote", "updateNotes", "wroteNotes", "statusLine", "readSpec", "editSpec", "updateSpec", "block", "unblock", "resumeWork", "returnToPlanning", "submitForReview", "updateBranch", "reviewDecision",
     "listTickets", "searchTickets", "listProjects", "listInbox", "createTicket", "recordPullRequest", "requestApproval", "checkPermission", "fileOutputScope",
-    "listWatchers", "getSettings", "listPrompts", "listDrivers", "createWatcher", "createProject", "updateSettings", "scheduleCreate", "scheduleList", "scheduleCancel", "queryActivity", "readMemory", "updateMemorySection", "listTerminals", "readTerminal", "writeTerminal", "arrangePanes",
+    "listWatchers", "getSettings", "listPrompts", "listDrivers", "createWatcher", "createProject", "updateSettings", "scheduleCreate", "scheduleList", "scheduleCancel", "queryActivity", "readMemory", "updateMemorySection", "recordEventOutcomes", "recordTriageVerdict", "listTerminals", "readTerminal", "writeTerminal", "arrangePanes",
   ];
   expect(Object.keys(ops).sort()).toEqual([...Object.keys(keyed), ...unkeyed].sort());
   const message = async (fn: () => Promise<unknown>, key: string) => {
@@ -432,4 +433,59 @@ test("a chief's sessions stay off the session list, its attachments and app-wide
   })();
   expect(results[0]!.text).toMatch(/can't attach files/);
   expect(results[1]!.text).toMatch(/only the All chief of staff/);
+});
+
+// ---------------------------------------------------------------------------
+// Which model a chief runs on: the project of a wake about one project, else the app's
+// ---------------------------------------------------------------------------
+
+/** A chief whose app default runs on `fake` and whose project WORK1 chose `alt`; wake it like the engine does. */
+async function modelRig() {
+  const alt = new FakeDriver({ id: "alt" });
+  const fake = new FakeDriver();
+  const h = makeOrchestrator({ tools: undefined, driver: fake, drivers: [fake, alt] });
+  const dir = join(h.home, "proj", "work1");
+  mkdirSync(dir, { recursive: true });
+  const work = h.orch.createProject({ path: dir, name: "WORK1", key: "WORK1", useWorktrees: false });
+  h.store.projects.update(work.id, { cosModel: { driver: "alt", model: "alt-model" } });
+  const cos = h.orch.openCos("all");
+  const wake = async (projectKey: string | null) => {
+    await (h.orch as unknown as { wakeCos(id: string, text: string, key: string | null): Promise<string | null> }).wakeCos(cos.ticketId, "wake", projectKey);
+    await h.settle();
+  };
+  return { h, alt, cos, wake };
+}
+
+test("a wake about one project runs on that project's chief model", async () => {
+  const { h, alt, wake } = await modelRig();
+  await wake("WORK1");
+  expect(h.driver.requests).toHaveLength(0);
+  expect(alt.requests.map((r) => r.model)).toEqual(["alt-model"]);
+});
+
+test("a wake that spans projects or holds only stalls (no project) runs on the app's model", async () => {
+  const { h, alt, wake } = await modelRig();
+  await wake(null);
+  expect(alt.requests).toHaveLength(0);
+  expect(h.driver.requests).toHaveLength(1);
+});
+
+test("a chat message to the chief runs on the app's model even after a wake about a project", async () => {
+  const { h, alt, cos, wake } = await modelRig();
+  await wake("WORK1");
+  await h.orch.sendMessage(cos.key, "how is it going?");
+  await h.settle();
+  expect(alt.requests).toHaveLength(1);
+  expect(h.driver.requests).toHaveLength(1);
+});
+
+test("switching the chief's driver starts a fresh conversation instead of resuming the other driver's", async () => {
+  const { h, alt, cos, wake } = await modelRig();
+  await wake(null); // fake writes a session
+  expect(h.driver.requests[0]!.state).toBeNull();
+  await wake("WORK1"); // alt must not be handed fake's session
+  expect(alt.requests[0]!.state).toBeNull();
+  await h.orch.sendMessage(cos.key, "back on the app's model"); // fake can't resume alt's either
+  await h.settle();
+  expect(h.driver.requests[1]!.state).toBeNull();
 });

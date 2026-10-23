@@ -53,6 +53,32 @@ public enum CosEventVerdict: OpenEnum {
     }
 }
 
+/// What the chief did about an event it was woken for.
+public enum CosOutcomeKind: OpenEnum {
+    case acted, noAction, needsUser
+    case unknown(String)
+    public static let allKnown: [Self] = [.acted, .noAction, .needsUser]
+    public var rawValue: String {
+        switch self {
+        case .acted: "acted"
+        case .noAction: "no_action"
+        case .needsUser: "needs_user"
+        case let .unknown(r): r
+        }
+    }
+}
+
+/// The chief's own account of one event (CosEvent.outcome).
+public struct CosOutcome: Codable, Sendable, Equatable {
+    public var kind: CosOutcomeKind
+    public var text: String
+
+    public init(kind: CosOutcomeKind, text: String) {
+        self.kind = kind
+        self.text = text
+    }
+}
+
 /// A chief of staff (GET /cos). `ticketId` and `key` identify its ticket (kind "cos").
 public struct Cos: Codable, Sendable, Equatable, Identifiable {
     public var ticketId: String
@@ -98,12 +124,16 @@ public struct CosEvent: Codable, Sendable, Equatable, Identifiable {
     @Nullable public var wakeId: String?
     /// The run that handled it
     @Nullable public var handledBy: String?
+    /// What the chief recorded for it; nil when its run recorded none (and for events handled before outcomes existed)
+    @Nullable public var outcome: CosOutcome?
+    /// The session whose transcript shows what triage looked up for it; nil when a one-shot call judged it
+    @Nullable public var triageSessionId: String?
     public var createdAt: Timestamp
 
     public init(
         id: String, cosId: String? = nil, projectKey: String? = nil, sourceKind: CosEventSource = .activity, title: String, summary: String = "",
         actor: String = "agent", status: CosEventStatus = .pending, verdict: CosEventVerdict = .pending, reason: String? = nil, model: String? = nil,
-        ticketKey: String? = nil, wakeId: String? = nil, handledBy: String? = nil, createdAt: Timestamp
+        ticketKey: String? = nil, wakeId: String? = nil, handledBy: String? = nil, outcome: CosOutcome? = nil, triageSessionId: String? = nil, createdAt: Timestamp
     ) {
         self.id = id
         self.cosId = cosId
@@ -119,6 +149,8 @@ public struct CosEvent: Codable, Sendable, Equatable, Identifiable {
         self.ticketKey = ticketKey
         self.wakeId = wakeId
         self.handledBy = handledBy
+        self.outcome = outcome
+        self.triageSessionId = triageSessionId
         self.createdAt = createdAt
     }
 }

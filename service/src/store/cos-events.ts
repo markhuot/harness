@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
-import type { CosBadge, CosEvent, CosEventSource, CosEventStatus, CosEventVerdict } from "@harness/shared";
-import { COS_OPEN_STATUSES } from "@harness/shared";
+import type { CosBadge, CosEvent, CosOutcome, CosEventSource, CosEventStatus, CosEventVerdict } from "@harness/shared";
+import { COS_OPEN_STATUSES, COS_OUTCOME_KINDS } from "@harness/shared";
 import { fromJson, newId } from "./util";
 import { type Clock, systemClock } from "../clock";
 
@@ -45,30 +45,41 @@ interface Row {
 const SELECT = `SELECT e.*, p.key AS project_key, t.key AS ticket_key FROM cos_events e
   LEFT JOIN projects p ON p.id = e.project_id LEFT JOIN tickets t ON t.id = e.ticket_id`;
 
-const toEvent = (r: Row): StoredCosEvent => ({
-  id: r.id,
-  cosId: r.cos_id,
-  projectKey: r.project_key,
-  sourceKind: r.source_kind as CosEventSource,
-  title: r.title,
-  summary: r.summary,
-  actor: r.actor,
-  status: r.status as CosEventStatus,
-  verdict: r.verdict as CosEventVerdict,
-  reason: r.reason,
-  model: r.model,
-  ticketKey: r.ticket_key,
-  wakeId: r.wake_id,
-  handledBy: r.status === "handled" ? r.consuming_run_id : null,
-  createdAt: r.created_at,
-  projectId: r.project_id,
-  ticketId: r.ticket_id,
-  kind: r.kind,
-  sourceRef: r.source_ref,
-  payload: fromJson<Record<string, unknown>>(r.payload, {}),
-  consumingRunId: r.consuming_run_id,
-  updatedAt: r.updated_at,
-});
+/** The outcome kept in a handled event's payload; anything else there reads as none. */
+const outcomeOf = (payload: Record<string, unknown>): CosOutcome | null => {
+  const o = payload.outcome as Partial<CosOutcome> | undefined;
+  return o && (COS_OUTCOME_KINDS as readonly unknown[]).includes(o.kind) && typeof o.text === "string" ? { kind: o.kind!, text: o.text } : null;
+};
+
+const toEvent = (r: Row): StoredCosEvent => {
+  const payload = fromJson<Record<string, unknown>>(r.payload, {});
+  return {
+    id: r.id,
+    cosId: r.cos_id,
+    projectKey: r.project_key,
+    sourceKind: r.source_kind as CosEventSource,
+    title: r.title,
+    summary: r.summary,
+    actor: r.actor,
+    status: r.status as CosEventStatus,
+    verdict: r.verdict as CosEventVerdict,
+    reason: r.reason,
+    model: r.model,
+    ticketKey: r.ticket_key,
+    wakeId: r.wake_id,
+    handledBy: r.status === "handled" ? r.consuming_run_id : null,
+    createdAt: r.created_at,
+    projectId: r.project_id,
+    ticketId: r.ticket_id,
+    kind: r.kind,
+    sourceRef: r.source_ref,
+    outcome: outcomeOf(payload),
+    triageSessionId: typeof payload.triageSession === "string" ? payload.triageSession : null,
+    payload,
+    consumingRunId: r.consuming_run_id,
+    updatedAt: r.updated_at,
+  };
+};
 
 export interface NewCosEvent {
   cosId: string | null;
@@ -122,7 +133,13 @@ export interface WakeLog {
   model?: string | null;
   tokensIn?: number | null;
   tokensOut?: number | null;
+  /** The run the wake went to */
+  runId?: string | null;
+  /** The stalled items it carried: ticket id → fingerprint */
+  reported?: Record<string, string>;
 }
+
+export type WakeOutcome = "spoke" | "quiet" | "failed";
 
 /** The chief-of-staff Inbox (DESIGN.md "Events"): every event with its one owner, verdict and status. */
 export class CosEventRepo {
@@ -266,9 +283,45 @@ export class CosEventRepo {
   addWake(log: WakeLog): string {
     const id = newId();
     this.db
-      .query("INSERT INTO cos_wakes (id, cos_id, kind, started_at, event_count, digest, model, tokens_in, tokens_out) VALUES ($id, $cosId, $kind, $t, $n, $digest, $model, $tin, $tout)")
-      .run({ id, cosId: log.cosId, kind: log.kind, t: this.now(), n: log.eventCount, digest: log.digest ?? null, model: log.model ?? null, tin: log.tokensIn ?? null, tout: log.tokensOut ?? null });
+      .query("INSERT INTO cos_wakes (id, cos_id, kind, started_at, event_count, digest, model, tokens_in, tokens_out, run_id, reported) VALUES ($id, $cosId, $kind, $t, $n, $digest, $model, $tin, $tout, $runId, $reported)")
+      .run({
+        id,
+        cosId: log.cosId,
+        kind: log.kind,
+        t: this.now(),
+        n: log.eventCount,
+        digest: log.digest ?? null,
+        model: log.model ?? null,
+        tin: log.tokensIn ?? null,
+        tout: log.tokensOut ?? null,
+        runId: log.runId ?? null,
+        reported: log.reported && Object.keys(log.reported).length ? JSON.stringify(log.reported) : null,
+      });
     return id;
+  }
+
+  /** Full wakes whose run hasn't been seen to end. */
+  openWakes(): { id: string; cosId: string; runId: string | null; startedAt: number; eventCount: number; digest: string }[] {
+    return (this.db.query("SELECT id, cos_id, run_id, started_at, event_count, digest FROM cos_wakes WHERE kind = 'wake' AND outcome IS NULL").all() as { id: string; cos_id: string; run_id: string | null; started_at: number; event_count: number; digest: string | null }[]).map((r) => ({
+      id: r.id,
+      cosId: r.cos_id,
+      runId: r.run_id,
+      startedAt: r.started_at,
+      eventCount: r.event_count,
+      digest: r.digest ?? "",
+    }));
+  }
+
+  setWakeOutcome(id: string, outcome: WakeOutcome) {
+    this.db.query("UPDATE cos_wakes SET outcome = $outcome WHERE id = $id").run({ id, outcome });
+  }
+
+  /** Per stalled ticket, the fingerprint and time of its latest report: wakes that carried it and didn't fail (one still running counts, so it isn't sent twice). */
+  reportedStalls(cosId: string): Map<string, { fingerprint: string; at: number }> {
+    const out = new Map<string, { fingerprint: string; at: number }>();
+    const rows = this.db.query("SELECT started_at, reported FROM cos_wakes WHERE cos_id = $cosId AND kind = 'wake' AND reported IS NOT NULL AND (outcome IS NULL OR outcome <> 'failed') ORDER BY started_at").all({ cosId }) as { started_at: number; reported: string }[];
+    for (const r of rows) for (const [key, fingerprint] of Object.entries(fromJson<Record<string, string>>(r.reported, {}))) out.set(key, { fingerprint, at: r.started_at });
+    return out;
   }
 
   /** Token counts of a full wake, known once its run reports them. */
@@ -307,7 +360,7 @@ export class CosEventRepo {
     return (
       this.db
         .query(
-          `SELECT id, started_at, digest FROM cos_wakes WHERE cos_id = $cosId AND kind = 'wake'
+          `SELECT id, started_at, digest FROM cos_wakes WHERE cos_id = $cosId AND kind = 'wake' AND event_count > 0 AND (outcome IS NULL OR outcome <> 'quiet')
            AND ($bt IS NULL OR started_at < $bt OR (started_at = $bt AND ('wake:' || id) < $bid)) ORDER BY started_at DESC, id DESC LIMIT $limit`,
         )
         .all({ cosId, bt: before?.createdAt ?? null, bid: before?.id ?? "", limit }) as { id: string; started_at: number; digest: string | null }[]

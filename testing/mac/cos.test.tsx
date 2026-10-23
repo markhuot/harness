@@ -10,6 +10,7 @@ import { all, click, edited, mount, text, type } from "./render";
 import { FakeClient } from "./fakeClient";
 import { world } from "../world";
 import { minutesAgo } from "../world/time";
+import { watcher } from "../world/build";
 
 type M = Awaited<ReturnType<typeof mount>>;
 
@@ -148,14 +149,21 @@ describe("Inbox", () => {
   test("lists the chief's events newest first, with their verdicts", async () => {
     const m = await inbox();
     await m.until("the rows", () => events(m).length > 0);
-    expect(events(m).map((e) => e.dataset.event)).toEqual(["ev-waiting", "ev-handling", "ev-ignored", "ev-escalated", "ev-handled", "ev-schedule"]);
-    expect(events(m).map((e) => e.dataset.state)).toEqual(["waiting", "handling", "ignored", "escalated", "handled", "handled"]);
+    expect(events(m).map((e) => e.dataset.event)).toEqual(["ev-waiting", "ev-handling", "ev-ignored", "ev-escalated", "ev-handled", "ev-needs-user", "ev-no-action", "ev-schedule"]);
+    expect(events(m).map((e) => e.dataset.state)).toEqual(["waiting", "handling", "ignored", "escalated", "acted", "needs_user", "no_action", "reviewed"]);
     const ignored = text(eventRow(m, "ev-ignored"));
     expect(ignored).toContain("Ignored");
     expect(ignored).toContain("Routine move; the agent review is already running");
     expect(text(eventRow(m, "ev-escalated"))).toContain("Watcher");
     expect(text(eventRow(m, "ev-schedule"))).toContain("Schedule");
-    expect(text(eventRow(m, "ev-handled"))).toContain("The chief of staff dealt with it");
+    expect(text(eventRow(m, "ev-handled"))).toContain("Posted the summary to the chat");
+    expect(text(eventRow(m, "ev-needs-user"))).toContain("Pick the release tag");
+    expect(text(eventRow(m, "ev-no-action"))).toContain("nothing to do");
+    // A handled event the chief recorded nothing for is not claimed as handled.
+    const reviewed = text(eventRow(m, "ev-schedule"));
+    expect(reviewed).toContain("Reviewed, no outcome recorded");
+    expect(reviewed).not.toContain("dealt with it");
+    expect(reviewed).not.toContain("Handled");
   });
 
   test("only ignored rows offer Escalate anyway, and it escalates that one event", async () => {
@@ -178,7 +186,20 @@ describe("Inbox", () => {
     expect(text(eventRow(m, "ev-waiting"))).toContain("Not worth a wake");
     await m.settle(() => m.client.push({ kind: "cos.event.upserted", event: { ...waiting, id: "ev-new", title: "Brand new", createdAt: waiting.createdAt + 1 } }));
     expect(events(m)[0]!.dataset.event).toBe("ev-new");
-    expect(events(m)).toHaveLength(7);
+    expect(events(m)).toHaveLength(9);
+  });
+
+  test("a row judged by a triage run links to what it looked up; a row judged without one doesn't", async () => {
+    const client = new FakeClient();
+    const base = client.cos.events.find((e) => e.id === "ev-ignored")!;
+    client.cos.events.push({ ...base, id: "ev-looked", title: "PR thread changed", triageSessionId: "triage-session-7", createdAt: base.createdAt + 1 });
+    const m = await open("#/cos/all/inbox", client);
+    await m.until("the rows", () => events(m).length > 0);
+    expect(all(m.container, '[data-testid="cos-triage-run"]').map((b) => b.closest("[data-event]")!.getAttribute("data-event")).sort()).toEqual(["ev-escalated", "ev-looked"]);
+    expect(eventRow(m, "ev-ignored").querySelector('[data-testid="cos-triage-run"]')).toBeNull();
+    await click(m, eventRow(m, "ev-looked").querySelector('[data-testid="cos-triage-run"]')!);
+    await m.until("the transcript", () => !!byId(m, "cos-triage-transcript"));
+    expect(m.client.requests.some((r) => r.startsWith("GET /sessions/triage-session-7/transcript"))).toBe(true);
   });
 
   test("events nobody owns yet show, another chief's and the chief's own filtered ones don't", async () => {
@@ -215,11 +236,79 @@ describe("Inbox", () => {
   });
 });
 
+describe("Listeners", () => {
+  const listeners = (m: M) => all(m.container, '[data-testid="cos-listener"]');
+  const row = (m: M, name: string) => listeners(m).find((r) => r.dataset.listener === `watcher-${name}`)!;
+  const withWatchers = (...w: ReturnType<typeof watcher>[]) => {
+    const client = new FakeClient(edited((x) => void (x.watchers = w)));
+    return client;
+  };
+
+  test("the All chief lists every watcher: its status, schedule, last run and the secret-free command", async () => {
+    const client = withWatchers(
+      watcher({ name: "jira", command: "JIRA_TOKEN=abc watch-jira --token hunter2", cosId: "cos-all", live: { state: "waiting", since: minutesAgo(30), nextRunAt: Date.now() + 60_000, failures: 0 } }),
+      watcher({ name: "github", command: "watch-prs", mode: "loop", enabled: false, lastRunAt: null, cosId: "cos-all" }),
+      watcher({ name: "sentry", command: "watch-sentry", cosId: "cos-all", lastError: "401 from the Sentry API", live: { state: "stopped", since: minutesAgo(9), nextRunAt: null, failures: 3 } }),
+    );
+    const m = await open("#/cos/all/listeners", client);
+    await m.until("the rows", () => listeners(m).length === 3);
+    // active ones first, the paused one last
+    expect(listeners(m).map((r) => r.dataset.listener)).toEqual(["watcher-jira", "watcher-sentry", "watcher-github"]);
+    const jira = row(m, "jira");
+    expect(jira.dataset.status).toBe("active");
+    expect(text(jira)).toContain("Every 5m");
+    expect(text(jira)).toContain("Next run in 1m");
+    expect(text(jira.querySelector('[data-testid="cos-listener-command"]'))).toBe("watch-jira --token ***");
+    expect(text(jira)).not.toContain("hunter2");
+    expect(row(m, "sentry").dataset.status).toBe("error");
+    expect(text(row(m, "sentry").querySelector('[data-testid="cos-listener-error"]'))).toBe("401 from the Sentry API");
+    expect(row(m, "github").dataset.status).toBe("paused");
+    expect(text(row(m, "github"))).toContain("Runs continuously");
+    expect(text(row(m, "github"))).toContain("Last ran never");
+    expect(all(m.container, "button, input, textarea").filter((e) => e.closest('[data-testid="cos-listeners"]') && e.dataset.testid !== "cos-listeners-ask")).toHaveLength(0);
+  });
+
+  test("a group's chief lists only its own watchers; the All chief tags another chief's with its name", async () => {
+    const client = withWatchers(watcher({ name: "mine", command: "a", cosId: "cos-work" }), watcher({ name: "theirs", command: "b", cosId: "cos-all" }), watcher({ name: "orphan", command: "c" }));
+    const group = await open("#/cos/group:group-work/listeners", client);
+    await group.until("the rows", () => listeners(group).length > 0);
+    expect(listeners(group).map((r) => r.dataset.listener)).toEqual(["watcher-mine"]);
+    expect(byId(group, "cos-listener-owner")).toBeNull();
+    group.unmount();
+
+    const m = await open("#/cos/all/listeners", withWatchers(watcher({ name: "mine", command: "a", cosId: "cos-work" }), watcher({ name: "theirs", command: "b", cosId: "cos-all" })));
+    await m.until("the rows", () => listeners(m).length === 2);
+    expect(text(row(m, "mine").querySelector('[data-testid="cos-listener-owner"]'))).toBe("Work");
+    expect(row(m, "theirs").querySelector('[data-testid="cos-listener-owner"]')).toBeNull();
+  });
+
+  test("creating, switching off and deleting a watcher updates the list with no refetch", async () => {
+    const client = withWatchers(watcher({ name: "jira", command: "watch-jira", cosId: "cos-all" }));
+    const m = await open("#/cos/all/listeners", client);
+    await m.until("the row", () => listeners(m).length === 1);
+    const fetched = client.requests.filter((r) => r === "GET /watchers").length;
+    const added = watcher({ name: "github", command: "watch-prs", cosId: "cos-all" });
+    await m.settle(() => client.push({ kind: "watcher.upserted", watcher: added }));
+    expect(listeners(m)).toHaveLength(2);
+    await m.settle(() => client.push({ kind: "watcher.upserted", watcher: { ...added, enabled: false } }));
+    expect(row(m, "github").dataset.status).toBe("paused");
+    await m.settle(() => client.push({ kind: "watcher.deleted", id: added.id }));
+    expect(listeners(m).map((r) => r.dataset.listener)).toEqual(["watcher-jira"]);
+    expect(client.requests.filter((r) => r === "GET /watchers")).toHaveLength(fetched);
+  });
+
+  test("a chief with no listeners says so", async () => {
+    const m = await open("#/cos/group:group-work/listeners", withWatchers(watcher({ name: "theirs", command: "b", cosId: "cos-all" })));
+    await m.until("the empty state", () => !!byId(m, "cos-listeners-empty"));
+    expect(listeners(m)).toHaveLength(0);
+  });
+});
+
 describe("the chief's header", () => {
-  test("the tab strip is Chat and Inbox, the Inbox carrying the count of events still open", async () => {
+  test("the tab strip is Chat, Inbox and Listeners, the Inbox carrying the count of events still open", async () => {
     const m = await open();
     await m.until("the tabs", () => all(m.container, '[role="tab"]').length > 0);
-    expect(all(m.container, '[role="tab"]').map((t) => t.dataset.tab)).toEqual(["chat", "inbox"]);
+    expect(all(m.container, '[role="tab"]').map((t) => t.dataset.tab)).toEqual(["chat", "inbox", "listeners"]);
     // waiting, handling and escalated; the ignored and handled rows don't count
     await m.until("the badge", () => text(byId(m, "cos-inbox-count")) === "3");
     await m.settle(() => m.client.push({ kind: "cos.badge", total: 1, byCos: { "cos-all": 1 } }));
@@ -394,6 +483,47 @@ describe("settings", () => {
     await click(m, sw("Chief of staff can unblock tickets"));
     await click(m, sw("Chief of staff enabled"));
     expect(patched(m, "PATCH /settings")).toEqual([{ cosCanUnblock: true }, { cosEnabled: false }]);
+  });
+
+  test("the app's chief-of-staff model defaults to the Work model, and picking one saves it", async () => {
+    const m = await mount(<SettingsView />, { hash: "#/settings" });
+    m.client.overrides.set("PATCH /settings", () => m.client.world.settings);
+    await m.until("the picker", () => !!byId(m, "cosModel")?.querySelector("button"));
+    const trigger = () => byId(m, "cosModel")!.querySelector("button")!;
+    expect(text(trigger())).toContain("Use Work model");
+    await click(m, trigger());
+    const options = all(document.body, '[role="option"]');
+    expect(text(options[0]!)).toContain("Use Work model");
+    const pick = options.find((o, i) => i > 0)!;
+    await click(m, pick);
+    const sent = patched(m, "PATCH /settings") as { cosModel: { driver: string; model: string | null } }[];
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.cosModel.driver).toBeTruthy();
+  });
+
+  test("a driver that can't run a chief isn't offered, unless it is the one already picked", async () => {
+    const w = edited((x) => void (x.drivers[0]!.runsCos = false));
+    const m = await mount(<SettingsView />, { hash: "#/settings", world: w });
+    await m.until("the picker", () => !!byId(m, "cosModel")?.querySelector("button"));
+    await click(m, byId(m, "cosModel")!.querySelector("button")!);
+    const options = all(document.body, '[role="option"]');
+    expect(options.map((o) => text(o))).toHaveLength(1);
+    expect(text(options[0]!)).toContain("Use Work model");
+    await click(m, options[0]!); // closes the popover, so it doesn't outlive the test
+  });
+
+  test("a project's chief-of-staff model reads 'Use app default' until it picks one, and Default clears it", async () => {
+    const id = world.projects[0]!.id;
+    const w = edited((x) => void (x.projects[0]!.cosModel = { driver: x.drivers[0]!.id, model: null }));
+    const m = await mount(<ProjectSettingsView />, { hash: `#/project/${id}/settings`, world: w });
+    m.client.overrides.set(`PATCH /projects/${id}`, () => m.client.world.projects[0]);
+    await m.until("the picker", () => !!byId(m, "project-cosModel")?.querySelector("button"));
+    const trigger = () => byId(m, "project-cosModel")!.querySelector("button")!;
+    expect(text(trigger())).not.toContain("Use app default");
+    await click(m, trigger());
+    const def = all(document.body, '[role="option"]').find((o) => text(o).startsWith("Use app default"))!;
+    await click(m, def);
+    expect(patched(m, `PATCH /projects/${id}`)).toEqual([{ cosModel: null }]);
   });
 
   test("the watcher forms are gone from Settings", async () => {

@@ -14,6 +14,26 @@ private func ext(_ id: String, _ source: BrowserExtensionSource) -> BrowserExten
     BrowserExtension(id: id, name: id, version: "1", source: source, enabled: true, status: .loaded, hasAction: false)
 }
 
+@Suite struct CosTicketHiddenTests {
+    private func t(_ key: String, kind: TicketKind) -> Ticket {
+        Ticket(id: "t-\(key)", key: key, projectId: "p", kind: kind, title: key, spec: "", status: .done, sessionId: "s", driver: "d", createdAt: 0, updatedAt: 0)
+    }
+
+    @Test func aChiefOfStaffTicketIsNeverHeldInTicketState() {
+        let cos = t("COS-1", kind: .cos), task = t("A-1", kind: .task)
+        var state = BoardState()
+        state.apply(.ticketUpserted(ticket: cos))
+        state.apply(.ticketUpserted(ticket: task))
+        #expect(Set(state.tickets.keys) == [task.id])
+        var fetched = BoardState()
+        fetched.reduce(.tickets([cos, task]))
+        #expect(Set(fetched.tickets.keys) == [task.id], "a fetched merge drops it")
+        state.tickets[cos.id] = cos
+        state.reduce(.snapshot(BoardSnapshot(tickets: [task])))
+        #expect(Set(state.tickets.keys) == [task.id], "a snapshot purges one already held")
+    }
+}
+
 @Suite struct ViewRulesTests {
     @Test func galleryProjectIsTheLowestKeyThatIsNotKnownToBeNonGit() {
         #expect(ViewRules.galleryProject([]) == nil)

@@ -809,6 +809,10 @@ kind `cos`) because a ticket already gives it approvals, grants, permission mode
 notes and a stored transcript, but it is not a board ticket: it lives in a hidden internal project
 (`projects.internal`, made on first use, running in the harness home folder with no worktree) that no
 project list, key lookup, ticket list, page or search returns, and `tickets.project_id` stays NOT NULL.
+The live socket still carries its `ticket.upserted` events, so the clients drop them: the shared reducer
+(`isHiddenKind`) and the Swift one (`Paging.isHidden`) ignore a `kind: "cos"` ticket in a live upsert, a
+fetched merge and a snapshot, and purge one already held. No board, count or total ever sees it, and a
+chief's UI reads `state.chiefs`, never its ticket.
 Its ticket can't be deleted (409) or created or changed through `POST`/`PATCH /tickets` (`cos` isn't a
 valid kind there).
 
@@ -824,6 +828,14 @@ returns the same one after; GET never creates. When a group's last project leave
 the app's values; a project's `cosEnabled` / `cosCanUnblock` are nullable overrides (null inherits;
 PATCH `null` resets). `resolveCosSetting` in `shared/src/cos.ts` is the one place that resolves
 project-else-app-else-default.
+
+**Model.** A CoS run has its own `{ driver, model }` choice, not a fifth phase: `settings.cosModel`
+for every chief, and a project's nullable `cosModel` (the `projects.cos_model` column) for a wake whose
+events all belong to that project (the engine passes the project key to `wakeCos`; a chat message, or
+a wake spanning projects, has none). `resolveCosChoice` in `shared/src/cos.ts` is the one place that
+resolves project, then `settings.cosModel`, then the Work choice, so an install that never chose one
+runs as before. `runDriver` fixes the driver when a run is queued and `runModel` resolves the model
+when it starts, as for ticket runs; a change applies to the next run.
 
 **Scope is enforced once, in the store.** A scope is `"all"` or `{ group }` (`store/scope.ts`). The
 service resolves it from the CoS ticket's `cos` row on every operation (`scopeOf(ctx)`: never a tool
@@ -876,20 +888,45 @@ triage may propose a project, which moves it to that project's owner.
 
 **Batching and triage.** A batch is due 45 seconds after its last event, never later than 5 minutes
 after its first (`nextWakeAt`); one timer is armed for the next due time and rebuilt from the rows.
-A ticket's status moves in a batch collapse to its net state (`collapseMoves`). The batch goes to a
-stateless, tool-less Haiku call (`cos/triage.ts`) on the classifier's backend (`claude-cli` or
-`anthropic-api`, via the shared `permissions/structured.ts`; model `HAIKU_MODELS`, overridable with
-`settings.cosTriageModel`). Input: the CoS's "Triage guidance" note section, the projects, open
+A ticket's status moves in a batch collapse to its net state (`collapseMoves`). The batch goes to
+triage (`cos/triage.ts`), a read-only **agent run** on the `claude-cli` backend (model `HAIKU_MODELS`,
+overridable with `settings.cosTriageModel`): `AgentTriage` → `Orchestrator.runTriage` starts a run of
+kind `triage` on its own session (`sessions.kind = "triage"`, no ticket, hidden from the board, in an
+empty temporary folder) through the claude-code driver. It has the board read tools (scoped to the
+chief's scope, read from its `cos` row on every call), `triage_verdict` (one call per event, recorded as
+the agent goes), Bash, and the user's MCP servers (Jira and the rest; no `--strict-mcp-config`), with no
+sub-agents and no web, and `--max-turns` 40. The CLI runs in `default` mode and asks the harness's
+permission prompt tool about everything it doesn't allow itself; `requestApproval` answers a triage run
+from `permissions/triage.ts` and nothing else: Bash only when `isTriageCommand` accepts it (the
+read-only allowlist with `gh` reads: `pr view|diff|checks|list|status`, `issue view|list|status`,
+`run view|list`, `repo view|list`, `release view|list`, `search`, and `gh api` only as a GET, with no
+method, field, input, header or hostname flag and never graphql; no argument that leaves the folder by
+path), MCP tools only when their name reads (`get*`, `list*`, `search*`, `find*`, `read*`, `query*`), every
+other tool denied. Denial lives in the harness's gate, not in CLI flag prefixes, because `gh api` turns
+into a POST by itself on `-f`. The prompt says the event is untrusted, to find out what changed and who
+changed it before judging, and that unsure means escalate; tool results (PR bodies, comments, Jira text)
+are declared untrusted too. A watcher's `prompt` goes in as a "Guidance from the human" block per
+watcher, outside the fence (the human wrote it), listing the events it applies to; the events stay
+fenced. The run's tool calls are its record: each judged event keeps the session id (`triageSession` in
+its payload, `CosEvent.triageSessionId`), and the Inbox row links to that transcript. The brief now
+carries what the agent found and names the ticket the event belongs to (a PR, a Jira key, a branch);
+triage only names it, the chief acts. The brief is capped at 600 characters and the wake prompt fences
+it, since it can repeat text an attacker wrote. A backend with no agent to run (`anthropic-api`, or no
+claude-code driver) keeps the one-shot call (`LlmTriage`: `structured.ts`, no tools), and its reasons end
+"(triaged without lookup)". Input: the CoS's "Triage guidance" note section, the projects, open
 conditions (tickets blocked, reviews waiting past 2 hours, owned by this CoS) and the events with their
 bodies fenced `<untrusted-event>`, with each event's actor and title inside the fence too, since a watcher names its own output. Output per event: ignore or escalate, a reason, and for an
 escalation a brief and the project. An error, timeout, garbage, an id the answer left out, or no
 backend at all escalates (fail-open); `Cos.triageUnavailable` says why when none can run. Prompt over
 rules: what is worth waking for is the prompt's call; code keeps only the invariants. A batch goes in
-calls of 20 events (at most 100 a pass, oldest first), each failing open on its own.
+calls of 5 events for an agent run (at most 30 a pass, 4 minutes each; 20, 100 and a minute for the
+one-shot call), oldest first, each failing open on its own. A run that ends early (failure, timeout)
+keeps the verdicts it recorded: the others escalate with the reason. The pre-triage filter (no ticket,
+caused by a chief, a chief's own ticket) stays: it decides by origin, which no lookup would change.
 
 **Hand-off.** Escalated events become one wake: `steerOrEnqueue` into the CoS session with the briefs,
-the raw events (untrusted), a one-line digest of what was ignored since the last wake, and the open
-conditions. A CoS runs one run at a time, so a wake steers into a running run or queues the next. At
+the raw events (untrusted), a one-line digest of what was ignored since the last wake, and the stalled
+items not yet reported (below). A CoS runs one run at a time, so a wake steers into a running run or queues the next. At
 most 6 wakes an hour per CoS (`nextWakeAllowedAt`); fail-open escalations count, and the overflow
 waits and goes in one later wake. A wake holds at most 40 events with bodies clipped to 2000
 characters, and says how many more wait. It is recorded (cap, chat) only once the chief took it. Events
@@ -897,6 +934,21 @@ are `handling` with the run that took them and `handled` when it succeeds; a run
 cancelled, or is gone after a restart, puts them back to `escalated`, while one still queued or running
 keeps them. Ignored, filtered and handled events are pruned after 30 days. `cos_wakes` logs each wake and
 triage call (tokens, model) for the cap and the token log.
+
+**Quiet by default.** A wake messages the user only for a change they would care about, an item that needs
+their attention or a decision, or a newly reported stall; every wake prompt says so, forbids narration between
+tool calls, and tells the chief to reply exactly `[quiet]` otherwise. Housekeeping (hand-offs, notes, tickets)
+happens either way. `isSilentReply` (`cos/chat.ts`) treats an empty or `[quiet]` reply as silent: the live
+`cos.transcript.appended` emit and `cosChat()` both leave it out (the raw transcript keeps it). The wake's
+`event_batch` card is emitted when its run ends (`settleWake`) and only if the run said something; `cos_wakes.outcome`
+(`spoke`, `quiet`, `failed`) hides a quiet wake's card from history, and a failed run still shows it. A **stall** is a
+blocked ticket or waiting review that has sat `COS_STALL_AFTER_MS` (4h, counted from its move into the status, not its
+last edit) in the chief's scope. It rides the next wake once, recorded as `cos_wakes.reported` (ticket id → status plus a
+hash of the blocked reason) when the wake is handed over, and is reported again only after `COS_STALL_REPEAT_MS` (24h) or
+when that fingerprint changes. A wake whose run failed doesn't count as a report. Wakes come only from events, so
+the engine's timer also arms for the next stall due and wakes the chief with just that stall (at most once per
+`COS_STALL_RETRY_MS`, 15 min); it counts against the 6-an-hour cap. Triage still sees every blocked or waiting
+ticket past `OPEN_CONDITION_AFTER_MS` (2h) as context.
 
 **Wire contract** (`shared/src/cos.ts`; the Mac and iOS Inbox and chat build on it):
 `CosEvent`, `CosChatEntry` (`message`, `ticket_created`, `ticket_moved`, `event_batch`). `GET
@@ -1053,9 +1105,9 @@ of staff, which decides what to do with it.
 chief, so every watcher from before chiefs existed belongs to All, a watcher the apps create with no
 owner is All's, and deleting a group's chief hands its watchers to All (`ON DELETE SET NULL`; an
 output from a stale owner goes to All too). Watchers carry commands and environments, so only a chief
-manages them (below). The old triage fields (`prompt`, `driver`, `models`, and
-`settings.watcherDriver` / `watcherModels`) are still accepted and stored, so shipped Mac and iPhone
-settings screens keep saving, but nothing reads them.
+manages them (below). A watcher's `prompt` is read again: triage gets it as guidance for that watcher's events. Its `driver`,
+`models` and `settings.watcherDriver` / `watcherModels` are still accepted and stored, so shipped Mac
+and iPhone settings screens keep saving, but nothing reads them (the triage model is `cosTriageModel`).
 
 **Command representation.** `command` + `args` (`Watcher` in `shared/src/protocol.ts`):
 

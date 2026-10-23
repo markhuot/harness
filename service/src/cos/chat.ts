@@ -8,6 +8,15 @@ import type { Store } from "../store";
 /** The prompt Harness hands a chief on a wake starts like this; the chat shows it as an event batch instead. */
 export const WAKE_PROMPT_PREFIX = "[Harness:";
 
+/** What a chief replies when a wake has nothing to tell the user. */
+export const QUIET_REPLY = "[quiet]";
+
+/** A reply that says nothing (empty, or the quiet sentinel, bare or in backticks): the chat leaves it out. */
+export function isSilentReply(text: string): boolean {
+  const t = text.trim().replace(/^`+|`+$/g, "").trim().toLowerCase();
+  return t === "" || t === QUIET_REPLY;
+}
+
 const CREATED_NOTE = /^Chief of staff \(.+\) created it$/;
 
 const cursorOf = (e: { createdAt: number; id: string }) => `${e.createdAt}:${e.id}`;
@@ -38,6 +47,7 @@ export function cosChat(store: Store, cosId: string, rawCursor: string | null, l
 
   for (const m of store.transcript.messagesBefore(ticket.sessionId, cursor, fetch, WAKE_PROMPT_PREFIX)) {
     if (m.content.type !== "text") continue;
+    if (m.role !== "user" && isSilentReply(m.content.text)) continue;
     found.push({ id: m.id, cosId, createdAt: m.createdAt, kind: "message", role: m.role === "user" ? "user" : "assistant", text: m.content.text });
   }
 

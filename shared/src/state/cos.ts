@@ -4,14 +4,14 @@
 import type { Cos, CosBadge, CosChatEntry, CosEvent } from "../cos";
 import { COS_OPEN_STATUSES } from "../cos";
 
-/** A chief's pane has these two tabs and no others (no Spec, Activity or Tickets). */
-export const COS_TABS = ["chat", "inbox"] as const;
+/** A chief's pane has these three tabs and no others (no Spec, Activity or Tickets). */
+export const COS_TABS = ["chat", "inbox", "listeners"] as const;
 export type CosTab = (typeof COS_TABS)[number];
 
-export const COS_TAB_LABEL: Record<CosTab, string> = { chat: "Chat", inbox: "Inbox" };
+export const COS_TAB_LABEL: Record<CosTab, string> = { chat: "Chat", inbox: "Inbox", listeners: "Listeners" };
 
 export function isCosTab(v: unknown): v is CosTab {
-  return v === "chat" || v === "inbox";
+  return v === "chat" || v === "inbox" || v === "listeners";
 }
 
 /** Events awaiting a verdict or being handled by one chief (0 when the badge hasn't loaded or names nobody). */
@@ -56,9 +56,10 @@ export function mergeEvents(existing: readonly CosEvent[], incoming: readonly Co
 }
 
 /** What an Inbox row says happened to the event, in a word. */
-export type InboxState = "waiting" | "ignored" | "escalated" | "handling" | "handled" | "filtered";
+export type InboxState = "waiting" | "ignored" | "escalated" | "handling" | "acted" | "no_action" | "needs_user" | "reviewed" | "filtered";
 
-export function inboxState(e: Pick<CosEvent, "status" | "verdict">): InboxState {
+/** A handled event shows what the chief recorded for it; one it recorded nothing for is only "reviewed" (its run ended, nothing says it did anything). */
+export function inboxState(e: Pick<CosEvent, "status" | "verdict" | "outcome">): InboxState {
   if (e.verdict === "filtered") return "filtered";
   switch (e.status) {
     case "pending":
@@ -71,7 +72,7 @@ export function inboxState(e: Pick<CosEvent, "status" | "verdict">): InboxState 
     case "handling":
       return "handling";
     case "handled":
-      return "handled";
+      return e.outcome?.kind ?? "reviewed";
   }
 }
 

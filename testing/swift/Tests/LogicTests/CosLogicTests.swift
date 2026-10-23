@@ -61,11 +61,23 @@ private func project(_ id: String, group: String?) -> Project {
         }
     }
 
-    @Test func aRowSaysWhyItWasIgnoredOrEscalatedAndThatAHandledOneWasDealtWith() {
+    @Test func aHandledRowShowsTheChiefsOutcomeAndOneWithoutIsOnlyReviewed() {
+        func handled(_ kind: CosOutcomeKind?) -> CosEvent {
+            CosEvent(id: "a", cosId: "c1", title: "a", status: .handled, verdict: .escalate, outcome: kind.map { CosOutcome(kind: $0, text: "text for \($0.rawValue)") }, createdAt: 0)
+        }
+        #expect(CosLogic.inboxState(handled(.acted)) == .acted)
+        #expect(CosLogic.inboxState(handled(.noAction)) == .noAction)
+        #expect(CosLogic.inboxState(handled(.needsUser)) == .needsUser)
+        #expect(CosLogic.inboxState(handled(nil)) == .reviewed)
+        #expect(CosLogic.verdictLine(handled(.needsUser)) == "text for needs_user")
+        #expect(CosLogic.verdictLine(handled(nil)) == nil)
+        #expect(CosInboxState.reviewed.label == "Reviewed, no outcome recorded")
+    }
+
+    @Test func aRowSaysWhyItWasIgnoredOrEscalated() {
         #expect(CosLogic.verdictLine(event("a", status: .ignored, verdict: .ignore, reason: "Routine move")) == "Routine move")
         #expect(CosLogic.verdictLine(event("a", status: .escalated, verdict: .escalate, reason: "A customer is waiting")) == "A customer is waiting")
         #expect(CosLogic.verdictLine(event("a", status: .ignored, verdict: .ignore, reason: "")) == nil)
-        #expect(CosLogic.verdictLine(event("a", status: .handled, verdict: .escalate)) == "The chief of staff dealt with it")
         #expect(CosLogic.verdictLine(event("a", status: .pending)) == nil)
     }
 
@@ -181,6 +193,40 @@ private func project(_ id: String, group: String?) -> Project {
         #expect(off["cosEnabled"] as? Bool == false)
         #expect(off["cosCanUnblock"] == nil)
         #expect(try json(UpdateProjectBody(cosCanUnblock: .null))["cosCanUnblock"] is NSNull, "Inherit sends an explicit null")
+    }
+
+    @Test func theChiefModelResolvesProjectThenAppThenWork() throws {
+        let work = PhaseChoice(driver: "claude-code", model: "sonnet")
+        let app = PhaseChoice(driver: "copilot", model: "gpt")
+        let own = PhaseChoice(driver: "claude-code", model: "haiku")
+        func settings(cosModel: PhaseChoice?) -> PublicSettings {
+            PublicSettings(phaseModels: PhaseModels(work: work), defaultDriver: "claude-code", maxConcurrentRuns: 4, permissionMode: .auto, classifier: .claudeCli, anthropicApiKeySet: false, cosModel: Patch(cosModel))
+        }
+        #expect(CosSettings.appModel(settings(cosModel: nil)) == work, "an install that never chose one runs on Work")
+        #expect(CosSettings.appModel(settings(cosModel: app)) == app)
+        #expect(CosSettings.appModel(nil) == PhaseChoice(driver: "claude-code", model: nil))
+        let project = try JSONDecoder().decode(Project.self, from: Data(#"{"id":"p","key":"A","name":"A","path":"/a","nextSeq":1,"useWorktrees":true,"defaultModels":{},"cosEnabled":null,"cosCanUnblock":null,"cosModel":{"driver":"claude-code","model":"haiku"},"createdAt":1,"updatedAt":1}"#.utf8))
+        #expect(CosSettings.model(project: project, settings: settings(cosModel: app)) == own)
+        #expect(CosSettings.model(project: nil, settings: settings(cosModel: app)) == app)
+    }
+
+    @Test func theChiefPickerLeavesOutDriversThatCantRunAChief() throws {
+        func driver(_ id: String, runsCos: Bool?) -> DriverInfo {
+            DriverInfo(id: id, name: id, description: "", available: true, authenticated: true, detail: "", supportsLogin: false, runsCos: runsCos)
+        }
+        let all = [driver("a", runsCos: nil), driver("b", runsCos: false), driver("c", runsCos: true)]
+        #expect(CosSettings.drivers(all, keeping: nil).map(\.id) == ["a", "c"])
+        #expect(CosSettings.drivers(all, keeping: "b").map(\.id) == ["a", "b", "c"], "a saved choice never vanishes")
+    }
+
+    @Test func aPickedModelSavesAndTheDefaultRowClearsIt() throws {
+        func json(_ body: UpdateProjectBody) throws -> [String: Any] {
+            try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(body)) as? [String: Any])
+        }
+        let picked = try json(UpdateProjectBody(cosModel: CosSettings.patch(.init(driver: "claude-code", model: "opus"))))
+        #expect((picked["cosModel"] as? [String: Any])?["model"] as? String == "opus")
+        #expect(try json(UpdateProjectBody(cosModel: CosSettings.patch(.init(driver: nil, model: nil))))["cosModel"] is NSNull)
+        #expect(try json(UpdateProjectBody())["cosModel"] == nil)
     }
 }
 

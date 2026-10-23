@@ -82,16 +82,22 @@ public struct CosState: Equatable, Sendable {
     }
 }
 
-/// A chief's pane has these two tabs and no others (no Spec, Activity or Tickets).
+/// A chief's pane has these three tabs and no others (no Spec, Activity or Tickets).
 public enum CosTab: String, CaseIterable, Sendable, Hashable {
-    case chat, inbox
+    case chat, inbox, listeners
 
-    public var label: String { self == .chat ? "Chat" : "Inbox" }
+    public var label: String {
+        switch self {
+        case .chat: "Chat"
+        case .inbox: "Inbox"
+        case .listeners: "Listeners"
+        }
+    }
 }
 
 /// What an Inbox row says happened to the event, in a word.
 public enum CosInboxState: String, Sendable {
-    case waiting, ignored, escalated, handling, handled, filtered
+    case waiting, ignored, escalated, handling, acted, noAction, needsUser, reviewed, filtered
 
     public var label: String {
         switch self {
@@ -99,7 +105,10 @@ public enum CosInboxState: String, Sendable {
         case .ignored: "Ignored"
         case .escalated: "Escalated"
         case .handling: "Handling"
-        case .handled: "Handled"
+        case .acted: "Acted"
+        case .noAction: "No action needed"
+        case .needsUser: "Needs you"
+        case .reviewed: "Reviewed, no outcome recorded"
         case .filtered: "Filtered"
         }
     }
@@ -134,6 +143,33 @@ public enum CosSettings {
 
     public static func enabled(_ settings: PublicSettings?) -> Bool { settings?.cosEnabled ?? defaultEnabled }
     public static func canUnblock(_ settings: PublicSettings?) -> Bool { settings?.cosCanUnblock ?? defaultCanUnblock }
+
+    /// The driver and model a chief of staff runs on when its wake isn't about a project that chose one (resolveCosChoice):
+    /// the app's CoS choice, else the app's Work choice.
+    public static func appModel(_ settings: PublicSettings?) -> PhaseChoice {
+        settings?.cosModel.optional ?? Phases.settingsPhaseChoice(settings?.phaseModels, .work)
+    }
+
+    /// The chief's model for a wake about `project` alone (resolveCosChoice): its own, else the app's.
+    public static func model(project: Project?, settings: PublicSettings?) -> PhaseChoice {
+        project?.cosModel ?? appModel(settings)
+    }
+
+    /// The drivers a CoS model picker offers (cosDrivers): those that can run a chief, and `keep` so a saved choice never vanishes.
+    public static func drivers(_ all: [DriverInfo], keeping keep: String?) -> [DriverInfo] {
+        all.filter { $0.runsCos != false || $0.id == keep }
+    }
+
+    /// A PhaseChoice as the picker's value: nil (the Default row) is no driver.
+    public static func pickerChoice(_ c: PhaseChoice?) -> Watchers.TriageChoice {
+        Watchers.TriageChoice(driver: c?.driver, model: c?.model)
+    }
+
+    /// What a picker pick saves: the Default row (no driver) clears the choice.
+    public static func patch(_ c: Watchers.TriageChoice) -> Patch<PhaseChoice> {
+        guard let driver = Models.nonEmpty(c.driver) else { return .null }
+        return .value(PhaseChoice(driver: driver, model: c.model))
+    }
 
     /// What "Inherit" resolves to, for its label ("Inherit (on)").
     public static func inheritedLabel(_ app: Bool) -> String { "Inherit (\(app ? "on" : "off"))" }
@@ -181,29 +217,36 @@ public enum CosLogic {
     /// Statuses that count toward the badge (an event somebody still has to see to).
     public static let openStatuses: [CosEventStatus] = [.pending, .triaging, .escalated, .handling]
 
-    public static func inboxState(status: CosEventStatus, verdict: CosEventVerdict) -> CosInboxState {
+    /// A handled event shows what the chief recorded for it; one it recorded nothing for is only reviewed.
+    public static func inboxState(status: CosEventStatus, verdict: CosEventVerdict, outcome: CosOutcome? = nil) -> CosInboxState {
         if verdict == .filtered { return .filtered }
         switch status {
         case .pending, .triaging: return .waiting
         case .ignored: return .ignored
         case .escalated: return .escalated
         case .handling: return .handling
-        case .handled: return .handled
+        case .handled:
+            switch outcome?.kind {
+            case .acted: return .acted
+            case .noAction: return .noAction
+            case .needsUser: return .needsUser
+            default: return .reviewed
+            }
         case .unknown: return .waiting
         }
     }
 
-    public static func inboxState(_ e: CosEvent) -> CosInboxState { inboxState(status: e.status, verdict: e.verdict) }
+    public static func inboxState(_ e: CosEvent) -> CosInboxState { inboxState(status: e.status, verdict: e.verdict, outcome: e.outcome) }
 
     /// Ignored events (and only those) can be escalated by hand.
     public static func canEscalate(_ e: CosEvent) -> Bool { e.status == .ignored && e.verdict != .filtered }
 
-    /// The line a row says about the verdict: the reason for an ignored or escalated one, that the
-    /// chief dealt with a handled one (the wire carries only the handling run's id), else nil.
+    /// The line a row says about the verdict: the reason for an ignored or escalated one, the chief's
+    /// recorded outcome for a handled one, else nil.
     public static func verdictLine(_ e: CosEvent) -> String? {
         switch inboxState(e) {
         case .ignored, .escalated: e.reason.flatMap { $0.isEmpty ? nil : $0 }
-        case .handled: "The chief of staff dealt with it"
+        case .acted, .noAction, .needsUser: e.outcome?.text
         default: nil
         }
     }

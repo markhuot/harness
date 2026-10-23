@@ -1,5 +1,5 @@
 // A chief of staff: a callout card on the board (CosCallout, not in a column) that opens its pane
-// (CosPane): its Chat and Inbox tabs under the ticket pane's chrome and its
+// (CosPane): its Chat, Inbox and Listeners tabs under the ticket pane's chrome and its
 // Memory (a sheet, not a tab). The ticket detail assumes a work ticket (workdir, subagents,
 // changes), so this reuses only its chrome (header, tab strip).
 
@@ -17,6 +17,7 @@ import type { CosContent } from "../state/paneModel";
 import { useAction, useStore } from "../state/store";
 import { CosChat } from "./CosChat";
 import { CosInbox } from "./CosInbox";
+import { CosListeners } from "./CosListeners";
 import { CosMemory } from "./CosMemory";
 import "./cos.css";
 
@@ -127,7 +128,9 @@ export function CosPane({ paneId, content }: { paneId: string; content: CosConte
               Triage is unavailable ({chief.triageUnavailable}), so every event wakes the chief.
             </div>
           )}
-          <div className="detail-body cos-body">{tab === "chat" ? <CosChat chief={chief} /> : <CosInbox chief={chief} onChat={() => go("chat")} />}</div>
+          <div className="detail-body cos-body">
+            {tab === "chat" ? <CosChat chief={chief} /> : tab === "inbox" ? <CosInbox chief={chief} onChat={() => go("chat")} /> : <CosListeners chief={chief} onChat={() => go("chat")} />}
+          </div>
           {memory && <CosMemory chief={chief} title={title} onClose={() => setMemory(false)} />}
         </>
       ) : (

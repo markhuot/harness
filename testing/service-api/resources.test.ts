@@ -170,3 +170,16 @@ test("a project's CoS overrides come back from the API and clear with null", asy
   expect(await rig.call("PATCH", `/projects/${project.id}`, { cosEnabled: "yes" })).toMatchObject({ status: 400 });
   expect(await rig.ok<PublicSettings>("PATCH", "/settings", { cosEnabled: false })).toMatchObject({ cosEnabled: false, cosCanUnblock: false });
 });
+
+test("the chief-of-staff model is saved on the app and on a project, and clears with null", async () => {
+  const rig = await boot();
+  const project = await rig.project("ACME");
+  expect(project.cosModel ?? null).toBeNull();
+  expect(await rig.ok<PublicSettings>("PATCH", "/settings", { cosModel: { driver: rig.driver.id, model: "d1" } })).toMatchObject({ cosModel: { driver: rig.driver.id, model: "d1" } });
+  expect(await rig.ok<Project>("PATCH", `/projects/${project.id}`, { cosModel: { driver: rig.driver.id, model: null } })).toMatchObject({ cosModel: { driver: rig.driver.id, model: null } });
+  expect((await rig.ok<Project[]>("GET", "/projects")).find((p) => p.id === project.id)).toMatchObject({ cosModel: { driver: rig.driver.id, model: null } });
+  expect(await rig.ok<Project>("PATCH", `/projects/${project.id}`, { cosModel: null })).toMatchObject({ cosModel: null });
+  expect(await rig.ok<PublicSettings>("PATCH", "/settings", { cosModel: null })).toMatchObject({ cosModel: null });
+  expect(await rig.call("PATCH", `/projects/${project.id}`, { cosModel: { driver: "nope", model: null } })).toMatchObject({ status: 400 });
+  expect(await rig.call("PATCH", "/settings", { cosModel: "opus" })).toMatchObject({ status: 400 });
+});

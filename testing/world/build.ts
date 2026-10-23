@@ -18,6 +18,7 @@ export function project(o: Pick<Project, "key" | "name" | "path"> & Partial<Proj
     color: null,
     group: null,
     groupId: null,
+    cosModel: null,
     createdAt: minutesAgo(60 * 24 * 30),
     updatedAt: minutesAgo(60 * 24),
     ...o,

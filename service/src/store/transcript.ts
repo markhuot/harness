@@ -90,6 +90,14 @@ export class TranscriptRepo {
     ).map(toEntry);
   }
 
+  /** The plain-text assistant replies a run wrote (its own agent's) from `since` on, oldest first. */
+  assistantTexts(runId: string, since: number): string[] {
+    const rows = this.db
+      .query("SELECT content FROM transcript WHERE run_id = $runId AND subagent_id IS NULL AND role = 'assistant' AND json_extract(content, '$.type') = 'text' AND created_at >= $since ORDER BY seq")
+      .all({ runId, since }) as { content: string }[];
+    return rows.map((r) => (JSON.parse(r.content) as { text: string }).text);
+  }
+
   /**
    * The session agent's last `limit` entries whose content type is in `types`, oldest first; with
    * `subagentId`, that sub-agent's.

@@ -30,11 +30,11 @@ test("GET /cos/:id/events pages newest first with a cursor, filters by status, a
   const all = await rig.ok<CosEventPage>("GET", `/cos/${cos.ticketId}/events?limit=200`);
   expect(all.nextCursor).toBeNull();
   expect(all.items.length).toBeGreaterThan(2);
-  const event = all.items[0]!;
+  const event = all.items.find((e) => e.status === "pending")!;
   expect(Object.keys(event).sort()).toEqual(
-    ["actor", "cosId", "createdAt", "handledBy", "id", "model", "projectKey", "reason", "sourceKind", "status", "summary", "ticketKey", "title", "verdict", "wakeId"].sort(),
+    ["actor", "cosId", "createdAt", "handledBy", "id", "model", "outcome", "projectKey", "reason", "sourceKind", "status", "summary", "ticketKey", "title", "triageSessionId", "verdict", "wakeId"].sort(),
   );
-  expect(event).toMatchObject({ cosId: cos.ticketId, projectKey: "ACME", sourceKind: "activity", status: "pending", verdict: "pending", reason: null, model: null, handledBy: null });
+  expect(event).toMatchObject({ cosId: cos.ticketId, projectKey: "ACME", sourceKind: "activity", status: "pending", verdict: "pending", reason: null, model: null, handledBy: null, outcome: null });
   expect([...all.items].sort((a, b) => b.createdAt - a.createdAt || (a.id < b.id ? 1 : -1)).map((e) => e.id)).toEqual(all.items.map((e) => e.id));
 
   const first = await rig.ok<CosEventPage>("GET", `/cos/${cos.ticketId}/events?limit=2`);
@@ -44,7 +44,7 @@ test("GET /cos/:id/events pages newest first with a cursor, filters by status, a
   expect([...first.items, ...second.items].map((e) => e.id)).toEqual(all.items.slice(0, 2 + second.items.length).map((e) => e.id));
 
   expect((await rig.ok<CosEventPage>("GET", `/cos/${cos.ticketId}/events?status=handled`)).items).toEqual([]);
-  expect((await rig.ok<CosEventPage>("GET", `/cos/${cos.ticketId}/events?status=pending`)).items.length).toBe(all.items.length);
+  expect((await rig.ok<CosEventPage>("GET", `/cos/${cos.ticketId}/events?status=pending`)).items.length).toBe(all.items.filter((e) => e.status === "pending").length);
   expect(await rig.call("GET", `/cos/${cos.ticketId}/events?status=nonsense`)).toMatchObject({ status: 400 });
   expect(await rig.call("GET", `/cos/${cos.ticketId}/events?before=garbage`)).toMatchObject({ status: 400 });
   expect(await rig.call("GET", "/cos/missing/events")).toMatchObject({ status: 404 });
@@ -53,7 +53,8 @@ test("GET /cos/:id/events pages newest first with a cursor, filters by status, a
 test("GET /cos/events/badge counts the events still open per chief", async () => {
   const { rig, cos } = await inbox();
   const badge = await rig.ok<CosBadge>("GET", "/cos/events/badge");
-  const open = (await rig.ok<CosEventPage>("GET", `/cos/${cos.ticketId}/events?limit=200`)).items.length;
+  // Routine activity (an approval, a ticket that completed) is filtered on the way in and isn't open.
+  const open = (await rig.ok<CosEventPage>("GET", `/cos/${cos.ticketId}/events?limit=200`)).items.filter((e) => e.verdict !== "filtered").length;
   expect(badge).toEqual({ total: open, byCos: { [cos.ticketId]: open } });
 });
 
@@ -87,4 +88,14 @@ test("watcher output injected over the API is a pending event for the All chief,
   const page = await rig.ok<CosEventPage>("GET", `/cos/${cos.ticketId}/events?limit=200`);
   expect(page.items.find((e) => e.id === first.id)).toMatchObject({ actor: "watcher:github", title: "github: PR 12 has review feedback" });
   expect((await rig.ok<CosBadge>("GET", "/cos/events/badge")).byCos[cos.ticketId]).toBe(page.items.length);
+});
+
+test("DELETE /tickets/:key puts the deletion in the chief's Inbox with the ticket's key and title", async () => {
+  const { rig, made, cos } = await inbox(1);
+  const doomed = made[0]!;
+  await rig.ok("DELETE", `/tickets/${doomed.key}`);
+  const page = await rig.ok<CosEventPage>("GET", `/cos/${cos.ticketId}/events?limit=200`);
+  const ev = page.items.find((e) => e.title.includes(`${doomed.key} deleted`));
+  expect(ev).toMatchObject({ cosId: cos.ticketId, sourceKind: "activity", ticketKey: null, projectKey: "ACME", actor: "human", status: "pending" });
+  expect(ev!.title).toContain(doomed.title);
 });

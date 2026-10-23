@@ -1,6 +1,7 @@
 // Chief of staff (CoS) shapes shared by the service and its clients (DESIGN.md "Chief of staff").
 
-import type { HarnessEvent, Project, Settings } from "./protocol";
+import type { HarnessEvent, PhaseChoice, Project, Settings } from "./protocol";
+import { settingsPhaseChoice } from "./phases";
 
 /** The two settings a project may override of the app's (Project.cosEnabled, Project.cosCanUnblock). */
 export type CosSettingKey = "cosEnabled" | "cosCanUnblock";
@@ -14,6 +15,20 @@ export const COS_SETTING_DEFAULTS: Readonly<Record<CosSettingKey, boolean>> = { 
  */
 export function resolveCosSetting(project: Pick<Project, "cosEnabled" | "cosCanUnblock"> | null | undefined, settings: Pick<Settings, "cosEnabled" | "cosCanUnblock">, key: CosSettingKey): boolean {
   return project?.[key] ?? settings[key] ?? COS_SETTING_DEFAULTS[key];
+}
+
+/**
+ * The driver and model a chief of staff runs on: the project's own choice (the project its wake is
+ * about), else the app's CoS choice, else the app's Work choice, so an install that never chose one
+ * runs as before. The one place that resolves it: every chief run (wake, chat, hand-off) reads it.
+ */
+export function resolveCosChoice(project: Pick<Project, "cosModel"> | null | undefined, settings: Pick<Settings, "cosModel" | "phaseModels">): PhaseChoice {
+  return project?.cosModel ?? settings.cosModel ?? settingsPhaseChoice(settings.phaseModels, "work");
+}
+
+/** The drivers a CoS model picker offers: those that can run a chief, and `keep` (the driver already picked) so a saved choice never vanishes. */
+export function cosDrivers<T extends { id: string; runsCos?: boolean }>(drivers: readonly T[], keep?: string | null): T[] {
+  return drivers.filter((d) => d.runsCos !== false || d.id === keep);
 }
 
 /** What a CoS sees and may act on: every project (`all`) or the projects of one group. */
@@ -64,6 +79,16 @@ export type CosEventVerdict = "pending" | "ignore" | "escalate" | "filtered";
 /** Statuses that count toward the Inbox badge (an event somebody still has to see to). */
 export const COS_OPEN_STATUSES: readonly CosEventStatus[] = ["pending", "triaging", "escalated", "handling"];
 
+/** What the chief did about an event it was woken for: acted, found nothing to do, or needs the user to do something. */
+export const COS_OUTCOME_KINDS = ["acted", "no_action", "needs_user"] as const;
+export type CosOutcomeKind = (typeof COS_OUTCOME_KINDS)[number];
+
+/** The chief's own account of one event, recorded with record_event_outcomes. */
+export interface CosOutcome {
+  kind: CosOutcomeKind;
+  text: string;
+}
+
 /** One row of a chief of staff's Inbox (GET /cos/:id/events). */
 export interface CosEvent {
   id: string;
@@ -84,6 +109,10 @@ export interface CosEvent {
   wakeId: string | null;
   /** The run that handled it */
   handledBy: string | null;
+  /** What the chief recorded for it; null when its run ended without recording one (and for events handled before outcomes existed) */
+  outcome: CosOutcome | null;
+  /** The session whose transcript shows what triage looked up for it; null when a one-shot call (or no model) judged it */
+  triageSessionId?: string | null;
   createdAt: number;
 }
 
@@ -178,6 +207,11 @@ export const COS_CEILING_MS = 5 * 60_000;
 /** Full wakes per chief per hour; more join one later wake. */
 export const COS_WAKES_PER_HOUR = 6;
 export const COS_HOUR_MS = 60 * 60_000;
+/** A blocked ticket or waiting review is a stall worth telling the user about once it has sat this long; it is told again after COS_STALL_REPEAT_MS, or sooner if its status or blocked reason changes. */
+export const COS_STALL_AFTER_MS = 4 * COS_HOUR_MS;
+export const COS_STALL_REPEAT_MS = 24 * COS_HOUR_MS;
+/** The soonest a chief is woken again on a timer for stalls alone, so a failing run isn't retried in a loop. */
+export const COS_STALL_RETRY_MS = 15 * 60_000;
 
 /** A chief as ownership sees it. */
 export type CosChief = Pick<Cos, "ticketId" | "scope" | "groupId" | "enabled">;
@@ -267,4 +301,15 @@ export interface PutCosMemoryBody {
 export interface MemoryConflict {
   currentRevision: string;
   text: string;
+}
+
+/**
+ * Activity that never needs a chief, so it is recorded as filtered instead of sent to triage: an agent review's approval of a
+ * ticket that still waits on a human, and a ticket that completed as planned (a human's approval, or a move into done from review).
+ * Blocks, failures, answers, conflicts and requested changes are not here: they stay with triage.
+ */
+export function routineActivityReason(e: { kind: string; to: string | null; from: string | null }, ticketStatus: string): string | null {
+  if (e.kind === "review_approved" && ticketStatus === "review") return "routine: the agent review approved it and it waits for a human";
+  if (e.kind === "approved" || (e.kind === "moved" && e.to === "done" && e.from === "review")) return "routine: it completed as planned";
+  return null;
 }

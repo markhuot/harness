@@ -1,7 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-// A chief of staff's pane: the Chat and Inbox tabs and the memory sheet. It is a card of the ticket
+// A chief of staff's pane: the Chat, Inbox and Listeners tabs and the memory sheet. It is a card of the ticket
 // sheets (`TicketSheet.Root.cos`): a sheet on the iPhone, the side panel on the iPad and Duo.
 
 /// What the board's Chief of Staff button does: opens the chief of the board's scope, making the
@@ -45,6 +45,7 @@ struct CosScreen: View {
                 switch tab {
                 case .chat: CosChatView(chief: chief)
                 case .inbox: CosInboxView(chief: chief, onChat: { tab = .chat })
+                case .listeners: CosListenersView(chief: chief, onChat: { tab = .chat })
                 }
             } else if let openFailure {
                 Spacer()
@@ -486,6 +487,7 @@ struct CosEventRow: View {
     let openTicket: (String) -> Void
 
     @Environment(\.palette) private var c
+    @State private var lookingUp = false
 
     var body: some View {
         let e = event
@@ -509,11 +511,17 @@ struct CosEventRow: View {
             }
             if let line = CosLogic.verdictLine(e) {
                 Text(line).font(.scaled(size: 13)).foregroundStyle(c.text2).frame(maxWidth: .infinity, alignment: .leading)
-                    .accessibilityIdentifier(st == .handled ? "cos-handled" : "cos-reason")
+                    .accessibilityIdentifier(st == .acted || st == .noAction || st == .needsUser ? "cos-outcome" : "cos-reason")
             }
             HStack {
                 Text("\(e.actor) · ").font(.scaled(size: 12)).foregroundStyle(c.text3) + Text(Format.relativeTime(e.createdAt, now: Date().timeIntervalSince1970 * 1000)).font(.scaled(size: 12)).foregroundStyle(c.text3)
                 Spacer()
+                if e.triageSessionId != nil {
+                    Button("What triage looked up") { lookingUp = true }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .accessibilityIdentifier("cos-triage-run")
+                }
                 if CosLogic.canEscalate(e) {
                     Button("Escalate anyway", action: escalate)
                         .buttonStyle(.bordered)
@@ -527,13 +535,22 @@ struct CosEventRow: View {
         .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(c.border, lineWidth: 1 / 3))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("cos-event")
+        .sheet(isPresented: $lookingUp) {
+            if let session = e.triageSessionId {
+                NavigationStack {
+                    TranscriptView(sessionId: session, emptyHint: "The triage run left no transcript.") { EmptyView() }
+                        .navigationTitle("Triage")
+                        .navigationBarTitleDisplayMode(.inline)
+                }
+            }
+        }
     }
 
     private func tone(_ s: CosInboxState) -> Tone {
         switch s {
-        case .waiting, .escalated, .handling: .amber
-        case .handled: .green
-        case .ignored, .filtered: .neutral
+        case .waiting, .escalated, .handling, .needsUser: .amber
+        case .acted: .green
+        case .ignored, .filtered, .noAction, .reviewed: .neutral
         }
     }
 }

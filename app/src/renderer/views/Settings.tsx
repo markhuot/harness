@@ -2,8 +2,8 @@
 // (each project's own settings live on its Project settings screen).
 
 import { useEffect, useState, type ReactNode } from "react";
-import type { Project, PublicSettings, Settings } from "@harness/shared";
-import { DEFAULT_BASE_BRANCH, DEFAULT_BROWSER_IDLE_TAB_MINUTES, DEFAULT_CONTEXT_GAUGE_LIMIT, MAX_BROWSER_IDLE_TAB_MINUTES} from "@harness/shared";
+import type { PhaseChoice, Project, PublicSettings, Settings } from "@harness/shared";
+import { DEFAULT_BASE_BRANCH, DEFAULT_BROWSER_IDLE_TAB_MINUTES, DEFAULT_CONTEXT_GAUGE_LIMIT, MAX_BROWSER_IDLE_TAB_MINUTES, resolveCosChoice } from "@harness/shared";
 import { limitError, parseLimit } from "../state/contextGauge";
 import { useAction, useStore } from "../state/store";
 import { modelName, sortedProjects } from "@harness/shared/state";
@@ -205,6 +205,40 @@ export const COS_SWITCHES = [
   { key: "cosCanUnblock", title: "Chief of staff can unblock tickets", sub: "A chief may answer a blocked ticket itself, learning from how you answered before. Off, it only tells you.", fallback: false },
 ] as const;
 
+/** What a model pick means as a PhaseChoice; null (the Default row) clears it. */
+function choiceOf(c: { driver: string | null; model: string | null }): PhaseChoice | null {
+  return c.driver ? { driver: c.driver, model: c.model } : null;
+}
+
+/**
+ * The model a chief of staff runs on: the app's (Default is the Work model) or one project's (Default is the app's).
+ * The next run picks it up; one in progress isn't interrupted.
+ */
+export function CosModelRow({ value, settings, project, onChange }: { value: PhaseChoice | null | undefined; settings: PublicSettings; project?: boolean; onChange: (choice: PhaseChoice | null) => void }) {
+  const title = "Chief of staff model";
+  return (
+    <Row
+      title={title}
+      sub={
+        project
+          ? "For a wake about this project alone. Chat, stall-only and multi-project wakes use the app default. Next run."
+          : "The model every chief runs on. A project can choose its own. Applies to the next run, not one in progress."
+      }
+    >
+      <span data-testid={project ? "project-cosModel" : "cosModel"} style={{ display: "inline-block", maxWidth: 240 }}>
+        <DriverModelSelect
+          autoWidth
+          value={value ?? { driver: null, model: null }}
+          resolved={project ? resolveCosChoice(null, settings) : resolveCosChoice(null, { phaseModels: settings.phaseModels })}
+          defaultLabel={project ? "Use app default" : "Use Work model"}
+          forCos
+          onChange={(c) => onChange(choiceOf(c))}
+        />
+      </span>
+    </Row>
+  );
+}
+
 function CosSection({ settings }: { settings: PublicSettings }) {
   const { client } = useStore();
   const act = useAction();
@@ -216,6 +250,7 @@ function CosSection({ settings }: { settings: PublicSettings }) {
             <Switch checked={settings[s.key] ?? s.fallback} ariaLabel={s.title} onChange={(v) => void act(() => client.updateSettings({ [s.key]: v }))} />
           </Row>
         ))}
+        <CosModelRow value={settings.cosModel} settings={settings} onChange={(c) => void act(() => client.updateSettings({ cosModel: c }))} />
       </div>
     </Section>
   );

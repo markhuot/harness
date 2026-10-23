@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type Anthropic from "@anthropic-ai/sdk";
-import { buildTriagePrompt, fenceUntrusted, LlmTriage, parseTriage, TRIAGE_SCHEMA, type TriageInput } from "../../../service/src/cos/triage";
+import { buildTriagePrompt, fenceUntrusted, LlmTriage, MAX_BRIEF, parseTriage, TRIAGE_AGENT_SYSTEM, TRIAGE_SCHEMA, type TriageInput } from "../../../service/src/cos/triage";
 import { triageGuidance } from "../../../service/src/cos/engine";
 import { anthropicStructured, claudeStructuredArgs, type MessagesCreateLike } from "../../../service/src/permissions/structured";
 
@@ -34,6 +34,7 @@ test("parseTriage reads JSON wrapped in prose and refuses anything without a ver
 });
 
 const input: TriageInput = {
+  cosId: "c1",
   guidance: "",
   projects: [{ key: "ACME", name: "Acme", description: "" }],
   openConditions: ["ACME-1 is blocked"],
@@ -110,4 +111,37 @@ test("the API backend forces the tool call and reports usage; the CLI backend ru
   expect(args[args.indexOf("--tools") + 1]).toBe("");
   expect(JSON.parse(args[args.indexOf("--json-schema") + 1]!)).toEqual(TRIAGE_SCHEMA);
   expect(args[args.indexOf("--model") + 1]).toBe("haiku");
+});
+
+test("a watcher's prompt is a guidance block outside the fence, keyed to its events; its lines stay inside", () => {
+  const watched = {
+    ...input,
+    events: [
+      { ...input.events[0]!, id: "e1", watcher: { name: "gh-notifications", prompt: "WATCHER-RULE: a thread line is a pointer; read the PR." } },
+      { ...input.events[0]!, id: "e2", body: "second line", watcher: { name: "gh-notifications", prompt: "WATCHER-RULE: a thread line is a pointer; read the PR." } },
+      { ...input.events[0]!, id: "e3", watcher: { name: "quiet", prompt: "  " } },
+    ],
+  };
+  const user = buildTriagePrompt(watched).user;
+  expect(user.match(/WATCHER-RULE/g)).toHaveLength(1); // once per watcher, not per event
+  expect(user).toContain('### Watcher "gh-notifications" (events e1, e2)');
+  expect(user).not.toContain('Watcher "quiet"'); // nothing to say
+  const fenced = user.replace(/<untrusted-event id="[^"]*">[\s\S]*?<\/untrusted-event>/g, "");
+  expect(fenced).toContain("WATCHER-RULE"); // the human wrote it: not inside a fence
+  expect(buildTriagePrompt(input).user).not.toContain("Guidance from the human"); // no watcher, no block
+});
+
+test("the agent prompt tells triage to look things up, to treat tool results as untrusted, and that unsure escalates; the system prompt is byte-stable", () => {
+  expect(TRIAGE_AGENT_SYSTEM).toMatch(/Don't judge it by how routine it looks/);
+  expect(TRIAGE_AGENT_SYSTEM).toMatch(/everything you read with a tool/);
+  expect(TRIAGE_AGENT_SYSTEM).toMatch(/anything you're unsure about/);
+  expect(TRIAGE_AGENT_SYSTEM).toMatch(/triage_verdict/);
+  const a = buildTriagePrompt(input, TRIAGE_AGENT_SYSTEM);
+  const b = buildTriagePrompt({ ...input, guidance: "different", events: [] }, TRIAGE_AGENT_SYSTEM);
+  expect(a.system).toBe(b.system);
+});
+
+test("a brief is capped, because the chief that reads it can act", () => {
+  const [v] = parseTriage({ verdicts: [{ id: "e1", verdict: "escalate", reason: "r", brief: "x".repeat(MAX_BRIEF + 500) }] }, ["e1"]);
+  expect(v!.brief!.length).toBeLessThanOrEqual(MAX_BRIEF + 1);
 });

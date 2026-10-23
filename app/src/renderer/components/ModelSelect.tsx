@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
-import type { ModelInfo, Ticket, TriageChoice } from "@harness/shared";
+import { cosDrivers, type ModelInfo, type Ticket, type TriageChoice } from "@harness/shared";
 import { useStore } from "../state/store";
 import { decodeChoice, driverModelChoices, encodeChoice, hasCustomModel, modelCacheFor, modelName, modelOptions } from "@harness/shared/state";
 import { useDriverModels } from "../state/models";
@@ -101,6 +101,7 @@ export function DriverModelSelect({
   autoWidth,
   onlyDriver,
   inheritedModel,
+  forCos,
 }: {
   value: TriageChoice;
   onChange: (choice: TriageChoice) => void;
@@ -114,11 +115,14 @@ export function DriverModelSelect({
   onlyDriver?: string;
   /** What a driver picked without a model falls back to, named in its "<driver> default" entry */
   inheritedModel?: (driver: string) => string | null;
+  /** List only drivers that can run a chief of staff (the picked one stays) */
+  forCos?: boolean;
 }) {
   const { state, client, epoch } = useStore();
+  const drivers = forCos ? cosDrivers(state.drivers, value.driver) : state.drivers;
   const cache = modelCacheFor(client);
   useSyncExternalStore(cache.subscribe, () => cache.version);
-  const signedIn = onlyDriver ? [onlyDriver] : state.drivers.filter((d) => d.available && d.authenticated).map((d) => d.id);
+  const signedIn = onlyDriver ? [onlyDriver] : drivers.filter((d) => d.available && d.authenticated).map((d) => d.id);
   const ids = [...new Set([...signedIn, value.driver, resolved.driver].filter((id): id is string => !!id))];
   const key = ids.join(",");
   useEffect(() => {
@@ -128,9 +132,9 @@ export function DriverModelSelect({
 
   const lists = Object.fromEntries(ids.map((id) => [id, cache.get(id)]));
   const models = Object.fromEntries(ids.map((id) => [id, lists[id]!.data?.models as ModelInfo[] | undefined]));
-  const choices = driverModelChoices(state.drivers, models, value, resolved, { defaultLabel, onlyDriver, inheritedModel });
+  const choices = driverModelChoices(drivers, models, value, resolved, { defaultLabel, onlyDriver, inheritedModel });
   const loading = ids.some((id) => lists[id]!.loading && !lists[id]!.data);
-  const driverNames = Object.fromEntries(state.drivers.map((d) => [d.id, d.name]));
+  const driverNames = Object.fromEntries(drivers.map((d) => [d.id, d.name]));
   const problems = ids.flatMap((id) => {
     const p = lists[id]!.error ?? lists[id]!.data?.error;
     return p ? [`${driverNames[id] ?? id}: ${p}`] : [];

@@ -8,6 +8,7 @@ import type { Cos, CosEvent } from "@harness/shared";
 import { canEscalate, inboxState, mergeEvents } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import { Modal, relativeTime } from "../components/bits";
+import { Transcript } from "./Transcript";
 import { useAction, useStore } from "../state/store";
 
 const PAGE = 50;
@@ -75,12 +76,13 @@ export function CosInbox({ chief, onChat }: { chief: Cos; onChat: () => void }) 
   );
 }
 
-const STATE_LABEL = { waiting: "Waiting for a verdict", ignored: "Ignored", escalated: "Escalated", handling: "Handling", handled: "Handled", filtered: "Filtered" } as const;
+const STATE_LABEL = { waiting: "Waiting for a verdict", ignored: "Ignored", escalated: "Escalated", handling: "Handling", acted: "Acted", no_action: "No action needed", needs_user: "Needs you", reviewed: "Reviewed, no outcome recorded", filtered: "Filtered" } as const;
 const SOURCE_LABEL = { activity: "Ticket", watcher: "Watcher", schedule: "Schedule" } as const;
 
 function EventRow({ event: e }: { event: CosEvent }) {
   const { client, dispatch, navigate } = useStore();
   const act = useAction();
+  const [looking, setLooking] = useState(false);
   const st = inboxState(e);
   const escalate = async () => {
     const next = await act(() => client.escalateCosEvent(e.id));
@@ -115,10 +117,15 @@ function EventRow({ event: e }: { event: CosEvent }) {
           </span>
         )}
         {st === "escalated" && e.reason && <span className="cos-reason dim">{e.reason}</span>}
-        {st === "handled" && (
-          <span className="cos-reason dim" data-testid="cos-handled">
-            The chief of staff dealt with it
+        {e.outcome && (st === "acted" || st === "no_action" || st === "needs_user") && (
+          <span className="cos-reason dim" data-testid="cos-outcome">
+            {e.outcome.text}
           </span>
+        )}
+        {e.triageSessionId && (
+          <button className="link-btn" data-testid="cos-triage-run" onClick={() => setLooking(true)}>
+            What triage looked up
+          </button>
         )}
         {canEscalate(e) && (
           <button className="btn btn-sm" data-testid="cos-escalate" onClick={() => void escalate()}>
@@ -126,6 +133,14 @@ function EventRow({ event: e }: { event: CosEvent }) {
           </button>
         )}
       </div>
+      {looking && e.triageSessionId && (
+        <Modal onClose={() => setLooking(false)} width={720}>
+          <h3>Triage of “{e.title}”</h3>
+          <div className="cos-triage-transcript" data-testid="cos-triage-transcript">
+            <Transcript sessionId={e.triageSessionId} emptyHint="The triage run left no transcript." />
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

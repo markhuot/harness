@@ -172,6 +172,7 @@ extension BoardState {
             projects[id] = nil
             tickets = tickets.filter { $0.value.projectId != id }
         case let .ticketUpserted(ticket):
+            if Paging.isHidden(ticket) { return }
             donePaging = Paging.adjustDoneTotals(self, prev: tickets[ticket.id], next: ticket)
             tickets[ticket.id] = ticket
             if let list = specRevisions[ticket.id] {
@@ -240,7 +241,7 @@ extension BoardState {
             if let dp = s.donePage { paging[dp.scope] = Paging.pagingFromPage(dp.page, prev: nil, append: false) }
             ready = true
             projects = Self.preferNewer(Self.byId(s.projects), projects, updatedAt: { $0.updatedAt })
-            tickets = Self.preferNewer(Self.byId(all), tickets, updatedAt: { $0.updatedAt })
+            tickets = Self.preferNewer(Self.byId(all), tickets, updatedAt: { $0.updatedAt }).filter { !Paging.isHidden($0.value) }
             donePaging = paging
             if var search {
                 search.ids = nil

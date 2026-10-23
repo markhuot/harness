@@ -86,6 +86,16 @@ final class ScreenTests: ScreenTestCase {
         try await screen("cos-empty") { NavigationStack { CosScreen(scope: "group:group-work", tab: .inbox) } }
     }
 
+    /// The All chief's Listeners tab: an active listener with its next run, a paused loop and one whose last run failed.
+    func testCosListeners() async throws {
+        try await screen("cos-listeners") { NavigationStack { CosScreen(scope: "all", tab: .listeners) } }
+    }
+
+    /// The Work group's chief owns no watchers yet: the tab says so.
+    func testCosListenersEmpty() async throws {
+        try await screen("cos-listeners-empty") { NavigationStack { CosScreen(scope: "group:group-work", tab: .listeners) } }
+    }
+
     /// The chiefs' bus events reach the store through the socket, which delivers them as events
     /// HarnessEvent doesn't know: the badge and a chat entry land in the CoS state.
     func testCosEventsFromTheSocketReachTheStore() async throws {
@@ -104,11 +114,12 @@ final class ScreenTests: ScreenTestCase {
         try await screen("cos-memory") { CosMemorySheet(chief: chief) }
     }
 
-    /// The chief of staff's switches: the app's two, and a project that switched its chief off
-    /// (its own choice, with the app's value beside Inherit on the other).
+    /// The chief of staff's switches and model: the app's (Default is the Work model), and a project that
+    /// switched its chief off and chose its own model (the app's value beside Inherit on the other switch).
     func testCosSettings() async throws {
         let settings = try XCTUnwrap(world.store.state.settings)
-        let notes = try XCTUnwrap(world.store.state.projects["project-NOTES"])
+        var notes = try XCTUnwrap(world.store.state.projects["project-NOTES"])
+        notes.cosModel = PhaseChoice(driver: "claude-code", model: "haiku")
         try await screen("cos-settings") {
             Form {
                 SettingsCosSection(settings: settings)

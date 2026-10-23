@@ -30,6 +30,7 @@ import type {
   TriageStatus,
   TranscriptRole,
   Watcher,
+  PhaseChoice,
 } from "@harness/shared";
 import type { BrowserService } from "../browser/types";
 import type { ActivityHit, ActivityQuery } from "../store/activity";
@@ -273,6 +274,10 @@ export interface TerminalView {
 }
 
 export interface HarnessOps {
+  // --- triage runs ---
+  /** triage_verdict: record one event's verdict; returns what is still without one. Throws for an unknown id or verdict. */
+  recordTriageVerdict(ctx: ToolContext, input: unknown): string;
+
   // --- any ticket run ---
   /** A short Activity note on the ticket (post_note). */
   postNote(ctx: ToolContext, note: string): Promise<void>;
@@ -379,6 +384,13 @@ export interface HarnessOps {
   readMemory(ctx: ToolContext): Promise<CosMemory>;
   /** Replace one section of the caller's memory; throws when the body is too long or would start another section. */
   updateMemorySection(ctx: ToolContext, section: string, body: string): Promise<CosMemory>;
+
+  // --- events: chief of staff runs ---
+  /**
+   * Record the outcome of events the calling run was woken for, each checked alone (an event another run was given is refused as
+   * unknown); returns each item's error or null. Throws for a run that isn't a chief of staff's.
+   */
+  recordEventOutcomes(ctx: ToolContext, items: { eventId: string; kind: string; text: string }[]): Promise<{ eventId: string; error: string | null }[]>;
 
   // --- terminals: chief of staff runs (DESIGN.md "Chief of staff terminals") ---
   // Only terminals inside the worktree of a ticket the caller covers; any other id behaves as not found.
@@ -532,6 +544,8 @@ export interface ProjectView {
   cosEnabled: boolean | null;
   /** Whether a chief of staff may answer the project's blocked tickets; null → settings.cosCanUnblock */
   cosCanUnblock: boolean | null;
+  /** The driver and model a chief woken for the project's events alone runs on; null → settings.cosModel */
+  cosModel: PhaseChoice | null;
   /** What approving a ticket does by default: merge, pr (a GitHub pull request) or custom */
   completionAction: CompletionAction;
   /** The completion actions the project offers (pr needs a remote gh is logged into) */
