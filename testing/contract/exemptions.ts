@@ -11,6 +11,8 @@ export const VALUE_EXEMPTIONS: Record<string, string> = {
   MAX_PROMPT_ATTACHMENTS: "A limit the apps enforce, not a field",
   DEFAULT_BROWSER_IDLE_TAB_MINUTES: "A limit the apps enforce, not a field",
   MAX_BROWSER_IDLE_TAB_MINUTES: "A limit the apps enforce, not a field",
+  DEFAULT_EVENT_RETENTION_DAYS: "A limit the apps enforce, not a field",
+  MAX_EVENT_RETENTION_DAYS: "A limit the apps enforce, not a field",
   MAX_RUNNING_TERMINALS: "A limit the apps enforce, not a field",
   MIN_TERMINAL_COLS: "A limit the apps enforce, not a field",
   MIN_TERMINAL_ROWS: "A limit the apps enforce, not a field",

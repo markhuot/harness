@@ -978,6 +978,9 @@ export interface DriverModels {
 /** Settings.browserIdleTabMinutes when unset, and its upper bound (a day). */
 export const DEFAULT_BROWSER_IDLE_TAB_MINUTES = 5;
 export const MAX_BROWSER_IDLE_TAB_MINUTES = 1440;
+/** Settings.eventRetentionDays when unset, and its upper bound (a year). */
+export const DEFAULT_EVENT_RETENTION_DAYS = 7;
+export const MAX_EVENT_RETENTION_DAYS = 365;
 
 export interface Settings {
   /**
@@ -1075,6 +1078,11 @@ export interface Settings {
    * service always sends it; optional so clients tolerate an older service without it.
    */
   browserIdleTabMinutes?: number;
+  /**
+   * Days a ticket event (the Events history, the chief's Inbox) is kept once it is handled or ignored; older ones are
+   * pruned. Integer 1–365, default 7. The service always sends it; optional so clients tolerate an older service without it.
+   */
+  eventRetentionDays?: number;
   /**
    * The user's prompt overrides (DESIGN.md "Prompt overrides"): prompt id → template text, or null
    * for the built-in prompt that ships with the service. The service sends every id; unset ones

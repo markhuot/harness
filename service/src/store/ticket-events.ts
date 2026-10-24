@@ -6,6 +6,8 @@ import { type Clock, systemClock } from "../clock";
 
 /** A stored event: the wire CosEvent plus what the engine needs and clients don't. */
 export interface StoredTicketEvent extends CosEvent {
+  /** The ticket the event wakes (the chief's id for chief-of-staff rows); null while no owner is picked */
+  targetId: string | null;
   projectId: string | null;
   ticketId: string | null;
   /** The activity kind ("moved", "submitted", ...) for activity events, else "" */
@@ -21,6 +23,7 @@ export interface StoredTicketEvent extends CosEvent {
 interface Row {
   id: string;
   cos_id: string | null;
+  target_id: string | null;
   project_id: string | null;
   ticket_id: string | null;
   source_kind: string;
@@ -56,6 +59,7 @@ const toEvent = (r: Row): StoredTicketEvent => {
   return {
     id: r.id,
     cosId: r.cos_id,
+    targetId: r.target_id,
     projectKey: r.project_key,
     sourceKind: r.source_kind as CosEventSource,
     title: r.title,
@@ -127,7 +131,10 @@ const COLUMNS: Record<keyof EventPatch, string> = {
 };
 
 export interface WakeLog {
-  cosId: string;
+  /** The ticket that was woken */
+  targetId: string;
+  /** The cap the wake counts against (the delivery policy's event class; "" for the chief's) */
+  eventClass?: string;
   kind: "wake" | "triage";
   eventCount: number;
   /** A wake's one-line digest of what triage ignored before it */
@@ -222,6 +229,11 @@ export class TicketEventRepo {
     return (this.db.query(`${SELECT} WHERE e.status = $status ${owner} ORDER BY e.created_at, e.rowid`).all(args) as Row[]).map(toEvent);
   }
 
+  /** Events with a status that wake one ticket, oldest first. */
+  byTarget(status: CosEventStatus, targetId: string): StoredTicketEvent[] {
+    return (this.db.query(`${SELECT} WHERE e.status = $status AND e.target_id = $targetId ORDER BY e.created_at, e.rowid`).all({ status, targetId }) as Row[]).map(toEvent);
+  }
+
   byWake(wakeId: string): StoredTicketEvent[] {
     return (this.db.query(`${SELECT} WHERE e.wake_id = $wakeId ORDER BY e.created_at, e.rowid`).all({ wakeId }) as Row[]).map(toEvent);
   }
@@ -271,7 +283,7 @@ export class TicketEventRepo {
 
   /** Delete settled events (ignored, handled) last touched before `before`, and the wake log from before it. */
   prune(before: number): number {
-    this.db.query("DELETE FROM cos_wakes WHERE started_at < $before").run({ before });
+    this.db.query("DELETE FROM event_wakes WHERE started_at < $before").run({ before });
     return this.db.query("DELETE FROM ticket_events WHERE status IN ('ignored', 'handled') AND updated_at < $before").run({ before }).changes;
   }
 
@@ -289,10 +301,11 @@ export class TicketEventRepo {
   addWake(log: WakeLog): string {
     const id = newId();
     this.db
-      .query("INSERT INTO cos_wakes (id, cos_id, kind, started_at, event_count, digest, model, tokens_in, tokens_out, run_id) VALUES ($id, $cosId, $kind, $t, $n, $digest, $model, $tin, $tout, $runId)")
+      .query("INSERT INTO event_wakes (id, target_id, event_class, kind, started_at, event_count, digest, model, tokens_in, tokens_out, run_id) VALUES ($id, $targetId, $eventClass, $kind, $t, $n, $digest, $model, $tin, $tout, $runId)")
       .run({
         id,
-        cosId: log.cosId,
+        targetId: log.targetId,
+        eventClass: log.eventClass ?? "",
         kind: log.kind,
         t: this.now(),
         n: log.eventCount,
@@ -306,10 +319,10 @@ export class TicketEventRepo {
   }
 
   /** Full wakes whose run hasn't been seen to end. */
-  openWakes(): { id: string; cosId: string; runId: string | null; startedAt: number; eventCount: number; digest: string }[] {
-    return (this.db.query("SELECT id, cos_id, run_id, started_at, event_count, digest FROM cos_wakes WHERE kind = 'wake' AND outcome IS NULL").all() as { id: string; cos_id: string; run_id: string | null; started_at: number; event_count: number; digest: string | null }[]).map((r) => ({
+  openWakes(): { id: string; targetId: string; runId: string | null; startedAt: number; eventCount: number; digest: string }[] {
+    return (this.db.query("SELECT id, target_id, run_id, started_at, event_count, digest FROM event_wakes WHERE kind = 'wake' AND outcome IS NULL").all() as { id: string; target_id: string; run_id: string | null; started_at: number; event_count: number; digest: string | null }[]).map((r) => ({
       id: r.id,
-      cosId: r.cos_id,
+      targetId: r.target_id,
       runId: r.run_id,
       startedAt: r.started_at,
       eventCount: r.event_count,
@@ -318,30 +331,30 @@ export class TicketEventRepo {
   }
 
   setWakeOutcome(id: string, outcome: WakeOutcome) {
-    this.db.query("UPDATE cos_wakes SET outcome = $outcome WHERE id = $id").run({ id, outcome });
+    this.db.query("UPDATE event_wakes SET outcome = $outcome WHERE id = $id").run({ id, outcome });
   }
 
   /** Token counts of a full wake, known once its run reports them. */
   setWakeTokens(id: string, tokensIn: number, tokensOut: number) {
-    this.db.query("UPDATE cos_wakes SET tokens_in = $tokensIn, tokens_out = $tokensOut WHERE id = $id").run({ id, tokensIn, tokensOut });
+    this.db.query("UPDATE event_wakes SET tokens_in = $tokensIn, tokens_out = $tokensOut WHERE id = $id").run({ id, tokensIn, tokensOut });
   }
 
-  wakeTimes(cosId: string, kind: "wake" | "triage", since: number): number[] {
-    return (this.db.query("SELECT started_at FROM cos_wakes WHERE cos_id = $cosId AND kind = $kind AND started_at > $since ORDER BY started_at").all({ cosId, kind, since }) as { started_at: number }[]).map(
+  wakeTimes(targetId: string, kind: "wake" | "triage", since: number, eventClass = ""): number[] {
+    return (this.db.query("SELECT started_at FROM event_wakes WHERE target_id = $targetId AND kind = $kind AND event_class = $eventClass AND started_at > $since ORDER BY started_at").all({ targetId, kind, since, eventClass }) as { started_at: number }[]).map(
       (r) => r.started_at,
     );
   }
 
   lastWakeAt(cosId: string): number {
-    return (this.db.query("SELECT MAX(started_at) AS t FROM cos_wakes WHERE cos_id = $cosId AND kind = 'wake'").get({ cosId }) as { t: number | null }).t ?? 0;
+    return (this.db.query("SELECT MAX(started_at) AS t FROM event_wakes WHERE target_id = $cosId AND kind = 'wake'").get({ cosId }) as { t: number | null }).t ?? 0;
   }
 
   wake(id: string): { id: string; cosId: string; kind: string; startedAt: number; eventCount: number; model: string | null; tokensIn: number | null; tokensOut: number | null } | null {
-    const r = this.db.query("SELECT * FROM cos_wakes WHERE id = $id").get({ id }) as Record<string, unknown> | null;
+    const r = this.db.query("SELECT * FROM event_wakes WHERE id = $id").get({ id }) as Record<string, unknown> | null;
     return r
       ? {
           id: r.id as string,
-          cosId: r.cos_id as string,
+          cosId: r.target_id as string,
           kind: r.kind as string,
           startedAt: r.started_at as number,
           eventCount: r.event_count as number,
@@ -357,7 +370,7 @@ export class TicketEventRepo {
     return (
       this.db
         .query(
-          `SELECT id, started_at, digest FROM cos_wakes WHERE cos_id = $cosId AND kind = 'wake' AND event_count > 0 AND (outcome IS NULL OR outcome <> 'quiet')
+          `SELECT id, started_at, digest FROM event_wakes WHERE target_id = $cosId AND kind = 'wake' AND event_count > 0 AND (outcome IS NULL OR outcome <> 'quiet')
            AND ($bt IS NULL OR started_at < $bt OR (started_at = $bt AND ('wake:' || id) < $bid)) ORDER BY started_at DESC, id DESC LIMIT $limit`,
         )
         .all({ cosId, bt: before?.createdAt ?? null, bid: before?.id ?? "", limit }) as { id: string; started_at: number; digest: string | null }[]

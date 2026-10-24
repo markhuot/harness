@@ -2,13 +2,14 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { TICKET_STATUSES } from "../../../shared/src/protocol";
-import { COS_CEILING_MS, COS_HOUR_MS, COS_QUIET_MS, COS_WAKES_PER_HOUR } from "../../../shared/src/cos";
+import { COS_TRIAGE_BATCH_MS, EVENT_WAKE_CAP } from "../../../shared/src/cos";
+import { WAKE_MAX_ATTEMPTS, WAKE_MAX_EVENTS } from "../../../service/src/events/delivery";
 import { isSilentReply, WAKE_PROMPT_PREFIX } from "../../../service/src/cos/chat";
 import type { CosEngine } from "../../../service/src/cos/engine";
 import { LlmTriage, type CosTriage, type TriageInput, type TriageResult, type TriageVerdict } from "../../../service/src/cos/triage";
 import type { StoredTicketEvent } from "../../../service/src/store/ticket-events";
 import { handleMcpRequest } from "../../../service/src/api/mcp";
-import { COS_UNASSIGNED_MAX, COS_UNASSIGNED_RETENTION_MS, TRIAGE_CHUNK, WAKE_BODY_MAX, WAKE_MAX_ATTEMPTS, WAKE_MAX_EVENTS } from "../../../service/src/cos/engine";
+import { COS_UNASSIGNED_MAX, COS_UNASSIGNED_RETENTION_MS, TRIAGE_CHUNK, WAKE_BODY_MAX } from "../../../service/src/cos/engine";
 import { FakeDriver, gate, replyScript } from "../fake-driver";
 import { callTools, makeOrchestrator, stopAll } from "../orchestrator-harness";
 
@@ -332,7 +333,7 @@ test("a ticket's moves in one batch are triaged as its net state: one move, or n
   s.happen(b, "marker-b1", { kind: "moved", from: "planning", to: "in_progress" });
   s.happen(b, "marker-b2", { kind: "moved", from: "in_progress", to: "review" });
   s.happen(b, "marker-b3", { kind: "moved", from: "review", to: "blocked" });
-  await s.after(COS_QUIET_MS + 1000);
+  await s.after(COS_TRIAGE_BATCH_MS + 1000);
   const asked = s.scripted!.calls[0]!.events.map((e) => e.title);
   expect(asked).toHaveLength(1); // a's moves cancelled out; b's three became one
   expect(asked[0]).toContain("marker-b3");
@@ -347,32 +348,16 @@ test("a ticket's moves in one batch are triaged as its net state: one move, or n
 // Debounce, steering, cap
 // ---------------------------------------------------------------------------
 
-test("a batch is triaged 45 seconds after its last event", async () => {
+test("a burst is triaged in one call a fixed window after its first event, and a trickle can't push it out", async () => {
   const s = await quiet();
-  s.happen(s.t, "marker-debounce");
-  await s.after(COS_QUIET_MS - 1000);
-  expect(s.scripted!.calls).toHaveLength(0);
-  s.happen(s.t, "marker-debounce-2"); // a new event pushes the quiet time out
-  await s.after(COS_QUIET_MS - 1000);
+  s.happen(s.t, "marker-batch-0");
+  await s.after(COS_TRIAGE_BATCH_MS / 2);
+  s.happen(s.t, "marker-batch-1"); // joins the batch; doesn't move its time
+  await s.after(COS_TRIAGE_BATCH_MS / 2 - 1000);
   expect(s.scripted!.calls).toHaveLength(0);
   await s.after(2000);
   expect(s.scripted!.calls).toHaveLength(1);
   expect(s.scripted!.calls[0]!.events).toHaveLength(2);
-});
-
-test("a steady trickle can't postpone triage past five minutes from the first event", async () => {
-  const s = await quiet();
-  s.happen(s.t, "marker-ceiling-0");
-  for (let i = 1; i < 10; i++) {
-    await s.after(30_000);
-    s.happen(s.t, `marker-ceiling-${i}`);
-  }
-  expect(s.scripted!.calls).toHaveLength(0);
-  const first = s.eventOf("marker-ceiling-0").createdAt;
-  s.h.clock.set(first + COS_CEILING_MS);
-  await s.engine.tick();
-  expect(s.scripted!.calls).toHaveLength(1);
-  expect(s.scripted!.calls[0]!.events.length).toBe(10);
 });
 
 test("the next due time arms one timer, rebuilt from the rows", async () => {
@@ -381,7 +366,7 @@ test("the next due time arms one timer, rebuilt from the rows", async () => {
   s.engine.nudge();
   const armed = [...s.timers.pending.values()];
   expect(armed).toHaveLength(1);
-  expect(armed[0]!.ms).toBe(COS_QUIET_MS);
+  expect(armed[0]!.ms).toBe(COS_TRIAGE_BATCH_MS);
 });
 
 test("one run per chief: a second wake steers into the running run, or waits to be the next run", async () => {
@@ -408,24 +393,26 @@ test("one run per chief: a second wake steers into the running run, or waits to 
   expect(s.eventOf("marker-second")).toMatchObject({ status: "handled" });
 });
 
-test("at most six wakes an hour: fail-open escalations count, and the overflow joins one later wake", async () => {
+test("the chief wakes under the shared cap: fail-open escalations count, and the overflow is held, then joins one later wake", async () => {
   const s = await quiet({ triage: { unavailable: "no model" } });
-  for (let i = 0; i < COS_WAKES_PER_HOUR; i++) {
+  const { limit, windowMs } = EVENT_WAKE_CAP;
+  const step = COS_TRIAGE_BATCH_MS * 2;
+  for (let i = 0; i < limit; i++) {
     s.happen(s.t, `marker-cap-${i}`);
-    await s.after(MIN);
+    await s.after(step);
   }
-  expect(s.h.driver.requests).toHaveLength(COS_WAKES_PER_HOUR);
+  expect(s.h.driver.requests).toHaveLength(limit);
   s.happen(s.t, "marker-over-1");
-  await s.after(MIN);
+  await s.after(step);
   s.happen(s.t, "marker-over-2");
-  await s.after(MIN);
-  expect(s.h.driver.requests).toHaveLength(COS_WAKES_PER_HOUR); // held
+  await s.after(step);
+  expect(s.h.driver.requests).toHaveLength(limit); // held
   expect(s.eventOf("marker-over-1").status).toBe("escalated");
   expect(s.eventOf("marker-over-2").status).toBe("escalated");
-  expect(s.timers.pending.size).toBe(1); // armed for when the oldest wake leaves the hour
+  expect(s.timers.pending.size).toBe(1); // armed for when the oldest wake leaves the window
 
-  await s.after(COS_HOUR_MS);
-  expect(s.h.driver.requests).toHaveLength(COS_WAKES_PER_HOUR + 1);
+  await s.after(windowMs);
+  expect(s.h.driver.requests).toHaveLength(limit + 1);
   const last = s.h.driver.requests.at(-1)!.prompt;
   expect(last).toContain("marker-over-1");
   expect(last).toContain("marker-over-2");
@@ -626,6 +613,7 @@ test("escalate anyway puts an ignored event in the chief's next wake; a handled 
 
   const out = await s.h.orch.escalateCosEvent(ignored.id);
   await s.h.settle();
+
   expect(out.verdict).toBe("escalate");
   expect(out.reason).toContain("Escalated by you");
   expect(s.h.driver.requests.at(-1)!.prompt).toContain("marker-skipped");
@@ -635,7 +623,7 @@ test("escalate anyway puts an ignored event in the chief's next wake; a handled 
   await expect(s.h.orch.escalateCosEvent("nope")).rejects.toThrow(/Unknown event/);
 });
 
-test("settled events are pruned after a month; events still open never are", async () => {
+test("settled events are pruned after the retention setting (7 days by default); events still open never are", async () => {
   const s = await quiet();
   const off = s.project("OFF1");
   s.h.orch.updateProject(off.id, { cosEnabled: false });
@@ -646,9 +634,23 @@ test("settled events are pruned after a month; events still open never are", asy
   expect(s.eventOf("marker-settled").status).toBe("ignored");
   await s.after(12 * 60 * MIN);
   expect(s.eventOf("marker-unowned").status).toBe("pending"); // waiting for an owner: kept for a day
-  await s.after(31 * 24 * 60 * MIN);
+  await s.after(5 * 24 * 60 * MIN);
+  expect(s.events().some((e) => e.title.includes("marker-settled"))).toBe(true); // 5½ days: inside the default week
+  await s.after(2 * 24 * 60 * MIN);
   expect(s.events().some((e) => e.title.includes("marker-settled"))).toBe(false);
   expect(s.events().some((e) => e.title.includes("marker-unowned"))).toBe(false); // …and no longer
+});
+
+test("an idle service still prunes, at the retention the setting names", async () => {
+  const s = await quiet();
+  s.happen(s.t, "marker-idle-prune");
+  await s.after(MIN);
+  expect(s.eventOf("marker-idle-prune").status).toBe("ignored");
+  s.h.orch.updateSettings({ eventRetentionDays: 2 });
+  await s.after(30 * 60 * MIN); // no activity at all: the prune runs on its own timer
+  expect(s.events().some((e) => e.title.includes("marker-idle-prune"))).toBe(true);
+  await s.after(20 * 60 * MIN);
+  expect(s.events().some((e) => e.title.includes("marker-idle-prune"))).toBe(false);
 });
 
 test("the Inbox badge counts what is still open, unassigned included", async () => {
@@ -783,7 +785,7 @@ test("a failed or cancelled wake hands its events back for the next one instead 
   expect(e.consumingRunId).toBeNull();
   expect(s.engine.badge().total).toBe(1);
   // The next wake brings it again, and a run that finishes closes it.
-  await s.after(COS_HOUR_MS / COS_WAKES_PER_HOUR);
+  await s.after(EVENT_WAKE_CAP.windowMs);
   expect(s.h.driver.requests.at(-1)!.prompt).toContain("marker-crash");
   expect(s.eventOf("marker-crash").status).toBe("handled");
 });
@@ -932,7 +934,8 @@ test("two overlapping hand-offs to one chief send its events once", async () => 
   const s = await quiet({ triage: { unavailable: "no model" } });
   const ev = s.engine.addExternal({ sourceKind: "watcher", sourceRef: "gh:sha256:r", actor: "watcher:gh", title: "gh: issue", body: "once", cosId: s.chief.ticketId })!;
   s.h.store.ticketEvents.update(ev.id, { status: "escalated", verdict: "escalate" });
-  const deliver = (s.engine as unknown as { deliver(id: string): Promise<void> }).deliver.bind(s.engine);
+  const { delivery } = s.engine as unknown as { delivery: { deliver(id: string): Promise<void> } };
+  const deliver = delivery.deliver.bind(delivery);
   await Promise.all([deliver(s.chief.ticketId), deliver(s.chief.ticketId)]);
   await s.h.settle();
   expect(s.h.driver.requests.filter((r) => r.prompt.includes("[Harness: 1 event for you]"))).toHaveLength(1);
@@ -954,7 +957,7 @@ test("a chief whose runs keep failing isn't woken for the same event forever", a
   const s = await quiet({ triage: { unavailable: "no model" } });
   for (let i = 0; i < 3; i++) s.h.driver.script([{ throw: new Error("boom") }]);
   s.happen(s.t, "marker-doomed");
-  for (let i = 0; i < 5; i++) await s.after(COS_HOUR_MS / COS_WAKES_PER_HOUR);
+  for (let i = 0; i < 5; i++) await s.after(EVENT_WAKE_CAP.windowMs);
   expect(s.h.driver.requests.filter((r) => r.prompt.includes("marker-doomed"))).toHaveLength(WAKE_MAX_ATTEMPTS);
   expect(s.eventOf("marker-doomed")).toMatchObject({ status: "ignored", reason: expect.stringContaining("failed 3 times") });
 });
@@ -1017,7 +1020,7 @@ test("a failed run leaves no outcome behind, so the next successful run can't in
   s.happen(s.t, "marker-f");
   await s.after(MIN);
   expect(s.eventOf("marker-f")).toMatchObject({ status: "escalated", outcome: null });
-  await s.after(COS_HOUR_MS / COS_WAKES_PER_HOUR);
+  await s.after(EVENT_WAKE_CAP.windowMs);
   expect(s.eventOf("marker-f")).toMatchObject({ status: "handled", outcome: null });
 });
 

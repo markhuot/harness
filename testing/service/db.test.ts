@@ -43,7 +43,7 @@ test("a database from a newer service is refused rather than downgraded", () => 
 test("a failing migration rolls back whole and leaves the version where it was", () => {
   const db = dbAt(SCHEMA_VERSION - 1);
   // Break the last migration's target: it creates a table that is already there.
-  db.exec("CREATE TABLE ticket_events (id TEXT)");
+  db.exec("CREATE TABLE event_wakes (id TEXT)");
   expect(() => migrate(db, paths())).toThrow();
   expect(version(db)).toBe(SCHEMA_VERSION - 1);
 });
@@ -385,13 +385,25 @@ test("deleting a group's chief hands its watchers to All (cos_id goes NULL)", ()
   expect((db.query("SELECT cos_id FROM watchers WHERE id = 'w'").get() as { cos_id: string | null }).cos_id).toBeNull();
 });
 
-test("migration 53 drops cos_wakes.reported and keeps the wakes", () => {
+test("migration 53 drops cos_wakes.reported and keeps the wakes (which migration 56 then renames)", () => {
   const db = dbAt(52);
   db.exec(`INSERT INTO cos_wakes (id, cos_id, kind, started_at, event_count, run_id, outcome, reported) VALUES ('w1', 'chief', 'wake', 5, 2, 'r1', 'spoke', '{"t1":"blocked:x"}')`);
   expect(columns(db, "cos_wakes")).toContain("reported");
   migrate(db, paths());
-  expect(columns(db, "cos_wakes")).not.toContain("reported");
-  expect(db.query("SELECT id, event_count, run_id, outcome FROM cos_wakes").all()).toEqual([{ id: "w1", event_count: 2, run_id: "r1", outcome: "spoke" }]);
+  expect(columns(db, "event_wakes")).not.toContain("reported");
+  expect(db.query("SELECT id, event_count, run_id, outcome FROM event_wakes").all()).toEqual([{ id: "w1", event_count: 2, run_id: "r1", outcome: "spoke" }]);
+});
+
+test("migration 56 keys the wake log by the ticket woken and keeps every wake, in the chief's cap class", () => {
+  const db = dbAt(55);
+  db.exec(`INSERT INTO cos_wakes (id, cos_id, kind, started_at, event_count) VALUES ('w1', 'chief', 'wake', 5, 2), ('w2', 'chief', 'triage', 6, 1)`);
+  migrate(db, paths());
+  expect(columns(db, "event_wakes")).toEqual(expect.arrayContaining(["target_id", "event_class"]));
+  expect(columns(db, "event_wakes")).not.toContain("cos_id");
+  expect(db.query("SELECT id, target_id, event_class, kind FROM event_wakes ORDER BY id").all()).toEqual([
+    { id: "w1", target_id: "chief", event_class: "", kind: "wake" },
+    { id: "w2", target_id: "chief", event_class: "", kind: "triage" },
+  ]);
 });
 
 test("migration 54 keeps an old CoS can-unblock choice as the Blocked box, every other column off, for the app and per project", () => {

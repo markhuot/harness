@@ -1,32 +1,21 @@
 // The chief-of-staff event pipeline (DESIGN.md "Events"): activity → ticket_events (one owner each) →
-// debounce → Haiku triage → one wake of the owner's chief. Code keeps only the invariants (dedupe,
-// net-state collapse, actor filter, debounce, one run per chief, hourly cap, scope, fail-open); what
-// counts as worth waking for is the triage prompt's call.
+// short batch window → Haiku triage → escalated rows, which the shared EventDelivery (events/delivery.ts)
+// wakes the owner's chief with, under the same wake cap as any ticket. Code keeps only the invariants (dedupe,
+// net-state collapse, actor filter, one run per chief, scope, fail-open); what counts as worth waking for is
+// the triage prompt's call.
 //
 // Every state change is a row in ticket_events, so a restart loses nothing: `start()` recovers
 // events left mid-flight, catches the activity cursor up and re-arms the timer from the rows.
 
 import type { CosBadge, CosBusEvent, CosEvent, CosEventStatus, CosChief, Project, Settings, Ticket } from "@harness/shared";
-import { COS_HOUR_MS, COS_OUTCOME_KINDS, routineActivityReason, collapseMoves, nextWakeAllowedAt, nextWakeAt, ownerOf, cosSeesStatus } from "@harness/shared";
+import { COS_OUTCOME_KINDS, DEFAULT_EVENT_RETENTION_DAYS, routineActivityReason, collapseMoves, triageDueAt, ownerOf, cosSeesStatus } from "@harness/shared";
 import { isSilentReply, QUIET_REPLY } from "./chat";
 import { memorySection, TRIAGE_GUIDANCE } from "./memory";
+import { EventDelivery, type OpenWake, type Timers, realTimers } from "../events/delivery";
+import { clip } from "../events/render";
 import type { Store } from "../store";
 import type { StoredTicketEvent } from "../store/ticket-events";
 import { type CosTriage, type TriageEvent, TriageIncomplete, type TriageVerdict, fenceUntrusted } from "./triage";
-
-export interface Timers {
-  set(fn: () => void, ms: number): unknown;
-  clear(handle: unknown): void;
-}
-
-const realTimers: Timers = {
-  set: (fn, ms) => {
-    const h = setTimeout(fn, ms);
-    h.unref?.();
-    return h;
-  },
-  clear: (h) => clearTimeout(h as ReturnType<typeof setTimeout>),
-};
 
 export interface CosEngineDeps {
   store: Store;
@@ -49,9 +38,7 @@ export interface CosEngineDeps {
   triageTimeoutMs?: number;
 }
 
-/** Settled events are kept this long, then pruned. */
-export const COS_EVENT_RETENTION_MS = 30 * 24 * 60 * 60_000;
-const PRUNE_EVERY_MS = 24 * 60 * 60_000;
+const DAY_MS = 24 * 60 * 60_000;
 const DRAIN_PAGE = 500;
 /** Events with no owner (no chief could take them) are kept this long and at most this many, so a board with no chief doesn't pile up rows. */
 export const COS_UNASSIGNED_RETENTION_MS = 24 * 60 * 60_000;
@@ -62,12 +49,9 @@ const noteLookup = (reason: string, lookup: boolean) => (lookup ? reason : `${re
 /** Events per one-shot triage call (a larger batch overruns the model's answer), and per batch pass; the rest wait for the next. An agent run sets its own (CosTriage.limits). */
 export const TRIAGE_CHUNK = 20;
 export const TRIAGE_MAX_PER_PASS = 100;
-/** Events in one wake, and each one's raw body; the rest wait for a later wake and are counted in this one. */
-export const WAKE_MAX_EVENTS = 40;
+/** Each event's raw body in a wake. */
 export const WAKE_BODY_MAX = 2000;
 const MAX_DIGEST_REASONS = 3;
-/** A wake whose run fails or is cancelled is sent again this many times in all. */
-export const WAKE_MAX_ATTEMPTS = 3;
 
 /** What every wake tells the chief about speaking: the user hears from it only when there is a reason. */
 export const WAKE_RULES = [
@@ -84,25 +68,50 @@ const firstLine = (s: string, max = 200) => {
   return line.length > max ? `${line.slice(0, max)}…` : line;
 };
 
-const clip = (s: string, max: number) => (s.length > max ? `${s.slice(0, max)}… (${s.length - max} more characters)` : s);
-
 export class CosEngine {
-  private timer: unknown = null;
-  private stopped = false;
   /** Chiefs whose batch is out for triage now */
   private triaging = new Set<string>();
-  /** Chiefs with a wake being handed over now: a second deliver would send the same events again */
-  private delivering = new Set<string>();
-  /** Chiefs whose run failed in this tick: it doesn't get its events again in the same pass */
-  private failedThisTick = new Set<string>();
-  private lastPrune = 0;
-  private ticking: Promise<void> | null = null;
-  private tickAgain = false;
   private unavailable: string | null = null;
+  private readonly delivery: EventDelivery;
   private readonly timers: Timers;
 
   constructor(private readonly d: CosEngineDeps) {
     this.timers = d.timers ?? realTimers;
+    this.delivery = new EventDelivery({
+      store: d.store,
+      now: d.now,
+      log: d.log,
+      timers: this.timers,
+      runStatus: d.runStatus,
+      retentionMs: () => (d.settings().eventRetentionDays ?? DEFAULT_EVENT_RETENTION_DAYS) * DAY_MS,
+      // The chief's batch window already gathers a burst, so its wakes need no extra debounce.
+      debounceMs: 0,
+      // The chief settles its rows through record_event_outcomes and the end of its run, never at the push.
+      settleOnPush: () => false,
+      open: (cosId) => !!d.store.cos.get(cosId)?.enabled,
+      targetExists: (cosId) => !!d.store.cos.get(cosId),
+      // A chief that was removed: its rows wait for whoever owns their project now.
+      onTargetGone: (e) => this.patch(e.id, { status: "escalated", wakeId: null, consumingRunId: null, cosId: null }),
+      render: (cosId, events, more) => this.render(cosId, events, more),
+      deliver: async (cosId, text, events) => {
+        const keys = new Set(events.map((e) => e.projectKey));
+        return { runId: await d.deliver(cosId, text, keys.size === 1 ? ([...keys][0] ?? null) : null) };
+      },
+      describeRun: () => "The chief's run",
+      patched: (e) => d.emit({ kind: "cos.event.upserted", event: wire(e) }),
+      changed: () => {
+        this.rehome();
+        this.emitBadge();
+      },
+      settleWake: (w, status) => this.settleWake(w, status),
+      beforeTick: () => this.triageDue(),
+      extraDue: () => this.nextTriageAt(),
+      afterPrune: () => this.pruneUnassigned(),
+    });
+  }
+
+  private get stopped() {
+    return this.delivery.isStopped;
   }
 
   /** Why triage can't run (shown on the chief), or null. */
@@ -115,20 +124,16 @@ export class CosEngine {
   // -------------------------------------------------------------------------
 
   start() {
-    this.stopped = false;
     const recovered = this.d.store.ticketEvents.recover();
     if (recovered) this.d.log(`cos: recovered ${recovered} event(s) left mid-flight`);
-    this.prune();
+    this.delivery.start();
     this.drain();
-    this.sweepHandling();
     this.rehome();
     this.arm();
   }
 
   stop() {
-    this.stopped = true;
-    if (this.timer) this.timers.clear(this.timer);
-    this.timer = null;
+    this.delivery.stop();
   }
 
   /** The bus saw activity: read it now rather than at the next tick. */
@@ -317,39 +322,19 @@ export class CosEngine {
   // Batching, triage and hand-off
   // -------------------------------------------------------------------------
 
-  /** Process what is due now: triage batches whose quiet time passed, then wakes the cap allows. One tick at a time; a tick requested during one runs after it. */
+  /** Process what is due now: triage batches whose window passed, then the wakes the cap allows. One tick at a time; a tick requested during one runs after it. */
   tick(): Promise<void> {
-    if (this.stopped) return Promise.resolve();
-    if (this.ticking) {
-      this.tickAgain = true;
-      return this.ticking;
-    }
-    this.ticking = (async () => {
-      try {
-        do {
-          this.tickAgain = false;
-          await this.runDue();
-        } while (this.tickAgain && !this.stopped);
-      } finally {
-        this.ticking = null;
-        this.arm();
-      }
-    })();
-    return this.ticking;
+    return this.delivery.tick();
   }
 
-  private async runDue() {
+  /** The delivery tick's first step: read the activity and triage the batches that are due. */
+  private triageDue(): Promise<unknown> | void {
     const { store } = this.d;
     const now = this.d.now();
-    this.failedThisTick.clear();
     this.drain();
-    this.sweepHandling();
-    if (now - this.lastPrune >= PRUNE_EVERY_MS) this.prune();
     const pendingBy = this.groupByChief(store.ticketEvents.byStatus("pending"));
-    const due = [...pendingBy].filter(([cosId, events]) => !this.triaging.has(cosId) && (nextWakeAt(events.map((e) => e.createdAt)) ?? Infinity) <= now);
-    await Promise.all(due.map(([cosId, events]) => this.processBatch(cosId, events)));
-    const escalated = this.groupByChief(store.ticketEvents.byStatus("escalated"));
-    for (const cosId of escalated.keys()) await this.deliver(cosId);
+    const due = [...pendingBy].filter(([cosId, events]) => !this.triaging.has(cosId) && (triageDueAt(events.map((e) => e.createdAt)) ?? Infinity) <= now);
+    if (due.length) return Promise.all(due.map(([cosId, events]) => this.processBatch(cosId, events)));
   }
 
   private groupByChief(events: StoredTicketEvent[]): Map<string, StoredTicketEvent[]> {
@@ -396,7 +381,7 @@ export class CosEngine {
   /** The batch may have escalated for this chief or (after a project proposal, or a chief switched off meanwhile) another: wake whoever has escalations. */
   private async handOff() {
     this.rehome();
-    for (const id of new Set(this.d.store.ticketEvents.byStatus("escalated").flatMap((e) => (e.cosId ? [e.cosId] : [])))) await this.deliver(id);
+    for (const id of new Set(this.d.store.ticketEvents.byStatus("escalated").flatMap((e) => (e.cosId ? [e.cosId] : [])))) await this.delivery.deliver(id);
   }
 
   /** The batch sizes and time budget of the triage layer in use (an agent run has smaller batches and more time than a one-shot call). */
@@ -412,7 +397,7 @@ export class CosEngine {
     // ignored one while an earlier chunk ran, and the payload may have changed.
     const batch = queued.map((e) => store.ticketEvents.get(e.id)).filter((e): e is StoredTicketEvent => !!e && e.status === "pending");
     if (!batch.length) return;
-    const batchId = store.ticketEvents.addWake({ cosId, kind: "triage", eventCount: batch.length });
+    const batchId = store.ticketEvents.addWake({ targetId: cosId, kind: "triage", eventCount: batch.length });
     for (const e of batch) this.patch(e.id, { status: "triaging", wakeId: batchId });
     this.emitBadge();
 
@@ -515,46 +500,10 @@ export class CosEngine {
     return watcher ? { name: watcher.name, prompt: watcher.prompt } : null;
   }
 
-  /**
-   * Wake the chief with its escalated events, unless it is off or the hourly cap is spent; the
-   * overflow then waits and goes in one later wake. Steers into a running run (deliver decides).
-   */
-  private async deliver(cosId: string) {
-    if (this.stopped || this.delivering.has(cosId) || this.failedThisTick.has(cosId)) return;
-    this.delivering.add(cosId);
-    try {
-      await this.deliverNow(cosId);
-    } finally {
-      this.delivering.delete(cosId);
-    }
-  }
-
-  private async deliverNow(cosId: string) {
-    const { store } = this.d;
-    const waiting = store.ticketEvents.byStatus("escalated", cosId);
-    const chief = store.cos.get(cosId);
-    if (!chief?.enabled) return;
-    const now = this.d.now();
-    if (!waiting.length) return;
-    if (nextWakeAllowedAt(store.ticketEvents.wakeTimes(cosId, "wake", now - COS_HOUR_MS), now) > now) return;
-    const events = waiting.slice(0, WAKE_MAX_EVENTS);
-    const since = store.ticketEvents.lastWakeAt(cosId);
-    const parts = this.digestParts(cosId, since);
-    const digest = this.digestText(parts);
-    const text = this.wakePrompt(events, parts, waiting.length - events.length);
-    let runId: string | null;
-    try {
-      const keys = new Set(events.map((e) => e.projectKey));
-      runId = await this.d.deliver(cosId, text, keys.size === 1 ? ([...keys][0] ?? null) : null);
-    } catch (err) {
-      // Nothing was handed over: no wake is charged to the cap and no batch shows in the chat.
-      this.d.log(`cos: couldn't wake ${chief.key}: ${err instanceof Error ? err.message : String(err)}`);
-      return;
-    }
-    const wakeId = store.ticketEvents.addWake({ cosId, kind: "wake", eventCount: events.length, digest, runId });
-    for (const e of events) this.patch(e.id, { status: "handling", wakeId, consumingRunId: runId });
-    this.emitBadge();
-    // The batch card shows once the run ends, and only if the chief had something to say (settleWake).
+  /** What a wake of the chief carries: its prompt and the digest of what triage ignored since the last one. */
+  private render(cosId: string, events: StoredTicketEvent[], more: number): { text: string; digest: string } {
+    const parts = this.digestParts(cosId, this.d.store.ticketEvents.lastWakeAt(cosId));
+    return { text: this.wakePrompt(events, parts, more), digest: this.digestText(parts) };
   }
 
   /** What the chief reads on a wake: Haiku's brief, the raw (untrusted) events, and a digest of what was ignored. */
@@ -588,28 +537,22 @@ export class CosEngine {
     return count ? `Ignored since the last wake: ${count} event${count === 1 ? "" : "s"} (${reasons}).` : "Ignored since the last wake: nothing.";
   }
 
-  /** A chief's run ended: a run that finished handled its events; one that failed or was cancelled didn't, so they go back to waiting for the next wake. */
+  /** A run ended: a run that finished handled its events; one that failed or was cancelled didn't, so they go back to waiting for the next wake. */
   runEnded(runId: string, status: string) {
-    const events = this.d.store.ticketEvents.byRun(runId, "handling");
-    for (const e of events) this.settle(e, status);
-    for (const w of this.d.store.ticketEvents.openWakes()) if (w.runId === runId) this.settleWake(w, status);
-    if (events.length) {
-      this.emitBadge();
-    }
-    this.arm();
+    this.delivery.runEnded(runId, status);
   }
 
   /**
    * A wake's run is over: record how it ended. One that failed is recorded as failed,
    * one whose whole reply was silent drops its batch card from the chat, and any other shows the card now.
    */
-  private settleWake(w: { id: string; cosId: string; runId: string | null; startedAt: number; eventCount: number; digest: string }, runStatus: string) {
+  private settleWake(w: OpenWake, runStatus: string) {
     const { store } = this.d;
     const quiet = runStatus === "succeeded" && !!w.runId && this.d.runReplies(w.runId, w.startedAt).every(isSilentReply);
     store.ticketEvents.setWakeOutcome(w.id, runStatus !== "succeeded" ? "failed" : quiet ? "quiet" : "spoke");
     if (quiet) return;
     const eventIds = store.ticketEvents.byWake(w.id).map((e) => e.id);
-    this.d.emit({ kind: "cos.transcript.appended", cosId: w.cosId, entry: { id: `wake:${w.id}`, cosId: w.cosId, createdAt: w.startedAt, kind: "event_batch", wakeId: w.id, eventIds, digest: w.digest } });
+    this.d.emit({ kind: "cos.transcript.appended", cosId: w.targetId, entry: { id: `wake:${w.id}`, cosId: w.targetId, createdAt: w.startedAt, kind: "event_batch", wakeId: w.id, eventIds, digest: w.digest } });
   }
 
   /**
@@ -627,48 +570,6 @@ export class CosEngine {
       this.patch(e.id, { payload: { ...e.payload, outcome: { kind, text: clip(clean, OUTCOME_TEXT_MAX) } } });
       return { eventId, error: null };
     });
-  }
-
-  private settle(e: StoredTicketEvent, runStatus: string) {
-    // An outcome belongs to the run that recorded it: a run that failed or was cancelled leaves none for the next one to inherit.
-    if (runStatus !== "succeeded" && e.payload.outcome !== undefined) {
-      const { outcome: _o, ...rest } = e.payload;
-      e = { ...e, payload: rest };
-    }
-    if (runStatus === "succeeded") this.patch(e.id, { status: "handled" });
-    else {
-      // A chief whose runs keep failing isn't woken forever: after a few tries the event is closed with the reason.
-      if (e.cosId) this.failedThisTick.add(e.cosId);
-      const attempts = (typeof e.payload.wakeAttempts === "number" ? e.payload.wakeAttempts : 0) + 1;
-      if (attempts >= WAKE_MAX_ATTEMPTS) this.patch(e.id, { status: "ignored", reason: `The chief's run ${runStatus === "cancelled" ? "was cancelled" : "failed"} ${attempts} times, so it isn't woken for this again`, wakeId: null, consumingRunId: null, payload: { ...e.payload, wakeAttempts: attempts } });
-      else this.patch(e.id, { status: "escalated", wakeId: null, consumingRunId: null, payload: { ...e.payload, wakeAttempts: attempts } });
-    }
-  }
-
-  /**
-   * Events "handling" whose run is gone or over (a crash, a pruned chief or run, a run that ended
-   * while its events were being recorded) are settled. One whose run is still queued or running
-   * stays: the wake survived, and sending it again would wake the chief twice.
-   */
-  private sweepHandling() {
-    const { store } = this.d;
-    let changed = false;
-    for (const e of store.ticketEvents.byStatus("handling")) {
-      const status = e.consumingRunId ? this.d.runStatus(e.consumingRunId) : null;
-      if (status === "queued" || status === "running") continue;
-      if (e.cosId && !store.cos.get(e.cosId)) this.patch(e.id, { status: "escalated", wakeId: null, consumingRunId: null, cosId: null });
-      else this.settle(e, status ?? "missing");
-      changed = true;
-    }
-    for (const w of store.ticketEvents.openWakes()) {
-      const status = w.runId ? this.d.runStatus(w.runId) : null;
-      if (status === "queued" || status === "running") continue;
-      this.settleWake(w, status ?? "missing");
-    }
-    if (changed) {
-      this.rehome();
-      this.emitBadge();
-    }
   }
 
   /** The human says an ignored (or not yet triaged) event matters: it goes in the next wake, to whoever owns its project now. */
@@ -690,41 +591,19 @@ export class CosEngine {
   // Timer, retention, badge
   // -------------------------------------------------------------------------
 
-  /** The next moment something is due: a batch's quiet time, a held wake's cap, the prune. */
-  private nextDue(): number | null {
-    const { store } = this.d;
-    const now = this.d.now();
+  /** When the next triage batch is due, or null. */
+  private nextTriageAt(): number | null {
     const times: number[] = [];
-    for (const [cosId, events] of this.groupByChief(store.ticketEvents.byStatus("pending"))) {
+    for (const [cosId, events] of this.groupByChief(this.d.store.ticketEvents.byStatus("pending"))) {
       if (this.triaging.has(cosId)) continue;
-      const at = nextWakeAt(events.map((e) => e.createdAt));
+      const at = triageDueAt(events.map((e) => e.createdAt));
       if (at !== null) times.push(at);
-    }
-    const escalatedOwners = new Set(this.groupByChief(store.ticketEvents.byStatus("escalated")).keys());
-    for (const cosId of escalatedOwners) {
-      if (!store.cos.get(cosId)?.enabled) continue;
-      times.push(nextWakeAllowedAt(store.ticketEvents.wakeTimes(cosId, "wake", now - COS_HOUR_MS), now));
     }
     return times.length ? Math.min(...times) : null;
   }
 
   private arm() {
-    if (this.stopped) return;
-    if (this.timer) this.timers.clear(this.timer);
-    this.timer = null;
-    const at = this.nextDue();
-    if (at === null) return;
-    this.timer = this.timers.set(() => {
-      this.timer = null;
-      void this.tick().catch((err) => this.d.log(`cos: tick failed: ${err instanceof Error ? err.message : String(err)}`));
-    }, Math.max(0, at - this.d.now()));
-  }
-
-  private prune() {
-    this.lastPrune = this.d.now();
-    const n = this.d.store.ticketEvents.prune(this.d.now() - COS_EVENT_RETENTION_MS);
-    if (n) this.d.log(`cos: pruned ${n} old event(s)`);
-    this.pruneUnassigned();
+    this.delivery.arm();
   }
 
   /** Events nobody owns are a short, bounded list: a chief created later starts from the recent ones, not the whole history. */
@@ -745,7 +624,7 @@ export class CosEngine {
 
 /** The wire shape of a stored event. */
 export function wire(e: StoredTicketEvent): CosEvent {
-  const { projectId: _p, ticketId: _t, kind: _k, sourceRef: _r, payload: _pl, updatedAt: _u, consumingRunId: _c, ...event } = e;
+  const { targetId: _g, projectId: _p, ticketId: _t, kind: _k, sourceRef: _r, payload: _pl, updatedAt: _u, consumingRunId: _c, ...event } = e;
   return event;
 }
 
