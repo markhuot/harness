@@ -205,7 +205,8 @@ import { PermissionGate, type GateEnv } from "../permissions/gate";
 import { AnthropicApiClassifier, ClaudeCliClassifier, type Classifier } from "../permissions/classifier";
 import { AutoModeRulesProvider } from "../permissions/rules";
 import { anthropicStructured, claudeCliStructured } from "../permissions/structured";
-import { CosEngine, wire as wireCosEvent, type Timers as CosTimers } from "../cos/engine";
+import { CosEngine, wire as wireCosEvent } from "../cos/engine";
+import type { Timers as CosTimers } from "../events/delivery";
 import { chatEntryOf, cosChat, isSilentReply, WAKE_PROMPT_PREFIX } from "../cos/chat";
 import { AgentTriage, LlmTriage, parseTriage, TriageIncomplete, type AgentTriageRequest, type AgentTriageRun, type CosTriage, type TriageVerdict } from "../cos/triage";
 import { triageDecision } from "../permissions/triage";
@@ -751,7 +752,7 @@ export class Orchestrator {
         this.bus.emit({ kind: "cos.transcript.appended", cosId, entry: { id: m.id, cosId, createdAt: m.createdAt, kind: "message", role: m.role, text: m.content.text, ...(m.content.attachments?.length ? { attachments: m.content.attachments } : {}) } });
       }),
       this.bus.onKind("run.upserted", (e) => {
-        if (e.run.kind === "cos" && (e.run.status === "succeeded" || e.run.status === "failed" || e.run.status === "cancelled")) this.cosEngine.runEnded(e.run.id, e.run.status);
+        if (e.run.status === "succeeded" || e.run.status === "failed" || e.run.status === "cancelled") this.cosEngine.runEnded(e.run.id, e.run.status);
       }),
     );
     this.cosEngine.start();

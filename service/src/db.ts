@@ -971,6 +971,15 @@ export const MIGRATIONS: string[] = [
   CREATE INDEX ticket_events_status ON ticket_events(status, created_at);
   CREATE INDEX ticket_events_wake ON ticket_events(wake_id);
   `,
+  // 56: the wake log is keyed by the ticket that was woken (the chief's id for every row that exists), so the wake cap
+  //     works for any ticket. event_class says which cap a wake counts against ('' for the chief's wakes).
+  `
+  DROP INDEX cos_wakes_cos;
+  ALTER TABLE cos_wakes RENAME TO event_wakes;
+  ALTER TABLE event_wakes RENAME COLUMN cos_id TO target_id;
+  ALTER TABLE event_wakes ADD COLUMN event_class TEXT NOT NULL DEFAULT '';
+  CREATE INDEX event_wakes_target ON event_wakes(target_id, kind, event_class, started_at);
+  `,
 ];
 
 /** Where the files migrations look at live (HarnessPaths); by default next to the database file. */

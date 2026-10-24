@@ -1,5 +1,5 @@
 import type { ListenSetting, NotificationSettings, PhaseChoice, PhaseModels, PhaseModelsPatch, PromptId, PublicSettings, Settings, TicketStatus } from "@harness/shared";
-import { COS_SETTING_DEFAULTS, COS_STATUS_DEFAULTS, TICKET_STATUSES,applyLegacySettings, legacySettingsFields, mergePhaseModels, PHASES, DEFAULT_NOTIFICATION_SETTINGS, NOTIFICATION_CATEGORIES, branchNameError, CLASSIFIER_BACKENDS, DEFAULT_BASE_BRANCH, DEFAULT_BROWSER_IDLE_TAB_MINUTES, DEFAULT_CONTEXT_GAUGE_LIMIT, MAX_BROWSER_IDLE_TAB_MINUTES, MAX_CONTEXT_GAUGE_LIMIT, MIN_CONTEXT_GAUGE_LIMIT, LISTEN_MODES, PERMISSION_MODES, PROMPT_IDS, RENAMED_PROMPT_IDS, TRIAGE_PERMISSION_MODES } from "@harness/shared";
+import { COS_SETTING_DEFAULTS, COS_STATUS_DEFAULTS, TICKET_STATUSES,applyLegacySettings, legacySettingsFields, mergePhaseModels, PHASES, DEFAULT_NOTIFICATION_SETTINGS, NOTIFICATION_CATEGORIES, branchNameError, CLASSIFIER_BACKENDS, DEFAULT_BASE_BRANCH, DEFAULT_BROWSER_IDLE_TAB_MINUTES, DEFAULT_CONTEXT_GAUGE_LIMIT, DEFAULT_EVENT_RETENTION_DAYS, MAX_BROWSER_IDLE_TAB_MINUTES, MAX_EVENT_RETENTION_DAYS, MAX_CONTEXT_GAUGE_LIMIT, MIN_CONTEXT_GAUGE_LIMIT, LISTEN_MODES, PERMISSION_MODES, PROMPT_IDS, RENAMED_PROMPT_IDS, TRIAGE_PERMISSION_MODES } from "@harness/shared";
 import { badRequest } from "./errors";
 import { isPromptId, promptTemplateError } from "./prompt-templates";
 
@@ -31,6 +31,7 @@ export const DEFAULT_SETTINGS: Settings = {
   listen: { mode: "localhost" },
   baseBranch: DEFAULT_BASE_BRANCH,
   browserIdleTabMinutes: DEFAULT_BROWSER_IDLE_TAB_MINUTES,
+  eventRetentionDays: DEFAULT_EVENT_RETENTION_DAYS,
   prompts: unsetPrompts(),
   notifications: DEFAULT_NOTIFICATION_SETTINGS,
 };
@@ -212,6 +213,10 @@ export function validateSettingsPatch(body: unknown, knownDrivers?: string[], cu
         if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > MAX_BROWSER_IDLE_TAB_MINUTES)
           throw badRequest(`browserIdleTabMinutes must be an integer between 0 (never) and ${MAX_BROWSER_IDLE_TAB_MINUTES}`);
         out.browserIdleTabMinutes = value;
+        break;
+      case "eventRetentionDays":
+        if (typeof value !== "number" || !Number.isInteger(value) || value < 1 || value > MAX_EVENT_RETENTION_DAYS) throw badRequest(`eventRetentionDays must be an integer between 1 and ${MAX_EVENT_RETENTION_DAYS}`);
+        out.eventRetentionDays = value;
         break;
       case "permissionMode":
         if (!(PERMISSION_MODES as readonly unknown[]).includes(value)) throw badRequest(`permissionMode must be one of ${PERMISSION_MODES.join(", ")}`);
