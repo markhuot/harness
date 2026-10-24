@@ -909,8 +909,9 @@ project's `cosEnabled` or group changed, the app setting changed, a project dele
 triaged or handled are never moved. A watcher event has no project: it belongs to the All CoS, and
 triage may propose a project, which moves it to that project's owner.
 
-**Batching and triage.** A batch is due 45 seconds after its last event, never later than 5 minutes
-after its first (`nextWakeAt`); one timer is armed for the next due time and rebuilt from the rows.
+**Batching and triage.** A batch is due 10 seconds after its first event (`triageDueAt`, `COS_TRIAGE_BATCH_MS`):
+a fixed window that only gathers a burst into one triage call, not a quiet time. The one timer
+(`EventDelivery`) is armed for the next due time, the batch included, and rebuilt from the rows.
 A ticket's status moves in a batch collapse to its net state (`collapseMoves`). The batch goes to
 triage (`cos/triage.ts`), a read-only **agent run** on the `claude-cli` backend (model `HAIKU_MODELS`,
 overridable with `settings.cosTriageModel`, which Settings shows as "Triage model" with Haiku as its
@@ -963,27 +964,35 @@ bodies fenced `<untrusted-event>`, with each event's actor and title inside the 
 escalation a brief and the project. An error, timeout, garbage, an id the answer left out, or no
 backend at all escalates (fail-open); `Cos.triageUnavailable` says why when none can run. Prompt over
 rules: what is worth waking for is the prompt's call; code keeps only the invariants. A batch goes in
-calls of 5 events for an agent run (at most 30 a pass, 4 minutes each; 20, 100 and a minute for the
+calls of 5 events for an agent run (at most 30 a pass, 19 minutes each; 20, 100 and a minute for the
 one-shot call), oldest first, each failing open on its own. A run that ends early (failure, timeout)
 keeps the verdicts it recorded: the others escalate with the reason. The pre-triage filter (no ticket,
 caused by a chief, a chief's own ticket) stays: it decides by origin, which no lookup would change.
 
-**Hand-off.** Escalated events become one wake: `steerOrEnqueue` into the CoS session with the briefs,
-the raw events (untrusted), a one-line digest of what was ignored since the last wake. A CoS runs one run at a time, so a wake steers into a running run or queues the next. At
-most 6 wakes an hour per CoS (`nextWakeAllowedAt`); fail-open escalations count, and the overflow
-waits and goes in one later wake. A wake holds at most 40 events with bodies clipped to 2000
+**Hand-off.** Escalated events are delivered by `EventDelivery` (`events/delivery.ts`), the one delivery engine
+for every ticket's events: the CoS hands it escalated rows and hooks (the wake prompt with the briefs, the raw
+events (untrusted) and a one-line digest of what was ignored since the last wake; `steerOrEnqueue` into the CoS
+session; the chief's switch as the gate). A CoS runs one run at a time, so a wake steers into a running run or
+queues the next. The chief follows the same cap as any ticket that follows events: at most 8 wakes per 5 minutes
+(`EVENT_WAKE_CAP`, `nextWakeAllowedAt`); fail-open escalations count, and the overflow is held and goes in one
+later wake. The cap is keyed by the target ticket and an event class, so a batch can carry a strict cap next to
+the generous `CHILD_EVENT_WAKE_CAP`. A wake holds at most 40 events with bodies clipped to 2000
 characters, and says how many more wait. It is recorded (cap, chat) only once the chief took it. Events
-are `handling` with the run that took them and `handled` when it succeeds; a run that fails or is
-cancelled, or is gone after a restart, puts them back to `escalated`, while one still queued or running
-keeps them. Ignored, filtered and handled events are pruned after 30 days. `cos_wakes` logs each wake and
-triage call (tokens, model) for the cap and the token log.
+are `handling` with the run that took them and `handled` when it succeeds (a push into a live run of a
+non-chief target settles its rows at the push instead, since that run may live for hours); a run that fails or is
+cancelled, or is gone after a restart (`sweep`), puts them back to `escalated` with a try counted, and after
+`WAKE_MAX_ATTEMPTS` they close as `ignored` with the reason, while a run still queued or running
+keeps them. Repeated moves of one ticket waiting for a wake collapse to the net move. Ignored, filtered and handled
+events are pruned after `settings.eventRetentionDays` (7 by default) by the same timer, so an idle service prunes
+too. `event_wakes` (keyed by `target_id` and `event_class`) logs each wake and triage call (tokens, model) for
+the cap and the token log.
 
 **Quiet by default.** A wake messages the user only for a change they would care about, an item that needs
 their attention or a decision; every wake prompt says so, forbids narration between
 tool calls, and tells the chief to reply exactly `[quiet]` otherwise. Housekeeping (hand-offs, notes, tickets)
 happens either way. `isSilentReply` (`cos/chat.ts`) treats an empty or `[quiet]` reply as silent: the live
 `cos.transcript.appended` emit and `cosChat()` both leave it out (the raw transcript keeps it). The wake's
-`event_batch` card is emitted when its run ends (`settleWake`) and only if the run said something; `cos_wakes.outcome`
+`event_batch` card is emitted when its run ends (`settleWake`) and only if the run said something; `event_wakes.outcome`
 (`spoke`, `quiet`, `failed`) hides a quiet wake's card from history, and a failed run still shows it. Wakes come only from escalated events
 (a chief's own schedule is one); nothing wakes a chief because a ticket has sat blocked or in review, and triage
 judges each event on its own, with no list of waiting tickets.
@@ -1157,7 +1166,7 @@ approval and `addActivity` for notes and spec revisions) buffers a change for th
 a change the subscriber's own tool call caused is skipped (`callerContext`, set around every run's
 tool calls and cleared again when a queued run starts, so a run the call queued isn't "its" change); a
 subscriber is woken at most 8 times per 5 minutes (`SUBSCRIPTION_WAKE_LIMIT`, counted per delivered
-message), so two tickets subscribed to each other can't loop, and events past the limit stay buffered
+message; the same limit as `EVENT_WAKE_CAP`, which the subscription path moves onto when it uses `EventDelivery`), so two tickets subscribed to each other can't loop, and events past the limit stay buffered
 and arrive together once the window has room; and a subscriber's rows are deleted when its ticket
 leaves in progress and blocked, or its runs are cancelled (an event must not restart an agent someone
 stopped). A ticket that ends its turn with a subscription on a ticket that isn't done, or with an
