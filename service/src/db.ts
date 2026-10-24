@@ -935,6 +935,8 @@ export const MIGRATIONS: string[] = [
   //     the rows that exist, NULL while triage hasn't picked an owner. SQLite can't drop migration 46's
   //     inline UNIQUE (source_kind, source_ref), so the table is rebuilt. A row with no target dedupes on
   //     (kind, ref); a row with a target on (kind, ref, target), so one activity can wake several tickets.
+  //     The CoS rows are deduped in code (TicketEventRepo.insert), not by these indexes: a triaged row can sit
+  //     under two chiefs, so its (kind, ref) repeats across targets. ticket_events_ref serves that lookup.
   `
   CREATE TABLE ticket_events (
     id TEXT PRIMARY KEY,
@@ -965,7 +967,7 @@ export const MIGRATIONS: string[] = [
   CREATE UNIQUE INDEX ticket_events_ref_untargeted ON ticket_events(source_kind, source_ref) WHERE target_id IS NULL;
   CREATE UNIQUE INDEX ticket_events_ref_targeted ON ticket_events(source_kind, source_ref, target_id) WHERE target_id IS NOT NULL;
   CREATE INDEX ticket_events_cos ON ticket_events(cos_id, status);
-  CREATE INDEX ticket_events_target ON ticket_events(target_id, status);
+  CREATE INDEX ticket_events_ref ON ticket_events(source_kind, source_ref);
   CREATE INDEX ticket_events_status ON ticket_events(status, created_at);
   CREATE INDEX ticket_events_wake ON ticket_events(wake_id);
   `,

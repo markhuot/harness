@@ -296,6 +296,26 @@ test("a chief of staff row's target follows its owner, and a repeat of its sourc
   expect((db.query("SELECT target_id AS t FROM ticket_events WHERE source_ref = 'x'").get() as { t: string }).t).toBe("chief");
 });
 
+test("rehoming or unassigning a row aimed at another ticket keeps its target, so two such rows with one ref don't collide", () => {
+  const db = dbAt(54);
+  migrate(db, paths());
+  const store = new Store(db);
+  const base = { cosId: "chief", projectId: null, ticketId: null, sourceKind: "subscription" as const, sourceRef: "a1", actor: "a", title: "t" };
+  const a = store.ticketEvents.insert({ ...base, targetId: "T1" })!;
+  const b = store.ticketEvents.insert({ ...base, targetId: "T2" })!;
+  store.ticketEvents.update(a.id, { cosId: null });
+  store.ticketEvents.update(b.id, { cosId: null });
+  const target = (id: string) => (db.query("SELECT target_id AS t FROM ticket_events WHERE id = $id").get({ id }) as { t: string | null }).t;
+  expect([target(a.id), target(b.id)]).toEqual(["T1", "T2"]);
+});
+
+test("the dedupe lookup on (source_kind, source_ref) is served by an index", () => {
+  const db = dbAt(54);
+  migrate(db, paths());
+  const plan = db.query("EXPLAIN QUERY PLAN SELECT 1 FROM ticket_events WHERE source_kind = 'a' AND source_ref = 'b'").all() as { detail: string }[];
+  expect(plan.map((p) => p.detail).join(" ")).toContain("USING");
+});
+
 /** An install at migration 48 with the All chief, a watcher and one TRIAGE session per outcome. */
 function triageInstall(withAllChief = true) {
   const db = dbAt(48);

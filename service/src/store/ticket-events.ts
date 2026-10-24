@@ -141,7 +141,7 @@ export interface WakeLog {
 
 export type WakeOutcome = "spoke" | "quiet" | "failed";
 
-/** The chief-of-staff Inbox (DESIGN.md "Events"): every event with its one owner, verdict and status. */
+/** The events table (DESIGN.md "Events"): every event with its owner, verdict and status. Today only the chief-of-staff Inbox reads it. */
 export class TicketEventRepo {
   constructor(private db: Database, private now: Clock = systemClock) {}
 
@@ -237,8 +237,8 @@ export class TicketEventRepo {
     if (!sets.length) return this.get(id);
     const args: Record<string, string | number | null> = { id, t: this.now() };
     for (const [k, v] of Object.entries(patch)) if (v !== undefined) args[k] = k === "payload" ? JSON.stringify(v) : (v as string | null);
-    // A chief taking over a row is the row's target too (DESIGN.md "Events")
-    if (patch.cosId !== undefined) sets.push("target_id = $cosId");
+    // A chief taking over a row is the row's target too, but a row aimed at another ticket keeps its target (DESIGN.md "Events")
+    if (patch.cosId !== undefined) sets.push("target_id = CASE WHEN target_id IS cos_id THEN $cosId ELSE target_id END");
     this.db.query(`UPDATE ticket_events SET ${sets.join(", ")}, updated_at = $t WHERE id = $id`).run(args);
     return this.get(id);
   }

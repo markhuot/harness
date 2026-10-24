@@ -884,8 +884,11 @@ migration 55), not the in-process bus, so a restart loses nothing. The table is 
 an event wakes (the chief's id for every CoS row, `NULL` until triage rehomes one; `ticket_id` stays the ticket the event is about), and
 `source_kind` is `activity`, `watcher`, `schedule`, `subscription` or `child`. A row without a target dedupes on
 `(source_kind, source_ref)` and a row with one on `(source_kind, source_ref, target_id)` (two partial unique indexes, since
-SQLite treats NULLs as distinct), so one activity can wake several tickets. The store's `insert` still checks the
-first form for rows it doesn't give a target, so a rehomed row keeps deduping. `cos_id` still routes the CoS wakes and moves with `target_id`. One drain path (`cos/engine.ts` `drain`) reads `activity` rows after a cursor
+SQLite treats NULLs as distinct), so one activity can wake several tickets. The indexes don't dedupe the CoS rows,
+though: a triaged row can sit under two chiefs, so its pair repeats across targets. The store's `insert` does it in
+code, checking `(source_kind, source_ref)` for any row it doesn't give a target (served by `ticket_events_ref`), so a
+rehomed row keeps deduping; a write that skips `insert` gets no such guarantee. `cos_id` still routes the CoS wakes
+and moves `target_id` with it, except on a row aimed at another ticket, which keeps its target. One drain path (`cos/engine.ts` `drain`) reads `activity` rows after a cursor
 (`cos_state.activity_seq`, an `activity.seq`: a monotonic counter, not the rowid, which SQLite reuses
 after a session's delete; seeded at the current end so the first boot doesn't triage history) and inserts events with the cursor advance in one transaction; the bus
 `activity.added` only nudges it to run now, and `start()` catches up after a restart. Watcher output
