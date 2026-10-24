@@ -470,6 +470,7 @@ public struct SettingsPatch: Codable, Sendable, Equatable {
     public var baseBranch: String?
     public var listen: ListenSetting?
     public var browserIdleTabMinutes: Int?
+    public var eventRetentionDays: Int?
     /// Prompt id (`PromptId.rawValue`) → template; nil (null) or "" resets one to the built-in.
     public var prompts: [String: String?]?
     /// Merged over the stored notifications block (categories per category).
@@ -488,7 +489,7 @@ public struct SettingsPatch: Codable, Sendable, Equatable {
         classifier: ClassifierBackend? = nil, defaultModels: [String: String?]? = nil,
         reviewModels: [String: String?]? = nil, watcherDriver: Patch<String> = .absent,
         watcherModels: [String: String?]? = nil, anthropicApiKey: Patch<String> = .absent,
-        claudeOauthToken: Patch<String> = .absent, copilotGithubToken: Patch<String> = .absent, baseBranch: String? = nil, listen: ListenSetting? = nil, browserIdleTabMinutes: Int? = nil,
+        claudeOauthToken: Patch<String> = .absent, copilotGithubToken: Patch<String> = .absent, baseBranch: String? = nil, listen: ListenSetting? = nil, browserIdleTabMinutes: Int? = nil, eventRetentionDays: Int? = nil,
         prompts: [String: String?]? = nil, notifications: NotificationSettingsPatch? = nil, contextGaugeLimit: Int? = nil, saveOnBlur: Bool? = nil,
         cosEnabled: Bool? = nil, cosStatuses: [TicketStatus]? = nil, cosModel: Patch<PhaseChoice> = .absent,
         cosTriageModel: Patch<String> = .absent, cosTriagePermissionMode: Patch<TriagePermissionMode> = .absent
@@ -515,6 +516,7 @@ public struct SettingsPatch: Codable, Sendable, Equatable {
         self.baseBranch = baseBranch
         self.listen = listen
         self.browserIdleTabMinutes = browserIdleTabMinutes
+        self.eventRetentionDays = eventRetentionDays
         self.prompts = prompts
         self.notifications = notifications
     }

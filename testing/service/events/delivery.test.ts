@@ -1,6 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { CHILD_EVENT_WAKE_CAP, EVENT_WAKE_CAP } from "../../../shared/src/cos";
 import { type DeliveryResult, EventDelivery, type EventDeliveryDeps, WAKE_MAX_ATTEMPTS } from "../../../service/src/events/delivery";
+import { EVENT_BODY_MAX, renderEventsPrompt } from "../../../service/src/events/render";
 import type { StoredTicketEvent } from "../../../service/src/store/ticket-events";
 import { fakeClock } from "../../builders/clock";
 import { makeStore } from "../../builders/store";
@@ -266,4 +267,13 @@ test("the one timer is armed for the earliest of the prune and what is due", asy
   const armed = [...r.t.pending.values()];
   expect(armed).toHaveLength(1);
   expect(armed[0]!.ms).toBe(0); // a ready row with no debounce is due now
+});
+
+test("a wake's text clips a long body and says how many more events wait", async () => {
+  const r = rig();
+  const e = r.ready("T", { body: "x".repeat(EVENT_BODY_MAX + 500) });
+  const text = renderEventsPrompt([r.get(e.id)], 3);
+  expect(text).toContain("(500 more characters)");
+  expect(text).toContain("(3 more events are waiting and come in the next wake.)");
+  expect(text.length).toBeLessThan(EVENT_BODY_MAX + 1000);
 });
