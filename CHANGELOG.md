@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261024.0004](https://github.com/markhuot/harness/releases/tag/app-20261024.0004) - 2026-10-24
+
 ### Added
 
 - Settings → Chief of staff has a **Triage model** row on the Mac, iPhone and iPad. It shows Haiku as
