@@ -823,6 +823,12 @@ chief's UI reads `state.chiefs`, never its ticket.
 Its ticket can't be deleted (409) or created or changed through `POST`/`PATCH /tickets` (`cos` isn't a
 valid kind there).
 
+**Routing.** A CoS sends a specific request to the project it belongs to instead of doing it: the
+`system.cos` prompt has it resolve the project from `list_projects` (name, key, path and group; there
+are no per-project descriptions) and `create_ticket` there. When no project fits or several could, it
+asks the human. The one exception is research across projects: it creates a ticket in each, and when
+their events wake it, reads each outcome with `get_ticket` and summarizes. The prompt names no domain.
+
 Each project group has one CoS, and an **All projects** CoS covers the rest. Table `cos` (migration
 45): `ticket_id`, `scope` (`all` or `group:<group id>`, UNIQUE, since SQLite lets a nullable unique
 column repeat), `group_id`, `enabled` (the CoS's own switch, how All is turned off). `openCos(scope)`

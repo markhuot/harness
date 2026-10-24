@@ -9,6 +9,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Changed
+
+- The chief of staff now routes a specific request to the project it belongs to, asks you which project
+  when none or several could fit, and sends research that spans projects to each project it touches,
+  then summarizes the results.
+
 ## [app-20261024.0004](https://github.com/markhuot/harness/releases/tag/app-20261024.0004) - 2026-10-24
 
 ### Added

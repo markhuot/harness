@@ -154,3 +154,15 @@ test("the unblock prompt carries the notes and the block reason, or says no note
   expect(unblockPrompt(t, "")).toContain("no notes");
   expect(unblockPrompt(makeTicket({ status: "blocked" }), "x")).not.toContain("It was blocked because");
 });
+
+test("the chief of staff prompt routes a request to its project, asks when unsure, and names no domain", () => {
+  const prompt = renderPrompt("system.cos", {});
+  expect(prompt).toContain("`list_projects`");
+  expect(prompt).toContain("`create_ticket`");
+  expect(prompt).toMatch(/If no project fits, or several could, ask the human/);
+  expect(prompt).toMatch(/research that touches several projects/);
+  expect(prompt).toContain("`get_ticket`");
+  // the CoS has no subscribe_ticket tool, so the prompt must not point it at one
+  expect(prompt).not.toContain("subscribe_ticket");
+  expect(prompt).not.toMatch(/grocer|chocolate|recipe|shopping|list items/i);
+});
