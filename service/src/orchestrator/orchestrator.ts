@@ -1276,7 +1276,7 @@ export class Orchestrator {
       if (i <= 0 || !Number.isFinite(createdAt)) throw badRequest("before is not a cursor from a previous page");
       before = { createdAt, id: query.before.slice(i + 1) };
     }
-    const rows = this.store.cosEvents.list({ cosId, status: status as CosEventStatus | undefined, before, limit: limit + 1 });
+    const rows = this.store.ticketEvents.list({ cosId, status: status as CosEventStatus | undefined, before, limit: limit + 1 });
     const items = rows.slice(0, limit);
     const last = items[items.length - 1];
     return { items: items.map(wireCosEvent), nextCursor: rows.length > limit && last ? `${last.createdAt}:${last.id}` : null };
@@ -1295,7 +1295,7 @@ export class Orchestrator {
     }
     // The wake is the engine's to deliver; the answer doesn't wait on a triage call or a chief.
     void this.cosEngine.tick().catch((err) => this.log(`cos: tick failed: ${errMsg(err)}`));
-    return wireCosEvent(this.store.cosEvents.get(id)!);
+    return wireCosEvent(this.store.ticketEvents.get(id)!);
   }
 
   cosTranscript(cosId: string, query: { before?: string | null; limit?: string | null }): CosChatPage {

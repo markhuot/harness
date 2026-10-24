@@ -77,7 +77,7 @@ export function CosInbox({ chief, onChat }: { chief: Cos; onChat: () => void }) 
 }
 
 const STATE_LABEL = { waiting: "Waiting for a verdict", ignored: "Ignored", escalated: "Escalated", handling: "Handling", acted: "Acted", no_action: "No action needed", needs_user: "Needs you", reviewed: "Reviewed, no outcome recorded", filtered: "Filtered" } as const;
-const SOURCE_LABEL = { activity: "Ticket", watcher: "Watcher", schedule: "Schedule" } as const;
+const SOURCE_LABEL = { activity: "Ticket", watcher: "Watcher", schedule: "Schedule", subscription: "Subscription", child: "Child" } as const;
 
 function EventRow({ event: e }: { event: CosEvent }) {
   const { client, dispatch, navigate } = useStore();

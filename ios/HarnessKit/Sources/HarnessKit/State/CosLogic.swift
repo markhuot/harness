@@ -300,6 +300,8 @@ public enum CosLogic {
         case .activity: "Ticket"
         case .watcher: "Watcher"
         case .schedule: "Schedule"
+        case .subscription: "Subscription"
+        case .child: "Child"
         case .unknown: "Event"
         }
     }

@@ -42,8 +42,8 @@ test("a database from a newer service is refused rather than downgraded", () => 
 
 test("a failing migration rolls back whole and leaves the version where it was", () => {
   const db = dbAt(SCHEMA_VERSION - 1);
-  // Break the last migration's target: it adds a column that is already there.
-  db.exec("ALTER TABLE projects ADD COLUMN cos_statuses TEXT");
+  // Break the last migration's target: it creates a table that is already there.
+  db.exec("CREATE TABLE ticket_events (id TEXT)");
   expect(() => migrate(db, paths())).toThrow();
   expect(version(db)).toBe(SCHEMA_VERSION - 1);
 });
@@ -243,14 +243,57 @@ test("migration 46 seeds the event cursor at the end of existing activity, so th
   for (const id of ["a", "b", "c"]) db.query("INSERT INTO activity (id, session_id, ticket_id, kind, author, body, meta, created_at) VALUES ($id, 's1', 't1', 'note', 'agent', 'x', '{}', 0)").run({ id });
   migrate(db, paths());
   const store = new Store(db);
-  expect(store.cosEvents.activitySeq()).toBe(3);
-  expect(store.activity.listAfter(store.cosEvents.activitySeq(), 10)).toEqual([]);
+  expect(store.ticketEvents.activitySeq()).toBe(3);
+  expect(store.activity.listAfter(store.ticketEvents.activitySeq(), 10)).toEqual([]);
   // The old rows carry no actor: they never count as a chief's.
   expect(db.query("SELECT actor FROM activity WHERE id = 'a'").get()).toEqual({ actor: null });
   // A source is only ever one event.
   const base = { cosId: null, projectId: null, ticketId: null, sourceKind: "watcher" as const, sourceRef: "r", actor: "watcher:x", title: "t" };
-  expect(store.cosEvents.insert(base)).not.toBeNull();
-  expect(store.cosEvents.insert(base)).toBeNull();
+  expect(store.ticketEvents.insert(base)).not.toBeNull();
+  expect(store.ticketEvents.insert(base)).toBeNull();
+});
+
+test("migration 55 renames cos_events to ticket_events, keeps its rows and gives each a target", () => {
+  const db = dbAt(54);
+  const ins = db.query("INSERT INTO cos_events (id, cos_id, project_id, ticket_id, source_kind, source_ref, kind, actor, title, payload, status, created_at, updated_at) VALUES ($id, $cos, NULL, $ticket, $sk, $ref, 'moved', 'a', 't', '{\"x\":1}', 'handled', 5, 6)");
+  ins.run({ id: "e1", cos: "chief", ticket: "t1", sk: "activity", ref: "r1" });
+  ins.run({ id: "e2", cos: null, ticket: null, sk: "watcher", ref: "r2" });
+  migrate(db, paths());
+  expect(db.query("SELECT name FROM sqlite_master WHERE name LIKE 'cos_events%'").all()).toEqual([]);
+  expect(db.query("SELECT id, cos_id AS cosId, target_id AS targetId, ticket_id AS ticketId, payload, status, created_at AS c, updated_at AS u FROM ticket_events ORDER BY id").all()).toEqual([
+    { id: "e1", cosId: "chief", targetId: "chief", ticketId: "t1", payload: '{"x":1}', status: "handled", c: 5, u: 6 },
+    { id: "e2", cosId: null, targetId: null, ticketId: null, payload: '{"x":1}', status: "handled", c: 5, u: 6 },
+  ]);
+});
+
+test("ticket_events dedupes a source once without a target and once per target with one", () => {
+  const db = dbAt(54);
+  migrate(db, paths());
+  const store = new Store(db);
+  const base = { cosId: null, projectId: null, ticketId: null, actor: "a", title: "t" };
+  // No target: the same (kind, ref) is one event.
+  expect(store.ticketEvents.insert({ ...base, sourceKind: "watcher", sourceRef: "w" })).not.toBeNull();
+  expect(store.ticketEvents.insert({ ...base, sourceKind: "watcher", sourceRef: "w" })).toBeNull();
+  // One activity wakes several targets, but each only once.
+  expect(store.ticketEvents.insert({ ...base, sourceKind: "subscription", sourceRef: "a1", targetId: "T1" })).not.toBeNull();
+  expect(store.ticketEvents.insert({ ...base, sourceKind: "subscription", sourceRef: "a1", targetId: "T2" })).not.toBeNull();
+  expect(store.ticketEvents.insert({ ...base, sourceKind: "subscription", sourceRef: "a1", targetId: "T1" })).toBeNull();
+  expect(store.ticketEvents.insert({ ...base, sourceKind: "child", sourceRef: "a1", targetId: "T1" })).not.toBeNull();
+});
+
+test("a chief of staff row's target follows its owner, and a repeat of its source still dedupes after triage rehomes it", () => {
+  const db = dbAt(54);
+  migrate(db, paths());
+  const store = new Store(db);
+  const base = { cosId: null, projectId: null, ticketId: null, sourceKind: "watcher" as const, sourceRef: "w", actor: "a", title: "t" };
+  const ev = store.ticketEvents.insert(base)!;
+  const target = (id: string) => (db.query("SELECT target_id AS t FROM ticket_events WHERE id = $id").get({ id }) as { t: string | null }).t;
+  expect(target(ev.id)).toBeNull();
+  store.ticketEvents.update(ev.id, { cosId: "chief" });
+  expect(target(ev.id)).toBe("chief");
+  expect(store.ticketEvents.insert(base)).toBeNull();
+  expect(store.ticketEvents.insert({ ...base, cosId: "chief", sourceRef: "x" })).not.toBeNull();
+  expect((db.query("SELECT target_id AS t FROM ticket_events WHERE source_ref = 'x'").get() as { t: string }).t).toBe("chief");
 });
 
 /** An install at migration 48 with the All chief, a watcher and one TRIAGE session per outcome. */
@@ -269,7 +312,7 @@ function triageInstall(withAllChief = true) {
   return db;
 }
 const eventRows = (db: Database) =>
-  db.query("SELECT source_ref AS ref, cos_id AS cosId, status, verdict, reason, actor, payload FROM cos_events WHERE source_kind = 'watcher' ORDER BY created_at").all() as {
+  db.query("SELECT source_ref AS ref, cos_id AS cosId, status, verdict, reason, actor, payload FROM ticket_events WHERE source_kind = 'watcher' ORDER BY created_at").all() as {
     ref: string; cosId: string | null; status: string; verdict: string; reason: string | null; actor: string; payload: string;
   }[];
 
@@ -305,7 +348,10 @@ test("migration 49 with no All chief yet leaves the events unassigned, and repla
   migrate(db, paths());
   expect(eventRows(db).every((r) => r.cosId === null)).toBe(true);
   const before = eventRows(db).length;
+  // The step is written for the table as migration 49 left it, so replay it against that name.
+  db.exec("ALTER TABLE ticket_events RENAME TO cos_events");
   MIGRATION_CODE[49]!(db, paths());
+  db.exec("ALTER TABLE cos_events RENAME TO ticket_events");
   expect(eventRows(db)).toHaveLength(before);
 });
 

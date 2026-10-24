@@ -44,7 +44,7 @@ async function setup() {
       projectId: extra.projectId ?? null,
       nextFireAt: nextFire(spec, h.clock())!,
     });
-  const events = () => h.store.cosEvents.list({ limit: 500 }).filter((e) => e.sourceKind === "schedule");
+  const events = () => h.store.ticketEvents.list({ limit: 500 }).filter((e) => e.sourceKind === "schedule");
   return { h, chief, triage, reminders, scheduler, make, add, events };
 }
 
@@ -266,7 +266,7 @@ test("a group chief's project-less wake stays with the chief that made it when e
   s.scheduler.tick();
   expect(s.events()[0]!.cosId).toBe(group.ticketId);
   s.h.orch.cosEngine.rehome();
-  expect(s.h.store.cosEvents.get(s.events()[0]!.id)!.cosId).toBe(group.ticketId);
+  expect(s.h.store.ticketEvents.get(s.events()[0]!.id)!.cosId).toBe(group.ticketId);
 });
 
 test("deleting a chief's ticket takes its schedules with it", async () => {

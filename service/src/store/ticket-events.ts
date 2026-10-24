@@ -5,7 +5,7 @@ import { fromJson, newId } from "./util";
 import { type Clock, systemClock } from "../clock";
 
 /** A stored event: the wire CosEvent plus what the engine needs and clients don't. */
-export interface StoredCosEvent extends CosEvent {
+export interface StoredTicketEvent extends CosEvent {
   projectId: string | null;
   ticketId: string | null;
   /** The activity kind ("moved", "submitted", ...) for activity events, else "" */
@@ -42,7 +42,7 @@ interface Row {
   ticket_key: string | null;
 }
 
-const SELECT = `SELECT e.*, p.key AS project_key, t.key AS ticket_key FROM cos_events e
+const SELECT = `SELECT e.*, p.key AS project_key, t.key AS ticket_key FROM ticket_events e
   LEFT JOIN projects p ON p.id = e.project_id LEFT JOIN tickets t ON t.id = e.ticket_id`;
 
 /** The outcome kept in a handled event's payload; anything else there reads as none. */
@@ -51,7 +51,7 @@ const outcomeOf = (payload: Record<string, unknown>): CosOutcome | null => {
   return o && (COS_OUTCOME_KINDS as readonly unknown[]).includes(o.kind) && typeof o.text === "string" ? { kind: o.kind!, text: o.text } : null;
 };
 
-const toEvent = (r: Row): StoredCosEvent => {
+const toEvent = (r: Row): StoredTicketEvent => {
   const payload = fromJson<Record<string, unknown>>(r.payload, {});
   return {
     id: r.id,
@@ -81,8 +81,10 @@ const toEvent = (r: Row): StoredCosEvent => {
   };
 };
 
-export interface NewCosEvent {
+export interface NewTicketEvent {
   cosId: string | null;
+  /** The ticket the event wakes. Left out, it is `cosId` (the chief-of-staff kinds); a subscription or child row names it, and dedupes per target. */
+  targetId?: string | null;
   projectId: string | null;
   ticketId: string | null;
   sourceKind: CosEventSource;
@@ -140,7 +142,7 @@ export interface WakeLog {
 export type WakeOutcome = "spoke" | "quiet" | "failed";
 
 /** The chief-of-staff Inbox (DESIGN.md "Events"): every event with its one owner, verdict and status. */
-export class CosEventRepo {
+export class TicketEventRepo {
   constructor(private db: Database, private now: Clock = systemClock) {}
 
   /** The last activity row the feed read. */
@@ -153,18 +155,22 @@ export class CosEventRepo {
   }
 
   /** Insert an event; null when the source already produced it (deduped). */
-  insert(input: NewCosEvent): StoredCosEvent | null {
+  insert(input: NewTicketEvent): StoredTicketEvent | null {
     const id = newId();
     const t = this.now();
     const filtered = input.filtered !== undefined;
+    // Rows with no explicit target belong to one source event however triage has since rehomed them, so a
+    // repeat dedupes against any owner (the unique indexes only see equal targets).
+    if (input.targetId === undefined && this.db.query("SELECT 1 FROM ticket_events WHERE source_kind = $k AND source_ref = $r").get({ k: input.sourceKind, r: input.sourceRef })) return null;
     const res = this.db
       .query(
-        `INSERT OR IGNORE INTO cos_events (id, cos_id, project_id, ticket_id, source_kind, source_ref, kind, actor, title, summary, payload, verdict, reason, status, created_at, updated_at)
-         VALUES ($id, $cosId, $projectId, $ticketId, $sourceKind, $sourceRef, $kind, $actor, $title, $summary, $payload, $verdict, $reason, $status, $createdAt, $t)`,
+        `INSERT OR IGNORE INTO ticket_events (id, cos_id, target_id, project_id, ticket_id, source_kind, source_ref, kind, actor, title, summary, payload, verdict, reason, status, created_at, updated_at)
+         VALUES ($id, $cosId, $targetId, $projectId, $ticketId, $sourceKind, $sourceRef, $kind, $actor, $title, $summary, $payload, $verdict, $reason, $status, $createdAt, $t)`,
       )
       .run({
         id,
         cosId: input.cosId,
+        targetId: input.targetId === undefined ? input.cosId : input.targetId,
         projectId: input.projectId,
         ticketId: input.ticketId,
         sourceKind: input.sourceKind,
@@ -183,13 +189,13 @@ export class CosEventRepo {
     return res.changes ? this.get(id) : null;
   }
 
-  get(id: string): StoredCosEvent | null {
+  get(id: string): StoredTicketEvent | null {
     const r = this.db.query(`${SELECT} WHERE e.id = $id`).get({ id }) as Row | null;
     return r ? toEvent(r) : null;
   }
 
   /** Newest first. A chief's page includes the unassigned events, so a chief that is off or missing never hides them. */
-  list(opts: { cosId?: string; status?: CosEventStatus; before?: { createdAt: number; id: string }; limit: number }): StoredCosEvent[] {
+  list(opts: { cosId?: string; status?: CosEventStatus; before?: { createdAt: number; id: string }; limit: number }): StoredTicketEvent[] {
     const where: string[] = ["1 = 1"];
     const args: Record<string, string | number> = { limit: opts.limit };
     if (opts.cosId) {
@@ -209,29 +215,31 @@ export class CosEventRepo {
   }
 
   /** Events with a status, oldest first; `cosId` null for the unassigned ones, undefined for every owner. */
-  byStatus(status: CosEventStatus, cosId?: string | null): StoredCosEvent[] {
+  byStatus(status: CosEventStatus, cosId?: string | null): StoredTicketEvent[] {
     const owner = cosId === undefined ? "" : cosId === null ? "AND e.cos_id IS NULL" : "AND e.cos_id = $cosId";
     const args: Record<string, string> = { status };
     if (typeof cosId === "string") args.cosId = cosId;
     return (this.db.query(`${SELECT} WHERE e.status = $status ${owner} ORDER BY e.created_at, e.rowid`).all(args) as Row[]).map(toEvent);
   }
 
-  byWake(wakeId: string): StoredCosEvent[] {
+  byWake(wakeId: string): StoredTicketEvent[] {
     return (this.db.query(`${SELECT} WHERE e.wake_id = $wakeId ORDER BY e.created_at, e.rowid`).all({ wakeId }) as Row[]).map(toEvent);
   }
 
-  byRun(runId: string, status: CosEventStatus): StoredCosEvent[] {
+  byRun(runId: string, status: CosEventStatus): StoredTicketEvent[] {
     return (this.db.query(`${SELECT} WHERE e.consuming_run_id = $runId AND e.status = $status`).all({ runId, status }) as Row[]).map(toEvent);
   }
 
-  update(id: string, patch: EventPatch): StoredCosEvent | null {
+  update(id: string, patch: EventPatch): StoredTicketEvent | null {
     const sets = Object.keys(patch)
       .filter((k) => patch[k as keyof EventPatch] !== undefined)
       .map((k) => `${COLUMNS[k as keyof EventPatch]} = $${k}`);
     if (!sets.length) return this.get(id);
     const args: Record<string, string | number | null> = { id, t: this.now() };
     for (const [k, v] of Object.entries(patch)) if (v !== undefined) args[k] = k === "payload" ? JSON.stringify(v) : (v as string | null);
-    this.db.query(`UPDATE cos_events SET ${sets.join(", ")}, updated_at = $t WHERE id = $id`).run(args);
+    // A chief taking over a row is the row's target too (DESIGN.md "Events")
+    if (patch.cosId !== undefined) sets.push("target_id = $cosId");
+    this.db.query(`UPDATE ticket_events SET ${sets.join(", ")}, updated_at = $t WHERE id = $id`).run(args);
     return this.get(id);
   }
 
@@ -239,7 +247,7 @@ export class CosEventRepo {
   badge(): CosBadge {
     const marks = COS_OPEN_STATUSES.map((_, i) => `$s${i}`).join(", ");
     const args = Object.fromEntries(COS_OPEN_STATUSES.map((s, i) => [`s${i}`, s]));
-    const rows = this.db.query(`SELECT cos_id, COUNT(*) AS n FROM cos_events WHERE status IN (${marks}) GROUP BY cos_id`).all(args) as { cos_id: string | null; n: number }[];
+    const rows = this.db.query(`SELECT cos_id, COUNT(*) AS n FROM ticket_events WHERE status IN (${marks}) GROUP BY cos_id`).all(args) as { cos_id: string | null; n: number }[];
     const byCos: Record<string, number> = {};
     let total = 0;
     for (const r of rows) {
@@ -251,29 +259,29 @@ export class CosEventRepo {
 
   /** A crash left events mid-triage: triage starts over. (Events a wake was handling are settled by the engine, which can see whether the run survived.) */
   recover(): number {
-    return this.db.query("UPDATE cos_events SET status = 'pending', wake_id = NULL, updated_at = $t WHERE status = 'triaging'").run({ t: this.now() }).changes;
+    return this.db.query("UPDATE ticket_events SET status = 'pending', wake_id = NULL, updated_at = $t WHERE status = 'triaging'").run({ t: this.now() }).changes;
   }
 
   /** What was ignored for a chief since `since` (the digest an escalation brief ends with), newest first. */
   ignoredSince(cosId: string, since: number): { reason: string | null; title: string }[] {
     return this.db
-      .query("SELECT reason, title FROM cos_events WHERE cos_id = $cosId AND status = 'ignored' AND verdict <> 'filtered' AND updated_at > $since ORDER BY updated_at DESC")
+      .query("SELECT reason, title FROM ticket_events WHERE cos_id = $cosId AND status = 'ignored' AND verdict <> 'filtered' AND updated_at > $since ORDER BY updated_at DESC")
       .all({ cosId, since }) as { reason: string | null; title: string }[];
   }
 
   /** Delete settled events (ignored, handled) last touched before `before`, and the wake log from before it. */
   prune(before: number): number {
     this.db.query("DELETE FROM cos_wakes WHERE started_at < $before").run({ before });
-    return this.db.query("DELETE FROM cos_events WHERE status IN ('ignored', 'handled') AND updated_at < $before").run({ before }).changes;
+    return this.db.query("DELETE FROM ticket_events WHERE status IN ('ignored', 'handled') AND updated_at < $before").run({ before }).changes;
   }
 
   /** Delete unowned events still waiting (pending, escalated) that are older than `before`, and all but the newest `keep` of the rest. */
   pruneUnassigned(before: number, keep: number): number {
     // Open items converted from the old Inbox (migration 49) wait for the All chief; they are never pruned.
     const open = "cos_id IS NULL AND status IN ('pending', 'escalated') AND source_ref NOT LIKE 'triage:%'";
-    const old = this.db.query(`DELETE FROM cos_events WHERE ${open} AND created_at < $before`).run({ before }).changes;
+    const old = this.db.query(`DELETE FROM ticket_events WHERE ${open} AND created_at < $before`).run({ before }).changes;
     const over = this.db
-      .query(`DELETE FROM cos_events WHERE ${open} AND id IN (SELECT id FROM cos_events WHERE ${open} ORDER BY created_at DESC, rowid DESC LIMIT -1 OFFSET $keep)`)
+      .query(`DELETE FROM ticket_events WHERE ${open} AND id IN (SELECT id FROM ticket_events WHERE ${open} ORDER BY created_at DESC, rowid DESC LIMIT -1 OFFSET $keep)`)
       .run({ keep }).changes;
     return old + over;
   }

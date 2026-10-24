@@ -879,8 +879,13 @@ setting and the ticket's question; reading it stays available. Human-only approv
 (`noPendingApproval`). What a CoS changes on a ticket is added to that ticket's Activity as "Chief of
 staff (KEY) …".
 
-**Events.** What wakes a CoS is a row in `cos_events` (migration 46), not the in-process bus, so a
-restart loses nothing. One drain path (`cos/engine.ts` `drain`) reads `activity` rows after a cursor
+**Events.** What wakes a CoS is a row in `ticket_events` (created as `cos_events` by migration 46, renamed by
+migration 55), not the in-process bus, so a restart loses nothing. The table is the one events table for any ticket: `target_id` is the ticket
+an event wakes (the chief's id for every CoS row, `NULL` until triage rehomes one; `ticket_id` stays the ticket the event is about), and
+`source_kind` is `activity`, `watcher`, `schedule`, `subscription` or `child`. A row without a target dedupes on
+`(source_kind, source_ref)` and a row with one on `(source_kind, source_ref, target_id)` (two partial unique indexes, since
+SQLite treats NULLs as distinct), so one activity can wake several tickets. The store's `insert` still checks the
+first form for rows it doesn't give a target, so a rehomed row keeps deduping. `cos_id` still routes the CoS wakes and moves with `target_id`. One drain path (`cos/engine.ts` `drain`) reads `activity` rows after a cursor
 (`cos_state.activity_seq`, an `activity.seq`: a monotonic counter, not the rowid, which SQLite reuses
 after a session's delete; seeded at the current end so the first boot doesn't triage history) and inserts events with the cursor advance in one transaction; the bus
 `activity.added` only nudges it to run now, and `start()` catches up after a restart. Watcher output
@@ -1077,7 +1082,7 @@ chief's ticket.
 which reads `clock.now()` and takes the rows whose `next_fire_at` has passed; `start()` runs one
 tick first as the catch-up after a restart. A schedule due several times fires **once** and moves to
 the first occurrence after now (an interval keeps its phase); a one-shot more than a day late is
-marked `missed`. Each fire has the id `<schedule id>:<scheduled time>`, used as the `cos_events`
+marked `missed`. Each fire has the id `<schedule id>:<scheduled time>`, used as the `ticket_events`
 dedupe key, written in the same transaction that moves the schedule on, so a wake happens exactly once
 across restarts; a reminder is pushed after that commit, so it happens at most once, and a repeated
 fire id never pushes again. The event's body says when it was scheduled and, if late, when it fired.
@@ -1156,6 +1161,9 @@ stopped). A ticket that ends its turn with a subscription on a ticket that isn't
 event still buffered, isn't auto-submitted, since it is waiting for events: it calls
 `submit_for_review` when it is done. A done ticket can't be subscribed to, and its subscribers' rows
 are dropped once they have heard it is done, so no ticket waits on something that can't change.
+
+The events table these changes will be written to is `ticket_events` (`source_kind` `subscription`, `child`; `target_id` the
+subscriber, `source_ref` the activity id), so one activity is one row per ticket it wakes. Delivery above still uses the buffer until that lands.
 
 ### Watchers
 

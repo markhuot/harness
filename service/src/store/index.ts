@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
 import { GroupRepo, ProjectRepo } from "./projects";
 import { CosRepo } from "./cos";
-import { CosEventRepo } from "./cos-events";
+import { TicketEventRepo } from "./ticket-events";
 import { ScheduleRepo } from "./schedules";
 import { TicketRepo } from "./tickets";
 import { SessionRepo } from "./sessions";
@@ -23,7 +23,7 @@ export class Store {
   readonly projects: ProjectRepo;
   readonly groups: GroupRepo;
   readonly cos: CosRepo;
-  readonly cosEvents: CosEventRepo;
+  readonly ticketEvents: TicketEventRepo;
   readonly schedules: ScheduleRepo;
   readonly tickets: TicketRepo;
   readonly sessions: SessionRepo;
@@ -45,7 +45,7 @@ export class Store {
     this.projects = new ProjectRepo(db, now);
     this.groups = new GroupRepo(db, now);
     this.cos = new CosRepo(db, now);
-    this.cosEvents = new CosEventRepo(db, now);
+    this.ticketEvents = new TicketEventRepo(db, now);
     this.schedules = new ScheduleRepo(db, now);
     this.settings = new SettingsRepo(db);
     // A ticket's legacy driver follows the settings' choices it inherits.
@@ -70,7 +70,7 @@ export class Store {
   }
 }
 
-export { ProjectRepo, GroupRepo, CosRepo, CosEventRepo, ScheduleRepo, TicketRepo, SessionRepo, RunRepo, TranscriptRepo, ActivityRepo, AttachmentRepo, SpecRepo, SubagentRepo, WatcherRepo, SeenRepo, SettingsRepo, CounterRepo, BrowserTabRepo, DeviceRepo, SubscriptionRepo };
+export { ProjectRepo, GroupRepo, CosRepo, TicketEventRepo, ScheduleRepo, TicketRepo, SessionRepo, RunRepo, TranscriptRepo, ActivityRepo, AttachmentRepo, SpecRepo, SubagentRepo, WatcherRepo, SeenRepo, SettingsRepo, CounterRepo, BrowserTabRepo, DeviceRepo, SubscriptionRepo };
 export { normalizeProjectKey } from "./projects";
 export { SpecConflictError } from "./spec";
 export { ScopedStore, type Scope } from "./scope";

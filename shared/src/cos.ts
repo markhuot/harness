@@ -106,7 +106,7 @@ export interface Cos {
 // Events: what wakes a chief of staff (DESIGN.md "Chief of staff", "Events")
 // ---------------------------------------------------------------------------
 
-export type CosEventSource = "activity" | "watcher" | "schedule";
+export type CosEventSource = "activity" | "watcher" | "schedule" | "subscription" | "child";
 
 /** Where an event is: pending (waiting for triage), triaging, escalated (for the next wake), handling (in a run), handled, or ignored. */
 export type CosEventStatus = "pending" | "triaging" | "escalated" | "handling" | "handled" | "ignored";

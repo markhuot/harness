@@ -930,6 +930,45 @@ export const MIGRATIONS: string[] = [
   SELECT 'cosStatuses', CASE WHEN value = 'true' THEN '["blocked"]' ELSE '[]' END FROM settings WHERE key = 'cosCanUnblock';
   DELETE FROM settings WHERE key = 'cosCanUnblock';
   `,
+  // 55: cos_events becomes ticket_events, the one events table for every ticket (not only the CoS).
+  //     target_id is the ticket an event wakes (ticket_id stays the subject it is about): the CoS id for
+  //     the rows that exist, NULL while triage hasn't picked an owner. SQLite can't drop migration 46's
+  //     inline UNIQUE (source_kind, source_ref), so the table is rebuilt. A row with no target dedupes on
+  //     (kind, ref); a row with a target on (kind, ref, target), so one activity can wake several tickets.
+  `
+  CREATE TABLE ticket_events (
+    id TEXT PRIMARY KEY,
+    cos_id TEXT,
+    target_id TEXT,
+    project_id TEXT,
+    ticket_id TEXT,
+    source_kind TEXT NOT NULL,
+    source_ref TEXT NOT NULL,
+    source_seq INTEGER,
+    kind TEXT NOT NULL DEFAULT '',
+    actor TEXT NOT NULL,
+    title TEXT NOT NULL,
+    summary TEXT NOT NULL DEFAULT '',
+    payload TEXT NOT NULL DEFAULT '{}',
+    verdict TEXT NOT NULL DEFAULT 'pending',
+    reason TEXT,
+    model TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    wake_id TEXT,
+    consuming_run_id TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+  INSERT INTO ticket_events (rowid, id, cos_id, target_id, project_id, ticket_id, source_kind, source_ref, source_seq, kind, actor, title, summary, payload, verdict, reason, model, status, wake_id, consuming_run_id, created_at, updated_at)
+  SELECT rowid, id, cos_id, cos_id, project_id, ticket_id, source_kind, source_ref, source_seq, kind, actor, title, summary, payload, verdict, reason, model, status, wake_id, consuming_run_id, created_at, updated_at FROM cos_events;
+  DROP TABLE cos_events;
+  CREATE UNIQUE INDEX ticket_events_ref_untargeted ON ticket_events(source_kind, source_ref) WHERE target_id IS NULL;
+  CREATE UNIQUE INDEX ticket_events_ref_targeted ON ticket_events(source_kind, source_ref, target_id) WHERE target_id IS NOT NULL;
+  CREATE INDEX ticket_events_cos ON ticket_events(cos_id, status);
+  CREATE INDEX ticket_events_target ON ticket_events(target_id, status);
+  CREATE INDEX ticket_events_status ON ticket_events(status, created_at);
+  CREATE INDEX ticket_events_wake ON ticket_events(wake_id);
+  `,
 ];
 
 /** Where the files migrations look at live (HarnessPaths); by default next to the database file. */

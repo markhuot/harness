@@ -11,6 +11,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
+- Internal: the chief of staff's events table is now `ticket_events` with a `target_id` for the ticket an event wakes, groundwork for waking any ticket; nothing changes in the app, and a database from this build can't be opened by an older one.
 - The chief of staff now routes a specific request to the project it belongs to, asks you which project
   when none or several could fit, and sends research that spans projects to each project it touches,
   then summarizes the results.

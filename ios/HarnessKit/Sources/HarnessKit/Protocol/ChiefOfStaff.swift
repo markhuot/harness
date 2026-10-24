@@ -4,14 +4,16 @@ import Foundation
 // The conventions of HarnessProtocol.swift apply.
 
 public enum CosEventSource: OpenEnum {
-    case activity, watcher, schedule
+    case activity, watcher, schedule, subscription, child
     case unknown(String)
-    public static let allKnown: [Self] = [.activity, .watcher, .schedule]
+    public static let allKnown: [Self] = [.activity, .watcher, .schedule, .subscription, .child]
     public var rawValue: String {
         switch self {
         case .activity: "activity"
         case .watcher: "watcher"
         case .schedule: "schedule"
+        case .subscription: "subscription"
+        case .child: "child"
         case let .unknown(r): r
         }
     }

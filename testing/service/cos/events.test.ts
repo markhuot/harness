@@ -6,7 +6,7 @@ import { COS_CEILING_MS, COS_HOUR_MS, COS_QUIET_MS, COS_WAKES_PER_HOUR } from ".
 import { isSilentReply, WAKE_PROMPT_PREFIX } from "../../../service/src/cos/chat";
 import type { CosEngine } from "../../../service/src/cos/engine";
 import { LlmTriage, type CosTriage, type TriageInput, type TriageResult, type TriageVerdict } from "../../../service/src/cos/triage";
-import type { StoredCosEvent } from "../../../service/src/store/cos-events";
+import type { StoredTicketEvent } from "../../../service/src/store/ticket-events";
 import { handleMcpRequest } from "../../../service/src/api/mcp";
 import { COS_UNASSIGNED_MAX, COS_UNASSIGNED_RETENTION_MS, TRIAGE_CHUNK, WAKE_BODY_MAX, WAKE_MAX_ATTEMPTS, WAKE_MAX_EVENTS } from "../../../service/src/cos/engine";
 import { FakeDriver, gate, replyScript } from "../fake-driver";
@@ -88,8 +88,8 @@ async function setup(opts: { triage?: CosTriage | { unavailable: string }; drive
   /** Something happened on a ticket (an activity row, as the orchestrator writes them). */
   const happen = (t: { id: string; sessionId: string }, body: string, extra: { kind?: "note" | "moved" | "blocked" | "review_approved" | "approved" | "failed"; actor?: string; from?: string; to?: string } = {}) =>
     h.store.activity.add({ sessionId: t.sessionId, ticketId: t.id, kind: extra.kind ?? "note", author: "agent", body, actor: extra.actor, meta: extra.from ? { from: extra.from as never, to: extra.to as never } : {} });
-  const events = () => h.store.cosEvents.list({ limit: 500 }).reverse();
-  const eventOf = (marker: string): StoredCosEvent => {
+  const events = () => h.store.ticketEvents.list({ limit: 500 }).reverse();
+  const eventOf = (marker: string): StoredTicketEvent => {
     const found = events().filter((e) => e.title.includes(marker));
     if (found.length !== 1) throw new Error(`expected one event for "${marker}", found ${found.length}`);
     return found[0]!;
@@ -160,8 +160,8 @@ test("an event for a project whose chiefs are off isn't owned, so nothing is tri
   await s.after(10 * MIN);
   expect(s.eventOf("marker-off")).toMatchObject({ cosId: null, status: "pending" });
   expect(s.h.driver.requests.filter((r) => r.prompt.includes("marker-off"))).toHaveLength(0);
-  expect(s.h.store.cosEvents.badge().byCos[chief.ticketId]).toBeUndefined();
-  expect(s.h.store.cosEvents.badge().total).toBeGreaterThan(0); // unassigned events still count: nothing hides them
+  expect(s.h.store.ticketEvents.badge().byCos[chief.ticketId]).toBeUndefined();
+  expect(s.h.store.ticketEvents.badge().total).toBeGreaterThan(0); // unassigned events still count: nothing hides them
 });
 
 test("switching chiefs off in the app's settings stops triage and runs, and switching back on hands the events over again", async () => {
@@ -306,19 +306,19 @@ test("activity written while the service was down is read at startup, and events
   const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x", start: false });
   await h.settle();
   h.store.activity.add({ sessionId: t.sessionId, ticketId: t.id, kind: "note", author: "agent", body: "marker-offline" });
-  expect(h.store.cosEvents.list({ limit: 50 }).some((e) => e.title.includes("marker-offline"))).toBe(false);
+  expect(h.store.ticketEvents.list({ limit: 50 }).some((e) => e.title.includes("marker-offline"))).toBe(false);
   h.orch.start();
-  const e = h.store.cosEvents.list({ limit: 50 }).find((x) => x.title.includes("marker-offline"))!;
+  const e = h.store.ticketEvents.list({ limit: 50 }).find((x) => x.title.includes("marker-offline"))!;
   expect(e.status).toBe("pending");
 
   // A crash left it mid-triage with a batch id: it is pending again, to be triaged again.
-  h.store.cosEvents.update(e.id, { status: "triaging", wakeId: "batch-1" });
+  h.store.ticketEvents.update(e.id, { status: "triaging", wakeId: "batch-1" });
   h.orch.cosEngine.start();
-  expect(h.store.cosEvents.get(e.id)).toMatchObject({ status: "pending", wakeId: null });
+  expect(h.store.ticketEvents.get(e.id)).toMatchObject({ status: "pending", wakeId: null });
   // And a run that vanished mid-wake leaves its events to be delivered again.
-  h.store.cosEvents.update(e.id, { status: "handling", consumingRunId: "gone" });
+  h.store.ticketEvents.update(e.id, { status: "handling", consumingRunId: "gone" });
   h.orch.cosEngine.start();
-  expect(h.store.cosEvents.get(e.id)).toMatchObject({ status: "escalated", handledBy: null });
+  expect(h.store.ticketEvents.get(e.id)).toMatchObject({ status: "escalated", handledBy: null });
 });
 
 test("a ticket's moves in one batch are triaged as its net state: one move, or none when it ended where it began", async () => {
@@ -542,9 +542,9 @@ test("a watcher's output is an event with no project; triage's proposed project 
   s.scripted!.calls.splice(0);
   s.scripted!.answers.push((i) => i.events.map((e) => verdict(e.id, "escalate", { brief: "A WORK1 issue", project: "WORK1" })));
   const ev = s.engine.addExternal({ sourceKind: "watcher", sourceRef: "gh:sha256:1", actor: "watcher:gh", title: "gh: new issue", body: "Issue: login broken" })!;
-  expect(s.h.store.cosEvents.get(ev.id)).toMatchObject({ cosId: all.ticketId, projectId: null });
+  expect(s.h.store.ticketEvents.get(ev.id)).toMatchObject({ cosId: all.ticketId, projectId: null });
   await s.after(MIN);
-  expect(s.h.store.cosEvents.get(ev.id)).toMatchObject({ cosId: work.ticketId, projectKey: "WORK1", status: "handled" });
+  expect(s.h.store.ticketEvents.get(ev.id)).toMatchObject({ cosId: work.ticketId, projectKey: "WORK1", status: "handled" });
   expect(s.h.driver.requests.at(-1)!.prompt).toContain("Issue: login broken");
 });
 
@@ -572,7 +572,7 @@ test("tickets blocked or in review for days never wake the chief, and no timer i
 // Quiet by default: the chief messages the user only for a change, or an attention item
 // ---------------------------------------------------------------------------
 
-const wakeCount = (s: { h: { store: { cosEvents: { wakeTimes(c: string, k: "wake", since: number): number[] } } }; chief: { ticketId: string } }) => s.h.store.cosEvents.wakeTimes(s.chief.ticketId, "wake", 0).length;
+const wakeCount = (s: { h: { store: { ticketEvents: { wakeTimes(c: string, k: "wake", since: number): number[] } } }; chief: { ticketId: string } }) => s.h.store.ticketEvents.wakeTimes(s.chief.ticketId, "wake", 0).length;
 const chatOf = (s: { h: { orch: { cosTranscript(id: string, q: { limit: string }): { entries: { kind: string; text?: string }[] } } }; chief: { ticketId: string } }) => s.h.orch.cosTranscript(s.chief.ticketId, { limit: "100" }).entries;
 const liveOf = (s: { h: { events: { kind: string }[] } }) => s.h.events.flatMap((e) => (e.kind === "cos.transcript.appended" ? [(e as unknown as { entry: { kind: string; text?: string } }).entry] : []));
 
@@ -811,7 +811,7 @@ test("a restart leaves a wake whose run is still going alone, and sends again on
 test("events handled by a chief that was removed are put back for an owner instead of sticking", async () => {
   const s = await quiet();
   const e = s.engine.addExternal({ sourceKind: "watcher", sourceRef: "feed:x", actor: "watcher:feed", title: "marker-orphaned", body: "b" })!;
-  s.h.store.cosEvents.update(e.id, { status: "handling", cosId: "no-such-chief", consumingRunId: null });
+  s.h.store.ticketEvents.update(e.id, { status: "handling", cosId: "no-such-chief", consumingRunId: null });
   await s.after(MIN);
   expect(s.eventOf("marker-orphaned").status).not.toBe("handling");
 });
@@ -822,7 +822,7 @@ test("a wake that can't be handed over costs no wake and leaves nothing in the c
   s.happen(s.t, "marker-undeliverable");
   await s.after(MIN);
   expect(s.eventOf("marker-undeliverable").status).toBe("escalated");
-  expect(s.h.store.cosEvents.wakeTimes(s.chief.ticketId, "wake", 0)).toEqual([]);
+  expect(s.h.store.ticketEvents.wakeTimes(s.chief.ticketId, "wake", 0)).toEqual([]);
   const chat = s.h.orch.cosTranscript(s.chief.ticketId, {});
   expect(chat.entries.filter((x) => x.kind === "event_batch")).toEqual([]);
 });
@@ -925,29 +925,29 @@ test("triage can only propose a project in the chief's scope, and is only told a
   const input = s.scripted!.calls[0]!;
   expect(input.projects.map((p) => p.key)).toContain("WORK1");
   expect(input.projects.map((p) => p.key)).not.toContain("PLAY1");
-  expect(s.h.store.cosEvents.get(ev.id)).toMatchObject({ cosId: work.ticketId, projectId: null });
+  expect(s.h.store.ticketEvents.get(ev.id)).toMatchObject({ cosId: work.ticketId, projectId: null });
 });
 
 test("two overlapping hand-offs to one chief send its events once", async () => {
   const s = await quiet({ triage: { unavailable: "no model" } });
   const ev = s.engine.addExternal({ sourceKind: "watcher", sourceRef: "gh:sha256:r", actor: "watcher:gh", title: "gh: issue", body: "once", cosId: s.chief.ticketId })!;
-  s.h.store.cosEvents.update(ev.id, { status: "escalated", verdict: "escalate" });
+  s.h.store.ticketEvents.update(ev.id, { status: "escalated", verdict: "escalate" });
   const deliver = (s.engine as unknown as { deliver(id: string): Promise<void> }).deliver.bind(s.engine);
   await Promise.all([deliver(s.chief.ticketId), deliver(s.chief.ticketId)]);
   await s.h.settle();
   expect(s.h.driver.requests.filter((r) => r.prompt.includes("[Harness: 1 event for you]"))).toHaveLength(1);
-  expect(s.h.store.cosEvents.wakeTimes(s.chief.ticketId, "wake", 0)).toHaveLength(1);
+  expect(s.h.store.ticketEvents.wakeTimes(s.chief.ticketId, "wake", 0)).toHaveLength(1);
 });
 
 test("Inbox items converted at migration are never pruned as unassigned", async () => {
   const s = await quiet();
   const old = s.h.clock() - COS_UNASSIGNED_RETENTION_MS * 3;
-  const mk = (ref: string) => s.h.store.cosEvents.insert({ cosId: null, projectId: null, ticketId: null, sourceKind: "watcher", sourceRef: ref, kind: "", actor: "watcher:x", title: ref, summary: ref, payload: {}, createdAt: old })!;
+  const mk = (ref: string) => s.h.store.ticketEvents.insert({ cosId: null, projectId: null, ticketId: null, sourceKind: "watcher", sourceRef: ref, kind: "", actor: "watcher:x", title: ref, summary: ref, payload: {}, createdAt: old })!;
   const migrated = mk("triage:TRIAGE-1");
   const other = mk("gh:old");
-  s.h.store.cosEvents.pruneUnassigned(s.h.clock() - COS_UNASSIGNED_RETENTION_MS, COS_UNASSIGNED_MAX);
-  expect(s.h.store.cosEvents.get(migrated.id)).not.toBeNull();
-  expect(s.h.store.cosEvents.get(other.id)).toBeNull();
+  s.h.store.ticketEvents.pruneUnassigned(s.h.clock() - COS_UNASSIGNED_RETENTION_MS, COS_UNASSIGNED_MAX);
+  expect(s.h.store.ticketEvents.get(migrated.id)).not.toBeNull();
+  expect(s.h.store.ticketEvents.get(other.id)).toBeNull();
 });
 
 test("a chief whose runs keep failing isn't woken for the same event forever", async () => {
