@@ -15,6 +15,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
+- An agent's `list_inbox` now lists the events addressed to its own ticket (title, summary, source, status, verdict, reason and the ticket each is about), the same events the Inbox shows. A chief of staff sees its whole Inbox. It no longer lists old triage items, and `include_output` is gone.
 - The chief of staff now wakes under the same limit as any ticket that follows events (8 wakes per 5 minutes, extra events wait and arrive together in a later wake) instead of 6 an hour, and triage gathers a burst for 10 seconds instead of waiting for 45 seconds of quiet. Event history is kept 7 days instead of 30.
 - Internal: ticket events go through one shared delivery engine (`EventDelivery`: debounce, wake cap, one wake per batch, retry then close with a reason, restart sweep), and the chief of staff runs on it. The wake log table is now `event_wakes`, keyed by the ticket woken. A database from this build can't be opened by an older one.
 

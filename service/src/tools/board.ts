@@ -1,7 +1,7 @@
 // Board tools (read-only): every run kind can look around the board for context — list and
 // search tickets in any project, read one ticket in full, list the projects and the Inbox.
 
-import { TICKET_STATUSES, type TicketStatus, type TriageStatus } from "@harness/shared";
+import { COS_EVENT_STATUSES, type CosEventSource, type CosEventStatus, TICKET_STATUSES, type TicketStatus } from "@harness/shared";
 import type { BoardRelatedTicket, BoardScope, BoardTicket, BoardTicketDetail } from "./types";
 import { defineTool, json, RemoteIdError, schema, ticketView } from "./util";
 
@@ -149,21 +149,20 @@ export const listProjects = defineTool<Record<string, never>>({
   },
 });
 
-const TRIAGE_STATUSES = ["triaging", "dispatched", "declined", "failed"] as const;
+const INBOX_SOURCES: CosEventSource[] = ["activity", "watcher", "schedule", "subscription", "child"];
 
 /** list_inbox page size when no limit is given (the ops cap it at 100). */
 export const LIST_INBOX_DEFAULT_LIMIT = 20;
 
-export const listInbox = defineTool<{ status?: TriageStatus[]; source?: string; key?: string; limit?: number; include_output?: boolean }>({
+export const listInbox = defineTool<{ status?: CosEventStatus[]; source?: CosEventSource; key?: string; limit?: number }>({
   name: "list_inbox",
   description:
-    "List the Inbox, newest first: one item per piece of watcher output, with the triage agent's decision. status is \"triaging\", \"dispatched\" (outcome names the ticket), \"declined\" (outcome says why) or \"failed\". Filter by status, by source (the watcher's name) or by key for one item (e.g. \"TRIAGE-12\": Inbox keys aren't tickets, so get_ticket can't read them); include_output adds the output each item was triaged from (truncated). Use it to check that a watcher you set up is producing items and how they were handled.",
+    "List the events addressed to this ticket, newest first: the same ones the Inbox shows (a chief of staff's Inbox also lists events no chief has claimed yet). Each has the event's title and summary, its source (activity, watcher, schedule, subscription or child), its status (pending, triaging, escalated, handling, handled, ignored), triage's verdict and reason, and the ticket it is about. Filter by status, by source, or by key (one event's id, or a ticket key for the events about that ticket). Use it to check what has reached you and how triage treated it.",
   inputSchema: schema({
-    status: { type: "array", items: { type: "string", enum: [...TRIAGE_STATUSES] }, description: "Only items in these states." },
-    source: { type: "string", minLength: 1, description: "Only items from this watcher (its name)." },
-    key: { type: "string", minLength: 1, description: "Only the item with this key, e.g. \"TRIAGE-12\"." },
-    limit: { type: "integer", minimum: 1, maximum: 100, description: `Most items to return. Default ${LIST_INBOX_DEFAULT_LIMIT}.` },
-    include_output: { type: "boolean", description: "Include each item's watcher output. Default false." },
+    status: { type: "array", items: { type: "string", enum: [...COS_EVENT_STATUSES] }, description: "Only events in these states." },
+    source: { type: "string", enum: INBOX_SOURCES, description: "Only events from this source." },
+    key: { type: "string", minLength: 1, description: "Only this event (its id) or the events about this ticket (its key, e.g. \"SHOP-4\")." },
+    limit: { type: "integer", minimum: 1, maximum: 100, description: `Most events to return. Default ${LIST_INBOX_DEFAULT_LIMIT}.` },
   }),
   async run(input, ctx) {
     const { items, total } = await ctx.ops.listInbox(ctx, {
@@ -171,19 +170,19 @@ export const listInbox = defineTool<{ status?: TriageStatus[]; source?: string; 
       source: input.source,
       key: input.key,
       limit: input.limit ?? LIST_INBOX_DEFAULT_LIMIT,
-      output: input.include_output ?? false,
     });
-    if (items.length === 0) return input.status?.length || input.source || input.key ? "No Inbox items match." : "The Inbox is empty.";
+    if (items.length === 0) return input.status?.length || input.source || input.key ? "No Inbox events match." : "The Inbox is empty.";
     const out = json(
-      items.map((i) => ({
-        key: i.key,
-        title: i.title,
-        source: i.source,
-        status: i.status,
-        outcome: i.outcome,
-        ...(i.prompt ? { prompt: i.prompt } : {}),
-        ...(i.output !== undefined ? { output: i.output } : {}),
-        created_at: new Date(i.createdAt).toISOString(),
+      items.map((e) => ({
+        id: e.id,
+        title: e.title,
+        summary: e.summary,
+        source: e.sourceKind,
+        status: e.status,
+        verdict: e.verdict,
+        reason: e.reason,
+        ticket: e.ticketKey,
+        created_at: new Date(e.createdAt).toISOString(),
       })),
     );
     return items.length < total ? `Showing ${items.length} of ${total} items. Narrow with status, source or key, or raise limit.\n${out}` : out;

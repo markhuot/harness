@@ -130,11 +130,11 @@ test("create_ticket by a group's chief needs a project of its own, in scope, and
   expect(h.store.activity.listBySession(created.sessionId).map((e) => e.body)).toContain(`Chief of staff (${h.orch.listCos()[0]!.key}) created it`);
 });
 
-test("watchers and the Inbox belong to no project: only the All chief sees them", async () => {
+test("watchers belong to no project: only the All chief sees them", async () => {
   const { h, groupOf, asCos } = await board();
   h.orch.createWatcher({ name: "pager", command: "echo hi", mode: "interval", intervalSec: 60, enabled: false });
-  const scoped = await asCos({ group: groupOf("Work") }, [["list_watchers", {}], ["list_inbox", {}]]);
-  expect(scoped.map((r) => r.text)).toEqual(["No watchers are configured.", "The Inbox is empty."]);
+  const scoped = await asCos({ group: groupOf("Work") }, [["list_watchers", {}]]);
+  expect(scoped.map((r) => r.text)).toEqual(["No watchers are configured."]);
   const all = await asCos("all", [["list_watchers", {}]]);
   expect(all[0]!.text).toContain("pager");
 });

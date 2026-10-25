@@ -27,7 +27,9 @@ import type {
   Ticket,
   TicketStatus,
   ToolResultContent,
-  TriageStatus,
+  CosEvent,
+  CosEventSource,
+  CosEventStatus,
   TranscriptRole,
   Watcher,
   PhaseChoice,
@@ -153,22 +155,6 @@ export interface BoardRemoteMatches {
   ticket: null;
   requested: string;
   relatedTickets: BoardRelatedTicket[];
-}
-
-/** One Inbox item (a triage session), for list_inbox. */
-export interface InboxItem {
-  key: string;
-  title: string;
-  /** The watcher's name (or the inject source) */
-  source: string;
-  status: TriageStatus;
-  /** What triage did: "Dispatched as SHOP-4", "Declined: …" */
-  outcome: string | null;
-  /** The watcher's prompt at the time ("" → none) */
-  prompt: string;
-  /** The watcher output, truncated; only when requested */
-  output?: string;
-  createdAt: number;
 }
 
 export interface CreateTicketInput {
@@ -370,13 +356,14 @@ export interface HarnessOps {
   /** Every project with its settings (null permissionMode → the settings default) */
   listProjects(ctx: ToolContext): Promise<ProjectView[]>;
   /**
-   * Inbox items (triage sessions), newest first, capped at `limit` (default 20, max 100);
-   * `total` counts every match. `source` is a watcher name; `key` one item (TRIAGE-n); `output` adds its text, truncated.
+   * The events addressed to the calling ticket (what the Inbox shows a chief), newest first, capped at `limit`
+   * (default 20, max 100); `total` counts every match. `source` is an event source kind; `key` one event id or the
+   * events about one ticket.
    */
   listInbox(
     ctx: ToolContext,
-    filter: { statuses?: TriageStatus[]; source?: string; key?: string; limit?: number; output?: boolean },
-  ): Promise<{ items: InboxItem[]; total: number }>;
+    filter: { statuses?: CosEventStatus[]; source?: CosEventSource; key?: string; limit?: number },
+  ): Promise<{ items: CosEvent[]; total: number }>;
 
   // --- memory and activity: chief of staff runs (DESIGN.md "Chief of staff memory") ---
   /** Activity across the tickets the caller covers, newest first, with a blocked entry's answers. Out-of-scope tickets match nothing. */

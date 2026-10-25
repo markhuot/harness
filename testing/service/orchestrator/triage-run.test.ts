@@ -216,7 +216,7 @@ test("the run's own time limit counts from when it starts, and cuts it off keepi
   expect(err.verdicts.map((v: { id: string }) => v.id)).toEqual(["e1"]);
 });
 
-test("a triage run's session isn't a legacy Inbox item: list_inbox and get_ticket don't show it", async () => {
+test("a triage run reads its chief's Inbox, and get_ticket says a TRIAGE-n key is an event now", async () => {
   const { h, driver, request } = await rig();
   let inbox = "";
   let ticket = "";
@@ -226,8 +226,8 @@ test("a triage run's session isn't a legacy Inbox item: list_inbox and get_ticke
     ...verdictCall("e1", "ignore"),
   ]);
   await h.orch.runTriage(request(["e1"]), new AbortController().signal);
-  expect(inbox).not.toMatch(/TRIAGE-1/);
-  expect(ticket).toMatch(/Unknown ticket/);
+  expect(inbox).toBe("The Inbox is empty.");
+  expect(ticket).toMatch(/Inbox items are events now/);
 });
 
 test("a triage run reads only what its chief covers: with no chief behind it, the board tools refuse", async () => {

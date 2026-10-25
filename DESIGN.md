@@ -1246,8 +1246,8 @@ event, a declined or failed one an ignored event, with the outcome as the reason
 `triage:TRIAGE-n`, so a rerun adds nothing). The old triage sessions, their runs, `sessions.triage_status`
 and the `seen_items` rows stay in place, unread, because tickets and Activity link to TRIAGE-n. `TRIAGE`
 stays a reserved project key. `GET /sessions?kind=triage` is still accepted and answers `[]`, and
-`Session.triageStatus` stays on the wire, so installed apps keep decoding; `list_inbox` still reads
-the old items. Dropping all of that waits for a release after the apps lose their Inbox.
+`Session.triageStatus` stays on the wire, so installed apps keep decoding; `list_inbox` no longer
+reads them. Dropping all of that waits for a release after the apps lose their Inbox.
 
 ## Tools
 
@@ -1276,7 +1276,7 @@ stubs whose full description `tool_search` returns, see "Stubs and tool_search" 
 | `get_ticket_agent` | all | `{ key, id, include_transcript?: 1..50 }` → one sub-agent or task of that ticket's session (`Orchestrator.getTicketAgent_`): its `agent` fields plus `prompt`, prompt and result clipped to 8000 chars; a sub-agent's own last N (default 20) text/status/error `transcript` entries, or a task's `output` (its last 8000 chars, `truncated`, `done`, `available`; a task with no output file reads as unavailable). An unknown id fails pointing at `get_ticket`'s include_agents |
 | `search_tickets` | all | `{ query, project_key?, limit?, cursor?, include_drafts? (default true) }` → `{ total, hits: [{ key, title, status, draft, project, snippet }], nextCursor }`. Same matching, ranking and cursors as `GET /tickets/search` ("Paging and search"); default limit 20 |
 | `list_projects` | all | `{}` → each project's key, name, path and settings, with `completionAction`, the offered `completionActions` and `pullRequestHost` |
-| `list_inbox` | all (a legacy read; its prompt text no longer points agents at it) | `{ status?: TriageStatus[], source?, key?, limit?, include_output? }` (`key` picks one item, e.g. `TRIAGE-12`; `get_ticket` on an Inbox key fails pointing here) → Inbox items (triage sessions) newest first: key, title, source (watcher name), status, outcome, the watcher prompt, and with include_output the output (clipped to 2000 chars). Default limit 20, max 100, with a "Showing n of total" note |
+| `list_inbox` | all | `{ status?: CosEventStatus[], source?, key?, limit? }` (`source` is an event source kind; `key` an event id or a ticket key) → the events addressed to the calling ticket (`target_id`), newest first: id, title, summary, source, status, verdict, reason, the ticket it is about, created_at. A chief (and the triage run working for it) reads its Inbox instead: its own events plus the unassigned ones, the same rows `GET /cos/:id/events` returns. Default limit 20, max 100, with a "Showing n of total" note. `get_ticket` on a `TRIAGE-n` key says Inbox items are events now |
 | `start_ticket` | work, conductor | `{ key }` → `startTicket` (any ticket, not only children). While the ticket's planning run is going it approves the plan instead and the work starts when the run ends |
 | `message_ticket` | work, conductor, chat | `{ key, text }` → `sendMessage`, as a human message (never with `move`: the ticket stays in its column and its agent moves it) |
 | `cancel_ticket` | work, conductor | `{ key }` → `cancelTicket` (abort the active run, drop queued runs) |
@@ -1447,7 +1447,7 @@ client state, not service state.
 | Board | approve a review choosing how it lands (merge, open PR, "Approve and…" with instructions, take no action), request changes, re-run the agent review, complete or mark done; open a ticket's pull request | parents only, for their own children: `review_ticket`, `complete_ticket` (`action`) | reviews and merges are the reviewers' and the human's; an agent can't sign off its own or a sibling's work |
 | Board | answer a tool approval (allow once, always allow, deny) | none | a human's decision by design; a message to a ticket waiting on one is refused |
 | Chief of staff | open a board's chief, read its Chat and Inbox, escalate an ignored event, edit its memory | the chief's own tools (`list_tickets`, `query_activity`, `read_memory`, `update_memory_section`, `schedule_*`); a ticket agent has no CoS tool | the apps have no screen for schedules yet |
-| Inbox (legacy) | list the old triage items | `list_inbox` (`include_output`), `get_ticket` | the apps have no Inbox actions beyond reading |
+| Inbox | read the events addressed to a ticket | `list_inbox` | the apps' Inbox is the chief of staff's events; agents have no Inbox actions beyond reading |
 | Watchers | create, edit (command line, cwd, mode, interval), pause or resume, run now, delete | a chief's `create_watcher`, `update_watcher` (`enabled`), `run_watcher`, `delete_watcher` (all gated); `list_watchers` | `env` is tool-only (the forms don't edit it); values are never shown |
 | Projects | add, rename, change key or folder, default driver and models, permission mode, worktrees, base branch, review defaults, what approving does ("When approved"), color, group, remove | `create_project`, `update_project`, `delete_project` (gated); `list_projects` | reveal in Finder and "new session here" are Local |
 | Settings | default driver, concurrent runs, default and review models, permission mode, classifier, network listen mode, base branch | `update_settings` (gated), `get_settings` | |

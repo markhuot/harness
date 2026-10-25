@@ -63,6 +63,36 @@ test("list_inbox says the inbox is empty when nothing has arrived", async () => 
   expect(results[0]!.text).toBe("The Inbox is empty.");
 });
 
+test("list_inbox returns only the events addressed to the caller's own ticket, and a chief's match what its Inbox API returns", async () => {
+  const h = makeOrchestrator({ tools: undefined });
+  const a = await h.orch.createTicket({ projectId: h.project.id, spec: "A", start: false });
+  const b = await h.orch.createTicket({ projectId: h.project.id, spec: "B", start: false });
+  const cos = h.orch.openCos("all");
+  const base = { projectId: null, ticketId: null, actor: "watcher:x" };
+  const add = (title: string, owner: { cosId: string | null; targetId?: string | null }, sourceKind: "watcher" | "child" = "watcher") =>
+    h.store.ticketEvents.insert({ ...base, ...owner, sourceKind, sourceRef: title, title })!;
+  const forA = add("for A", { cosId: cos.ticketId, targetId: a.id });
+  const forB = add("for B", { cosId: cos.ticketId, targetId: b.id }, "child");
+  const forCos = add("for chief", { cosId: cos.ticketId });
+  const unassigned = add("unclaimed", { cosId: null });
+  const ctxOf = (key: string) => {
+    const ticket = h.ticket(key);
+    return { runId: "r", runKind: ticket.kind === "cos" ? "cos" : "work", session: h.store.sessions.get(ticket.sessionId)!, ticket, cwd: h.home, ops: h.orch.ops, browser: undefined as never, signal: new AbortController().signal } as Parameters<typeof h.orch.ops.listInbox>[0];
+  };
+  const ids = async (key: string, filter: Parameters<typeof h.orch.ops.listInbox>[1] = {}) => (await h.orch.ops.listInbox(ctxOf(key), filter)).items.map((e) => e.id);
+
+  expect(await ids(a.key)).toEqual([forA.id]);
+  expect(await ids(b.key)).toEqual([forB.id]);
+  expect(await ids(b.key, { source: "watcher" })).toEqual([]);
+  expect(await ids(b.key, { statuses: ["handled"] })).toEqual([]);
+  expect(await ids(a.key, { key: "NOPE-1" })).toEqual([]);
+  // A chief reads its Inbox: its own events and the unclaimed ones, exactly the rows the Inbox API returns.
+  const api = h.orch.cosEvents(cos.ticketId, {}).items.map((e) => e.id);
+  expect(await ids(cos.key)).toEqual(api);
+  expect(new Set(api)).toEqual(new Set([forA.id, forB.id, forCos.id, unassigned.id]));
+  expect((await h.orch.ops.listInbox(ctxOf(cos.key), { limit: 2 })).total).toBe(4);
+});
+
 test("create_ticket makes a ticket on the board in the agent's project and says its key", async () => {
   const { results, h } = await agent([["create_ticket", { title: "Follow up", spec: "Do the follow up" }]]);
   expect(results[0]!.text).toMatch(/^Created ACME-3\./);

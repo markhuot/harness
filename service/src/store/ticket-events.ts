@@ -201,17 +201,25 @@ export class TicketEventRepo {
     return r ? toEvent(r) : null;
   }
 
-  /** Newest first. A chief's page includes the unassigned events, so a chief that is off or missing never hides them. */
-  list(opts: { cosId?: string; status?: CosEventStatus; before?: { createdAt: number; id: string }; limit: number }): StoredTicketEvent[] {
+  /** Newest first. `targetId` keeps the events that wake one ticket. A chief's page includes the unassigned events, so a chief that is off or missing never hides them. */
+  list(opts: { cosId?: string; targetId?: string; status?: CosEventStatus; sourceKind?: string; before?: { createdAt: number; id: string }; limit: number }): StoredTicketEvent[] {
     const where: string[] = ["1 = 1"];
     const args: Record<string, string | number> = { limit: opts.limit };
     if (opts.cosId) {
       where.push("(e.cos_id = $cosId OR e.cos_id IS NULL)");
       args.cosId = opts.cosId;
     }
+    if (opts.targetId) {
+      where.push("e.target_id = $targetId");
+      args.targetId = opts.targetId;
+    }
     if (opts.status) {
       where.push("e.status = $status");
       args.status = opts.status;
+    }
+    if (opts.sourceKind) {
+      where.push("e.source_kind = $sourceKind");
+      args.sourceKind = opts.sourceKind;
     }
     if (opts.before) {
       where.push("(e.created_at < $bt OR (e.created_at = $bt AND e.id < $bid))");

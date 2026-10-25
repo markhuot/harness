@@ -138,7 +138,6 @@ import type {
   BoardTranscriptEntry,
   CreateTicketInput,
   HarnessOps,
-  InboxItem,
   ProjectView,
   ReviewSkips,
   UpdateTicketInput,
@@ -146,6 +145,7 @@ import type {
   ToolContext,
   ToolDefinition,
 } from "../tools/types";
+import { LIST_INBOX_DEFAULT_LIMIT } from "../tools/board";
 import { RemoteIdError, truncateMiddle } from "../tools/util";
 import type { BrowserService } from "../browser/types";
 import type { HarnessPaths } from "../config";
@@ -353,13 +353,6 @@ interface ActiveRun {
   compacted?: { before?: number; after?: number };
 }
 
-/** What the Inbox's old triage sessions (kept, read-only) stored: the output they were triaging. */
-interface LegacyTriageMeta {
-  source: string;
-  text: string;
-  prompt?: string;
-}
-
 /** One chunk of watcher (or injected) output on its way into the chief of staff's events. */
 export interface IngestInput {
   /** Dedupe scope: the watcher id, or inject:<source> */
@@ -444,8 +437,6 @@ const boardAgent = (s: Subagent, chars: number): BoardAgent => ({
 });
 /** search_tickets page size when the agent doesn't pass a limit (the HTTP default of 100 floods context) */
 export const BOARD_SEARCH_LIMIT = 20;
-/** list_inbox default page size */
-export const BOARD_INBOX_LIMIT = 20;
 export const APPROVAL_PENDING_MESSAGE =
   "A human must approve this tool call. The ticket is now blocked awaiting approval — stop now; you'll be resumed with the answer.";
 
@@ -3258,7 +3249,7 @@ export class Orchestrator {
     if (kind === "triage") return [];
     // A chief of staff's conversation isn't on the board: it is read through /cos.
     const chiefs = new Set(this.store.cos.list().map((c) => c.ticketId));
-    // Old triage sessions (kept only for list_inbox) are not a list any app shows.
+    // Old triage sessions are not a list any app shows.
     return this.store.sessions.list(kind).filter((s) => s.kind !== "triage" && !(s.ticketId && chiefs.has(s.ticketId)));
   }
 
@@ -3944,12 +3935,8 @@ ${numberLines(r.body)}`;
       const requested = String(key ?? "").trim().toUpperCase();
       const related = requested ? this.relatedTickets(sc, requested, null) : [];
       if (!related.length) {
-        // The Inbox isn't any project's: a group scope can't tell an item's key from a missing ticket's.
-        const item = requested && sc.scope === "all" ? this.store.sessions.list("triage").find((s) => s.triageStatus !== null && s.key.toUpperCase() === requested) : undefined;
-        if (item) {
-          const routed = item.outcome ? ` (${item.outcome})` : "";
-          throw new Error(`${item.key} is an Inbox item${routed}, not a ticket. Read it with list_inbox { key: "${item.key}", include_output: true }.`);
-        }
+        // Inbox items used to be keyed TRIAGE-n; they are events of the chief of staff now.
+        if (/^TRIAGE-\d+$/.test(requested)) throw new Error(`${requested} was an Inbox item, not a ticket. Inbox items are events now: read them with list_inbox.`);
         throw new Error(`Unknown ticket: ${key}`);
       }
       throw new RemoteIdError(`${this.remoteOnlyMessage(requested, related)} Call get_ticket with one of those keys.`, {
@@ -4032,34 +4019,17 @@ ${numberLines(r.body)}`;
     return this.scopeOf(ctx).projects.list().map((p) => this.projectView(p));
   }
 
-  async listInbox_(ctx: ToolContext, filter: Parameters<HarnessOps["listInbox"]>[1]): Promise<{ items: InboxItem[]; total: number }> {
-    // Inbox items belong to no project: a group scope has none.
-    if (this.scopeOf(ctx).scope !== "all") return { items: [], total: 0 };
-    const limit = Math.min(Math.max(1, filter.limit ?? BOARD_INBOX_LIMIT), 100);
-    const source = filter.source?.trim().toLowerCase();
+  async listInbox_(ctx: ToolContext, filter: Parameters<HarnessOps["listInbox"]>[1]): Promise<{ items: CosEvent[]; total: number }> {
+    const limit = Math.min(Math.max(1, filter.limit ?? LIST_INBOX_DEFAULT_LIMIT), 100);
     const key = filter.key?.trim().toUpperCase();
-    const matches = this.store.sessions
-      .list("triage")
-      // A legacy Inbox item always has a triage status (the migration settled the open ones); a triage agent run has none.
-      .filter((s) => s.triageStatus !== null)
-      .map((s) => ({ s, meta: this.store.sessions.getMeta<LegacyTriageMeta>(s.id) }))
-      .filter(({ s, meta }) => {
-        if (key && s.key.toUpperCase() !== key) return false;
-        if (filter.statuses?.length && !filter.statuses.includes(s.triageStatus ?? "triaging")) return false;
-        return !source || (meta?.source ?? "").toLowerCase() === source;
-      })
-      .sort((a, b) => b.s.createdAt - a.s.createdAt || b.s.key.localeCompare(a.s.key, undefined, { numeric: true }));
-    const items = matches.slice(0, limit).map(({ s, meta }): InboxItem => ({
-      key: s.key,
-      title: s.title,
-      source: meta?.source ?? "",
-      status: s.triageStatus ?? "triaging",
-      outcome: s.outcome,
-      prompt: meta?.prompt ?? "",
-      ...(filter.output ? { output: truncateMiddle(meta?.text ?? "", BOARD_TRANSCRIPT_CHARS) } : {}),
-      createdAt: s.createdAt,
-    }));
-    return { items, total: matches.length };
+    // A chief reads what its Inbox shows (its own events and the unassigned ones), and so does the triage run working for it;
+    // any other ticket reads the events that wake it.
+    const cosId = ctx.runKind === "triage" ? this.triageRuns.get(ctx.session.id)?.cosId : ctx.ticket?.kind === "cos" ? ctx.ticket.id : undefined;
+    const owner = cosId ? { cosId } : { targetId: this.ctxTicket(ctx).id };
+    const rows = this.store.ticketEvents
+      .list({ ...owner, sourceKind: filter.source, limit: 10_000 })
+      .filter((e) => (!filter.statuses?.length || filter.statuses.includes(e.status)) && (!key || e.id.toUpperCase() === key || e.ticketKey?.toUpperCase() === key));
+    return { items: rows.slice(0, limit).map(wireCosEvent), total: rows.length };
   }
 
   // --- board (write): work, conductor and chat runs; the HTTP API's code paths plus guard rails ---
