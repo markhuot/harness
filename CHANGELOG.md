@@ -15,6 +15,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
+- Stopping a ticket whose run was started by a child or subscription update no longer restarts it a few seconds later with the same updates.
 - A parent's child updates and a subscriber's subscription events that were waiting (held behind a run that can't take input, a queued run or the wake cap) are no longer lost when the service restarts: they are stored, and the ticket is woken for them after the restart. When several moves of one ticket wait, the wake carries its latest status, and a parent hears at most 60 wakes in 5 minutes.
 
 ### Changed

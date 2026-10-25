@@ -155,6 +155,24 @@ test("a subscription is dropped when its subscriber's run is cancelled, so an ev
   expect(wakes(h)).toHaveLength(0);
 });
 
+test("stopping a run that was woken by a change doesn't restart the ticket once the backoff passes", async () => {
+  const { h, other, me } = await subscriber((key) => [["subscribe_ticket", { key, mode: "forever" }]]);
+  const hold = gate();
+  // Only the wake's run holds; the other ticket's own run answers at once.
+  h.driver.script((req) => (req.prompt.includes("Updates from tickets you subscribed to") ? [{ wait: hold }, ...replyScript("woken")] : replyScript("other")));
+  await h.orch.startTicket(other.key);
+  await new Promise<void>((resolve) => {
+    const poll = setInterval(() => (h.clock.advance(5), wakes(h).length && (clearInterval(poll), resolve())), 5);
+  });
+  await h.orch.cancelTicket(me.key);
+  const before = wakes(h).length;
+  h.clock.advance(60_000);
+  await h.settle();
+  expect(wakes(h)).toHaveLength(before);
+  expect(h.store.ticketEvents.byStatus("escalated", undefined, "ticket")).toHaveLength(0);
+  expect(h.store.ticketEvents.byStatus("handling", undefined, "ticket")).toHaveLength(0);
+});
+
 test("a subscriber is woken at most eight times in a window; the events past that are held, not lost, and arrive together once there is room", async () => {
   const { h, other } = await subscriber((key) => [["subscribe_ticket", { key, mode: "forever" }]]);
   await h.orch.startTicket(other.key);

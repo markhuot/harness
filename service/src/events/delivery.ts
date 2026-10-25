@@ -242,11 +242,14 @@ export class EventDelivery {
     // One wake-log row per class, so each class's cap counts only its own events.
     const byClass = new Map<string, StoredTicketEvent[]>();
     for (const e of events) byClass.set(this.classOf(e), [...(byClass.get(this.classOf(e)) ?? []), e]);
-    for (const [eventClass, rows] of byClass) {
-      const wakeId = store.ticketEvents.addWake({ targetId, eventClass, kind: "wake", eventCount: rows.length, digest, runId: result.runId });
-      // A conductor's run can live for hours: a later cancel mustn't redeliver what the agent already read.
-      for (const e of rows) this.patch(e.id, { status: settleNow ? "handled" : "handling", wakeId, consumingRunId: result.runId });
-    }
+    // One transaction: the run is already queued or fed, so the rows are marked together or not at all.
+    store.transaction(() => {
+      for (const [eventClass, rows] of byClass) {
+        const wakeId = store.ticketEvents.addWake({ targetId, eventClass, kind: "wake", eventCount: rows.length, digest, runId: result.runId });
+        // A conductor's run can live for hours: a later cancel mustn't redeliver what the agent already read.
+        for (const e of rows) this.patch(e.id, { status: settleNow ? "handled" : "handling", wakeId, consumingRunId: result.runId });
+      }
+    });
     // A run that ended before its rows were marked is settled now, not at the next tick.
     const ended = !settleNow && result.runId ? this.d.runStatus(result.runId) : null;
     if (result.runId && (ended === "succeeded" || ended === "failed" || ended === "cancelled")) this.runEnded(result.runId, ended);

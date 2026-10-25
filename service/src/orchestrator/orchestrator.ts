@@ -3236,7 +3236,10 @@ export class Orchestrator {
     this.dropPlanApproval(ticket.id, "Plan approval cleared: run cancelled; work not started");
     // Someone stopped this agent: an event must not start it again behind their back.
     this.store.subscriptions.deleteBySubscriber(ticket.id);
+    // Nor may the changes it was woken with: a cancelled run would put them back to waiting and the engine would retry them.
+    this.closeTicketEvents(ticket.id, "run stopped");
     await this.cancelSession(ticket.sessionId, true);
+    this.closeTicketEvents(ticket.id, "run stopped");
     return this.store.tickets.get(ticket.id)!;
   }
 
@@ -5603,9 +5606,12 @@ ${numberLines(r.body)}`;
   private deliverTicketEvents(ticketId: string, arm = false) {
     queueMicrotask(() => {
       if (this.stopping) return;
-      void this.ticketEvents.deliver(ticketId).finally(() => {
-        if (arm) this.ticketEvents.arm();
-      });
+      void this.ticketEvents
+        .deliver(ticketId)
+        .catch((err) => this.log(`events: delivery to ${ticketId} failed: ${err instanceof Error ? err.message : String(err)}`))
+        .finally(() => {
+          if (arm) this.ticketEvents.arm();
+        });
     });
     if (arm) this.ticketEvents.arm();
   }
