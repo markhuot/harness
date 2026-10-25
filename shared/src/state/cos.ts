@@ -72,6 +72,36 @@ export const EVENT_SOURCE_LABEL: Record<TicketEventSource, string> = { activity:
 /** What an Inbox row says happened to the event, in a word. */
 export type InboxState = "waiting" | "ignored" | "escalated" | "handling" | "acted" | "no_action" | "needs_user" | "reviewed" | "filtered";
 
+/** The words of a chief's Inbox row for each state. */
+const INBOX_STATE_LABEL: Record<InboxState, string> = {
+  waiting: "Waiting for a verdict",
+  ignored: "Ignored",
+  escalated: "Escalated",
+  handling: "Handling",
+  acted: "Acted",
+  no_action: "No action needed",
+  needs_user: "Needs you",
+  reviewed: "Reviewed, no outcome recorded",
+  filtered: "Filtered",
+};
+
+/** A ticket's own events have no chief judging them: they wait for delivery, are queued for its next run, and are delivered. */
+const FEED_STATE_LABEL: Record<InboxState, string> = {
+  ...INBOX_STATE_LABEL,
+  waiting: "Waiting to be delivered",
+  escalated: "Queued for the ticket",
+  handling: "In the ticket's run",
+  acted: "Delivered",
+  no_action: "Delivered",
+  needs_user: "Delivered",
+  reviewed: "Delivered",
+};
+
+/** What a row's state says, in a chief's Inbox (`chief`) or a ticket's Events tab. */
+export function eventStateLabel(state: InboxState, chief: boolean): string {
+  return (chief ? INBOX_STATE_LABEL : FEED_STATE_LABEL)[state];
+}
+
 /** A handled event shows what the chief recorded for it; one it recorded nothing for is only "reviewed" (its run ended, nothing says it did anything). */
 export function inboxState(e: Pick<TicketEvent, "status" | "verdict" | "outcome">): InboxState {
   if (e.verdict === "filtered") return "filtered";

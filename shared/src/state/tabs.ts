@@ -7,16 +7,17 @@
  * "spec" is the ticket's living document and the tab a ticket opens on; "activity" its typed
  * timeline. "children" is the conductor-only Tickets tab (listed right after Activity). "agents"
  * (Agents & tasks) lists the session's sub-agents and background tasks; it exists only once there
- * are any.
+ * are any. "events" lists the events aimed at the ticket (a child's change, a subscription, ...); it
+ * exists only once the ticket has some (`Ticket.hasEvents`).
  */
-export type BuiltinTicketTab = "spec" | "activity" | "children" | "transcript" | "agents" | "browser" | "details";
+export type BuiltinTicketTab = "spec" | "activity" | "children" | "transcript" | "agents" | "events" | "browser" | "details";
 /**
  * Built-in tabs, a plugin tab as "plugin:<pluginId>:<tabId>", or a sub-agent as "agent:<id>".
  * "changes" is the built-in Changes tab, which changesTab.ts layers on top of these functions (they,
  * and the iOS port checked against them, don't list it).
  */
 export type TicketTab = BuiltinTicketTab | "changes" | `plugin:${string}:${string}` | `agent:${string}`;
-export const TICKET_TABS: BuiltinTicketTab[] = ["spec", "activity", "children", "transcript", "agents", "browser", "details"];
+export const TICKET_TABS: BuiltinTicketTab[] = ["spec", "activity", "children", "transcript", "agents", "events", "browser", "details"];
 
 export const TAB_LABEL: Record<BuiltinTicketTab, string> = {
   spec: "Spec",
@@ -24,6 +25,7 @@ export const TAB_LABEL: Record<BuiltinTicketTab, string> = {
   children: "Tickets",
   transcript: "Transcript",
   agents: "Agents & tasks",
+  events: "Events",
   browser: "Browser",
   details: "Details",
 };
@@ -93,15 +95,17 @@ export function showsAgentsTab(subagents: { id: string }[] | null | undefined): 
 /**
  * The tab to show for a requested one: a plugin tab that doesn't apply (once the ticket's plugin
  * tabs are known) and the conductor-only Tickets tab on a plain ticket fall back to the Spec.
+ * The Events tab needs events (`Ticket.hasEvents`): once pruning leaves none, it falls back to the Spec.
  * The Agents tab and a sub-agent's view need sub-agents: without any (or before they're known)
  * they fall back to the Spec, and a sub-agent that isn't among them falls back to the list.
  * The requested tab is kept by the caller, so a deep link opens once the sub-agents arrive.
  */
 export function effectiveTab(
   requested: TicketTab,
-  opts: { conductor: boolean; pluginTabs: { pluginId: string; id: string }[] | null; subagents?: { id: string }[] | null },
+  opts: { conductor: boolean; pluginTabs: { pluginId: string; id: string }[] | null; subagents?: { id: string }[] | null; events?: boolean },
 ): TicketTab {
   if (requested === "children" && !opts.conductor) return "spec";
+  if (requested === "events" && !opts.events) return "spec";
   if (tabStripTab(requested) === "agents") {
     if (!showsAgentsTab(opts.subagents)) return "spec";
     const agent = parseSubagentTab(requested);
@@ -122,10 +126,10 @@ export function openingTab(): TicketTab {
 
 /**
  * The tab strip, in order: the built-in tabs this ticket shows (Tickets only on a conductor, Agents
- * only once there are sub-agents), then its plugin tabs. ⌘⇧[ / ⌘⇧] and 1–9 walk this list.
+ * only once there are sub-agents, Events only once there are events), then its plugin tabs. ⌘⇧[ / ⌘⇧] and 1–9 walk this list.
  */
-export function visibleTabs(opts: { conductor: boolean; subagents?: { id: string }[] | null; pluginTabs?: { pluginId: string; id: string }[] | null }): TicketTab[] {
-  const builtin = TICKET_TABS.filter((t) => (t !== "children" || opts.conductor) && (t !== "agents" || showsAgentsTab(opts.subagents)));
+export function visibleTabs(opts: { conductor: boolean; subagents?: { id: string }[] | null; pluginTabs?: { pluginId: string; id: string }[] | null; events?: boolean }): TicketTab[] {
+  const builtin = TICKET_TABS.filter((t) => (t !== "children" || opts.conductor) && (t !== "agents" || showsAgentsTab(opts.subagents)) && (t !== "events" || !!opts.events));
   return [...builtin, ...(opts.pluginTabs ?? []).map((p) => pluginTabRoute(p.pluginId, p.id))];
 }
 

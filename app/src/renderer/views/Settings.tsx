@@ -3,7 +3,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import type { PhaseChoice, Project, PublicSettings, Settings, TicketStatus, TriagePermissionMode } from "@harness/shared";
-import { DEFAULT_BASE_BRANCH, DEFAULT_BROWSER_IDLE_TAB_MINUTES, DEFAULT_CONTEXT_GAUGE_LIMIT, MAX_BROWSER_IDLE_TAB_MINUTES, resolveCosChoice, resolveCosStatuses, resolveTriagePermissionMode, TICKET_STATUSES, TRIAGE_PERMISSION_MODE_LABELS, TRIAGE_PERMISSION_MODES, triageDefaultModel, triageDriver } from "@harness/shared";
+import { DEFAULT_BASE_BRANCH, DEFAULT_BROWSER_IDLE_TAB_MINUTES, DEFAULT_CONTEXT_GAUGE_LIMIT, DEFAULT_EVENT_RETENTION_DAYS, MAX_BROWSER_IDLE_TAB_MINUTES, parseEventRetentionDays, resolveCosChoice, resolveCosStatuses, resolveTriagePermissionMode, TICKET_STATUSES, TRIAGE_PERMISSION_MODE_LABELS, TRIAGE_PERMISSION_MODES, triageDefaultModel, triageDriver } from "@harness/shared";
 import { limitError, parseLimit } from "../state/contextGauge";
 import { useAction, useStore } from "../state/store";
 import { modelName, sortedProjects } from "@harness/shared/state";
@@ -121,7 +121,7 @@ export function Row({ title, sub, children }: { title: ReactNode; sub?: ReactNod
 // ---------------------------------------------------------------------------
 
 /** Text input with a local draft that commits on blur / Enter. */
-export function DraftInput({ value, onCommit, placeholder, type = "text", className = "input" }: { value: string; onCommit: (v: string) => void; placeholder?: string; type?: string; className?: string }) {
+export function DraftInput({ value, onCommit, placeholder, type = "text", className = "input", ariaLabel }: { value: string; onCommit: (v: string) => void; placeholder?: string; type?: string; className?: string; ariaLabel?: string }) {
   const [draft, setDraft] = useState(value);
   useEffect(() => {
     setDraft(value);
@@ -133,6 +133,7 @@ export function DraftInput({ value, onCommit, placeholder, type = "text", classN
     <input
       className={className}
       type={type}
+      aria-label={ariaLabel}
       value={draft}
       placeholder={placeholder}
       onChange={(e) => setDraft(e.target.value)}
@@ -182,6 +183,17 @@ function GeneralSection({ settings }: { settings: PublicSettings }) {
             onCommit={(v) => {
               const n = Math.round(Number(v));
               if (v.trim() && Number.isFinite(n)) save({ browserIdleTabMinutes: Math.min(MAX_BROWSER_IDLE_TAB_MINUTES, Math.max(0, n)) });
+            }}
+          />
+        </Row>
+        <Row title="Keep event history for" sub="Days, 1 to 365. Events a chief or ticket has dealt with are deleted after this long; the ones still waiting are kept.">
+          <DraftInput
+            type="number"
+            ariaLabel="Keep event history for"
+            value={String(settings.eventRetentionDays ?? DEFAULT_EVENT_RETENTION_DAYS)}
+            onCommit={(v) => {
+              const n = parseEventRetentionDays(v);
+              if (n !== null) save({ eventRetentionDays: n });
             }}
           />
         </Row>

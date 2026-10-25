@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { resolveTriageModel, resolveTriagePermissionMode, triageDriver, type Cos, type CosChatEntry, type TicketEvent } from "../../../shared/src/cos";
-import { anchoredScrollTop, canEscalate, cosBadgeCount, COS_TABS, inboxState, isCosTab, mergeChat, mergeEvents, nearTop, openEventCount, sortChiefs, triStateOf, triStateValue } from "../../../shared/src/state/cos";
+import { anchoredScrollTop, canEscalate, cosBadgeCount, COS_TABS, eventRows, eventStateLabel, EVENT_SOURCE_LABEL, inboxState, isCosTab, mergeChat, mergeEvents, nearTop, openEventCount, sortChiefs, triStateOf, triStateValue } from "../../../shared/src/state/cos";
 import { applyEvent, initialState, reducer } from "../../../shared/src/state/reducer";
 
 const msg = (id: string, createdAt: number, text = id, role: "user" | "assistant" = "assistant"): CosChatEntry => ({ id, cosId: "c1", createdAt, kind: "message", role, text });
@@ -177,5 +177,43 @@ describe("triage settings", () => {
     expect(resolveTriagePermissionMode({})).toBe("read_only");
     expect(resolveTriagePermissionMode({ cosTriagePermissionMode: null })).toBe("read_only");
     expect(resolveTriagePermissionMode({ cosTriagePermissionMode: "auto" })).toBe("auto");
+  });
+});
+
+describe("eventRows", () => {
+  const rows = [
+    event("mine", { createdAt: 3 }),
+    event("unassigned", { targetId: null, createdAt: 2 }),
+    event("other-chief", { targetId: "c2", createdAt: 5 }),
+    event("dropped", { verdict: "filtered", status: "ignored", createdAt: 4 }),
+    event("reminder", { verdict: "filtered", status: "ignored", sourceKind: "schedule", createdAt: 1 }),
+  ];
+  const ids = (owner: { ticketId: string; chief: boolean }) => eventRows(rows, owner).map((e) => e.id);
+
+  test("a chief's Inbox is its own rows and the unassigned ones, newest first, without what its rules dropped but with a reminder", () => {
+    expect(ids({ ticketId: "c1", chief: true })).toEqual(["mine", "unassigned", "reminder"]);
+  });
+
+  test("a ticket's tab is only the rows aimed at it: no unassigned rows, and a filtered reminder stays out", () => {
+    expect(ids({ ticketId: "c1", chief: false })).toEqual(["mine"]);
+  });
+
+  test("a keyed record reads like a list", () => {
+    expect(eventRows(Object.fromEntries(rows.map((e) => [e.id, e])), { ticketId: "c2", chief: false }).map((e) => e.id)).toEqual(["other-chief"]);
+  });
+});
+
+describe("event labels", () => {
+  test("every kind of event has a label, including the subscription and child rows", () => {
+    expect(EVENT_SOURCE_LABEL).toEqual({ activity: "Ticket", watcher: "Watcher", schedule: "Schedule", subscription: "Subscription", child: "Child" });
+  });
+
+  test("a ticket's rows speak of delivery, a chief's of verdicts, and the shared states read the same", () => {
+    expect(eventStateLabel("waiting", true)).toBe("Waiting for a verdict");
+    expect(eventStateLabel("waiting", false)).toBe("Waiting to be delivered");
+    expect(eventStateLabel("escalated", false)).toBe("Queued for the ticket");
+    expect(eventStateLabel("reviewed", false)).toBe("Delivered");
+    expect(eventStateLabel("needs_user", true)).toBe("Needs you");
+    expect(eventStateLabel("ignored", false)).toBe(eventStateLabel("ignored", true));
   });
 });

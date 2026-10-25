@@ -203,3 +203,11 @@
   background: var(--red-soft);
   color: var(--red);
 }
+
+/* A ticket's Events tab: the same list as the Inbox, in the tab body */
+.events-tab {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}

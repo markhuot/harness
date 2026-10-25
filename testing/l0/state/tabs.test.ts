@@ -121,6 +121,12 @@ describe("effectiveTab", () => {
     expect(effectiveTab("plugin:g:c", { ...plain, pluginTabs: [{ pluginId: "x", id: "c" }] })).toBe("spec");
   });
 
+  test("Events needs events: without any it falls back to Spec, with some it stays", () => {
+    expect(effectiveTab("events", plain)).toBe("spec");
+    expect(effectiveTab("events", { ...plain, events: false })).toBe("spec");
+    expect(effectiveTab("events", { ...plain, events: true })).toBe("events");
+  });
+
   test("built-in tabs pass through", () => {
     expect(effectiveTab("browser", plain)).toBe("browser");
   });
@@ -137,6 +143,16 @@ describe("openingTab / visibleTabs", () => {
 
   test("a conductor with sub-agents gets Tickets and Agents in place", () => {
     expect(visibleTabs({ conductor: true, subagents: [{ id: "a" }] })).toEqual(["spec", "activity", "children", "transcript", "agents", "browser", "details"]);
+  });
+
+  test("Events sits after Agents, only once the ticket has events", () => {
+    expect(visibleTabs({ conductor: false, events: true })).toEqual(["spec", "activity", "transcript", "events", "browser", "details"]);
+    expect(visibleTabs({ conductor: true, subagents: [{ id: "a" }], events: true })).toEqual(["spec", "activity", "children", "transcript", "agents", "events", "browser", "details"]);
+    expect(visibleTabs({ conductor: false, events: false })).not.toContain("events");
+  });
+
+  test("a saved Events route is still a ticket tab, so it reopens once events arrive", () => {
+    expect(ticketTabFrom("events")).toBe("events");
   });
 
   test("plugin tabs follow the built-ins as routes", () => {

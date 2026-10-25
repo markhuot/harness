@@ -987,6 +987,13 @@ export const MAX_BROWSER_IDLE_TAB_MINUTES = 1440;
 export const DEFAULT_EVENT_RETENTION_DAYS = 7;
 export const MAX_EVENT_RETENTION_DAYS = 365;
 
+/** The retention days a Settings field's text means: rounded and kept within 1…365; null (nothing is saved) when it's blank or not a number. */
+export function parseEventRetentionDays(text: string): number | null {
+  if (!text.trim()) return null;
+  const n = Math.round(Number(text));
+  return Number.isFinite(n) ? Math.min(MAX_EVENT_RETENTION_DAYS, Math.max(1, n)) : null;
+}
+
 export interface Settings {
   /**
    * The app's driver and model per run phase, the last level tickets and projects inherit from.
