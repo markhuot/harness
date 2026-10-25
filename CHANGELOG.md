@@ -11,6 +11,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Added
 
+- A ticket that has had events aimed at it (a child ticket's change, a subscription) now has an **Events** tab on the Mac and on iPhone, iPad and iPhone Duo, listing them newest first with what kind each is. The tab only shows once there is something in it, and goes away if its events are cleaned up. A ticket's agents already read the same events with `list_inbox`.
+- Settings → General has **Keep event history for** on the Mac and on iPhone and iPad (1 to 365 days, 7 by default): how long handled and ignored events are kept.
 - Settings now has an event retention value (`eventRetentionDays`, 7 days by default, 1 to 365): handled and ignored ticket events older than that are removed, and the chief can change it through its settings tool. The pruning now also runs while the app sits idle.
 
 ### Fixed
@@ -20,6 +22,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
+- The chief of staff's Inbox is now the same view as a ticket's Events tab, so the rows look and behave alike. The apps ask `GET /tickets/:key/events` instead of `GET /cos/:id/events`, and events carry the ticket they are aimed at (`targetId`) where they had the owning chief (`cosId`), so an iPhone or iPad build older than this service can't load its Inbox until you update it.
+- `list_inbox` now filters by status, source and key in the database, so the "Showing n of total" count is exact (it stopped at 10,000 before) and says "events" rather than "items".
 - An agent's `list_inbox` now lists the events addressed to its own ticket (title, summary, source, status, verdict, reason and the ticket each is about), the same events the Inbox shows. A chief of staff sees its whole Inbox. It no longer lists old triage items, and `include_output` is gone.
 - The chief of staff now wakes under the same limit as any ticket that follows events (8 wakes per 5 minutes, extra events wait and arrive together in a later wake) instead of 6 an hour, and triage gathers a burst for 10 seconds instead of waiting for 45 seconds of quiet. Event history is kept 7 days instead of 30.
 - Chief wake failures (a wake that errors, or a run that fails or is cancelled) now back off, 5 seconds doubling to a minute, instead of retrying at once, so a broken ticket can't spin. The event batch cards in a chief's chat now follow the 7-day event retention (they were kept 30 days).

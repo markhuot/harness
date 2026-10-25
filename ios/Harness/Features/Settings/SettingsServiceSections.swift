@@ -164,8 +164,8 @@ struct SettingsPermissionsSection: View {
     }
 }
 
-/// The chiefs of staff's two app-wide switches (projects may override both): whether they run, and
-/// whether they may unblock tickets.
+/// The chiefs of staff's app-wide settings (projects may override them): whether they run, the columns
+/// they handle, the chief's and triage's models and the triage permissions.
 struct SettingsCosSection: View {
     let settings: PublicSettings
 

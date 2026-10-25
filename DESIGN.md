@@ -953,7 +953,7 @@ changed it before judging, and that unsure means escalate; tool results (PR bodi
 are declared untrusted too. A watcher's `prompt` goes in as a "Guidance from the human" block per
 watcher, outside the fence (the human wrote it), listing the events it applies to; the events stay
 fenced. The run's tool calls are its record: each judged event keeps the session id (`triageSession` in
-its payload, `CosEvent.triageSessionId`), and the Inbox row links to that transcript. The brief now
+its payload, `TicketEvent.triageSessionId`), and the Inbox row links to that transcript. The brief now
 carries what the agent found and names the ticket the event belongs to (a PR, a Jira key, a branch);
 triage only names it, the chief acts. The brief is capped at 600 characters and the wake prompt fences
 it, since it can repeat text an attacker wrote. A backend with no agent to run (`anthropic-api`, or no
@@ -998,12 +998,14 @@ happens either way. `isSilentReply` (`cos/chat.ts`) treats an empty or `[quiet]`
 judges each event on its own, with no list of waiting tickets.
 
 **Wire contract** (`shared/src/cos.ts`; the Mac and iOS Inbox and chat build on it):
-`CosEvent`, `CosChatEntry` (`message`, `ticket_created`, `ticket_moved`, `event_batch`). `GET
-/cos/:id/events?status=&before=&limit=` (newest first; the chief's own plus unassigned, so a stuck or
-disabled CoS never hides events), `GET /cos/events/badge`, `POST /cos/events/:id/escalate` ("Escalate
+`TicketEvent` (`targetId` is the ticket it wakes, null while no chief qualifies; `sourceKind` is any of
+`TICKET_EVENT_SOURCES`), `CosChatEntry` (`message`, `ticket_created`, `ticket_moved`, `event_batch`). `GET
+/tickets/:key/events?status=&before=&limit=` (newest first; the key may also be the ticket's id. For a chief it is the
+Inbox, the chief's own plus unassigned, so a stuck or disabled CoS never hides events; for any other ticket it is the
+rows with that `target_id`, served by the `(target_id, created_at)` index), `GET /cos/events/badge`, `POST /cos/events/:id/escalate` ("Escalate
 anyway"; 409 once handled), `GET /cos/:id/transcript?before=&limit=` (newest page first; a projection
 over the CoS session, its stamped activity and its wakes), `POST /cos/:id/messages { text,
-attachments? }` → `{ entryId }`. Bus events `cos.event.upserted`, `cos.badge`, `cos.transcript.appended`
+attachments? }` → `{ entryId }`. Bus events `ticket.event.upserted`, `cos.badge`, `cos.transcript.appended`
 (typed `CosBusEvent`, not part of `HarnessEvent`, so clients that don't know them ignore them).
 
 #### The Mac
@@ -1018,13 +1020,13 @@ All chief when the project has no group. A click makes the chief if it doesn't e
 `state/paneModel.ts`; one chief pane at a time, so another scope replaces it and the same one comes
 forward). The pane has the header (title, Memory, close) and a **Chat** and an **Inbox** tab, and no
 on/off switch: a chief is switched on or off in Settings (app-wide) and a project's settings
-(per project), which is also where its column checkboxes live. The store holds `chiefs`, `cosEvents` (by
+(per project), which is also where its column checkboxes live. The store holds `chiefs`, `ticketEvents` (by
 id, so a pushed event replaces its row), `cosChat` (oldest first, merged by id so a page and a live
 push never show an entry twice) and `cosBadge`; the pure rules (tab set, merges, inbox states, the
 tri-state of a project's override, the scroll anchor kept when an older page loads) are in
 `shared/src/state/cos.ts`. Chat pages in as the reader nears the top and keeps what they were
 reading under their eye; the Inbox is a plain list that never needs the chief running (a reminder is
-the one filtered event it shows, since it went to you), and its **+** sends the chief a message in
+the one filtered event it shows, since it went to you; it is the same `EventsList` a ticket's Events tab uses, below), and its **+** sends the chief a message in
 chat, because the chief creates listeners with its own tools. Memory is a sheet from the header,
 saved against the revision it opened. The app's two switches are in Settings → Chief of staff; a
 project's are Inherit/On/Off selects (`null` clears the override). The old watcher Inbox, its ⌘2
@@ -1186,6 +1188,16 @@ subscription on a ticket that isn't done, or with a subscription row still waiti
 waiting for events: it calls `submit_for_review` when it is done. A done ticket can't be subscribed to, and its
 subscribers' rows are dropped once they have heard it is done, so no ticket waits on something that can't change.
 
+**Events tab.** `Ticket.hasEvents` (a boolean, so a busy feed doesn't push the ticket on every event) is true while a
+row that isn't `filtered` has the ticket as its `target_id`. The service pushes the ticket again when an insert (or a chief
+taking over a row) flips it on and when pruning leaves a ticket with no rows, so the tab appears and goes while a ticket is
+open; a requested Events tab on a ticket without events opens the Spec (`effectiveTab`). The tab sits after Agents & tasks
+on the Mac and on iPhone, iPad and Duo (`shared/src/state/tabs.ts`, `Logic/Tabs.swift`) and shows `eventRows`: the rows aimed
+at the ticket, newest first, without the filtered ones, each with its kind (Ticket, Watcher, Schedule, Subscription, Child),
+and, since no chief judges a ticket's own rows, delivery wording (waiting to be delivered, queued for the ticket, delivered)
+in place of the Inbox's verdicts. "Escalate anyway" and the **+** exist only in a chief's Inbox. How long rows are kept is
+Settings → General → "Keep event history for" on both apps (`eventRetentionDays`, 1 to 365, default 7).
+
 Explicit subscription and child rows skip the chief's triage and rehoming: the chief's engine and its Inbox only read
 `activity`, `watcher` and `schedule` rows (the store's scope), and the ticket feed only the other two. The rows show in
 the target's own `list_inbox`. Wakes of the two feeds are told apart in the wake log by event class (`child`,
@@ -1290,7 +1302,7 @@ stubs whose full description `tool_search` returns, see "Stubs and tool_search" 
 | `get_ticket_agent` | all | `{ key, id, include_transcript?: 1..50 }` → one sub-agent or task of that ticket's session (`Orchestrator.getTicketAgent_`): its `agent` fields plus `prompt`, prompt and result clipped to 8000 chars; a sub-agent's own last N (default 20) text/status/error `transcript` entries, or a task's `output` (its last 8000 chars, `truncated`, `done`, `available`; a task with no output file reads as unavailable). An unknown id fails pointing at `get_ticket`'s include_agents |
 | `search_tickets` | all | `{ query, project_key?, limit?, cursor?, include_drafts? (default true) }` → `{ total, hits: [{ key, title, status, draft, project, snippet }], nextCursor }`. Same matching, ranking and cursors as `GET /tickets/search` ("Paging and search"); default limit 20 |
 | `list_projects` | all | `{}` → each project's key, name, path and settings, with `completionAction`, the offered `completionActions` and `pullRequestHost` |
-| `list_inbox` | all | `{ status?: CosEventStatus[], source?, key?, limit? }` (`source` is an event source kind; `key` an event id or a ticket key) → the events addressed to the calling ticket (`target_id`), newest first: id, title, summary, source, status, verdict, reason, the ticket it is about, created_at. A chief (and the triage run working for it) reads its Inbox instead: its own events plus the unassigned ones, the same rows `GET /cos/:id/events` returns. Default limit 20, max 100, with a "Showing n of total" note. `get_ticket` on a `TRIAGE-n` key says Inbox items are events now |
+| `list_inbox` | all | `{ status?: TicketEventStatus[], source?, key?, limit? }` (`source` is an event source kind; `key` an event id or a ticket key) → the events addressed to the calling ticket (`target_id`), newest first: id, title, summary, source, status, verdict, reason, the ticket it is about, created_at. A chief (and the triage run working for it) reads its Inbox instead: its own events plus the unassigned ones, the same rows `GET /tickets/:key/events` returns for the chief. Status, source and key are filtered in the query and the total is a `COUNT`, so it is exact however many events there are. Default limit 20, max 100, with a "Showing n of total events" note. `get_ticket` on a `TRIAGE-n` key says Inbox items are events now |
 | `start_ticket` | work, conductor | `{ key }` → `startTicket` (any ticket, not only children). While the ticket's planning run is going it approves the plan instead and the work starts when the run ends |
 | `message_ticket` | work, conductor, chat | `{ key, text }` → `sendMessage`, as a human message (never with `move`: the ticket stays in its column and its agent moves it) |
 | `cancel_ticket` | work, conductor | `{ key }` → `cancelTicket` (abort the active run, drop queued runs) |

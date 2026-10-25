@@ -213,6 +213,11 @@ final class ScreenTests: ScreenTestCase {
         try await screen("ticket-children", router: ticket("HARNESS-8", .children)) { RootView() }
     }
 
+    /// HARNESS-8's Events tab: what woke the conductor (a child's change, a subscription), listed with the Inbox's rows.
+    func testTicketEvents() async throws {
+        try await screen("ticket-events", router: ticket("HARNESS-8", .events)) { RootView() }
+    }
+
     /// HARNESS-9, a child of HARNESS-8 pushed onto its sheet: the glass Back circle and the "Part of" row.
     func testTicketChild() async throws {
         let router = ticket("HARNESS-8", .children)
