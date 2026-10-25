@@ -121,6 +121,13 @@ public enum BrowserIdleTabs {
     public static let maxMinutes = 1440
 }
 
+/// `DEFAULT_EVENT_RETENTION_DAYS` / `MAX_EVENT_RETENTION_DAYS`: Settings.eventRetentionDays when unset,
+/// and its upper bound (a year).
+public enum EventRetention {
+    public static let defaultDays = 7
+    public static let maxDays = 365
+}
+
 /// `Omit<Settings, "anthropicApiKey" | "claudeOauthToken" | "copilotGithubToken"> & {
 /// anthropicApiKeySet: boolean; claudeOauthTokenSet?: boolean; copilotGithubTokenSet?: boolean }`: what GET /settings and the settings.updated event send.
 public struct PublicSettings: Codable, Sendable, Equatable {
@@ -211,6 +218,9 @@ public struct PublicSettings: Codable, Sendable, Equatable {
 
     /// browserIdleTabMinutes, or the default when an older service doesn't send it.
     public var idleTabMinutes: Int { browserIdleTabMinutes ?? BrowserIdleTabs.defaultMinutes }
+
+    /// eventRetentionDays, or the default when an older service doesn't send it.
+    public var retentionDays: Int { eventRetentionDays ?? EventRetention.defaultDays }
 
     /// The override for one prompt, or nil when the built-in is used.
     public func promptOverride(_ id: PromptId) -> String? {

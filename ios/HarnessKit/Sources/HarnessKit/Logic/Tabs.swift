@@ -9,9 +9,10 @@ import Foundation
 /// "spec" is the ticket's living document and the tab a ticket opens on; "activity" its typed
 /// timeline. "children" is the conductor-only Tickets tab (listed right after Activity). "agents"
 /// (Agents & tasks) lists the session's sub-agents and background tasks; it exists only once there
-/// are any.
+/// are any. "events" lists the events aimed at the ticket; it exists only once the ticket has some
+/// (`Ticket.hasEvents`).
 public enum BuiltinTicketTab: String, Codable, Sendable, CaseIterable {
-    case spec, activity, children, transcript, agents, browser, details
+    case spec, activity, children, transcript, agents, events, browser, details
 }
 
 /// Built-in tabs, a plugin tab as "plugin:<pluginId>:<tabId>", or a sub-agent as "agent:<id>".
@@ -45,6 +46,7 @@ public struct TicketTab: RawRepresentable, Codable, Sendable, Hashable, Expressi
     public static let children = TicketTab(.children)
     public static let transcript = TicketTab(.transcript)
     public static let agents = TicketTab(.agents)
+    public static let events = TicketTab(.events)
     public static let browser = TicketTab(.browser)
     public static let details = TicketTab(.details)
 }
@@ -79,6 +81,7 @@ public enum Tabs {
         .children: "Tickets",
         .transcript: "Transcript",
         .agents: "Agents & tasks",
+        .events: "Events",
         .browser: "Browser",
         .details: "Details",
     ]
@@ -159,12 +162,14 @@ public enum Tabs {
     }
 
     /// The tab to show for a requested one: a plugin tab that doesn't apply (once the ticket's plugin
-    /// tabs are known) and the conductor-only Tickets tab on a plain ticket fall back to the Spec.
+    /// tabs are known) and the conductor-only Tickets tab on a plain ticket fall back to the Spec, and
+    /// so does Events on a ticket without events.
     /// The Agents & tasks tab and a sub-agent's view need sub-agents: without any (or before they're known)
     /// they fall back to the Spec, and a sub-agent that isn't among them falls back to the list.
     /// The requested tab is kept by the caller, so a deep link opens once the sub-agents arrive.
-    public static func effectiveTab(_ requested: TicketTab, conductor: Bool, pluginTabs: [PluginTabID]?, subagentIds: [String]? = nil) -> TicketTab {
+    public static func effectiveTab(_ requested: TicketTab, conductor: Bool, pluginTabs: [PluginTabID]?, subagentIds: [String]? = nil, events: Bool = false) -> TicketTab {
         if requested == .children && !conductor { return .spec }
+        if requested == .events && !events { return .spec }
         if tabStripTab(requested) == .agents {
             guard let subagentIds, showsAgentsTab(subagentIds: subagentIds) else { return .spec }
             if let agent = parseSubagentTab(requested), !subagentIds.contains(where: { same($0, agent) }) { return .agents }
@@ -176,8 +181,8 @@ public enum Tabs {
         return requested
     }
 
-    public static func effectiveTab(_ requested: TicketTab, conductor: Bool, pluginTabs: [PluginTab]?, subagents: [Subagent]? = nil) -> TicketTab {
-        effectiveTab(requested, conductor: conductor, pluginTabs: pluginTabs?.map(PluginTabID.init), subagentIds: subagents?.map(\.id))
+    public static func effectiveTab(_ requested: TicketTab, conductor: Bool, pluginTabs: [PluginTab]?, subagents: [Subagent]? = nil, events: Bool = false) -> TicketTab {
+        effectiveTab(requested, conductor: conductor, pluginTabs: pluginTabs?.map(PluginTabID.init), subagentIds: subagents?.map(\.id), events: events)
     }
 
     /// The tab a ticket opens on when nothing asked for a particular one: the Spec, which every
@@ -185,14 +190,14 @@ public enum Tabs {
     public static func openingTab() -> TicketTab { .spec }
 
     /// The tab strip, in order: the built-in tabs this ticket shows (Tickets only on a conductor, Agents &
-    /// tasks only once there are sub-agents or tasks), then its plugin tabs. ⌘⇧[ / ⌘⇧] and 1–9 walk this list.
-    public static func visibleTabs(conductor: Bool, subagentIds: [String]? = nil, pluginTabs: [PluginTabID]? = nil) -> [TicketTab] {
-        let builtin = ticketTabs.filter { ($0 != .children || conductor) && ($0 != .agents || showsAgentsTab(subagentIds: subagentIds)) }
+    /// tasks only once there are sub-agents or tasks, Events only once there are events), then its plugin tabs. ⌘⇧[ / ⌘⇧] and 1–9 walk this list.
+    public static func visibleTabs(conductor: Bool, subagentIds: [String]? = nil, pluginTabs: [PluginTabID]? = nil, events: Bool = false) -> [TicketTab] {
+        let builtin = ticketTabs.filter { ($0 != .children || conductor) && ($0 != .agents || showsAgentsTab(subagentIds: subagentIds)) && ($0 != .events || events) }
         return builtin.map(TicketTab.init) + (pluginTabs ?? []).map { pluginTabRoute($0.pluginId, $0.id) }
     }
 
-    public static func visibleTabs(conductor: Bool, subagents: [Subagent]?, pluginTabs: [PluginTab]?) -> [TicketTab] {
-        visibleTabs(conductor: conductor, subagentIds: subagents?.map(\.id), pluginTabs: pluginTabs?.map(PluginTabID.init))
+    public static func visibleTabs(conductor: Bool, subagents: [Subagent]?, pluginTabs: [PluginTab]?, events: Bool = false) -> [TicketTab] {
+        visibleTabs(conductor: conductor, subagentIds: subagents?.map(\.id), pluginTabs: pluginTabs?.map(PluginTabID.init), events: events)
     }
 
     /// The tab `delta` steps from `current` in `tabs`, wrapping at both ends (like Chrome's ⌘⇧]). A

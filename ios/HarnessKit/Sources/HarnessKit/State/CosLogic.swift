@@ -66,11 +66,11 @@ public struct CosState: Equatable, Sendable {
         return hole
     }
 
-    /// The Inbox twin of `loadNewestChat`: drops the chief's loaded rows (and the unassigned ones)
-    /// when the newest page leaves a hole above them.
+    /// The events twin of `loadNewestChat`: drops the ticket's loaded rows (and, for a chief's Inbox,
+    /// the unassigned ones) when the newest page leaves a hole above them.
     @discardableResult
-    public mutating func loadNewestEvents(_ cosId: String, _ page: [TicketEvent], hasOlder: Bool) -> Bool {
-        let own = events.values.filter { $0.cosId == cosId || $0.cosId == nil }
+    public mutating func loadNewestEvents(_ ticketId: String, _ page: [TicketEvent], hasOlder: Bool, chief: Bool = true) -> Bool {
+        let own = events.values.filter { $0.targetId == ticketId || (chief && $0.targetId == nil) }
         let hole = hasOlder && !own.isEmpty && !page.contains { events[$0.id] != nil }
         if hole {
             let newest = page.map(\.createdAt).max() ?? 0
@@ -87,8 +87,15 @@ public struct CosState: Equatable, Sendable {
 
     /// The rows a chief's Inbox shows: its own events and the unassigned ones, newest first. Rows its
     /// own rules dropped (filtered) stay out, except a reminder: it went to the person, so it shows.
-    public func inbox(_ cosId: String) -> [TicketEvent] {
-        CosLogic.mergeEvents([], events.values.filter { ($0.cosId == cosId || $0.cosId == nil) && ($0.verdict != .filtered || $0.sourceKind == .schedule) })
+    public func inbox(_ cosId: String) -> [TicketEvent] { rows(ticketId: cosId, chief: true) }
+
+    /// The rows of an events list, newest first: a chief's Inbox (`chief`) is its own events and the
+    /// unassigned ones; any other ticket's Events tab is the events aimed at it. Rows a coded rule
+    /// dropped (filtered) stay out of both, except a reminder in the Inbox.
+    public func rows(ticketId: String, chief: Bool) -> [TicketEvent] {
+        CosLogic.mergeEvents([], events.values.filter {
+            ($0.targetId == ticketId || (chief && $0.targetId == nil)) && ($0.verdict != .filtered || (chief && $0.sourceKind == .schedule))
+        })
     }
 }
 
@@ -108,6 +115,19 @@ public enum CosTab: String, CaseIterable, Sendable, Hashable {
 /// What an Inbox row says happened to the event, in a word.
 public enum CosInboxState: String, Sendable {
     case waiting, ignored, escalated, handling, acted, noAction, needsUser, reviewed, filtered
+
+    /// What the row says: in a chief's Inbox (`chief`) a verdict; in a ticket's Events tab, where no
+    /// chief judges the rows, how far delivery has come.
+    public func label(chief: Bool) -> String {
+        if chief { return label }
+        switch self {
+        case .waiting: return "Waiting to be delivered"
+        case .escalated: return "Queued for the ticket"
+        case .handling: return "In the ticket's run"
+        case .acted, .noAction, .needsUser, .reviewed: return "Delivered"
+        case .ignored, .filtered: return label
+        }
+    }
 
     public var label: String {
         switch self {

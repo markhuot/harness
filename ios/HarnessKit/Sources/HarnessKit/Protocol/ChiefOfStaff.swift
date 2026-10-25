@@ -110,11 +110,11 @@ public struct Cos: Codable, Sendable, Equatable, Identifiable {
     }
 }
 
-/// One row of a chief's Inbox (GET /cos/:id/events).
+/// One event: a row of a ticket's Events tab, or of a chief's Inbox (GET /tickets/:key/events).
 public struct TicketEvent: Codable, Sendable, Equatable, Identifiable {
     public var id: String
-    /// The chief that owns it; nil while no chief qualifies (unassigned)
-    @Nullable public var cosId: String?
+    /// The ticket the event wakes (a chief's id for the chief's own rows); nil while no chief qualifies (unassigned)
+    @Nullable public var targetId: String?
     @Nullable public var projectKey: String?
     public var sourceKind: TicketEventSource
     public var title: String
@@ -136,12 +136,12 @@ public struct TicketEvent: Codable, Sendable, Equatable, Identifiable {
     public var createdAt: Timestamp
 
     public init(
-        id: String, cosId: String? = nil, projectKey: String? = nil, sourceKind: TicketEventSource = .activity, title: String, summary: String = "",
+        id: String, targetId: String? = nil, projectKey: String? = nil, sourceKind: TicketEventSource = .activity, title: String, summary: String = "",
         actor: String = "agent", status: TicketEventStatus = .pending, verdict: TicketEventVerdict = .pending, reason: String? = nil, model: String? = nil,
         ticketKey: String? = nil, wakeId: String? = nil, handledBy: String? = nil, outcome: CosOutcome? = nil, triageSessionId: String? = nil, createdAt: Timestamp
     ) {
         self.id = id
-        self.cosId = cosId
+        self.targetId = targetId
         self.projectKey = projectKey
         self.sourceKind = sourceKind
         self.title = title
@@ -160,7 +160,7 @@ public struct TicketEvent: Codable, Sendable, Equatable, Identifiable {
     }
 }
 
-/// GET /cos/:id/events
+/// GET /tickets/:key/events
 public struct TicketEventPage: Codable, Sendable, Equatable {
     public var items: [TicketEvent]
     @Nullable public var nextCursor: String?
@@ -338,7 +338,7 @@ public enum CosBusEvent: Codable, Sendable, Equatable {
 
     /// The CoS event an unknown `HarnessEvent` carries, or nil for any other event.
     public init?(event: HarnessEvent) {
-        guard case let .unknown(kind, raw) = event, kind.hasPrefix("cos."),
+        guard case let .unknown(kind, raw) = event, kind.hasPrefix("cos.") || kind == "ticket.event.upserted",
               let data = try? JSONEncoder().encode(raw),
               let decoded = try? JSONDecoder().decode(CosBusEvent.self, from: data)
         else { return nil }

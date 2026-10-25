@@ -43,7 +43,8 @@ import HarnessKit
         _ = try decode(CosBadge.self, try #require(Self.world()["cosBadge"]))
         _ = try decode(CosMemory.self, try #require(Self.world()["cosMemory"]))
         #expect(Set(events.map(\.status)) == Set(TicketEventStatus.allKnown).subtracting([.triaging]), "the world's Inbox shows every state a row can rest in (triaging reads like pending)")
-        #expect(Set(events.compactMap(\.cosId)).isSubset(of: Set(chiefs.map(\.ticketId))))
+        #expect(Set(events.compactMap(\.targetId)).isSubset(of: Set(chiefs.map(\.ticketId)).union(tickets.map(\.id))), "every event is aimed at a chief or a ticket the world has")
+        #expect(Set(events.filter { $0.sourceKind == .child || $0.sourceKind == .subscription }.compactMap(\.targetId)) == Set(tickets.filter { $0.hasEvents == true }.map(\.id)), "a ticket shows an Events tab exactly when something is aimed at it")
         #expect(projects.contains { $0.cosEnabled == .value(false) }, "a project with its chief switched off")
     }
 

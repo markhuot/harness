@@ -3,7 +3,7 @@ import Testing
 import HarnessKit
 
 private func event(_ id: String, cos: String? = "c1", status: TicketEventStatus = .pending, verdict: TicketEventVerdict = .pending, at: Double = 0, reason: String? = nil, source: TicketEventSource = .activity) -> TicketEvent {
-    TicketEvent(id: id, cosId: cos, sourceKind: source, title: id, status: status, verdict: verdict, reason: reason, createdAt: at)
+    TicketEvent(id: id, targetId: cos, sourceKind: source, title: id, status: status, verdict: verdict, reason: reason, createdAt: at)
 }
 
 private func message(_ id: String, at: Double, text: String = "hi", role: String = "assistant") -> CosChatEntry {
@@ -63,7 +63,7 @@ private func project(_ id: String, group: String?) -> Project {
 
     @Test func aHandledRowShowsTheChiefsOutcomeAndOneWithoutIsOnlyReviewed() {
         func handled(_ kind: CosOutcomeKind?) -> TicketEvent {
-            TicketEvent(id: "a", cosId: "c1", title: "a", status: .handled, verdict: .escalate, outcome: kind.map { CosOutcome(kind: $0, text: "text for \($0.rawValue)") }, createdAt: 0)
+            TicketEvent(id: "a", targetId: "c1", title: "a", status: .handled, verdict: .escalate, outcome: kind.map { CosOutcome(kind: $0, text: "text for \($0.rawValue)") }, createdAt: 0)
         }
         #expect(CosLogic.inboxState(handled(.acted)) == .acted)
         #expect(CosLogic.inboxState(handled(.noAction)) == .noAction)
@@ -330,9 +330,9 @@ private func project(_ id: String, group: String?) -> Project {
         let appended: HarnessEvent = try decode(#"{"kind":"cos.transcript.appended","cosId":"c1","entry":{"id":"m","cosId":"c1","createdAt":1,"kind":"message","role":"user","text":"hi"}}"#)
         #expect(CosBusEvent(event: appended) == .transcriptAppended(cosId: "c1", entry: .message(id: "m", cosId: "c1", createdAt: 1, role: "user", text: "hi")))
 
-        let upserted: HarnessEvent = try decode(#"{"kind":"ticket.event.upserted","event":{"id":"e","cosId":null,"projectKey":null,"sourceKind":"watcher","title":"t","summary":"","actor":"watcher:jira","status":"ignored","verdict":"ignore","reason":"noise","model":null,"ticketKey":null,"wakeId":null,"handledBy":null,"createdAt":1}}"#)
+        let upserted: HarnessEvent = try decode(#"{"kind":"ticket.event.upserted","event":{"id":"e","targetId":null,"projectKey":null,"sourceKind":"watcher","title":"t","summary":"","actor":"watcher:jira","status":"ignored","verdict":"ignore","reason":"noise","model":null,"ticketKey":null,"wakeId":null,"handledBy":null,"createdAt":1}}"#)
         guard case let .eventUpserted(e)? = CosBusEvent(event: upserted) else { Issue.record("not an upserted event"); return }
-        #expect(e.cosId == nil)
+        #expect(e.targetId == nil)
         #expect(e.status == .ignored)
         #expect(e.sourceKind == .watcher)
     }
@@ -373,7 +373,7 @@ private func project(_ id: String, group: String?) -> Project {
     }
 
     private func event(_ id: String, status: TicketEventStatus, verdict: TicketEventVerdict = .pending) -> TicketEvent {
-        TicketEvent(id: id, cosId: "c1", title: id, status: status, verdict: verdict, createdAt: 0)
+        TicketEvent(id: id, targetId: "c1", title: id, status: status, verdict: verdict, createdAt: 0)
     }
 
     private func message(_ id: String, at: Double) -> CosChatEntry {

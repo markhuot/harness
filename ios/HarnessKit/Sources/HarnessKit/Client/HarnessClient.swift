@@ -433,9 +433,9 @@ public final class HarnessClient: Sendable {
         try await request("POST", "/cos", body: OpenCosBody(scope: scope))
     }
 
-    /// A chief's Inbox, newest first; `before` is the previous page's `nextCursor`.
-    public func ticketEvents(_ id: String, before: String? = nil, limit: Int? = nil) async throws -> TicketEventPage {
-        try await request("GET", "/cos/\(id)/events\(Query.build([("before", .str(before)), ("limit", .int(limit))]))")
+    /// A ticket's events (a chief's Inbox, for a chief), newest first; `before` is the previous page's `nextCursor`.
+    public func ticketEvents(_ key: String, before: String? = nil, limit: Int? = nil) async throws -> TicketEventPage {
+        try await request("GET", "/tickets/\(key)/events\(Query.build([("before", .str(before)), ("limit", .int(limit))]))")
     }
 
     public func cosBadge() async throws -> CosBadge {

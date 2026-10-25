@@ -66,17 +66,17 @@ public enum ChangesTab {
 
     /// Tabs.effectiveTab with the built-in Changes tab: shown while it applies (and while the plugin
     /// tabs that could say it does aren't loaded yet), else the Spec.
-    public static func effectiveTab(_ requested: TicketTab, conductor: Bool, workdir: String?, pluginTabs: [PluginTab]?, subagents: [Subagent]? = nil) -> TicketTab {
+    public static func effectiveTab(_ requested: TicketTab, conductor: Bool, workdir: String?, pluginTabs: [PluginTab]?, subagents: [Subagent]? = nil, events: Bool = false) -> TicketTab {
         let tab = normalize(requested)
         if tab == .changes {
             return shows(workdir: workdir, pluginTabs: pluginTabs) || pluginTabs == nil ? .changes : .spec
         }
-        return Tabs.effectiveTab(tab, conductor: conductor, pluginTabs: otherPluginTabs(pluginTabs), subagents: subagents)
+        return Tabs.effectiveTab(tab, conductor: conductor, pluginTabs: otherPluginTabs(pluginTabs), subagents: subagents, events: events)
     }
 
     /// Tabs.visibleTabs with Changes after Browser, ahead of Details.
-    public static func visibleTabs(conductor: Bool, workdir: String?, subagents: [Subagent]?, pluginTabs: [PluginTab]?) -> [TicketTab] {
-        var tabs = Tabs.visibleTabs(conductor: conductor, subagents: subagents, pluginTabs: otherPluginTabs(pluginTabs))
+    public static func visibleTabs(conductor: Bool, workdir: String?, subagents: [Subagent]?, pluginTabs: [PluginTab]?, events: Bool = false) -> [TicketTab] {
+        var tabs = Tabs.visibleTabs(conductor: conductor, subagents: subagents, pluginTabs: otherPluginTabs(pluginTabs), events: events)
         if shows(workdir: workdir, pluginTabs: pluginTabs), let i = tabs.firstIndex(of: .details) { tabs.insert(.changes, at: i) }
         return tabs
     }
