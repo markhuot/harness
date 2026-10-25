@@ -1142,13 +1142,24 @@ automatically; while any child isn't done, a run that ends without submitting le
 progress, and `submit_for_review` is refused (a parent in review or done would strand children
 whose reviews and merges are its job).
 
-Child changes reach the parent in one of two ways (`flushConductor`). A parent with no run going
-gets one run, with every buffered change in it. A parent whose run is still going (it may sit for
-hours waiting on a background task) gets the changes pushed into that run through the run's input,
-after a short debounce (`liveDebounceMs`, default 1s) so a burst is one message; the push is
-recorded in the run's transcript, not queued as a run. When the run can't take input (its driver
-has none, or it is cancelled or ending) the changes stay buffered and `afterRun` flushes them. The
-buffer also waits while the parent isn't in progress.
+Child changes reach the parent as rows of `ticket_events` (`source_kind` `child`, `target_id` the parent, `source_ref`
+the activity entry that recorded the change, `ticket_id` the child). `notifyConductor` inserts one synchronously where the
+change happens, with the facts at event time in `payload` (from, to, note, spec revision, title); the key is read from
+the child's ticket at delivery, so a project rename needs no fix-up, and the payload's copy stands in for a child deleted
+since. The ticket feed's `EventDelivery` instance (scope `ticket`, separate from the chief's, which never reads these
+kinds) delivers them. The gate (`deliverable`) holds the rows while the parent isn't in progress, a run is queued for it,
+or its live run is cancelled, can't take input or is another kind than its work. Otherwise, a parent with no run going
+gets one run (`workKind`) carrying the waiting changes, and a parent whose run is still going (it may sit for hours
+waiting on a background task) gets them pushed into that run through its input, after a short debounce
+(`liveDebounceMs`, default 1s, measured from the oldest waiting row, and only when a run is live) so a burst is one
+message; the push is recorded in the run's transcript, not queued as a run, and settles the rows at once. A run that
+was queued settles them when it ends. Moves of one child that wait together collapse to its latest status (a ticket
+that ended where it started is dropped), a wake carries at most 40 rows, and a parent is woken at most 60 times per 5
+minutes (`CHILD_EVENT_WAKE_CAP`). `afterRun` and a move to in progress deliver what was held, and the restart sweep (run
+after interrupted runs are failed and restarts resumed, so a resumed run and a wake never both start) settles rows
+whose wake died with the process and delivers the rest: a held update survives a restart. A wake whose run fails or is
+cancelled goes back to waiting (3 tries, then the rows close with the reason) and backs off before the next try. A row for
+a ticket that is done or deleted is closed `ignored` with the reason.
 
 ### Ticket subscriptions
 
@@ -1160,22 +1171,25 @@ to be woken when it changes, instead of waiting with a shell `sleep` (no prompt 
 `list_subscriptions` complete the set. A parent is an implicit subscriber to its children's status
 changes (no row, so it can't drift); subscribing to your own child's status is refused.
 
-Delivery reuses the parent's path: `notifySubscribers` (called from `transition`, the review
-approval and `addActivity` for notes and spec revisions) buffers a change for the subscriber, and
-`flushConductor` pushes it into its live run or starts a run with `ticketEventsPrompt`. Guard rails:
-a change the subscriber's own tool call caused is skipped (`callerContext`, set around every run's
-tool calls and cleared again when a queued run starts, so a run the call queued isn't "its" change); a
-subscriber is woken at most 8 times per 5 minutes (`SUBSCRIPTION_WAKE_LIMIT`, counted per delivered
-message; the same limit as `EVENT_WAKE_CAP`, which the subscription path moves onto when it uses `EventDelivery`), so two tickets subscribed to each other can't loop, and events past the limit stay buffered
-and arrive together once the window has room; and a subscriber's rows are deleted when its ticket
-leaves in progress and blocked, or its runs are cancelled (an event must not restart an agent someone
-stopped). A ticket that ends its turn with a subscription on a ticket that isn't done, or with an
-event still buffered, isn't auto-submitted, since it is waiting for events: it calls
-`submit_for_review` when it is done. A done ticket can't be subscribed to, and its subscribers' rows
-are dropped once they have heard it is done, so no ticket waits on something that can't change.
+Delivery is the parent's path above, with rows of `source_kind` `subscription` (`target_id` the subscriber). Guard rails:
+`notifySubscribers` (called from `transition`, the review approval and `addActivity` for notes and spec revisions) writes
+the row at insert time, where `callerContext` (set around every run's tool calls and cleared again when a queued run
+starts, so a run the call queued isn't "its" change) can still tell who caused the change: a change the subscriber's own
+tool call caused gets no row. A `once` subscription is deleted in the same transaction as its row. A parent doesn't get a
+subscription row for a change it already gets as a `child` row: one change reaches a ticket once, whichever way it
+subscribed (the store's `insert` checks the target and `source_ref` across the two kinds). A subscriber is woken at most 8
+times per 5 minutes (`EVENT_WAKE_CAP`, counted per delivered wake from the `event_wakes` log, so it holds across a
+restart); rows past the limit stay stored and arrive together, collapsed, once the window has room, so two tickets
+subscribed to each other can't loop. A subscriber's rows are deleted when its ticket leaves in progress and blocked, or
+its runs are cancelled (an event must not restart an agent someone stopped). A ticket that ends its turn with a
+subscription on a ticket that isn't done, or with a subscription row still waiting, isn't auto-submitted, since it is
+waiting for events: it calls `submit_for_review` when it is done. A done ticket can't be subscribed to, and its
+subscribers' rows are dropped once they have heard it is done, so no ticket waits on something that can't change.
 
-The events table these changes will be written to is `ticket_events` (`source_kind` `subscription`, `child`; `target_id` the
-subscriber, `source_ref` the activity id), so one activity is one row per ticket it wakes. Delivery above still uses the buffer until that lands.
+Explicit subscription and child rows skip the chief's triage and rehoming: the chief's engine and its Inbox only read
+`activity`, `watcher` and `schedule` rows (the store's scope), and the ticket feed only the other two. The rows show in
+the target's own `list_inbox`. Wakes of the two feeds are told apart in the wake log by event class (`child`,
+`subscription`; the chief's is empty), so a chief that is also a parent or subscriber keeps its chat cards to its own events.
 
 ### Watchers
 

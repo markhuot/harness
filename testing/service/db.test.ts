@@ -278,7 +278,9 @@ test("ticket_events dedupes a source once without a target and once per target w
   expect(store.ticketEvents.insert({ ...base, sourceKind: "subscription", sourceRef: "a1", targetId: "T1" })).not.toBeNull();
   expect(store.ticketEvents.insert({ ...base, sourceKind: "subscription", sourceRef: "a1", targetId: "T2" })).not.toBeNull();
   expect(store.ticketEvents.insert({ ...base, sourceKind: "subscription", sourceRef: "a1", targetId: "T1" })).toBeNull();
-  expect(store.ticketEvents.insert({ ...base, sourceKind: "child", sourceRef: "a1", targetId: "T1" })).not.toBeNull();
+  // The same change reaches a ticket once, whether as its parent or as a subscriber.
+  expect(store.ticketEvents.insert({ ...base, sourceKind: "child", sourceRef: "a1", targetId: "T1" })).toBeNull();
+  expect(store.ticketEvents.insert({ ...base, sourceKind: "child", sourceRef: "a1", targetId: "T3" })).not.toBeNull();
 });
 
 test("a chief of staff row's target follows its owner, and a repeat of its source still dedupes after triage rehomes it", () => {

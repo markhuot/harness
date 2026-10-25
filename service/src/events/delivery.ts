@@ -11,7 +11,7 @@
 import type { WakeCap } from "@harness/shared";
 import { EVENT_WAKE_CAP, collapseMoves, nextWakeAllowedAt } from "@harness/shared";
 import type { Store } from "../store";
-import type { StoredTicketEvent } from "../store/ticket-events";
+import type { EventScope, StoredTicketEvent } from "../store/ticket-events";
 import { renderEventsPrompt } from "./render";
 
 export interface Timers {
@@ -34,6 +34,9 @@ export const WAKE_MAX_EVENTS = 40;
 export const WAKE_MAX_ATTEMPTS = 3;
 /** Ready rows wait this long, so a burst of live pushes goes out as one. */
 export const DELIVERY_DEBOUNCE_MS = 1000;
+/** A target whose wake failed (a throw, a failed or cancelled run) isn't woken again for this long, doubling per failure up to the max, so it can't spin. */
+export const WAKE_RETRY_BACKOFF_MS = 5_000;
+export const WAKE_RETRY_BACKOFF_MAX_MS = 60_000;
 /** The prune runs this often (and once at start), so an idle service still applies the retention. */
 export const PRUNE_EVERY_MS = 60 * 60_000;
 
@@ -66,6 +69,8 @@ export interface EventDeliveryDeps {
   /** How a wake reads, with the digest the wake log keeps; the default fences every event's text. */
   render?(targetId: string, events: StoredTicketEvent[], more: number): { text: string; digest?: string };
   timers?: Timers;
+  /** Which rows this instance delivers: the chief of staff's (default) or the ticket feed's (subscription and child rows). Two instances never touch each other's rows. */
+  scope?: EventScope;
   /** Whether the target still exists. A ready row whose target is gone goes to `onTargetGone`. */
   targetExists?(targetId: string): boolean;
   onTargetGone?(e: StoredTicketEvent): void;
@@ -74,8 +79,8 @@ export interface EventDeliveryDeps {
   /** Which cap a row counts against, and what it is. A mixed batch carries each class under its own cap. */
   classOf?(e: StoredTicketEvent): string;
   capOf?(eventClass: string): WakeCap;
-  /** Debounce before a ready row goes out (default DELIVERY_DEBOUNCE_MS) */
-  debounceMs?: number;
+  /** Debounce before a ready row goes out (default DELIVERY_DEBOUNCE_MS); a function sets it per target (a ticket with no run going has nothing to batch into) */
+  debounceMs?: number | ((targetId: string) => number);
   /** Whether a push into a live run settles its rows at once (default true). The chief's rows wait for its outcomes and the run's end. */
   settleOnPush?(targetId: string): boolean;
   /** Names the target's run in the reason a row is closed with ("the chief's run") */
@@ -99,8 +104,8 @@ export class EventDelivery {
   private stopped = true;
   /** Targets with a wake being handed over now: a second deliver would send the same events again */
   private delivering = new Set<string>();
-  /** Targets whose run failed in this tick: they don't get their events again in the same pass */
-  private failedThisTick = new Set<string>();
+  /** Targets whose last wake failed: not before this time, and how many failures in a row (the backoff doubles) */
+  private backoff = new Map<string, { until: number; failures: number }>();
   private lastPrune = 0;
   private ticking: Promise<void> | null = null;
   private tickAgain = false;
@@ -113,6 +118,11 @@ export class EventDelivery {
   // -------------------------------------------------------------------------
   // Lifecycle
   // -------------------------------------------------------------------------
+
+  /** Deliver from now on, without the start-up work: for a caller whose rows come from its own call sites, which can fire before `start()`. */
+  activate() {
+    this.stopped = false;
+  }
 
   /** Prune, then settle what a crash left mid-flight. The caller arms the timer once its own start-up is done. */
   start() {
@@ -134,6 +144,20 @@ export class EventDelivery {
   // -------------------------------------------------------------------------
   // Delivery
   // -------------------------------------------------------------------------
+
+  private debounceOf(targetId: string): number {
+    const d = this.d.debounceMs ?? DELIVERY_DEBOUNCE_MS;
+    return typeof d === "function" ? d(targetId) : d;
+  }
+
+  private get scope(): EventScope {
+    return this.d.scope ?? "chief";
+  }
+
+  private failed(targetId: string) {
+    const failures = (this.backoff.get(targetId)?.failures ?? 0) + 1;
+    this.backoff.set(targetId, { failures, until: this.d.now() + Math.min(WAKE_RETRY_BACKOFF_MS * 2 ** (failures - 1), WAKE_RETRY_BACKOFF_MAX_MS) });
+  }
 
   private capOf(eventClass: string): WakeCap {
     return this.d.capOf?.(eventClass) ?? EVENT_WAKE_CAP;
@@ -171,7 +195,7 @@ export class EventDelivery {
 
   /** Wake `targetId` with its ready rows, unless it is gated, debouncing or over its cap; what is held goes in one later wake. */
   async deliver(targetId: string) {
-    if (this.stopped || this.delivering.has(targetId) || this.failedThisTick.has(targetId)) return;
+    if (this.stopped || this.delivering.has(targetId)) return;
     this.delivering.add(targetId);
     try {
       await this.deliverNow(targetId);
@@ -183,11 +207,16 @@ export class EventDelivery {
   private async deliverNow(targetId: string) {
     const { store } = this.d;
     if (this.d.open && !this.d.open(targetId)) return;
-    const waiting = store.ticketEvents.byTarget("escalated", targetId);
-    if (!waiting.length) return;
     const now = this.d.now();
-    const debounce = this.d.debounceMs ?? DELIVERY_DEBOUNCE_MS;
-    const ripe = this.collapse(waiting.filter((e) => now - e.updatedAt >= debounce));
+    if ((this.backoff.get(targetId)?.until ?? 0) > now) return;
+    const waiting = store.ticketEvents.byTarget("escalated", targetId, this.scope);
+    if (!waiting.length) return;
+    const debounce = this.debounceOf(targetId);
+    // A burst goes out as one wake: a class is ripe once its oldest row has waited the debounce, and then carries everything that arrived.
+    const oldest = new Map<string, number>();
+    for (const e of waiting) oldest.set(this.classOf(e), Math.min(oldest.get(this.classOf(e)) ?? Infinity, e.createdAt));
+    const ripeRows = waiting.filter((e) => now - oldest.get(this.classOf(e))! >= debounce);
+    const ripe = this.collapse(ripeRows);
     const capped = new Map<string, boolean>();
     const allowed = ripe.filter((e) => {
       const cls = this.classOf(e);
@@ -196,7 +225,8 @@ export class EventDelivery {
     });
     const events = allowed.slice(0, WAKE_MAX_EVENTS);
     if (!events.length) return;
-    const more = waiting.length - events.length;
+    // Rows the collapse merged away are gone, not waiting.
+    const more = waiting.length - (ripeRows.length - ripe.length) - events.length;
     const { text, digest } = this.d.render ? this.d.render(targetId, events, more) : { text: renderEventsPrompt(events, more), digest: undefined };
     let result: DeliveryResult;
     try {
@@ -204,8 +234,10 @@ export class EventDelivery {
     } catch (err) {
       // Nothing was handed over: no wake is charged to the cap.
       this.d.log(`events: couldn't wake ${targetId}: ${err instanceof Error ? err.message : String(err)}`);
+      this.failed(targetId);
       return;
     }
+    this.backoff.delete(targetId);
     const settleNow = !!result.live && (this.d.settleOnPush?.(targetId) ?? true);
     // One wake-log row per class, so each class's cap counts only its own events.
     const byClass = new Map<string, StoredTicketEvent[]>();
@@ -215,6 +247,9 @@ export class EventDelivery {
       // A conductor's run can live for hours: a later cancel mustn't redeliver what the agent already read.
       for (const e of rows) this.patch(e.id, { status: settleNow ? "handled" : "handling", wakeId, consumingRunId: result.runId });
     }
+    // A run that ended before its rows were marked is settled now, not at the next tick.
+    const ended = !settleNow && result.runId ? this.d.runStatus(result.runId) : null;
+    if (result.runId && (ended === "succeeded" || ended === "failed" || ended === "cancelled")) this.runEnded(result.runId, ended);
     this.d.changed?.();
   }
 
@@ -224,9 +259,9 @@ export class EventDelivery {
 
   /** A run ended: a run that finished handled its events; one that failed or was cancelled didn't, so they go back to waiting. */
   runEnded(runId: string, status: string): number {
-    const events = this.d.store.ticketEvents.byRun(runId, "handling");
+    const events = this.d.store.ticketEvents.byRun(runId, "handling", this.scope);
     for (const e of events) this.settle(e, status);
-    for (const w of this.d.store.ticketEvents.openWakes()) if (w.runId === runId) this.settleWake(w, status);
+    for (const w of this.d.store.ticketEvents.openWakes(this.scope)) if (w.runId === runId) this.settleWake(w, status);
     if (events.length) this.d.changed?.();
     this.arm();
     return events.length;
@@ -248,7 +283,7 @@ export class EventDelivery {
       return;
     }
     // A target whose runs keep failing isn't woken forever: after a few tries the event is closed with the reason.
-    if (e.targetId) this.failedThisTick.add(e.targetId);
+    if (e.targetId) this.failed(e.targetId);
     const attempts = (typeof e.payload.wakeAttempts === "number" ? e.payload.wakeAttempts : 0) + 1;
     if (attempts >= WAKE_MAX_ATTEMPTS) {
       const run = (e.targetId && this.d.describeRun?.(e.targetId)) || "The run for this ticket";
@@ -264,7 +299,7 @@ export class EventDelivery {
   sweep() {
     const { store } = this.d;
     let changed = false;
-    for (const e of store.ticketEvents.byStatus("handling")) {
+    for (const e of store.ticketEvents.byStatus("handling", undefined, this.scope)) {
       const status = e.consumingRunId ? this.d.runStatus(e.consumingRunId) : null;
       if (status === "queued" || status === "running") continue;
       if (e.targetId && this.d.targetExists && !this.d.targetExists(e.targetId)) {
@@ -273,7 +308,7 @@ export class EventDelivery {
       } else this.settle(e, status ?? "missing");
       changed = true;
     }
-    for (const w of store.ticketEvents.openWakes()) {
+    for (const w of store.ticketEvents.openWakes(this.scope)) {
       const status = w.runId ? this.d.runStatus(w.runId) : null;
       if (status === "queued" || status === "running") continue;
       this.settleWake(w, status ?? "missing");
@@ -307,7 +342,6 @@ export class EventDelivery {
   }
 
   private async runDue() {
-    this.failedThisTick.clear();
     this.sweep();
     if (this.d.now() - this.lastPrune >= PRUNE_EVERY_MS) this.prune();
     const before = this.d.beforeTick?.();
@@ -316,24 +350,23 @@ export class EventDelivery {
   }
 
   private readyTargets(): string[] {
-    return [...new Set(this.d.store.ticketEvents.byStatus("escalated").flatMap((e) => (e.targetId ? [e.targetId] : [])))];
+    return [...new Set(this.d.store.ticketEvents.byStatus("escalated", undefined, this.scope).flatMap((e) => (e.targetId ? [e.targetId] : [])))];
   }
 
   /** The next moment something is due: a ready row's debounce and cap, the caller's own time, the prune. */
   private nextDue(): number | null {
     const now = this.d.now();
-    const debounce = this.d.debounceMs ?? DELIVERY_DEBOUNCE_MS;
     const times: number[] = [];
     const by = new Map<string, Map<string, number>>();
-    for (const e of this.d.store.ticketEvents.byStatus("escalated")) {
+    for (const e of this.d.store.ticketEvents.byStatus("escalated", undefined, this.scope)) {
       if (!e.targetId || (this.d.open && !this.d.open(e.targetId))) continue;
       const classes = by.get(e.targetId) ?? new Map<string, number>();
       const cls = this.classOf(e);
-      classes.set(cls, Math.min(classes.get(cls) ?? Infinity, e.updatedAt + debounce));
+      classes.set(cls, Math.min(classes.get(cls) ?? Infinity, e.createdAt + this.debounceOf(e.targetId)));
       by.set(e.targetId, classes);
     }
     for (const [targetId, classes] of by) {
-      for (const [cls, ripeAt] of classes) times.push(Math.max(ripeAt, this.allowedAt(targetId, cls, now)));
+      for (const [cls, ripeAt] of classes) times.push(Math.max(ripeAt, this.allowedAt(targetId, cls, now), this.backoff.get(targetId)?.until ?? 0));
     }
     const extra = this.d.extraDue?.();
     if (extra !== null && extra !== undefined) times.push(extra);

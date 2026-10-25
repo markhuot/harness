@@ -13,13 +13,16 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 - Settings now has an event retention value (`eventRetentionDays`, 7 days by default, 1 to 365): handled and ignored ticket events older than that are removed, and the chief can change it through its settings tool. The pruning now also runs while the app sits idle.
 
+### Fixed
+
+- A parent's child updates and a subscriber's subscription events that were waiting (held behind a run that can't take input, a queued run or the wake cap) are no longer lost when the service restarts: they are stored, and the ticket is woken for them after the restart. When several moves of one ticket wait, the wake carries its latest status, and a parent hears at most 60 wakes in 5 minutes.
+
 ### Changed
 
 - An agent's `list_inbox` now lists the events addressed to its own ticket (title, summary, source, status, verdict, reason and the ticket each is about), the same events the Inbox shows. A chief of staff sees its whole Inbox. It no longer lists old triage items, and `include_output` is gone.
 - The chief of staff now wakes under the same limit as any ticket that follows events (8 wakes per 5 minutes, extra events wait and arrive together in a later wake) instead of 6 an hour, and triage gathers a burst for 10 seconds instead of waiting for 45 seconds of quiet. Event history is kept 7 days instead of 30.
-- Internal: ticket events go through one shared delivery engine (`EventDelivery`: debounce, wake cap, one wake per batch, retry then close with a reason, restart sweep), and the chief of staff runs on it. The wake log table is now `event_wakes`, keyed by the ticket woken. A database from this build can't be opened by an older one.
-
-- Internal: the chief of staff's events table is now `ticket_events` with a `target_id` for the ticket an event wakes, groundwork for waking any ticket; nothing changes in the app, and a database from this build can't be opened by an older one.
+- Chief wake failures (a wake that errors, or a run that fails or is cancelled) now back off, 5 seconds doubling to a minute, instead of retrying at once, so a broken ticket can't spin. The event batch cards in a chief's chat now follow the 7-day event retention (they were kept 30 days).
+- Internal: ticket events go through one shared delivery engine (`EventDelivery`: debounce, wake cap, one wake per batch, retry then close with a reason, restart sweep), run as two instances (the chief's, and one for every other ticket's child and subscription rows). The chief's events table is now `ticket_events`, with a `target_id` for the ticket an event wakes, and the wake log is `event_wakes`, keyed by the ticket woken. A database from this build can't be opened by an older one.
 - The chief of staff now routes a specific request to the project it belongs to, asks you which project
   when none or several could fit, and sends research that spans projects to each project it touches,
   then summarizes the results.

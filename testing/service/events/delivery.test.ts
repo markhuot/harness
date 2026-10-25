@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 import { CHILD_EVENT_WAKE_CAP, EVENT_WAKE_CAP } from "../../../shared/src/cos";
-import { type DeliveryResult, EventDelivery, type EventDeliveryDeps, WAKE_MAX_ATTEMPTS } from "../../../service/src/events/delivery";
+import { type DeliveryResult, EventDelivery, type EventDeliveryDeps, WAKE_MAX_ATTEMPTS, WAKE_RETRY_BACKOFF_MAX_MS, WAKE_RETRY_BACKOFF_MS } from "../../../service/src/events/delivery";
 import { EVENT_BODY_MAX, renderEventsPrompt } from "../../../service/src/events/render";
 import type { StoredTicketEvent } from "../../../service/src/store/ticket-events";
 import { fakeClock } from "../../builders/clock";
@@ -56,13 +56,13 @@ function rig(over: Partial<EventDeliveryDeps> & { live?: boolean } = {}) {
   running.push(d);
   d.start();
   /** An event ready for `target` (as if a subscription put it there). */
-  const ready = (target: string, over: { title?: string; kind?: string; ticketId?: string; from?: string; to?: string; body?: string } = {}) => {
+  const ready = (target: string, over: { title?: string; kind?: string; ticketId?: string; from?: string; to?: string; body?: string; sourceKind?: "activity" | "subscription" | "child" } = {}) => {
     const e = store.ticketEvents.insert({
       cosId: null,
       targetId: target,
       projectId: null,
       ticketId: over.ticketId ?? null,
-      sourceKind: "activity",
+      sourceKind: over.sourceKind ?? "activity",
       sourceRef: `ref-${++refs}`,
       kind: over.kind ?? "note",
       actor: "agent",
@@ -134,6 +134,7 @@ test("a freshly started run settles its rows when it ends; a cancelled one puts 
   r.d.runEnded("run-1", "cancelled");
   expect(r.get(a.id)).toMatchObject({ status: "escalated", consumingRunId: null, payload: { wakeAttempts: 1 } });
 
+  r.clock.advance(WAKE_RETRY_BACKOFF_MS);
   await r.d.tick();
   expect(r.wakes).toHaveLength(2);
   r.runs.set("run-2", "succeeded");
@@ -145,6 +146,7 @@ test("a run that keeps failing is retried a few times, then its events close wit
   const r = rig({ describeRun: () => "The conductor's run" });
   const e = r.ready("T");
   for (let i = 1; i <= WAKE_MAX_ATTEMPTS; i++) {
+    r.clock.advance(WAKE_RETRY_BACKOFF_MAX_MS);
     await r.d.tick();
     expect(r.wakes).toHaveLength(i);
     r.runs.set(`run-${i}`, "failed");
@@ -155,15 +157,16 @@ test("a run that keeps failing is retried a few times, then its events close wit
   expect(r.wakes).toHaveLength(WAKE_MAX_ATTEMPTS); // closed: no fourth wake
 });
 
-test("a target whose run just failed isn't handed the same events again in the same pass", async () => {
+test("a target whose run just failed isn't handed the same events again until its backoff passes", async () => {
   const r = rig();
   r.ready("T");
   await r.d.deliver("T");
   r.runs.set("run-1", "failed");
   r.d.runEnded("run-1", "failed");
-  await r.d.deliver("T"); // the same pass: skipped
+  await r.d.deliver("T"); // too soon: it backs off
   expect(r.wakes).toHaveLength(1);
-  await r.d.tick(); // the next one retries
+  r.clock.advance(WAKE_RETRY_BACKOFF_MS);
+  await r.d.tick(); // after the backoff it retries
   expect(r.wakes).toHaveLength(2);
 });
 
@@ -213,6 +216,7 @@ test("a gated target holds its events without charging a wake, and a failed hand
   expect(r.get(e.id).status).toBe("escalated");
   expect(r.store.ticketEvents.wakeTimes("T", "wake", 0)).toEqual([]);
   fail = false;
+  r.clock.advance(WAKE_RETRY_BACKOFF_MS);
   await r.d.deliver("T");
   expect(r.get(e.id).status).toBe("handling");
   expect(r.store.ticketEvents.wakeTimes("T", "wake", 0)).toHaveLength(1);
@@ -276,4 +280,78 @@ test("a wake's text clips a long body and says how many more events wait", async
   expect(text).toContain("(500 more characters)");
   expect(text).toContain("(3 more events are waiting and come in the next wake.)");
   expect(text.length).toBeLessThan(EVENT_BODY_MAX + 1000);
+});
+
+test("a hand-off that throws backs off instead of spinning: the timer waits for the backoff, which doubles", async () => {
+  const r = rig({
+    deliver: async () => {
+      throw new Error("no slot");
+    },
+  });
+  r.ready("T");
+  await r.d.deliver("T");
+  r.d.arm();
+  expect([...r.t.pending.values()][0]!.ms).toBe(WAKE_RETRY_BACKOFF_MS);
+  r.clock.advance(WAKE_RETRY_BACKOFF_MS);
+  await r.d.deliver("T");
+  r.d.arm();
+  expect([...r.t.pending.values()][0]!.ms).toBe(WAKE_RETRY_BACKOFF_MS * 2);
+});
+
+test("the count of events still waiting excludes rows the collapse merged away", async () => {
+  const r = rig({
+    render: (_t, events, more) => ({ text: `${events.length} events, ${more} more` }),
+  });
+  for (let i = 0; i < 5; i++) r.ready("T", { kind: "moved", ticketId: "tk-1", from: i % 2 ? "review" : "in_progress", to: i % 2 ? "in_progress" : "review" });
+  r.ready("T", { title: "other" });
+  await r.d.deliver("T");
+  expect(r.wakes[0]!.text).toBe("2 events, 0 more");
+});
+
+test("collapsing rewrites a row without restarting the wait: the debounce counts from when the oldest row arrived", async () => {
+  const r = rig({ debounceMs: SEC });
+  r.ready("T", { kind: "moved", ticketId: "tk-1", from: "planning", to: "in_progress" });
+  r.clock.advance(SEC / 2);
+  r.ready("T", { kind: "moved", ticketId: "tk-1", from: "in_progress", to: "review" });
+  await r.d.deliver("T");
+  expect(r.wakes).toHaveLength(0);
+  r.clock.advance(SEC / 2);
+  await r.d.deliver("T");
+  expect(r.wakes).toHaveLength(1);
+  expect(r.wakes[0]!.events).toHaveLength(1);
+});
+
+test("a run that ended before its rows were marked settles them at once", async () => {
+  const r = rig({
+    deliver: async () => ({ runId: "run-fast" }),
+  });
+  r.runs.set("run-fast", "succeeded");
+  const e = r.ready("T");
+  await r.d.deliver("T");
+  expect(r.get(e.id).status).toBe("handled");
+  expect(r.store.ticketEvents.openWakes()).toEqual([]);
+});
+
+test("the chief's delivery and the ticket feed's never touch each other's rows", async () => {
+  const chief = rig();
+  const feed = new EventDelivery({ store: chief.store, scope: "ticket", now: chief.clock, log: () => {}, timers: timers(), runStatus: (id) => chief.runs.get(id) ?? null, retentionMs: () => 7 * DAY, debounceMs: 0, classOf: (e) => e.sourceKind, deliver: async () => ({ runId: "feed-run" }) });
+  running.push(feed);
+  feed.start();
+  const own = chief.ready("T");
+  const sub = chief.ready("T", { sourceKind: "subscription" });
+  await chief.d.deliver("T");
+  expect(chief.wakes).toHaveLength(1);
+  expect(chief.wakes[0]!.events.map((e) => e.id)).toEqual([own.id]);
+  expect(chief.get(sub.id).status).toBe("escalated");
+  chief.runs.set("feed-run", "running");
+  await feed.deliver("T");
+  expect(chief.get(sub.id)).toMatchObject({ status: "handling", consumingRunId: "feed-run" });
+  // The chief's run ending doesn't settle the feed's row, nor the feed's wake the chief's.
+  chief.runs.set("run-1", "succeeded");
+  chief.d.runEnded("run-1", "succeeded");
+  expect(chief.get(own.id).status).toBe("handled");
+  expect(chief.get(sub.id).status).toBe("handling");
+  chief.runs.set("feed-run", "succeeded");
+  feed.runEnded("feed-run", "succeeded");
+  expect(chief.get(sub.id).status).toBe("handled");
 });
