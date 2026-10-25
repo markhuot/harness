@@ -1300,7 +1300,7 @@
       "createdAt": 1773241200000
     }
   ],
-  "cosEvents": [
+  "ticketEvents": [
     {
       "id": "ev-waiting",
       "cosId": "cos-all",

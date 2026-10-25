@@ -980,6 +980,10 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE event_wakes ADD COLUMN event_class TEXT NOT NULL DEFAULT '';
   CREATE INDEX event_wakes_target ON event_wakes(target_id, kind, event_class, started_at);
   `,
+  // 57: a ticket's Events tab (GET /tickets/:key/events) and its hasEvents flag read the rows aimed at it, newest first.
+  `
+  CREATE INDEX ticket_events_target ON ticket_events(target_id, created_at);
+  `,
 ];
 
 /** Where the files migrations look at live (HarnessPaths); by default next to the database file. */

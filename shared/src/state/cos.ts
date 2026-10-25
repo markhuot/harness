@@ -1,7 +1,7 @@
 // Chief of staff (CoS) presentation logic shared by the clients: tabs, badges, the chat and Inbox
 // merges, and the tri-state of a project's CoS settings. Pure; the wire shapes are in ../cos.
 
-import type { Cos, CosBadge, CosChatEntry, CosEvent } from "../cos";
+import type { Cos, CosBadge, CosChatEntry, TicketEvent, TicketEventSource } from "../cos";
 import { COS_OPEN_STATUSES } from "../cos";
 
 /** A chief's pane has these three tabs and no others (no Spec, Activity or Tickets). */
@@ -25,8 +25,8 @@ export function cosTitle(cos: Pick<Cos, "scope">, groupName: string | null): str
 }
 
 /** Open (badge-counting) events from a list of loaded ones: the client-side twin of the service's badge. */
-export function openEventCount(events: readonly CosEvent[], cosId: string): number {
-  return events.filter((e) => e.cosId === cosId && COS_OPEN_STATUSES.includes(e.status)).length;
+export function openEventCount(events: readonly TicketEvent[], cosId: string): number {
+  return events.filter((e) => e.targetId === cosId && COS_OPEN_STATUSES.includes(e.status)).length;
 }
 
 const chatOrder = (a: CosChatEntry, b: CosChatEntry) => a.createdAt - b.createdAt || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
@@ -49,17 +49,31 @@ export function mergeChat(existing: readonly CosChatEntry[], incoming: readonly 
 }
 
 /** The Inbox's rows: newest first, each id once. */
-export function mergeEvents(existing: readonly CosEvent[], incoming: readonly CosEvent[]): CosEvent[] {
+export function mergeEvents(existing: readonly TicketEvent[], incoming: readonly TicketEvent[]): TicketEvent[] {
   const byId = new Map(existing.map((e) => [e.id, e]));
   for (const e of incoming) byId.set(e.id, e);
   return [...byId.values()].sort((a, b) => b.createdAt - a.createdAt || (a.id < b.id ? 1 : -1));
 }
 
+/**
+ * The rows of an events list, newest first. A chief's Inbox is its own events and the unassigned ones, so a stuck or
+ * switched-off chief never hides them; any other ticket's Events tab is the events aimed at it. Rows a coded rule dropped
+ * (filtered) stay out of both, except a reminder in the Inbox: it went to the user, so it shows.
+ */
+export function eventRows(events: Record<string, TicketEvent> | readonly TicketEvent[], owner: { ticketId: string; chief: boolean }): TicketEvent[] {
+  const all = Array.isArray(events) ? (events as readonly TicketEvent[]) : Object.values(events as Record<string, TicketEvent>);
+  const mine = all.filter((e) => (e.targetId === owner.ticketId || (owner.chief && e.targetId === null)) && (e.verdict !== "filtered" || (owner.chief && e.sourceKind === "schedule")));
+  return mergeEvents([], mine);
+}
+
+/** What kind of event a row is, as its badge says it. */
+export const EVENT_SOURCE_LABEL: Record<TicketEventSource, string> = { activity: "Ticket", watcher: "Watcher", schedule: "Schedule", subscription: "Subscription", child: "Child" };
+
 /** What an Inbox row says happened to the event, in a word. */
 export type InboxState = "waiting" | "ignored" | "escalated" | "handling" | "acted" | "no_action" | "needs_user" | "reviewed" | "filtered";
 
 /** A handled event shows what the chief recorded for it; one it recorded nothing for is only "reviewed" (its run ended, nothing says it did anything). */
-export function inboxState(e: Pick<CosEvent, "status" | "verdict" | "outcome">): InboxState {
+export function inboxState(e: Pick<TicketEvent, "status" | "verdict" | "outcome">): InboxState {
   if (e.verdict === "filtered") return "filtered";
   switch (e.status) {
     case "pending":
@@ -77,7 +91,7 @@ export function inboxState(e: Pick<CosEvent, "status" | "verdict" | "outcome">):
 }
 
 /** Ignored events (and only those) can be escalated by hand. */
-export function canEscalate(e: Pick<CosEvent, "status" | "verdict">): boolean {
+export function canEscalate(e: Pick<TicketEvent, "status" | "verdict">): boolean {
   return e.status === "ignored" && e.verdict !== "filtered";
 }
 

@@ -22,7 +22,7 @@ import type {
 import { isConductor, reviewPassed } from "../protocol";
 import type { DepState } from "./conductor";
 import { mergeChat } from "./cos";
-import type { ClientEvent, Cos, CosBadge, CosChatEntry, CosEvent } from "../cos";
+import type { ClientEvent, Cos, CosBadge, CosChatEntry, TicketEvent } from "../cos";
 import { inheritedModel } from "./models";
 import { ALL_SCOPE, adjustDoneTotals, doneColumn, groupScope, inScope, isHiddenKind, mergeTickets, pagingFromPage, reducePaging, scopeGroup, scopeOf, type DonePaging, type PagingAction, type SearchState } from "./paging";
 
@@ -80,7 +80,7 @@ export interface State {
   /** The chiefs of staff by ticket id (GET /cos) */
   chiefs: Record<string, Cos>;
   /** Events a chief's Inbox has shown or been pushed, by event id (newest first through selectors) */
-  cosEvents: Record<string, CosEvent>;
+  ticketEvents: Record<string, TicketEvent>;
   /** A chief's chat so far (pages loaded and entries pushed), oldest first, by chief id */
   cosChat: Record<string, CosChatEntry[]>;
   /** Events awaiting a verdict or being handled, per chief (null before the first answer) */
@@ -112,7 +112,7 @@ export const initialState: State = {
   dependents: {},
   ticketsAsOf: null,
   chiefs: {},
-  cosEvents: {},
+  ticketEvents: {},
   cosChat: {},
   cosBadge: null,
 };
@@ -157,7 +157,7 @@ export type Action =
   | { type: "chief"; chief: Cos }
   | { type: "cosBadge"; badge: CosBadge }
   /** A page of a chief's Inbox, merged into what's loaded */
-  | { type: "cosEvents"; events: CosEvent[] }
+  | { type: "ticketEvents"; events: TicketEvent[] }
   /** A page of a chief's chat (any order), merged into what's loaded */
   | { type: "cosChat"; cosId: string; entries: CosChatEntry[] }
   | PagingAction;
@@ -324,8 +324,8 @@ function pruneDeltas(deltas: State["deltas"], sessions: State["sessions"], runs:
 
 export function applyEvent(state: State, event: ClientEvent): State {
   switch (event.kind) {
-    case "cos.event.upserted":
-      return { ...state, cosEvents: { ...state.cosEvents, [event.event.id]: event.event } };
+    case "ticket.event.upserted":
+      return { ...state, ticketEvents: { ...state.ticketEvents, [event.event.id]: event.event } };
     case "cos.badge":
       return { ...state, cosBadge: { total: event.total, byCos: event.byCos } };
     case "cos.transcript.appended":
@@ -540,10 +540,10 @@ export function reducer(state: State, action: Action): State {
       return { ...state, chiefs: { ...state.chiefs, [action.chief.ticketId]: action.chief } };
     case "cosBadge":
       return { ...state, cosBadge: action.badge };
-    case "cosEvents": {
-      const cosEvents = { ...state.cosEvents };
-      for (const e of action.events) cosEvents[e.id] = e;
-      return { ...state, cosEvents };
+    case "ticketEvents": {
+      const ticketEvents = { ...state.ticketEvents };
+      for (const e of action.events) ticketEvents[e.id] = e;
+      return { ...state, ticketEvents };
     }
     case "cosChat":
       return { ...state, cosChat: { ...state.cosChat, [action.cosId]: mergeChat(state.cosChat[action.cosId] ?? [], action.entries) } };

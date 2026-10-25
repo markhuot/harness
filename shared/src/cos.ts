@@ -106,16 +106,18 @@ export interface Cos {
 // Events: what wakes a chief of staff (DESIGN.md "Chief of staff", "Events")
 // ---------------------------------------------------------------------------
 
-export type CosEventSource = "activity" | "watcher" | "schedule" | "subscription" | "child";
+/** Every kind of event, in the order the filters list them. */
+export const TICKET_EVENT_SOURCES = ["activity", "watcher", "schedule", "subscription", "child"] as const;
+export type TicketEventSource = (typeof TICKET_EVENT_SOURCES)[number];
 
 /** Where an event is: pending (waiting for triage), triaging, escalated (for the next wake), handling (in a run), handled, or ignored. */
-export type CosEventStatus = "pending" | "triaging" | "escalated" | "handling" | "handled" | "ignored";
+export type TicketEventStatus = "pending" | "triaging" | "escalated" | "handling" | "handled" | "ignored";
 
 /** What triage said: not yet, ignore, escalate, or dropped by a coded rule (a chief's own activity, a net-zero move). */
-export type CosEventVerdict = "pending" | "ignore" | "escalate" | "filtered";
+export type TicketEventVerdict = "pending" | "ignore" | "escalate" | "filtered";
 
 /** Statuses that count toward the Inbox badge (an event somebody still has to see to). */
-export const COS_OPEN_STATUSES: readonly CosEventStatus[] = ["pending", "triaging", "escalated", "handling"];
+export const COS_OPEN_STATUSES: readonly TicketEventStatus[] = ["pending", "triaging", "escalated", "handling"];
 
 /** What the chief did about an event it was woken for: acted, found nothing to do, or needs the user to do something. */
 export const COS_OUTCOME_KINDS = ["acted", "no_action", "needs_user"] as const;
@@ -127,19 +129,19 @@ export interface CosOutcome {
   text: string;
 }
 
-/** One row of a chief of staff's Inbox (GET /cos/:id/events). */
-export interface CosEvent {
+/** One event: a row of a ticket's Events tab, or of a chief of staff's Inbox (GET /tickets/:key/events). */
+export interface TicketEvent {
   id: string;
-  /** The chief that owns it; null while no chief qualifies (unassigned) */
-  cosId: string | null;
+  /** The ticket the event wakes (a chief's id for the chief's own rows); null while no chief qualifies (unassigned) */
+  targetId: string | null;
   projectKey: string | null;
-  sourceKind: CosEventSource;
+  sourceKind: TicketEventSource;
   title: string;
   summary: string;
   /** Who caused it: "human", "agent", "system", "watcher:<name>", or "cos:<chief id>" */
   actor: string;
-  status: CosEventStatus;
-  verdict: CosEventVerdict;
+  status: TicketEventStatus;
+  verdict: TicketEventVerdict;
   reason: string | null;
   /** The model that triaged it; null when none did (filtered, or a fail-open escalation) */
   model: string | null;
@@ -154,9 +156,9 @@ export interface CosEvent {
   createdAt: number;
 }
 
-/** GET /cos/:id/events */
-export interface CosEventPage {
-  items: CosEvent[];
+/** GET /tickets/:key/events */
+export interface TicketEventPage {
+  items: TicketEvent[];
   nextCursor: string | null;
 }
 
@@ -187,7 +189,7 @@ export interface CosChatPage {
 
 /** Bus events for the Inbox and chat (not part of protocol.ts's HarnessEvent: clients that don't know them ignore them). */
 export type CosBusEvent =
-  | { kind: "cos.event.upserted"; event: CosEvent }
+  | { kind: "ticket.event.upserted"; event: TicketEvent }
   | { kind: "cos.badge"; total: number; byCos: Record<string, number> }
   | { kind: "cos.transcript.appended"; cosId: string; entry: CosChatEntry };
 
@@ -324,8 +326,8 @@ export function collapseMoves(events: readonly CollapsibleEvent[]): { dropped: {
   return { dropped, net };
 }
 
-/** Every CosEventStatus, for validating ?status= */
-export const COS_EVENT_STATUSES: readonly CosEventStatus[] = ["pending", "triaging", "escalated", "handling", "handled", "ignored"];
+/** Every TicketEventStatus, for validating ?status= */
+export const TICKET_EVENT_STATUSES: readonly TicketEventStatus[] = ["pending", "triaging", "escalated", "handling", "handled", "ignored"];
 
 /** A chief of staff's memory (GET /tickets/:key/memory): one markdown document, and the revision a write is checked against. */
 export interface CosMemory {

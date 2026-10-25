@@ -447,7 +447,7 @@ test("a subscription row never reaches a chief's triage, rehoming, Inbox list or
   await h.orch.cosEngine.tick();
   expect(h.store.ticketEvents.get(row.id)).toMatchObject({ cosId: null, status: "escalated" });
   expect(h.store.ticketEvents.get(pendingRow.id)).toMatchObject({ cosId: null, status: "pending" });
-  expect(h.orch.cosEvents(cos.ticketId, {}).items.map((e) => e.id)).not.toContain(row.id);
+  expect(h.orch.eventsPage(cos.ticketId, {}).items.map((e) => e.id)).not.toContain(row.id);
   expect(h.orch.cosEngine.badge().total).toBe(0);
 });
 

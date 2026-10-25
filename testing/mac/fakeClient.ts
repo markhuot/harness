@@ -4,8 +4,8 @@
 // fake can't drift from the client's API surface. The event socket is controlled by the test.
 
 import { HarnessApiError, HarnessClient } from "@harness/shared";
-import { COS_OPEN_STATUSES, type ClientEvent, type Cos, type CosBadge, type CosChatEntry, type CosChatPage, type CosEventPage, type MemoryConflict, type PutCosMemoryBody } from "@harness/shared";
-import { chiefs, cosChat, cosEvents } from "../world/cos";
+import { COS_OPEN_STATUSES, type ClientEvent, type Cos, type CosBadge, type CosChatEntry, type CosChatPage, type TicketEventPage, type MemoryConflict, type PutCosMemoryBody } from "@harness/shared";
+import { chiefs, cosChat, ticketEvents } from "../world/cos";
 import type { Attachment, MessageDraftBody, CreateTicketBody, DriverModels, FileWriteResult, SubmitTicketBody, UpdateTicketBody, HarnessSocket, WriteFileRequest, NetworkStatus, NotificationStatus, PairingInfo, SpecRevisionInfo, Ticket, TicketStatus } from "@harness/shared";
 import { world as defaultWorld, type World } from "../world";
 
@@ -46,7 +46,7 @@ export class FakeClient extends HarnessClient {
   private handlers: Handlers | null = null;
   world: World;
   /** The chiefs of staff, their Inbox, chat and memory: the writes the views make change these. */
-  readonly cos = { chiefs: structuredClone(chiefs), events: structuredClone(cosEvents), chat: structuredClone(cosChat), memory: { text: "# Memory\n\n## Triage guidance\n\nIgnore routine ticket moves.\n", revision: "rev-1" } };
+  readonly cos = { chiefs: structuredClone(chiefs), events: structuredClone(ticketEvents), chat: structuredClone(cosChat), memory: { text: "# Memory\n\n## Triage guidance\n\nIgnore routine ticket moves.\n", revision: "rev-1" } };
 
   constructor(world: World = defaultWorld) {
     super({ baseUrl: "http://fake.test", token: "fake" });
@@ -185,7 +185,7 @@ export class FakeClient extends HarnessClient {
     }
     if (method === "GET" && p === "/cos/events/badge") {
       const byCos: Record<string, number> = {};
-      for (const e of c.events) if (e.cosId && COS_OPEN_STATUSES.includes(e.status)) byCos[e.cosId] = (byCos[e.cosId] ?? 0) + 1;
+      for (const e of c.events) if (e.targetId && c.chiefs.some((x) => x.ticketId === e.targetId) && COS_OPEN_STATUSES.includes(e.status)) byCos[e.targetId] = (byCos[e.targetId] ?? 0) + 1;
       return { total: Object.values(byCos).reduce((n, v) => n + v, 0), byCos } satisfies CosBadge;
     }
     m = p.match(/^\/cos\/events\/([^/]+)\/escalate$/);
@@ -203,10 +203,12 @@ export class FakeClient extends HarnessClient {
       chief.enabled = (body as { enabled: boolean }).enabled;
       return chief;
     }
-    m = p.match(/^\/cos\/([^/]+)\/events$/);
+    m = p.match(/^\/tickets\/([^/]+)\/events$/);
     if (method === "GET" && m) {
-      const rows = c.events.filter((e) => e.cosId === m![1] || e.cosId === null).filter((e) => !q.get("status") || e.status === q.get("status"));
-      return paged(rows, q) satisfies CosEventPage;
+      // A chief's page is its Inbox (its own events and the unassigned ones); another ticket's is the events aimed at it.
+      const chief = c.chiefs.some((x) => x.ticketId === m![1]);
+      const rows = c.events.filter((e) => e.targetId === m![1] || (chief && e.targetId === null)).filter((e) => !q.get("status") || e.status === q.get("status"));
+      return paged(rows, q) satisfies TicketEventPage;
     }
     m = p.match(/^\/cos\/([^/]+)\/transcript$/);
     if (method === "GET" && m) {

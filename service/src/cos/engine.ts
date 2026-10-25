@@ -7,7 +7,7 @@
 // Every state change is a row in ticket_events, so a restart loses nothing: `start()` recovers
 // events left mid-flight, catches the activity cursor up and re-arms the timer from the rows.
 
-import type { CosBadge, CosBusEvent, CosEvent, CosEventStatus, CosChief, Project, Settings, Ticket } from "@harness/shared";
+import type { CosBadge, CosBusEvent, TicketEvent, TicketEventStatus, CosChief, Project, Settings, Ticket } from "@harness/shared";
 import { COS_OUTCOME_KINDS, DEFAULT_EVENT_RETENTION_DAYS, routineActivityReason, collapseMoves, triageDueAt, ownerOf, cosSeesStatus } from "@harness/shared";
 import { isSilentReply, QUIET_REPLY } from "./chat";
 import { memorySection, TRIAGE_GUIDANCE } from "./memory";
@@ -98,7 +98,7 @@ export class CosEngine {
         return { runId: await d.deliver(cosId, text, keys.size === 1 ? ([...keys][0] ?? null) : null) };
       },
       describeRun: () => "The chief's run",
-      patched: (e) => d.emit({ kind: "cos.event.upserted", event: wire(e) }),
+      patched: (e) => d.emit({ kind: "ticket.event.upserted", event: wire(e) }),
       changed: () => {
         this.rehome();
         this.emitBadge();
@@ -199,7 +199,7 @@ export class CosEngine {
       });
       if (unassigned) this.pruneUnassigned();
       made += inserted.length;
-      for (const e of inserted) if (store.ticketEvents.get(e.id)) this.d.emit({ kind: "cos.event.upserted", event: wire(e) });
+      for (const e of inserted) if (store.ticketEvents.get(e.id)) this.d.emit({ kind: "ticket.event.upserted", event: wire(e) });
       if (rows.length < DRAIN_PAGE) break;
     }
     if (made) this.emitBadge();
@@ -218,7 +218,7 @@ export class CosEngine {
     cosId?: string | null;
     /** Record it as ignored with this reason: it shows in the Inbox and wakes nobody (a reminder) */
     filtered?: string;
-  }): CosEvent | null {
+  }): TicketEvent | null {
     const project = input.projectId ? this.d.store.projects.get(input.projectId) : null;
     const ev = this.d.store.ticketEvents.insert({
       cosId: input.cosId !== undefined ? input.cosId : this.ownerFor(project),
@@ -233,7 +233,7 @@ export class CosEngine {
       payload: { body: input.body },
     });
     if (!ev) return null;
-    this.d.emit({ kind: "cos.event.upserted", event: wire(ev) });
+    this.d.emit({ kind: "ticket.event.upserted", event: wire(ev) });
     this.emitBadge();
     this.arm();
     return wire(ev);
@@ -246,7 +246,7 @@ export class CosEngine {
    * and the owner is fixed now because the project may be gone by the next rehome. A delete a chief
    * caused is recorded as ignored.
    */
-  addDeleted(input: { what: "ticket" | "project"; id: string; label: string; title: string; actor: string; project: Project | null; keepsProject?: boolean; internal?: boolean }): CosEvent | null {
+  addDeleted(input: { what: "ticket" | "project"; id: string; label: string; title: string; actor: string; project: Project | null; keepsProject?: boolean; internal?: boolean }): TicketEvent | null {
     const { store } = this.d;
     let filtered: string | undefined;
     if (input.actor.startsWith("cos:")) filtered = "caused by a chief of staff";
@@ -265,7 +265,7 @@ export class CosEngine {
       payload: { body, kind: "deleted", key: input.label, title: input.title },
     });
     if (!ev) return null;
-    this.d.emit({ kind: "cos.event.upserted", event: wire(ev) });
+    this.d.emit({ kind: "ticket.event.upserted", event: wire(ev) });
     this.emitBadge();
     this.arm();
     return wire(ev);
@@ -309,7 +309,7 @@ export class CosEngine {
       if (owner === e.cosId) continue;
       moved++;
       const next = store.ticketEvents.update(e.id, { cosId: owner });
-      if (next) this.d.emit({ kind: "cos.event.upserted", event: wire(next) });
+      if (next) this.d.emit({ kind: "ticket.event.upserted", event: wire(next) });
     }
     if (moved) {
       this.emitBadge();
@@ -345,7 +345,7 @@ export class CosEngine {
 
   private patch(id: string, patch: Parameters<Store["ticketEvents"]["update"]>[1]): StoredTicketEvent | null {
     const e = this.d.store.ticketEvents.update(id, patch);
-    if (e) this.d.emit({ kind: "cos.event.upserted", event: wire(e) });
+    if (e) this.d.emit({ kind: "ticket.event.upserted", event: wire(e) });
     return e;
   }
 
@@ -623,8 +623,8 @@ export class CosEngine {
 }
 
 /** The wire shape of a stored event. */
-export function wire(e: StoredTicketEvent): CosEvent {
-  const { targetId: _g, projectId: _p, ticketId: _t, kind: _k, sourceRef: _r, payload: _pl, updatedAt: _u, consumingRunId: _c, ...event } = e;
+export function wire(e: StoredTicketEvent): TicketEvent {
+  const { cosId: _g, projectId: _p, ticketId: _t, kind: _k, sourceRef: _r, payload: _pl, updatedAt: _u, consumingRunId: _c, ...event } = e;
   return event;
 }
 
@@ -633,4 +633,4 @@ export function triageGuidance(ticket: Pick<Ticket, "agentNotes"> | null): strin
   return memorySection(ticket?.agentNotes ?? "", TRIAGE_GUIDANCE);
 }
 
-export type { CosEventStatus };
+export type { TicketEventStatus };

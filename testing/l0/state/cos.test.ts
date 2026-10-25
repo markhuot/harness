@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { resolveTriageModel, resolveTriagePermissionMode, triageDriver, type Cos, type CosChatEntry, type CosEvent } from "../../../shared/src/cos";
+import { resolveTriageModel, resolveTriagePermissionMode, triageDriver, type Cos, type CosChatEntry, type TicketEvent } from "../../../shared/src/cos";
 import { anchoredScrollTop, canEscalate, cosBadgeCount, COS_TABS, inboxState, isCosTab, mergeChat, mergeEvents, nearTop, openEventCount, sortChiefs, triStateOf, triStateValue } from "../../../shared/src/state/cos";
 import { applyEvent, initialState, reducer } from "../../../shared/src/state/reducer";
 
 const msg = (id: string, createdAt: number, text = id, role: "user" | "assistant" = "assistant"): CosChatEntry => ({ id, cosId: "c1", createdAt, kind: "message", role, text });
-const event = (id: string, patch: Partial<CosEvent> = {}): CosEvent => ({
+const event = (id: string, patch: Partial<TicketEvent> = {}): TicketEvent => ({
   id,
-  cosId: "c1",
+  targetId: "c1",
   projectKey: null,
   sourceKind: "activity",
   title: id,
@@ -105,7 +105,7 @@ describe("badge", () => {
       event("c", { status: "handling" }),
       event("d", { status: "handled" }),
       event("e", { status: "ignored" }),
-      event("f", { status: "pending", cosId: "c2" }),
+      event("f", { status: "pending", targetId: "c2" }),
     ];
     expect(openEventCount(events, "c1")).toBe(3);
   });
@@ -139,10 +139,10 @@ describe("store", () => {
     expect(paged.cosChat.c1!.map((e) => e.id)).toEqual(["m1", "m2"]);
   });
   test("events and the badge follow the bus; a pushed event replaces the loaded row", () => {
-    let s = reducer(initialState, { type: "cosEvents", events: [event("e1", { status: "ignored", verdict: "ignore" })] });
-    s = applyEvent(s, { kind: "cos.event.upserted", event: event("e1", { status: "escalated", verdict: "escalate" }) });
+    let s = reducer(initialState, { type: "ticketEvents", events: [event("e1", { status: "ignored", verdict: "ignore" })] });
+    s = applyEvent(s, { kind: "ticket.event.upserted", event: event("e1", { status: "escalated", verdict: "escalate" }) });
     s = applyEvent(s, { kind: "cos.badge", total: 1, byCos: { c1: 1 } });
-    expect(s.cosEvents.e1!.status).toBe("escalated");
+    expect(s.ticketEvents.e1!.status).toBe("escalated");
     expect(cosBadgeCount(s.cosBadge, "c1")).toBe(1);
   });
   test("the chief's own ticket upserting keeps it off the board but moves its message draft onto the chief", () => {

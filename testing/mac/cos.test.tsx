@@ -218,9 +218,9 @@ describe("Inbox", () => {
     const m = await inbox();
     await m.until("the rows", () => events(m).length > 0);
     const waiting = m.client.cos.events.find((e) => e.id === "ev-waiting")!;
-    await m.settle(() => m.client.push({ kind: "cos.event.upserted", event: { ...waiting, status: "ignored", verdict: "ignore", reason: "Not worth a wake" } }));
+    await m.settle(() => m.client.push({ kind: "ticket.event.upserted", event: { ...waiting, status: "ignored", verdict: "ignore", reason: "Not worth a wake" } }));
     expect(text(eventRow(m, "ev-waiting"))).toContain("Not worth a wake");
-    await m.settle(() => m.client.push({ kind: "cos.event.upserted", event: { ...waiting, id: "ev-new", title: "Brand new", createdAt: waiting.createdAt + 1 } }));
+    await m.settle(() => m.client.push({ kind: "ticket.event.upserted", event: { ...waiting, id: "ev-new", title: "Brand new", createdAt: waiting.createdAt + 1 } }));
     expect(events(m)[0]!.dataset.event).toBe("ev-new");
     expect(events(m)).toHaveLength(9);
   });
@@ -241,7 +241,7 @@ describe("Inbox", () => {
   test("events nobody owns yet show, another chief's and the chief's own filtered ones don't", async () => {
     const client = new FakeClient();
     const base = client.cos.events[0]!;
-    client.cos.events.push({ ...base, id: "ev-nobody", cosId: null, title: "Unassigned" }, { ...base, id: "ev-other", cosId: "cos-work", title: "Other chief" }, { ...base, id: "ev-filtered", verdict: "filtered", status: "ignored", title: "Own move" }, { ...base, id: "ev-reminder", verdict: "filtered", status: "ignored", sourceKind: "schedule", reason: "reminder: posted to the human, no run", title: "Reminder: stand-up" });
+    client.cos.events.push({ ...base, id: "ev-nobody", targetId: null, title: "Unassigned" }, { ...base, id: "ev-other", targetId: "cos-work", title: "Other chief" }, { ...base, id: "ev-filtered", verdict: "filtered", status: "ignored", title: "Own move" }, { ...base, id: "ev-reminder", verdict: "filtered", status: "ignored", sourceKind: "schedule", reason: "reminder: posted to the human, no run", title: "Reminder: stand-up" });
     const m = await open("#/cos/all/inbox", client);
     await m.until("the rows", () => events(m).length > 0);
     const ids = events(m).map((e) => e.dataset.event);

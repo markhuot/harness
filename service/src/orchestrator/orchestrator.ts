@@ -100,7 +100,7 @@ import {
 import { ScopedStore, SpecConflictError, type GroupRepo, type Store } from "../store";
 import { SUBSCRIPTION_EVENTS, type Subscription, type SubscriptionEvent, type SubscriptionMode } from "../store/subscriptions";
 import {
-  COS_EVENT_STATUSES,
+  TICKET_EVENT_STATUSES,
   cosScopeKey,
   resolveTriageModel,
   resolveTriagePermissionMode,
@@ -110,9 +110,9 @@ import {
   type Cos,
   type CosBadge,
   type CosChatPage,
-  type CosEvent,
-  type CosEventPage,
-  type CosEventStatus,
+  type TicketEvent,
+  type TicketEventPage,
+  type TicketEventStatus,
   type CosScope,
 } from "@harness/shared";
 import { GroupNameTaken } from "../store/projects";
@@ -700,6 +700,11 @@ export class Orchestrator {
         if (w) this.bus.emit({ kind: "watcher.upserted", watcher: this.withLive(w) });
       },
     };
+    // A ticket's Events tab shows only once it has events (and goes when pruning leaves it none): push the ticket when that flips.
+    this.store.ticketEvents.onHasEventsChange = (id) => {
+      const t = this.store.tickets.get(id);
+      if (t) this.bus.emit({ kind: "ticket.upserted", ticket: t });
+    };
     this.cosEngine = new CosEngine({
       store: this.store,
       emit: (e) => this.bus.emit(e),
@@ -1277,11 +1282,12 @@ export class Orchestrator {
     void this.cosEngine.tick().catch((err) => this.log(`cos: tick failed: ${errMsg(err)}`));
   }
 
-  /** The Inbox page of a chief (GET /cos/:id/events). */
-  cosEvents(cosId: string, query: { status?: string | null; before?: string | null; limit?: string | null }): CosEventPage {
-    if (!this.store.cos.get(cosId)) throw notFound(`Unknown chief of staff: ${cosId}`);
+  /** A page of a ticket's events (GET /tickets/:key/events): for a chief its Inbox (its own and the unassigned ones), for any other ticket the events aimed at it. */
+  eventsPage(ref: string, query: { status?: string | null; before?: string | null; limit?: string | null }): TicketEventPage {
+    const ticket = this.store.tickets.getByKey(ref) ?? this.store.tickets.get(ref);
+    if (!ticket) throw notFound(`Unknown ticket: ${ref}`);
     const status = query.status || undefined;
-    if (status && !COS_EVENT_STATUSES.includes(status as CosEventStatus)) throw badRequest(`status must be one of ${COS_EVENT_STATUSES.join(", ")}`);
+    if (status && !TICKET_EVENT_STATUSES.includes(status as TicketEventStatus)) throw badRequest(`status must be one of ${TICKET_EVENT_STATUSES.join(", ")}`);
     const limit = Math.min(200, Math.max(1, Number(query.limit) || 50));
     let before: { createdAt: number; id: string } | undefined;
     if (query.before) {
@@ -1290,7 +1296,8 @@ export class Orchestrator {
       if (i <= 0 || !Number.isFinite(createdAt)) throw badRequest("before is not a cursor from a previous page");
       before = { createdAt, id: query.before.slice(i + 1) };
     }
-    const rows = this.store.ticketEvents.list({ cosId, status: status as CosEventStatus | undefined, before, limit: limit + 1 });
+    const owner = ticket.kind === "cos" ? { cosId: ticket.id } : { targetId: ticket.id };
+    const rows = this.store.ticketEvents.list({ ...owner, status: status as TicketEventStatus | undefined, before, limit: limit + 1 });
     const items = rows.slice(0, limit);
     const last = items[items.length - 1];
     return { items: items.map(wireCosEvent), nextCursor: rows.length > limit && last ? `${last.createdAt}:${last.id}` : null };
@@ -1301,7 +1308,7 @@ export class Orchestrator {
   }
 
   /** "Escalate anyway": an ignored event goes in the chief's next wake. */
-  async escalateCosEvent(id: string): Promise<CosEvent> {
+  async escalateCosEvent(id: string): Promise<TicketEvent> {
     const res = this.cosEngine.escalate(id);
     if ("error" in res) {
       if (res.error === "unknown") throw notFound(`Unknown event: ${id}`);
@@ -3440,7 +3447,7 @@ export class Orchestrator {
    * Feed output as if a watcher named `source` printed `text` (an object is taken as its JSON): an
    * event for the All chief of staff. Null when deduped or when the text is only whitespace.
    */
-  async injectOutput(source: string, text: unknown): Promise<CosEvent | null> {
+  async injectOutput(source: string, text: unknown): Promise<TicketEvent | null> {
     if (typeof source !== "string" || !source.trim()) throw badRequest("source is required");
     const raw = typeof text === "string" ? text : text === undefined || text === null ? "" : JSON.stringify(text);
     const output = toOutput(raw);
@@ -3450,7 +3457,7 @@ export class Orchestrator {
   }
 
   /** Dedupe (identical text from the same source is delivered once), then an event owned by the watcher's chief of staff. */
-  ingest(input: IngestInput): CosEvent | null {
+  ingest(input: IngestInput): TicketEvent | null {
     const hash = createHash("sha256").update(input.output.text).digest("hex");
     // Seen and event commit together: an insert that throws leaves the output unseen, to be delivered again.
     return this.store.transaction(() => {
@@ -4044,17 +4051,16 @@ ${numberLines(r.body)}`;
     return this.scopeOf(ctx).projects.list().map((p) => this.projectView(p));
   }
 
-  async listInbox_(ctx: ToolContext, filter: Parameters<HarnessOps["listInbox"]>[1]): Promise<{ items: CosEvent[]; total: number }> {
+  async listInbox_(ctx: ToolContext, filter: Parameters<HarnessOps["listInbox"]>[1]): Promise<{ items: TicketEvent[]; total: number }> {
     const limit = Math.min(Math.max(1, filter.limit ?? LIST_INBOX_DEFAULT_LIMIT), 100);
     const key = filter.key?.trim().toUpperCase();
     // A chief reads what its Inbox shows (its own events and the unassigned ones), and so does the triage run working for it;
     // any other ticket reads the events that wake it.
     const cosId = ctx.runKind === "triage" ? this.triageRuns.get(ctx.session.id)?.cosId : ctx.ticket?.kind === "cos" ? ctx.ticket.id : undefined;
     const owner = cosId ? { cosId } : { targetId: this.ctxTicket(ctx).id };
-    const rows = this.store.ticketEvents
-      .list({ ...owner, sourceKind: filter.source, limit: 10_000 })
-      .filter((e) => (!filter.statuses?.length || filter.statuses.includes(e.status)) && (!key || e.id.toUpperCase() === key || e.ticketKey?.toUpperCase() === key));
-    return { items: rows.slice(0, limit).map(wireCosEvent), total: rows.length };
+    const find = { ...owner, sourceKind: filter.source, statuses: filter.statuses, key };
+    const items = this.store.ticketEvents.list({ ...find, limit });
+    return { items: items.map(wireCosEvent), total: this.store.ticketEvents.count(find) };
   }
 
   // --- board (write): work, conductor and chat runs; the HTTP API's code paths plus guard rails ---

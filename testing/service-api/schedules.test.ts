@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import type { Cos, CosEventPage, Schedule } from "@harness/shared";
+import type { Cos, TicketEventPage, Schedule } from "@harness/shared";
 import { boot, stopRigs } from "./boot";
 
 afterEach(stopRigs);
@@ -28,8 +28,8 @@ test("GET /schedules lists active schedules with their spec, and ?all=1 adds the
 test("the service's scheduler turns a due wake into an event in its chief's Inbox", async () => {
   const { rig, cos, schedule } = await withSchedule();
   expect(rig.harness.scheduler.tick()).toBe(1);
-  const page = await rig.ok<CosEventPage>("GET", `/cos/${cos.ticketId}/events?limit=50`);
-  expect(page.items.filter((e) => e.sourceKind === "schedule")).toEqual([expect.objectContaining({ title: "Weekday check", cosId: cos.ticketId })]);
+  const page = await rig.ok<TicketEventPage>("GET", `/tickets/${cos.ticketId}/events?limit=50`);
+  expect(page.items.filter((e) => e.sourceKind === "schedule")).toEqual([expect.objectContaining({ title: "Weekday check", targetId: cos.ticketId })]);
   expect((await rig.ok<Schedule[]>("GET", "/schedules"))[0]!.lastOutcome).toBe("fired");
   expect((await rig.ok<Schedule[]>("GET", "/schedules"))[0]!.id).toBe(schedule.id);
 });

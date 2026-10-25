@@ -42,8 +42,8 @@ test("a database from a newer service is refused rather than downgraded", () => 
 
 test("a failing migration rolls back whole and leaves the version where it was", () => {
   const db = dbAt(SCHEMA_VERSION - 1);
-  // Break the last migration's target: it creates a table that is already there.
-  db.exec("CREATE TABLE event_wakes (id TEXT)");
+  // Break the last migration's target: it creates an index that is already there.
+  db.exec("CREATE INDEX ticket_events_target ON ticket_events(id)");
   expect(() => migrate(db, paths())).toThrow();
   expect(version(db)).toBe(SCHEMA_VERSION - 1);
 });
@@ -316,6 +316,13 @@ test("the dedupe lookup on (source_kind, source_ref) is served by an index", () 
   migrate(db, paths());
   const plan = db.query("EXPLAIN QUERY PLAN SELECT 1 FROM ticket_events WHERE source_kind = 'a' AND source_ref = 'b'").all() as { detail: string }[];
   expect(plan.map((p) => p.detail).join(" ")).toContain("USING");
+});
+
+test("a ticket's events are found by its target, newest first, through an index", () => {
+  const db = dbAt(56);
+  migrate(db, paths());
+  const plan = db.query("EXPLAIN QUERY PLAN SELECT 1 FROM ticket_events WHERE target_id = 'x' ORDER BY created_at DESC").all() as { detail: string }[];
+  expect(plan.map((p) => p.detail).join(" ")).toContain("ticket_events_target");
 });
 
 /** An install at migration 48 with the All chief, a watcher and one TRIAGE session per outcome. */

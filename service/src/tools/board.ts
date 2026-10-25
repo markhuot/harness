@@ -1,7 +1,7 @@
 // Board tools (read-only): every run kind can look around the board for context — list and
 // search tickets in any project, read one ticket in full, list the projects and the Inbox.
 
-import { COS_EVENT_STATUSES, type CosEventSource, type CosEventStatus, TICKET_STATUSES, type TicketStatus } from "@harness/shared";
+import { TICKET_EVENT_SOURCES, TICKET_EVENT_STATUSES, type TicketEventSource, type TicketEventStatus, TICKET_STATUSES, type TicketStatus } from "@harness/shared";
 import type { BoardRelatedTicket, BoardScope, BoardTicket, BoardTicketDetail } from "./types";
 import { defineTool, json, RemoteIdError, schema, ticketView } from "./util";
 
@@ -149,18 +149,16 @@ export const listProjects = defineTool<Record<string, never>>({
   },
 });
 
-const INBOX_SOURCES: CosEventSource[] = ["activity", "watcher", "schedule", "subscription", "child"];
-
 /** list_inbox page size when no limit is given (the ops cap it at 100). */
 export const LIST_INBOX_DEFAULT_LIMIT = 20;
 
-export const listInbox = defineTool<{ status?: CosEventStatus[]; source?: CosEventSource; key?: string; limit?: number }>({
+export const listInbox = defineTool<{ status?: TicketEventStatus[]; source?: TicketEventSource; key?: string; limit?: number }>({
   name: "list_inbox",
   description:
     "List the events addressed to this ticket, newest first: the same ones the Inbox shows (a chief of staff's Inbox also lists events no chief has claimed yet). Each has the event's title and summary, its source (activity, watcher, schedule, subscription or child), its status (pending, triaging, escalated, handling, handled, ignored), triage's verdict and reason, and the ticket it is about. Filter by status, by source, or by key (one event's id, or a ticket key for the events about that ticket). Use it to check what has reached you and how triage treated it.",
   inputSchema: schema({
-    status: { type: "array", items: { type: "string", enum: [...COS_EVENT_STATUSES] }, description: "Only events in these states." },
-    source: { type: "string", enum: INBOX_SOURCES, description: "Only events from this source." },
+    status: { type: "array", items: { type: "string", enum: [...TICKET_EVENT_STATUSES] }, description: "Only events in these states." },
+    source: { type: "string", enum: [...TICKET_EVENT_SOURCES], description: "Only events from this source." },
     key: { type: "string", minLength: 1, description: "Only this event (its id) or the events about this ticket (its key, e.g. \"SHOP-4\")." },
     limit: { type: "integer", minimum: 1, maximum: 100, description: `Most events to return. Default ${LIST_INBOX_DEFAULT_LIMIT}.` },
   }),
@@ -185,6 +183,6 @@ export const listInbox = defineTool<{ status?: CosEventStatus[]; source?: CosEve
         created_at: new Date(e.createdAt).toISOString(),
       })),
     );
-    return items.length < total ? `Showing ${items.length} of ${total} items. Narrow with status, source or key, or raise limit.\n${out}` : out;
+    return items.length < total ? `Showing ${items.length} of ${total} events. Narrow with status, source or key, or raise limit.\n${out}` : out;
   },
 });

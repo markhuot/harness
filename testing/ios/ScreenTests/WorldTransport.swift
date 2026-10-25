@@ -69,7 +69,7 @@ final class WorldTransport: HTTPTransport, @unchecked Sendable {
         }
         let parts = path.split(separator: "/").map(String.init)
         if parts.count == 3, parts[0] == "cos", parts[2] == "events" {
-            return ["items": w.list("cosEvents").filter { $0["cosId"] as? String == parts[1] }, "nextCursor": NSNull()] as [String: Any]
+            return ["items": w.list("ticketEvents").filter { $0["cosId"] as? String == parts[1] }, "nextCursor": NSNull()] as [String: Any]
         }
         if parts.count == 3, parts[0] == "cos", parts[2] == "transcript" {
             // Newest page first, as the service sends it; the world's chat is one page.

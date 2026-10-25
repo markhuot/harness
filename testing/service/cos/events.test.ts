@@ -834,9 +834,9 @@ test("escalate anyway gives a filtered or unowned event the owner its project ha
   s.happen(s.t, "marker-mine", { actor: `cos:${s.chief.ticketId}` });
   s.engine.drain();
   const filtered = s.eventOf("marker-mine");
-  expect(filtered.cosId).toBeNull();
+  expect(filtered.targetId).toBeNull();
   const out = await s.h.orch.escalateCosEvent(filtered.id);
-  expect(out.cosId).toBe(s.chief.ticketId);
+  expect(out.targetId).toBe(s.chief.ticketId);
 });
 
 test("chat pages don't skip entries when wake prompts crowd the message rows", async () => {
@@ -987,7 +987,7 @@ test("the chief's recorded outcome is stored on each event it was woken for and 
   await s.after(MIN);
   expect(results[0]!.text).toContain("Recorded 3 of 4 outcomes.");
   expect(results[0]!.text).toContain("not-an-event");
-  const wire = (m: string) => s.h.orch.cosEvents(s.chief.ticketId, {}).items.find((e) => e.id === s.eventOf(m).id)!;
+  const wire = (m: string) => s.h.orch.eventsPage(s.chief.ticketId, {}).items.find((e) => e.id === s.eventOf(m).id)!;
   expect(wire("marker-a")).toMatchObject({ status: "handled", outcome: { kind: "acted", text: "Moved the ticket back to planning." } });
   expect(wire("marker-b").outcome).toEqual({ kind: "no_action", text: "The agent review approved it; it already waits for you." });
   expect(wire("marker-c").outcome?.kind).toBe("needs_user");

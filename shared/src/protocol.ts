@@ -255,6 +255,11 @@ export interface Ticket {
    * (see `isConductor`), whatever its kind. Optional only so older services and fixtures type-check.
    */
   childCount?: number;
+  /**
+   * Whether any event (other than ones a coded rule dropped) is aimed at this ticket: the Events tab shows only then.
+   * A boolean, not a count, so a busy feed doesn't push the ticket again on every event. Optional only so older services and fixtures type-check.
+   */
+  hasEvents?: boolean;
   /** Keys of tickets that must be done before this one can start */
   dependsOn: string[];
   /** Start automatically once every dependency is done (used by conductors) */

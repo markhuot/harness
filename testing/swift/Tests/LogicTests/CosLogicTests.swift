@@ -2,8 +2,8 @@ import Foundation
 import Testing
 import HarnessKit
 
-private func event(_ id: String, cos: String? = "c1", status: CosEventStatus = .pending, verdict: CosEventVerdict = .pending, at: Double = 0, reason: String? = nil, source: CosEventSource = .activity) -> CosEvent {
-    CosEvent(id: id, cosId: cos, sourceKind: source, title: id, status: status, verdict: verdict, reason: reason, createdAt: at)
+private func event(_ id: String, cos: String? = "c1", status: TicketEventStatus = .pending, verdict: TicketEventVerdict = .pending, at: Double = 0, reason: String? = nil, source: TicketEventSource = .activity) -> TicketEvent {
+    TicketEvent(id: id, cosId: cos, sourceKind: source, title: id, status: status, verdict: verdict, reason: reason, createdAt: at)
 }
 
 private func message(_ id: String, at: Double, text: String = "hi", role: String = "assistant") -> CosChatEntry {
@@ -56,14 +56,14 @@ private func project(_ id: String, group: String?) -> Project {
         #expect(CosLogic.inboxState(event("a", status: .handled, verdict: .filtered)) == .filtered, "a filtered verdict wins over the status")
         #expect(CosLogic.canEscalate(event("a", status: .ignored, verdict: .ignore)))
         #expect(!CosLogic.canEscalate(event("a", status: .ignored, verdict: .filtered)))
-        for status in [CosEventStatus.pending, .triaging, .escalated, .handling, .handled] {
+        for status in [TicketEventStatus.pending, .triaging, .escalated, .handling, .handled] {
             #expect(!CosLogic.canEscalate(event("a", status: status)), "\(status) can't be escalated by hand")
         }
     }
 
     @Test func aHandledRowShowsTheChiefsOutcomeAndOneWithoutIsOnlyReviewed() {
-        func handled(_ kind: CosOutcomeKind?) -> CosEvent {
-            CosEvent(id: "a", cosId: "c1", title: "a", status: .handled, verdict: .escalate, outcome: kind.map { CosOutcome(kind: $0, text: "text for \($0.rawValue)") }, createdAt: 0)
+        func handled(_ kind: CosOutcomeKind?) -> TicketEvent {
+            TicketEvent(id: "a", cosId: "c1", title: "a", status: .handled, verdict: .escalate, outcome: kind.map { CosOutcome(kind: $0, text: "text for \($0.rawValue)") }, createdAt: 0)
         }
         #expect(CosLogic.inboxState(handled(.acted)) == .acted)
         #expect(CosLogic.inboxState(handled(.noAction)) == .noAction)
@@ -330,7 +330,7 @@ private func project(_ id: String, group: String?) -> Project {
         let appended: HarnessEvent = try decode(#"{"kind":"cos.transcript.appended","cosId":"c1","entry":{"id":"m","cosId":"c1","createdAt":1,"kind":"message","role":"user","text":"hi"}}"#)
         #expect(CosBusEvent(event: appended) == .transcriptAppended(cosId: "c1", entry: .message(id: "m", cosId: "c1", createdAt: 1, role: "user", text: "hi")))
 
-        let upserted: HarnessEvent = try decode(#"{"kind":"cos.event.upserted","event":{"id":"e","cosId":null,"projectKey":null,"sourceKind":"watcher","title":"t","summary":"","actor":"watcher:jira","status":"ignored","verdict":"ignore","reason":"noise","model":null,"ticketKey":null,"wakeId":null,"handledBy":null,"createdAt":1}}"#)
+        let upserted: HarnessEvent = try decode(#"{"kind":"ticket.event.upserted","event":{"id":"e","cosId":null,"projectKey":null,"sourceKind":"watcher","title":"t","summary":"","actor":"watcher:jira","status":"ignored","verdict":"ignore","reason":"noise","model":null,"ticketKey":null,"wakeId":null,"handledBy":null,"createdAt":1}}"#)
         guard case let .eventUpserted(e)? = CosBusEvent(event: upserted) else { Issue.record("not an upserted event"); return }
         #expect(e.cosId == nil)
         #expect(e.status == .ignored)
@@ -372,8 +372,8 @@ private func project(_ id: String, group: String?) -> Project {
         #expect(DeepLink.parse(try #require(URL(string: "harness://watcher?id=w1"))) == .tab(.board))
     }
 
-    private func event(_ id: String, status: CosEventStatus, verdict: CosEventVerdict = .pending) -> CosEvent {
-        CosEvent(id: id, cosId: "c1", title: id, status: status, verdict: verdict, createdAt: 0)
+    private func event(_ id: String, status: TicketEventStatus, verdict: TicketEventVerdict = .pending) -> TicketEvent {
+        TicketEvent(id: id, cosId: "c1", title: id, status: status, verdict: verdict, createdAt: 0)
     }
 
     private func message(_ id: String, at: Double) -> CosChatEntry {

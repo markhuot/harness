@@ -73,7 +73,7 @@ test("identical output from the same watcher is delivered once, and injected out
   expect(watcherEvents(h).filter((e) => e.actor === "watcher:work-feed")).toHaveLength(1);
 
   const first = await h.orch.injectOutput("pager", "page: db down");
-  expect(first).toMatchObject({ cosId: all.ticketId, status: "pending" });
+  expect(first).toMatchObject({ targetId: all.ticketId, status: "pending" });
   expect(await h.orch.injectOutput("pager", "page: db down")).toBeNull();
 });
 

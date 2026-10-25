@@ -496,9 +496,9 @@ struct CosInboxView: View {
     private func load(before: String?) async {
         loading = true
         defer { loading = false }
-        let page: CosEventPage
+        let page: TicketEventPage
         do {
-            page = try await store.connectedAPI().cosEvents(chief.ticketId, before: before, limit: Self.page)
+            page = try await store.connectedAPI().ticketEvents(chief.ticketId, before: before, limit: Self.page)
         } catch {
             haptic(.error)
             failure = Connection.describeError(error, baseUrl: store.baseUrl)
@@ -516,7 +516,7 @@ struct CosInboxView: View {
         if before != nil || cursor == nil || hole { cursor = .some(page.nextCursor) }
     }
 
-    private func escalate(_ e: CosEvent) {
+    private func escalate(_ e: TicketEvent) {
         failure = nil
         Task {
             do {
@@ -531,7 +531,7 @@ struct CosInboxView: View {
 }
 
 struct CosEventRow: View {
-    let event: CosEvent
+    let event: TicketEvent
     let escalate: () -> Void
     let openTicket: (String) -> Void
 

@@ -87,10 +87,14 @@ test("list_inbox returns only the events addressed to the caller's own ticket, a
   expect(await ids(b.key, { statuses: ["handled"] })).toEqual([]);
   expect(await ids(a.key, { key: "NOPE-1" })).toEqual([]);
   // A chief reads its Inbox: its own events and the unclaimed ones, exactly the rows the Inbox API returns. A child row is the ticket feed's, never the Inbox's.
-  const api = h.orch.cosEvents(cos.ticketId, {}).items.map((e) => e.id);
+  const api = h.orch.eventsPage(cos.ticketId, {}).items.map((e) => e.id);
   expect(await ids(cos.key)).toEqual(api);
   expect(new Set(api)).toEqual(new Set([forA.id, forCos.id, unassigned.id]));
   expect((await h.orch.ops.listInbox(ctxOf(cos.key), { limit: 2 })).total).toBe(3);
+  // The filters run in the query, so the total counts what matches, not what a page holds.
+  h.store.ticketEvents.update(forCos.id, { status: "handled" });
+  expect(await h.orch.ops.listInbox(ctxOf(cos.key), { statuses: ["pending"], limit: 1 })).toMatchObject({ total: 2, items: [{ status: "pending" }] });
+  expect(await ids(cos.key, { key: forA.id.toLowerCase() })).toEqual([forA.id]);
 });
 
 test("create_ticket makes a ticket on the board in the agent's project and says its key", async () => {

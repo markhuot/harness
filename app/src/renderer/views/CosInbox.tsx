@@ -4,7 +4,7 @@
 // to listen for something; the chief creates the listener with its own tools.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { Cos, CosEvent } from "@harness/shared";
+import type { Cos, TicketEvent } from "@harness/shared";
 import { canEscalate, inboxState, mergeEvents } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import { Modal, relativeTime } from "../components/bits";
@@ -14,7 +14,7 @@ import { useAction, useStore } from "../state/store";
 const PAGE = 50;
 
 /** The rows a chief's Inbox shows: its own events and the unassigned ones, newest first. Rows its own rules dropped (filtered) stay out, except a reminder: it went to you, so it shows. */
-export function inboxRows(events: Record<string, CosEvent>, cosId: string): CosEvent[] {
+export function inboxRows(events: Record<string, TicketEvent>, cosId: string): TicketEvent[] {
   return mergeEvents(
     [],
     Object.values(events).filter((e) => (e.cosId === cosId || e.cosId === null) && (e.verdict !== "filtered" || e.sourceKind === "schedule")),
@@ -25,7 +25,7 @@ export function CosInbox({ chief, onChat }: { chief: Cos; onChat: () => void }) 
   const { state, client, dispatch, epoch } = useStore();
   const act = useAction();
   const id = chief.ticketId;
-  const rows = useMemo(() => inboxRows(state.cosEvents, id), [state.cosEvents, id]);
+  const rows = useMemo(() => inboxRows(state.ticketEvents, id), [state.ticketEvents, id]);
   const [cursor, setCursor] = useState<string | null | undefined>(undefined);
   const [loading, setLoading] = useState(false);
   const [asking, setAsking] = useState(false);
@@ -33,9 +33,9 @@ export function CosInbox({ chief, onChat }: { chief: Cos; onChat: () => void }) 
   const load = useCallback(
     async (before: string | null) => {
       setLoading(true);
-      const page = await act(() => client.cosEvents(id, { before, limit: PAGE }));
+      const page = await act(() => client.ticketEvents(id, { before, limit: PAGE }));
       if (page) {
-        dispatch({ type: "cosEvents", events: page.items });
+        dispatch({ type: "ticketEvents", events: page.items });
         setCursor((c) => (before === null && c !== undefined ? c : page.nextCursor));
       }
       setLoading(false);
@@ -79,14 +79,14 @@ export function CosInbox({ chief, onChat }: { chief: Cos; onChat: () => void }) 
 const STATE_LABEL = { waiting: "Waiting for a verdict", ignored: "Ignored", escalated: "Escalated", handling: "Handling", acted: "Acted", no_action: "No action needed", needs_user: "Needs you", reviewed: "Reviewed, no outcome recorded", filtered: "Filtered" } as const;
 const SOURCE_LABEL = { activity: "Ticket", watcher: "Watcher", schedule: "Schedule", subscription: "Subscription", child: "Child" } as const;
 
-function EventRow({ event: e }: { event: CosEvent }) {
+function EventRow({ event: e }: { event: TicketEvent }) {
   const { client, dispatch, navigate } = useStore();
   const act = useAction();
   const [looking, setLooking] = useState(false);
   const st = inboxState(e);
   const escalate = async () => {
     const next = await act(() => client.escalateCosEvent(e.id));
-    if (next) dispatch({ type: "cosEvents", events: [next] });
+    if (next) dispatch({ type: "ticketEvents", events: [next] });
   };
   return (
     <div className="cos-event" data-testid="cos-event" data-state={st} data-event={e.id}>

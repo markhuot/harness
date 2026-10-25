@@ -8,7 +8,7 @@
 
 import {
   SCHEDULE_STALE_MS,
-  type CosEvent,
+  type TicketEvent,
   type Schedule,
   type ScheduleOutcome,
   type ScheduleStatus,
@@ -30,7 +30,7 @@ export interface CosEventSink {
     cosId?: string | null;
     /** Record the event as handled without a wake, with this reason (a reminder) */
     filtered?: string;
-  }): CosEvent | null;
+  }): TicketEvent | null;
 }
 
 /** How a reminder reaches the human (NotificationService.remind). */
@@ -137,7 +137,7 @@ export class Scheduler {
     const body = s.message
       ? `${s.message}\n\nScheduled for ${when}.`
       : `Scheduled for ${when}.`;
-    let event: CosEvent | null = null;
+    let event: TicketEvent | null = null;
     const cancelled = new Error("cancelled");
     try {
       store.transaction(() => {

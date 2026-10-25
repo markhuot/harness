@@ -75,7 +75,7 @@ export const tickets = [
     completedAt: hoursAgo(5),
     updatedAt: hoursAgo(5),
   }),
-  ticket({ key: "HARNESS-8", projectId: H, status: "in_progress", kind: "conductor", title: "Ship the iPad layout", childCount: 2, autoStart: true, position: 3, updatedAt: minutesAgo(10) }),
+  ticket({ key: "HARNESS-8", projectId: H, status: "in_progress", kind: "conductor", title: "Ship the iPad layout", childCount: 2, hasEvents: true, autoStart: true, position: 3, updatedAt: minutesAgo(10) }),
   ticket({ key: "HARNESS-9", projectId: H, status: "review", title: "iPad: two-column board", parentId: "ticket-HARNESS-8", agentReview: "approved", position: 3, updatedAt: minutesAgo(12) }),
   ticket({ key: "HARNESS-10", projectId: H, status: "planning", title: "iPad: sidebar navigation", parentId: "ticket-HARNESS-8", dependsOn: ["HARNESS-9"], position: 2, updatedAt: minutesAgo(11) }),
   ticket({

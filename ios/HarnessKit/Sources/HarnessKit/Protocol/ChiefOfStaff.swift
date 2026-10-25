@@ -3,7 +3,7 @@ import Foundation
 // Chief of staff (CoS) shapes: the Swift port of shared/src/cos.ts (DESIGN.md "Chief of staff").
 // The conventions of HarnessProtocol.swift apply.
 
-public enum CosEventSource: OpenEnum {
+public enum TicketEventSource: OpenEnum {
     case activity, watcher, schedule, subscription, child
     case unknown(String)
     public static let allKnown: [Self] = [.activity, .watcher, .schedule, .subscription, .child]
@@ -21,7 +21,7 @@ public enum CosEventSource: OpenEnum {
 
 /// Where an event is: pending (waiting for triage), triaging, escalated (for the next wake),
 /// handling (in a run), handled, or ignored.
-public enum CosEventStatus: OpenEnum {
+public enum TicketEventStatus: OpenEnum {
     case pending, triaging, escalated, handling, handled, ignored
     case unknown(String)
     public static let allKnown: [Self] = [.pending, .triaging, .escalated, .handling, .handled, .ignored]
@@ -40,7 +40,7 @@ public enum CosEventStatus: OpenEnum {
 
 /// What triage said: not yet, ignore, escalate, or dropped by a coded rule (a chief's own activity,
 /// a net-zero move).
-public enum CosEventVerdict: OpenEnum {
+public enum TicketEventVerdict: OpenEnum {
     case pending, ignore, escalate, filtered
     case unknown(String)
     public static let allKnown: [Self] = [.pending, .ignore, .escalate, .filtered]
@@ -70,7 +70,7 @@ public enum CosOutcomeKind: OpenEnum {
     }
 }
 
-/// The chief's own account of one event (CosEvent.outcome).
+/// The chief's own account of one event (TicketEvent.outcome).
 public struct CosOutcome: Codable, Sendable, Equatable {
     public var kind: CosOutcomeKind
     public var text: String
@@ -111,18 +111,18 @@ public struct Cos: Codable, Sendable, Equatable, Identifiable {
 }
 
 /// One row of a chief's Inbox (GET /cos/:id/events).
-public struct CosEvent: Codable, Sendable, Equatable, Identifiable {
+public struct TicketEvent: Codable, Sendable, Equatable, Identifiable {
     public var id: String
     /// The chief that owns it; nil while no chief qualifies (unassigned)
     @Nullable public var cosId: String?
     @Nullable public var projectKey: String?
-    public var sourceKind: CosEventSource
+    public var sourceKind: TicketEventSource
     public var title: String
     public var summary: String
     /// "human", "agent", "system", "watcher:<name>" or "cos:<chief id>"
     public var actor: String
-    public var status: CosEventStatus
-    public var verdict: CosEventVerdict
+    public var status: TicketEventStatus
+    public var verdict: TicketEventVerdict
     @Nullable public var reason: String?
     @Nullable public var model: String?
     @Nullable public var ticketKey: String?
@@ -136,8 +136,8 @@ public struct CosEvent: Codable, Sendable, Equatable, Identifiable {
     public var createdAt: Timestamp
 
     public init(
-        id: String, cosId: String? = nil, projectKey: String? = nil, sourceKind: CosEventSource = .activity, title: String, summary: String = "",
-        actor: String = "agent", status: CosEventStatus = .pending, verdict: CosEventVerdict = .pending, reason: String? = nil, model: String? = nil,
+        id: String, cosId: String? = nil, projectKey: String? = nil, sourceKind: TicketEventSource = .activity, title: String, summary: String = "",
+        actor: String = "agent", status: TicketEventStatus = .pending, verdict: TicketEventVerdict = .pending, reason: String? = nil, model: String? = nil,
         ticketKey: String? = nil, wakeId: String? = nil, handledBy: String? = nil, outcome: CosOutcome? = nil, triageSessionId: String? = nil, createdAt: Timestamp
     ) {
         self.id = id
@@ -161,11 +161,11 @@ public struct CosEvent: Codable, Sendable, Equatable, Identifiable {
 }
 
 /// GET /cos/:id/events
-public struct CosEventPage: Codable, Sendable, Equatable {
-    public var items: [CosEvent]
+public struct TicketEventPage: Codable, Sendable, Equatable {
+    public var items: [TicketEvent]
     @Nullable public var nextCursor: String?
 
-    public init(items: [CosEvent], nextCursor: String? = nil) {
+    public init(items: [TicketEvent], nextCursor: String? = nil) {
         self.items = items
         self.nextCursor = nextCursor
     }
@@ -332,7 +332,7 @@ public struct OpenCosBody: Codable, Sendable, Equatable {
 /// Bus events for the Inbox and chat. They travel in the same `{type: "event"}` frames but aren't
 /// part of `HarnessEvent`, which decodes them as `.unknown`; `init?(event:)` reads them from there.
 public enum CosBusEvent: Codable, Sendable, Equatable {
-    case eventUpserted(CosEvent)
+    case eventUpserted(TicketEvent)
     case badge(CosBadge)
     case transcriptAppended(cosId: String, entry: CosChatEntry)
 
@@ -348,7 +348,7 @@ public enum CosBusEvent: Codable, Sendable, Equatable {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: AnyCodingKey.self)
         switch try c.decode(String.self, forKey: "kind") {
-        case "cos.event.upserted": self = .eventUpserted(try c.decode(CosEvent.self, forKey: "event"))
+        case "ticket.event.upserted": self = .eventUpserted(try c.decode(TicketEvent.self, forKey: "event"))
         case "cos.badge": self = .badge(CosBadge(total: try c.decode(Int.self, forKey: "total"), byCos: try c.decode([String: Int].self, forKey: "byCos")))
         case "cos.transcript.appended":
             self = .transcriptAppended(cosId: try c.decode(String.self, forKey: "cosId"), entry: try c.decode(CosChatEntry.self, forKey: "entry"))
@@ -361,7 +361,7 @@ public enum CosBusEvent: Codable, Sendable, Equatable {
         var c = encoder.container(keyedBy: AnyCodingKey.self)
         switch self {
         case let .eventUpserted(event):
-            try c.encode("cos.event.upserted", forKey: "kind")
+            try c.encode("ticket.event.upserted", forKey: "kind")
             try c.encode(event, forKey: "event")
         case let .badge(badge):
             try c.encode("cos.badge", forKey: "kind")

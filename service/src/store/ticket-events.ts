@@ -1,13 +1,13 @@
 import type { Database } from "bun:sqlite";
-import type { CosBadge, CosEvent, CosOutcome, CosEventSource, CosEventStatus, CosEventVerdict } from "@harness/shared";
+import type { CosBadge, TicketEvent, CosOutcome, TicketEventSource, TicketEventStatus, TicketEventVerdict } from "@harness/shared";
 import { COS_OPEN_STATUSES, COS_OUTCOME_KINDS } from "@harness/shared";
 import { fromJson, newId } from "./util";
 import { type Clock, systemClock } from "../clock";
 
-/** A stored event: the wire CosEvent plus what the engine needs and clients don't. */
-export interface StoredTicketEvent extends CosEvent {
-  /** The ticket the event wakes (the chief's id for chief-of-staff rows); null while no owner is picked */
-  targetId: string | null;
+/** A stored event: the wire TicketEvent plus what the engine needs and clients don't. */
+export interface StoredTicketEvent extends TicketEvent {
+  /** The chief that owns it; null while no chief qualifies (unassigned) */
+  cosId: string | null;
   projectId: string | null;
   ticketId: string | null;
   /** The activity kind ("moved", "submitted", ...) for activity events, else "" */
@@ -68,12 +68,12 @@ const toEvent = (r: Row): StoredTicketEvent => {
     cosId: r.cos_id,
     targetId: r.target_id,
     projectKey: r.project_key,
-    sourceKind: r.source_kind as CosEventSource,
+    sourceKind: r.source_kind as TicketEventSource,
     title: r.title,
     summary: r.summary,
     actor: r.actor,
-    status: r.status as CosEventStatus,
-    verdict: r.verdict as CosEventVerdict,
+    status: r.status as TicketEventStatus,
+    verdict: r.verdict as TicketEventVerdict,
     reason: r.reason,
     model: r.model,
     ticketKey: r.ticket_key,
@@ -98,7 +98,7 @@ export interface NewTicketEvent {
   targetId?: string | null;
   projectId: string | null;
   ticketId: string | null;
-  sourceKind: CosEventSource;
+  sourceKind: TicketEventSource;
   /** Unique per source: an activity row's id, a watcher's content hash, a schedule fire */
   sourceRef: string;
   kind?: string;
@@ -116,10 +116,10 @@ export interface NewTicketEvent {
 export interface EventPatch {
   cosId?: string | null;
   projectId?: string | null;
-  verdict?: CosEventVerdict;
+  verdict?: TicketEventVerdict;
   reason?: string | null;
   model?: string | null;
-  status?: CosEventStatus;
+  status?: TicketEventStatus;
   wakeId?: string | null;
   consumingRunId?: string | null;
   summary?: string;
@@ -157,7 +157,20 @@ export interface WakeLog {
 
 export type WakeOutcome = "spoke" | "quiet" | "failed";
 
-/** The events table (DESIGN.md "Events"): every event with its owner, verdict and status. Today only the chief-of-staff Inbox reads it. */
+/** What `list` and `count` filter by. */
+export interface EventFilter {
+  cosId?: string;
+  targetId?: string;
+  status?: TicketEventStatus;
+  /** Any of these (wins over `status`) */
+  statuses?: readonly TicketEventStatus[];
+  sourceKind?: string;
+  /** An event id or the key of the ticket it is about */
+  key?: string;
+  before?: { createdAt: number; id: string };
+}
+
+/** The events table (DESIGN.md "Events"): every event with its owner, target, verdict and status. A ticket's Events tab, a chief's Inbox and the delivery engines read it. */
 export class TicketEventRepo {
   constructor(private db: Database, private now: Clock = systemClock) {}
 
@@ -180,6 +193,8 @@ export class TicketEventRepo {
     if (input.targetId === undefined && this.db.query("SELECT 1 FROM ticket_events WHERE source_kind = $k AND source_ref = $r").get({ k: input.sourceKind, r: input.sourceRef })) return null;
     // One change reaches a ticket once, whether it came as the parent or as a subscriber.
     if (input.targetId && (TICKET_SOURCE_KINDS as readonly string[]).includes(input.sourceKind) && this.db.query(`SELECT 1 FROM ticket_events e WHERE e.target_id = $t AND e.source_ref = $r AND ${scopeSql("ticket")}`).get({ t: input.targetId, r: input.sourceRef })) return null;
+    const target = input.targetId === undefined ? input.cosId : input.targetId;
+    const flips = !filtered && !!target && !this.hasEvents(target);
     const res = this.db
       .query(
         `INSERT OR IGNORE INTO ticket_events (id, cos_id, target_id, project_id, ticket_id, source_kind, source_ref, kind, actor, title, summary, payload, verdict, reason, status, created_at, updated_at)
@@ -188,7 +203,7 @@ export class TicketEventRepo {
       .run({
         id,
         cosId: input.cosId,
-        targetId: input.targetId === undefined ? input.cosId : input.targetId,
+        targetId: target,
         projectId: input.projectId,
         ticketId: input.ticketId,
         sourceKind: input.sourceKind,
@@ -204,6 +219,7 @@ export class TicketEventRepo {
         createdAt: input.createdAt ?? t,
         t,
       });
+    if (res.changes && flips) this.onHasEventsChange?.(target!);
     return res.changes ? this.get(id) : null;
   }
 
@@ -212,10 +228,10 @@ export class TicketEventRepo {
     return r ? toEvent(r) : null;
   }
 
-  /** Newest first. `targetId` keeps the events that wake one ticket. A chief's page includes the unassigned events, so a chief that is off or missing never hides them. */
-  list(opts: { cosId?: string; targetId?: string; status?: CosEventStatus; sourceKind?: string; before?: { createdAt: number; id: string }; limit: number }): StoredTicketEvent[] {
+  /** The WHERE clause shared by `list` and `count`. */
+  private filter(opts: EventFilter): { where: string; args: Record<string, string | number> } {
     const where: string[] = ["1 = 1"];
-    const args: Record<string, string | number> = { limit: opts.limit };
+    const args: Record<string, string | number> = {};
     if (opts.cosId) {
       where.push(`(e.cos_id = $cosId OR e.cos_id IS NULL) AND ${scopeSql("chief")}`);
       args.cosId = opts.cosId;
@@ -224,24 +240,46 @@ export class TicketEventRepo {
       where.push("e.target_id = $targetId");
       args.targetId = opts.targetId;
     }
-    if (opts.status) {
-      where.push("e.status = $status");
-      args.status = opts.status;
-    }
+    const statuses = opts.statuses?.length ? opts.statuses : opts.status ? [opts.status] : [];
+    if (statuses.length) where.push(`e.status IN (${statuses.map((st, i) => ((args[`s${i}`] = st), `$s${i}`)).join(", ")})`);
     if (opts.sourceKind) {
       where.push("e.source_kind = $sourceKind");
       args.sourceKind = opts.sourceKind;
+    }
+    if (opts.key) {
+      where.push("(UPPER(e.id) = $key OR UPPER(t.key) = $key)");
+      args.key = opts.key.toUpperCase();
     }
     if (opts.before) {
       where.push("(e.created_at < $bt OR (e.created_at = $bt AND e.id < $bid))");
       args.bt = opts.before.createdAt;
       args.bid = opts.before.id;
     }
-    return (this.db.query(`${SELECT} WHERE ${where.join(" AND ")} ORDER BY e.created_at DESC, e.id DESC LIMIT $limit`).all(args) as Row[]).map(toEvent);
+    return { where: where.join(" AND "), args };
   }
 
+  /** Newest first. `targetId` keeps the events that wake one ticket. A chief's page includes the unassigned events, so a chief that is off or missing never hides them. */
+  list(opts: EventFilter & { limit: number }): StoredTicketEvent[] {
+    const { where, args } = this.filter(opts);
+    return (this.db.query(`${SELECT} WHERE ${where} ORDER BY e.created_at DESC, e.id DESC LIMIT $limit`).all({ ...args, limit: opts.limit }) as Row[]).map(toEvent);
+  }
+
+  /** How many events `list` would find across every page (`before` and `limit` aside). */
+  count(opts: Omit<EventFilter, "before">): number {
+    const { where, args } = this.filter(opts);
+    return (this.db.query(`SELECT COUNT(*) AS n FROM ticket_events e LEFT JOIN tickets t ON t.id = e.ticket_id WHERE ${where}`).get(args) as { n: number }).n;
+  }
+
+  /** Whether the ticket has an event its Events tab shows (the `hasEvents` it carries). */
+  hasEvents(targetId: string): boolean {
+    return !!this.db.query("SELECT 1 FROM ticket_events WHERE target_id = $targetId AND verdict <> 'filtered' LIMIT 1").get({ targetId });
+  }
+
+  /** Called with a ticket's id when its `hasEvents` flips on (an insert, a chief taking a row) or off (a prune): the ticket is then pushed again. */
+  onHasEventsChange: ((targetId: string) => void) | null = null;
+
   /** Events with a status, oldest first; `cosId` null for the unassigned ones, undefined for every owner. */
-  byStatus(status: CosEventStatus, cosId?: string | null, scope: EventScope = "chief"): StoredTicketEvent[] {
+  byStatus(status: TicketEventStatus, cosId?: string | null, scope: EventScope = "chief"): StoredTicketEvent[] {
     const owner = cosId === undefined ? "" : cosId === null ? "AND e.cos_id IS NULL" : "AND e.cos_id = $cosId";
     const args: Record<string, string> = { status };
     if (typeof cosId === "string") args.cosId = cosId;
@@ -249,7 +287,7 @@ export class TicketEventRepo {
   }
 
   /** Events with a status that wake one ticket, oldest first. */
-  byTarget(status: CosEventStatus, targetId: string, scope: EventScope = "chief"): StoredTicketEvent[] {
+  byTarget(status: TicketEventStatus, targetId: string, scope: EventScope = "chief"): StoredTicketEvent[] {
     return (this.db.query(`${SELECT} WHERE e.status = $status AND e.target_id = $targetId AND ${scopeSql(scope)} ORDER BY e.created_at, e.rowid`).all({ status, targetId }) as Row[]).map(toEvent);
   }
 
@@ -257,7 +295,7 @@ export class TicketEventRepo {
     return (this.db.query(`${SELECT} WHERE e.wake_id = $wakeId ORDER BY e.created_at, e.rowid`).all({ wakeId }) as Row[]).map(toEvent);
   }
 
-  byRun(runId: string, status: CosEventStatus, scope: EventScope = "chief"): StoredTicketEvent[] {
+  byRun(runId: string, status: TicketEventStatus, scope: EventScope = "chief"): StoredTicketEvent[] {
     return (this.db.query(`${SELECT} WHERE e.consuming_run_id = $runId AND e.status = $status AND ${scopeSql(scope)}`).all({ runId, status }) as Row[]).map(toEvent);
   }
 
@@ -270,7 +308,10 @@ export class TicketEventRepo {
     for (const [k, v] of Object.entries(patch)) if (v !== undefined) args[k] = k === "payload" ? JSON.stringify(v) : (v as string | null);
     // A chief taking over a row is the row's target too, but a row aimed at another ticket keeps its target (DESIGN.md "Events")
     if (patch.cosId !== undefined) sets.push("target_id = CASE WHEN target_id IS cos_id THEN $cosId ELSE target_id END");
+    const before = patch.cosId ? this.get(id) : null;
+    const flips = !!patch.cosId && !!before && before.targetId === before.cosId && !this.hasEvents(patch.cosId);
     this.db.query(`UPDATE ticket_events SET ${sets.join(", ")}, updated_at = $t WHERE id = $id`).run(args);
+    if (flips && this.hasEvents(patch.cosId!)) this.onHasEventsChange?.(patch.cosId!);
     return this.get(id);
   }
 
@@ -303,17 +344,23 @@ export class TicketEventRepo {
   /** Delete settled events (ignored, handled) last touched before `before`, and the wake log from before it. */
   prune(before: number): number {
     this.db.query("DELETE FROM event_wakes WHERE started_at < $before").run({ before });
-    return this.db.query("DELETE FROM ticket_events WHERE status IN ('ignored', 'handled') AND updated_at < $before").run({ before }).changes;
+    return this.deleteWhere("status IN ('ignored', 'handled') AND updated_at < $before", { before });
+  }
+
+  /** Delete rows, then tell `onHasEventsChange` about each target that is left with none. */
+  private deleteWhere(where: string, args: Record<string, string | number>): number {
+    const targets = (this.db.query(`SELECT DISTINCT target_id FROM ticket_events WHERE target_id IS NOT NULL AND ${where}`).all(args) as { target_id: string }[]).map((r) => r.target_id);
+    const changes = this.db.query(`DELETE FROM ticket_events WHERE ${where}`).run(args).changes;
+    for (const id of targets) if (!this.hasEvents(id)) this.onHasEventsChange?.(id);
+    return changes;
   }
 
   /** Delete unowned events still waiting (pending, escalated) that are older than `before`, and all but the newest `keep` of the rest. */
   pruneUnassigned(before: number, keep: number): number {
     // Open items converted from the old Inbox (migration 49) wait for the All chief; they are never pruned.
     const open = `cos_id IS NULL AND status IN ('pending', 'escalated') AND source_ref NOT LIKE 'triage:%' AND source_kind NOT IN (${TICKET_KINDS_SQL})`;
-    const old = this.db.query(`DELETE FROM ticket_events WHERE ${open} AND created_at < $before`).run({ before }).changes;
-    const over = this.db
-      .query(`DELETE FROM ticket_events WHERE ${open} AND id IN (SELECT id FROM ticket_events WHERE ${open} ORDER BY created_at DESC, rowid DESC LIMIT -1 OFFSET $keep)`)
-      .run({ keep }).changes;
+    const old = this.deleteWhere(`${open} AND created_at < $before`, { before });
+    const over = this.deleteWhere(`${open} AND id IN (SELECT id FROM ticket_events WHERE ${open} ORDER BY created_at DESC, rowid DESC LIMIT -1 OFFSET $keep)`, { keep });
     return old + over;
   }
 

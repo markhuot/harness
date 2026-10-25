@@ -27,9 +27,9 @@ import type {
   Ticket,
   TicketStatus,
   ToolResultContent,
-  CosEvent,
-  CosEventSource,
-  CosEventStatus,
+  TicketEvent,
+  TicketEventSource,
+  TicketEventStatus,
   TranscriptRole,
   Watcher,
   PhaseChoice,
@@ -362,8 +362,8 @@ export interface HarnessOps {
    */
   listInbox(
     ctx: ToolContext,
-    filter: { statuses?: CosEventStatus[]; source?: CosEventSource; key?: string; limit?: number },
-  ): Promise<{ items: CosEvent[]; total: number }>;
+    filter: { statuses?: TicketEventStatus[]; source?: TicketEventSource; key?: string; limit?: number },
+  ): Promise<{ items: TicketEvent[]; total: number }>;
 
   // --- memory and activity: chief of staff runs (DESIGN.md "Chief of staff memory") ---
   /** Activity across the tickets the caller covers, newest first, with a blocked entry's answers. Out-of-scope tickets match nothing. */
