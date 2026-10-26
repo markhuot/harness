@@ -588,6 +588,8 @@ export class Orchestrator {
    * the run started, so a run that outlives its conversation can't write it back.
    */
   private sessionEpochs = new Map<string, number>();
+  /** Sessions that rotated for an expired cache and haven't made a call yet: their next run still gets the handoff block */
+  private pendingHandoff = new Set<string>();
   /** The plan-usage gauges' readings (DESIGN.md "Plan usage"); the app polls it while clients are connected */
   readonly planUsage: PlanUsageTracker;
   private queue: RunQueue;
@@ -5836,7 +5838,15 @@ ${numberLines(r.body)}`;
     const project = ticket ? this.store.projects.get(ticket.projectId) : null;
     const driver = this.drivers.get(run.driver);
     // Before the epoch is read below: starting a new session bumps it, and the run saves its own state under the new one.
-    const idleHandoff = this.expireIdleSession(run, session, ticket, driver);
+    let idleHandoff = false;
+    try {
+      idleHandoff = this.expireIdleSession(run, session, ticket, driver);
+    } catch (err) {
+      // A failed write must not strand the run as queued: it resumes the old conversation instead.
+      this.log(`couldn't check ${session.id} for an expired cache: ${errMsg(err)}`);
+    }
+    // A rotating run that fails before its first call leaves the handoff for the next one.
+    if (this.pendingHandoff.has(session.id) && driver && !FRESH_RUN_KINDS.has(run.kind) && run.kind !== "compact") idleHandoff = true;
     const controller = new AbortController();
     const active: ActiveRun = {
       run,
@@ -5922,18 +5932,20 @@ ${numberLines(r.body)}`;
    * A run that would resume a conversation whose prompt cache has expired starts a new session
    * instead (DESIGN.md "Driver state and sessions"): resuming reads the whole history uncached,
    * with the old context steering the agent. True when it did, so the run's context points at the
-   * old conversation. Checked once, as the run starts, and never while another run of the session
-   * is going: a new session would drop that run's state save.
+   * old conversation. Checked once, as the run starts, and never while another run that resumes
+   * the conversation is going: a new session would drop that run's state save.
    */
   private expireIdleSession(run: Run, session: Session, ticket: Ticket | null, driver: Driver | undefined): boolean {
     if (!driver || FRESH_RUN_KINDS.has(run.kind) || run.kind === "compact") return false;
-    if ([...this.active.values()].some((a) => a.run.sessionId === session.id)) return false;
+    if ([...this.active.values()].some((a) => a.run.sessionId === session.id && !FRESH_RUN_KINDS.has(a.run.kind))) return false;
     if (this.store.sessions.getDriverState(session.id, run.driver) == null) return false;
-    const last = this.store.sessions.lastCall(session.id);
+    // The gauge's numbers follow the resumed conversation (epoch, compaction), so they say when its cache was last touched and how big it is.
+    const last = this.store.sessions.getContext(session.id);
     const now = this.now();
-    const idle = sessionExpiry({ lastCallAt: last?.at ?? null, now, ttlMs: driver.cacheTtlMs, contextTokens: last?.tokens ?? 0 });
+    const idle = sessionExpiry({ lastCallAt: last?.at ?? null, now, ttlMs: driver.cacheTtlMs, contextTokens: last ? last.input + last.cacheRead + last.cacheWrite : 0 });
     if (idle == null) return false;
     this.newSession(session.id);
+    this.pendingHandoff.add(session.id);
     const text = `New session: the previous one was idle for ${idleLabel(idle)}, past the ${idleLabel(driver.cacheTtlMs!)} cache.`;
     this.appendStatus(session.id, run.id, text);
     if (ticket) this.addActivityLine(ticket, "system", "system", text);
@@ -6187,6 +6199,7 @@ ${numberLines(r.body)}`;
         // fresh, a compact run's own calls aren't it, and a run from before a session change no
         // longer is. Every call is kept either way.
         const first = active.modelCalls++ === 0;
+        if (!FRESH_RUN_KINDS.has(run.kind) && run.kind !== "compact") this.pendingHandoff.delete(run.sessionId);
         const at = this.now();
         this.store.sessions.addCall(run.sessionId, run.id, ev.call, at);
         if (!FRESH_RUN_KINDS.has(run.kind) && run.kind !== "compact" && active.sessionEpoch === (this.sessionEpochs.get(run.sessionId) ?? 0)) {

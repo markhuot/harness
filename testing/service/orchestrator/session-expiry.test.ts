@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
-import { bigReplyScript, FakeDriver, gate, replyScript } from "../fake-driver";
+import { bigReplyScript, failScript, FakeDriver, gate, replyScript } from "../fake-driver";
+import { compactedContext } from "../../../service/src/orchestrator/context-usage";
 import { SESSION_EXPIRY_MIN_TOKENS } from "../../../service/src/orchestrator/session-expiry";
 import { makeOrchestrator, stopAll } from "../orchestrator-harness";
 
@@ -119,4 +120,24 @@ test("a session whose other run is still going is left alone, and a burst rotate
   const starts = h.store.activity.listBySession(sessionId).filter((e) => e.body.startsWith("New session:"));
   expect(starts).toHaveLength(1);
   expect(h.driver.requests.filter((r) => (r.runContext ?? "").includes(HANDOFF))).toHaveLength(1);
+});
+
+test("a compacted conversation is measured at its compacted size, not by the compact run's own big call", async () => {
+  const { h, t, sessionId } = await bigSession();
+  const run = h.store.runs.create({ sessionId, kind: "compact", driver: "fake", prompt: "compact", attachments: [] });
+  h.store.sessions.addCall(sessionId, run.id, { input: 0, cacheRead: 0, cacheWrite: 300_000, output: 1 }, h.clock());
+  h.store.runs.finish(run.id, "succeeded");
+  h.store.sessions.setContext(sessionId, compactedContext(h.store.sessions.getContext(sessionId), 30_000, h.clock()));
+  await later(h, t.key, "much later", 5 * HOUR);
+  expect(h.driver.requests.at(-1)!.state).not.toBeNull();
+  expect(h.driver.requests.at(-1)!.runContext ?? "").not.toContain(HANDOFF);
+});
+
+test("a rotating run that fails before its first call leaves the handoff for the next run", async () => {
+  const { h, t } = await bigSession();
+  h.driver.script(failScript("usage limit"));
+  await later(h, t.key, "back", 2 * HOUR);
+  await later(h, t.key, "retry", 60_000);
+  expect(h.driver.requests.at(-1)!.state).toBeNull();
+  expect(h.driver.requests.at(-1)!.runContext).toContain(HANDOFF);
 });
