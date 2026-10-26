@@ -12,8 +12,8 @@ afterEach(stopAll);
  * Three projects: ACME (in no group), WORK1 (group Work) and HOME1 (group Home), a ticket in each,
  * and a runner that sends a message to a chief of staff whose scripted run calls `calls`.
  */
-async function board(opts: Parameters<typeof makeOrchestrator>[0] = {}) {
-  const h = makeOrchestrator({ tools: undefined, ...opts });
+async function board(opts: { cosTriage?: CosTriage } = {}) {
+  const h = makeOrchestrator<FakeDriver>({ tools: undefined, ...opts });
   const project = (key: string, group?: string) => {
     const dir = join(h.home, "proj", key.toLowerCase());
     mkdirSync(dir, { recursive: true });
