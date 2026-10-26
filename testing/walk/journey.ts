@@ -327,6 +327,29 @@ export function steps(start: Start, built: { app: string }): Step[] {
         await phoneShots(ctx, "08a-chat");
       },
     },
+    {
+      name: "9. a parent hears its child: the Events tab appears on the Mac with the row, and Settings has the retention field",
+      async run(ctx) {
+        const main = ctx.mac.main;
+        const d = ctx.daemon;
+        await main.evaluate(`location.hash = '#/board/${ctx.projectId}'`);
+        const parent = await d.call<Ticket>("POST", "/tickets", { projectId: ctx.projectId, spec: "Conduct the cache work", kind: "conductor", start: false });
+        await main.click(`.card[data-key="${parent.key}"]`);
+        await main.waitFor("the new parent's tabs, with no Events tab yet", `document.querySelector('[data-testid="pane-ticket"] [role=tab][data-tab="spec"]') && !document.querySelector('[role=tab][data-tab="events"]')`);
+        // The child runs to Review on the dummy driver; its parent hears each move (a `child` event).
+        const child = await d.call<Ticket>("POST", "/tickets", { projectId: ctx.projectId, spec: "Build one cache", parentId: parent.key, skipAgentReview: true });
+        await ctx.ws.event("the parent to gain events", (e) => e.kind === "ticket.upserted" && e.ticket.id === parent.id && e.ticket.hasEvents === true);
+        await main.waitFor("the Events tab on the parent", `document.querySelector('[data-testid="pane-ticket"] [role=tab][data-tab="events"]')`);
+        await main.click("[role=tab][data-tab=events]");
+        await main.waitFor(`the child's row in the Events tab`, `document.querySelector('[data-testid="ticket-events"] [data-testid="cos-event"]')?.innerText.includes(${JSON.stringify(child.key)})`);
+        await shot(ctx, "09-mac-events");
+
+        await main.evaluate(`location.hash = '#/settings'`);
+        await main.waitFor("the retention field", `document.querySelector('input[aria-label="Keep event history for"]')`);
+        await main.evaluate(`document.querySelector('input[aria-label="Keep event history for"]').scrollIntoView({ block: 'center' })`);
+        await shot(ctx, "09-mac-settings-retention");
+      },
+    },
   ];
 }
 

@@ -127,6 +127,15 @@ final class ScreenTests: ScreenTestCase {
         try await screen("cos-memory") { CosMemorySheet(chief: chief) }
     }
 
+    /// Settings → General, with the event history field (7 days from the world's settings).
+    func testGeneralSettings() async throws {
+        let settings = try XCTUnwrap(world.store.state.settings)
+        try await screen("general-settings") {
+            Form { SettingsGeneralSection(settings: settings) }
+                .settingsFormStyle(Palette(world.app.resolvedTheme(systemDark: false)))
+        }
+    }
+
     /// The chief of staff's switch, column boxes and model: the app's (Review checked; Default is the Work model),
     /// and a project that chose its own columns and model.
     func testCosSettings() async throws {

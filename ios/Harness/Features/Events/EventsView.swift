@@ -49,7 +49,7 @@ struct EventsView: View {
                     }
                 }
                 .padding(.horizontal, 16)
-                .padding(.top, 8)
+                .padding(.top, chief ? 0 : 8)
                 .padding(.bottom, 16)
             }
             .refreshable { await load(before: nil) }
