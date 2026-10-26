@@ -96,6 +96,40 @@ describe("TicketDetail", () => {
     expect(m.client.requests).toContain("POST /tickets/HARNESS-4/unblock");
   });
 
+  test("a blocked ticket shows its question and Unblock at the top of the Spec, outside the spec text", async () => {
+    const m = await mount(detail("HARNESS-4"));
+    await m.until("the callout", () => all(m.container, "[data-testid=blocked-callout]").length === 1);
+    const callout = all(m.container, "[data-testid=blocked-callout]")[0]!;
+    expect(text(callout)).toContain("Postgres or SQLite for the hosted tier?");
+    expect(callout.closest(".spec-body")!.firstElementChild).toBe(callout);
+    expect(all(m.container, "[data-testid=spec-doc]").every((d) => !text(d).includes("Postgres or SQLite"))).toBe(true);
+    await click(m, all(callout, "[data-testid=blocked-callout-unblock]")[0]!);
+    // The dialog opened from the callout, not one an earlier file left in the shared document.
+    await click(m, all(document.body, ".modal-foot button").filter((b) => text(b).startsWith("Unblock")).at(-1)!);
+    expect(m.client.requests).toContain("POST /tickets/HARNESS-4/unblock");
+  });
+
+  test("the callout is absent unless blocked, and a long question is clamped until Show all", async () => {
+    const review = await mount(detail("HARNESS-5"));
+    await review.until("loads", () => text(review.container).includes("Speed up the board"));
+    expect(all(review.container, "[data-testid=blocked-callout]")).toHaveLength(0);
+    review.unmount();
+
+    const long = "Which one?\n\n" + "A very long option. ".repeat(60);
+    const m = await mount(detail("HARNESS-4"), { world: edited((w) => void (w.tickets.find((t) => t.key === "HARNESS-4")!.blockedReason = long)) });
+    await m.until("the callout", () => all(m.container, "[data-testid=blocked-callout]").length === 1);
+    expect(all(m.container, ".blocked-callout-body.is-clamped")).toHaveLength(1);
+    await click(m, all(m.container, ".blocked-callout button").find((b) => text(b) === "Show all")!);
+    expect(all(m.container, ".blocked-callout-body.is-clamped")).toHaveLength(0);
+  });
+
+  test("a restart time shows in the callout with no Unblock button of its own", async () => {
+    const m = await mount(detail("HARNESS-4"), { world: edited((w) => void (w.tickets.find((t) => t.key === "HARNESS-4")!.resumeAt = world.now + 60_000)) });
+    await m.until("the callout", () => all(m.container, "[data-testid=blocked-callout]").length === 1);
+    expect(all(m.container, "[data-testid=blocked-callout]")[0]!.getAttribute("data-kind")).toBe("restart");
+    expect(all(m.container, "[data-testid=blocked-callout-unblock]")).toHaveLength(0);
+  });
+
   test("a blocked ticket with a restart time or a pending approval offers no Unblock", async () => {
     const timed = await mount(detail("HARNESS-4"), { world: edited((w) => void (w.tickets.find((t) => t.key === "HARNESS-4")!.resumeAt = world.now + 60_000)) });
     await timed.until("loads", () => text(timed.container).includes("Choose a storage backend"));

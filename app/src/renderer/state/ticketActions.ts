@@ -42,6 +42,11 @@ export interface TicketActionContext {
   deps: DepState[];
 }
 
+/** A block that waits on the human: no restart time, no run going, no tool approval to answer. */
+export function canUnblock(ticket: Ticket): boolean {
+  return ticket.status === "blocked" && !ticket.draft && !ticket.resumeAt && !ticket.busy && !ticket.pendingApproval;
+}
+
 export function ticketActions(ticket: Ticket, ctx: TicketActionContext): TicketActionSet {
   // A draft isn't launched: it offers nothing here (its card offers Discard).
   if (ticket.draft) return { primary: [], more: [], enabled: [] };
@@ -54,7 +59,7 @@ export function ticketActions(ticket: Ticket, ctx: TicketActionContext): TicketA
   if (start === "start" || start === "approve") primary.push({ id: "start", label: startLabel(start), enabled: !compacting });
 
   // A block that waits on the human: no restart time, no run going, no tool approval to answer.
-  if (ticket.status === "blocked" && !ticket.resumeAt && !ticket.busy && !ticket.pendingApproval) {
+  if (canUnblock(ticket)) {
     primary.push({ id: "unblock", label: "Unblock", enabled: !compacting });
   }
 

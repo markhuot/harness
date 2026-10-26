@@ -25,6 +25,7 @@ const SpecEditor = specEditor.Component;
 const noop = () => {};
 
 import { PromptAttachmentList } from "../components/PromptAttachments";
+import { BlockedCallout } from "./BlockedCallout";
 
 export function SpecTab({ ticket }: { ticket: Ticket }) {
   const { state, client, dispatch, epoch } = useStore();
@@ -119,6 +120,7 @@ export function SpecTab({ ticket }: { ticket: Ticket }) {
         )}
       </div>
       <div className="spec-body">
+        <BlockedCallout ticket={ticket} />
         {deps.length > 0 && (
           <div className="row" style={{ flexWrap: "wrap", gap: 6 }}>
             <span className="section-title">Depends on</span>

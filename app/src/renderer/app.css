@@ -965,6 +965,34 @@ html[data-input="keyboard"] .card.cursor:not(:focus) {
 .activity-blocked.is-open .activity-card {
   background: var(--amber-soft);
 }
+/* The Spec tab's blocked callout: the open question's attention card, above the spec. */
+.blocked-callout {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--amber);
+  border-radius: var(--radius-lg);
+  background: var(--amber-soft);
+  padding: 8px 12px;
+}
+.blocked-callout .activity-meta {
+  color: var(--amber);
+}
+.blocked-callout-body {
+  min-width: 0;
+  max-width: 100%;
+}
+.blocked-callout-body.is-clamped {
+  max-height: 11em;
+  overflow: hidden;
+}
+.blocked-callout-actions {
+  display: flex;
+  gap: 8px;
+}
 .activity-chat .activity-bubble {
   max-width: 85%;
   border-radius: var(--radius-lg);
