@@ -425,25 +425,16 @@ struct CosFailureBanner: View {
 
 // MARK: Inbox
 
-/// A plain list of the events the chief owns (and the unassigned ones): what happened and the
-/// verdict. "Escalate anyway" shows on ignored rows only; "+" asks the chief to listen for something.
+/// A chief's Inbox: the events list (EventsView) of the events it owns (and the unassigned ones), with
+/// "+" to ask the chief to listen for something.
 struct CosInboxView: View {
     let chief: Cos
     let onChat: () -> Void
 
-    @Environment(BoardStore.self) private var store
-    @Environment(Router.self) private var router
-    @Environment(Actions.self) private var actions
     @Environment(\.palette) private var c
-    @State private var cursor: String??
-    @State private var loading = false
     @State private var asking = false
-    @State private var failure: String?
-
-    private static let page = 50
 
     var body: some View {
-        let rows = store.cos.inbox(chief.ticketId)
         VStack(spacing: 0) {
             HStack {
                 Text("What this chief of staff has seen").font(.scaled(size: 13)).foregroundStyle(c.text3)
@@ -456,150 +447,13 @@ struct CosInboxView: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
-            if let failure { CosFailureBanner(text: failure) { self.failure = nil } }
-            ScrollView {
-                LazyVStack(spacing: 10) {
-                    if rows.isEmpty, cursor != nil {
-                        VStack(spacing: 8) {
-                            Icon("inbox", size: 22).foregroundStyle(c.text3)
-                            Text("Nothing yet. Ticket moves, watcher items and schedules show up here.")
-                                .font(.scaled(size: 14)).foregroundStyle(c.text3).multilineTextAlignment(.center)
-                        }
-                        .padding(.vertical, 40)
-                        .accessibilityIdentifier("cos-inbox-empty")
-                    }
-                    ForEach(rows) { e in
-                        CosEventRow(event: e, escalate: { escalate(e) }, openTicket: { key in router.openTicket(key: key, tab: nil) })
-                    }
-                    if case let .some(.some(next)) = cursor {
-                        Button(loading ? "Loading…" : "Load more") { Task { await load(before: next) } }
-                            .disabled(loading)
-                            .padding(.vertical, 8)
-                            .accessibilityIdentifier("cos-more")
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 16)
-            }
-            .refreshable { await load(before: nil) }
+            EventsView(ticketId: chief.ticketId, chief: true, emptyText: "Nothing yet. Ticket moves, watcher items and schedules show up here.", identifier: "cos-inbox")
         }
-        .task(id: "\(chief.ticketId)#\(store.epoch)") { await load(before: nil) }
         .sheet(isPresented: $asking) {
             CosListenSheet(chief: chief) {
                 asking = false
                 onChat()
             }
-        }
-        .accessibilityIdentifier("cos-inbox")
-    }
-
-    private func load(before: String?) async {
-        loading = true
-        defer { loading = false }
-        let page: CosEventPage
-        do {
-            page = try await store.connectedAPI().cosEvents(chief.ticketId, before: before, limit: Self.page)
-        } catch {
-            haptic(.error)
-            failure = Connection.describeError(error, baseUrl: store.baseUrl)
-            return
-        }
-        failure = nil
-        var hole = false
-        if before == nil {
-            store.updateCos { hole = $0.loadNewestEvents(chief.ticketId, page.items, hasOlder: page.nextCursor != nil) }
-        } else {
-            store.updateCos { $0.mergeEvents(page.items) }
-        }
-        // A reload of the newest page keeps the cursor of older pages already loaded, unless the
-        // new page doesn't reach them: then paging starts again from this page.
-        if before != nil || cursor == nil || hole { cursor = .some(page.nextCursor) }
-    }
-
-    private func escalate(_ e: CosEvent) {
-        failure = nil
-        Task {
-            do {
-                let next = try await store.connectedAPI().escalateCosEvent(e.id)
-                store.updateCos { $0.mergeEvents([next]) }
-            } catch {
-                haptic(.error)
-                failure = Connection.describeError(error, baseUrl: store.baseUrl)
-            }
-        }
-    }
-}
-
-struct CosEventRow: View {
-    let event: CosEvent
-    let escalate: () -> Void
-    let openTicket: (String) -> Void
-
-    @Environment(\.palette) private var c
-    @State private var lookingUp = false
-
-    var body: some View {
-        let e = event
-        let st = CosLogic.inboxState(e)
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                Badge(CosLogic.sourceLabel(e.sourceKind))
-                if let key = e.ticketKey {
-                    Button { openTicket(key) } label: { Text(key).font(.mono(12)).foregroundStyle(c.accent) }
-                        .buttonStyle(.plain)
-                } else if let project = e.projectKey {
-                    Text(project).font(.mono(12)).foregroundStyle(c.text3)
-                }
-                Spacer(minLength: 0)
-                Badge(st.label, tone: tone(st))
-                    .accessibilityIdentifier("cos-verdict")
-            }
-            Text(e.title).font(.scaled(size: 15, weight: .medium)).foregroundStyle(c.text).frame(maxWidth: .infinity, alignment: .leading)
-            if !e.summary.isEmpty {
-                Text(e.summary).font(.scaled(size: 13)).foregroundStyle(c.text2).frame(maxWidth: .infinity, alignment: .leading)
-            }
-            if let line = CosLogic.verdictLine(e) {
-                Text(line).font(.scaled(size: 13)).foregroundStyle(c.text2).frame(maxWidth: .infinity, alignment: .leading)
-                    .accessibilityIdentifier(st == .acted || st == .noAction || st == .needsUser ? "cos-outcome" : "cos-reason")
-            }
-            HStack {
-                Text("\(e.actor) · ").font(.scaled(size: 12)).foregroundStyle(c.text3) + Text(Format.relativeTime(e.createdAt, now: Date().timeIntervalSince1970 * 1000)).font(.scaled(size: 12)).foregroundStyle(c.text3)
-                Spacer()
-                if e.triageSessionId != nil {
-                    Button("What triage looked up") { lookingUp = true }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                        .accessibilityIdentifier("cos-triage-run")
-                }
-                if CosLogic.canEscalate(e) {
-                    Button("Escalate anyway", action: escalate)
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                        .accessibilityIdentifier("cos-escalate")
-                }
-            }
-        }
-        .padding(12)
-        .background(c.bgElev, in: .rect(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(c.border, lineWidth: 1 / 3))
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("cos-event")
-        .sheet(isPresented: $lookingUp) {
-            if let session = e.triageSessionId {
-                NavigationStack {
-                    TranscriptView(sessionId: session, emptyHint: "The triage run left no transcript.") { EmptyView() }
-                        .navigationTitle("Triage")
-                        .navigationBarTitleDisplayMode(.inline)
-                }
-            }
-        }
-    }
-
-    private func tone(_ s: CosInboxState) -> Tone {
-        switch s {
-        case .waiting, .escalated, .handling, .needsUser: .amber
-        case .acted: .green
-        case .ignored, .filtered, .noAction, .reviewed: .neutral
         }
     }
 }

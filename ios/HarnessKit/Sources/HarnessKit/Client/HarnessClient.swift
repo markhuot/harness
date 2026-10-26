@@ -418,7 +418,7 @@ public final class HarnessClient: Sendable {
     /// Feed output directly, as if a watcher named `source` printed `text` (objects are sent as JSON
     /// text). The event it becomes is for the All chief of staff; nil when the same text was
     /// already seen.
-    public func injectOutput(source: String, text: JSONValue) async throws -> CosEvent? {
+    public func injectOutput(source: String, text: JSONValue) async throws -> TicketEvent? {
         try await request("POST", "/watchers/inject", body: InjectOutputBody(source: source, text: text))
     }
 
@@ -433,9 +433,9 @@ public final class HarnessClient: Sendable {
         try await request("POST", "/cos", body: OpenCosBody(scope: scope))
     }
 
-    /// A chief's Inbox, newest first; `before` is the previous page's `nextCursor`.
-    public func cosEvents(_ id: String, before: String? = nil, limit: Int? = nil) async throws -> CosEventPage {
-        try await request("GET", "/cos/\(id)/events\(Query.build([("before", .str(before)), ("limit", .int(limit))]))")
+    /// A ticket's events (a chief's Inbox, for a chief), newest first; `before` is the previous page's `nextCursor`.
+    public func ticketEvents(_ key: String, before: String? = nil, limit: Int? = nil) async throws -> TicketEventPage {
+        try await request("GET", "/tickets/\(key)/events\(Query.build([("before", .str(before)), ("limit", .int(limit))]))")
     }
 
     public func cosBadge() async throws -> CosBadge {
@@ -443,7 +443,7 @@ public final class HarnessClient: Sendable {
     }
 
     /// An ignored event joins the chief's next wake.
-    public func escalateCosEvent(_ id: String) async throws -> CosEvent {
+    public func escalateCosEvent(_ id: String) async throws -> TicketEvent {
         try await request("POST", "/cos/events/\(id)/escalate")
     }
 

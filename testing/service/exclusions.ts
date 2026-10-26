@@ -62,5 +62,5 @@ export const EXCLUSIONS: Exclusion[] = [
   })),
 
   // -- Store repositories: tested through the Store --
-  ...["activity", "attachments", "browser-tabs", "cos", "cos-events", "devices", "misc", "runs", "schedules", "sessions", "spec", "subagents", "transcript", "watchers"].map(REPO),
+  ...["activity", "attachments", "browser-tabs", "cos", "ticket-events", "devices", "misc", "runs", "schedules", "sessions", "spec", "subagents", "transcript", "watchers"].map(REPO),
 ];

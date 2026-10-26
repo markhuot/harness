@@ -48,7 +48,7 @@ async function board() {
   return { h, sup, all, work, home, mine, theirs, shared, asCos };
 }
 const out = (text: string) => ({ text, truncated: false });
-const watcherEvents = (h: Awaited<ReturnType<typeof board>>["h"]) => h.store.cosEvents.list({ limit: 100 }).filter((e) => e.sourceKind === "watcher");
+const watcherEvents = (h: Awaited<ReturnType<typeof board>>["h"]) => h.store.ticketEvents.list({ limit: 100 }).filter((e) => e.sourceKind === "watcher");
 
 test("a watcher's output is an event owned by the watcher's chief of staff, not a triage item", async () => {
   const { h, sup, work, all, mine, shared } = await board();
@@ -73,7 +73,7 @@ test("identical output from the same watcher is delivered once, and injected out
   expect(watcherEvents(h).filter((e) => e.actor === "watcher:work-feed")).toHaveLength(1);
 
   const first = await h.orch.injectOutput("pager", "page: db down");
-  expect(first).toMatchObject({ cosId: all.ticketId, status: "pending" });
+  expect(first).toMatchObject({ targetId: all.ticketId, status: "pending" });
   expect(await h.orch.injectOutput("pager", "page: db down")).toBeNull();
 });
 

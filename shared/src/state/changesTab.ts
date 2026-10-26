@@ -45,7 +45,7 @@ export function showsChangesTab(workdir: string | null | undefined, pluginTabs: 
   return pluginTabs.some(isPluginChanges);
 }
 
-type Opts = { conductor: boolean; workdir: string | null | undefined; pluginTabs: PluginTabRef[] | null; subagents?: { id: string }[] | null };
+type Opts = { conductor: boolean; workdir: string | null | undefined; pluginTabs: PluginTabRef[] | null; subagents?: { id: string }[] | null; events?: boolean };
 
 /**
  * effectiveTab with the built-in Changes tab: shown while it applies (and while the plugin tabs that
@@ -54,12 +54,12 @@ type Opts = { conductor: boolean; workdir: string | null | undefined; pluginTabs
 export function effectiveTabWithChanges(requested: TicketTab, opts: Opts): TicketTab {
   const tab = normalizeChangesTab(requested);
   if (tab === CHANGES_TAB) return opts.pluginTabs === null || showsChangesTab(opts.workdir, opts.pluginTabs) ? CHANGES_TAB : "spec";
-  return effectiveTab(tab, { conductor: opts.conductor, subagents: opts.subagents, pluginTabs: otherPluginTabs(opts.pluginTabs) });
+  return effectiveTab(tab, { conductor: opts.conductor, subagents: opts.subagents, events: opts.events, pluginTabs: otherPluginTabs(opts.pluginTabs) });
 }
 
 /** visibleTabs with Changes after Browser, ahead of Details. */
 export function visibleTabsWithChanges(opts: Omit<Opts, "pluginTabs"> & { pluginTabs?: PluginTabRef[] | null }): TicketTab[] {
-  const tabs = visibleTabs({ conductor: opts.conductor, subagents: opts.subagents, pluginTabs: otherPluginTabs(opts.pluginTabs) });
+  const tabs = visibleTabs({ conductor: opts.conductor, subagents: opts.subagents, events: opts.events, pluginTabs: otherPluginTabs(opts.pluginTabs) });
   const i = tabs.indexOf("details");
   if (showsChangesTab(opts.workdir, opts.pluginTabs) && i >= 0) tabs.splice(i, 0, CHANGES_TAB);
   return tabs;

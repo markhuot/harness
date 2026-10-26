@@ -930,6 +930,60 @@ export const MIGRATIONS: string[] = [
   SELECT 'cosStatuses', CASE WHEN value = 'true' THEN '["blocked"]' ELSE '[]' END FROM settings WHERE key = 'cosCanUnblock';
   DELETE FROM settings WHERE key = 'cosCanUnblock';
   `,
+  // 55: cos_events becomes ticket_events, the one events table for every ticket (not only the CoS).
+  //     target_id is the ticket an event wakes (ticket_id stays the subject it is about): the CoS id for
+  //     the rows that exist, NULL while triage hasn't picked an owner. SQLite can't drop migration 46's
+  //     inline UNIQUE (source_kind, source_ref), so the table is rebuilt. A row with no target dedupes on
+  //     (kind, ref); a row with a target on (kind, ref, target), so one activity can wake several tickets.
+  //     The CoS rows are deduped in code (TicketEventRepo.insert), not by these indexes: a triaged row can sit
+  //     under two chiefs, so its (kind, ref) repeats across targets. ticket_events_ref serves that lookup.
+  `
+  CREATE TABLE ticket_events (
+    id TEXT PRIMARY KEY,
+    cos_id TEXT,
+    target_id TEXT,
+    project_id TEXT,
+    ticket_id TEXT,
+    source_kind TEXT NOT NULL,
+    source_ref TEXT NOT NULL,
+    source_seq INTEGER,
+    kind TEXT NOT NULL DEFAULT '',
+    actor TEXT NOT NULL,
+    title TEXT NOT NULL,
+    summary TEXT NOT NULL DEFAULT '',
+    payload TEXT NOT NULL DEFAULT '{}',
+    verdict TEXT NOT NULL DEFAULT 'pending',
+    reason TEXT,
+    model TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    wake_id TEXT,
+    consuming_run_id TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+  INSERT INTO ticket_events (rowid, id, cos_id, target_id, project_id, ticket_id, source_kind, source_ref, source_seq, kind, actor, title, summary, payload, verdict, reason, model, status, wake_id, consuming_run_id, created_at, updated_at)
+  SELECT rowid, id, cos_id, cos_id, project_id, ticket_id, source_kind, source_ref, source_seq, kind, actor, title, summary, payload, verdict, reason, model, status, wake_id, consuming_run_id, created_at, updated_at FROM cos_events;
+  DROP TABLE cos_events;
+  CREATE UNIQUE INDEX ticket_events_ref_untargeted ON ticket_events(source_kind, source_ref) WHERE target_id IS NULL;
+  CREATE UNIQUE INDEX ticket_events_ref_targeted ON ticket_events(source_kind, source_ref, target_id) WHERE target_id IS NOT NULL;
+  CREATE INDEX ticket_events_cos ON ticket_events(cos_id, status);
+  CREATE INDEX ticket_events_ref ON ticket_events(source_kind, source_ref);
+  CREATE INDEX ticket_events_status ON ticket_events(status, created_at);
+  CREATE INDEX ticket_events_wake ON ticket_events(wake_id);
+  `,
+  // 56: the wake log is keyed by the ticket that was woken (the chief's id for every row that exists), so the wake cap
+  //     works for any ticket. event_class says which cap a wake counts against ('' for the chief's wakes).
+  `
+  DROP INDEX cos_wakes_cos;
+  ALTER TABLE cos_wakes RENAME TO event_wakes;
+  ALTER TABLE event_wakes RENAME COLUMN cos_id TO target_id;
+  ALTER TABLE event_wakes ADD COLUMN event_class TEXT NOT NULL DEFAULT '';
+  CREATE INDEX event_wakes_target ON event_wakes(target_id, kind, event_class, started_at);
+  `,
+  // 57: a ticket's Events tab (GET /tickets/:key/events) and its hasEvents flag read the rows aimed at it, newest first.
+  `
+  CREATE INDEX ticket_events_target ON ticket_events(target_id, created_at, verdict);
+  `,
 ];
 
 /** Where the files migrations look at live (HarnessPaths); by default next to the database file. */

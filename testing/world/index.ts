@@ -5,7 +5,7 @@
 
 import type { ActivityEntry, Run, Ticket, TicketDetail, TranscriptEntry } from "@harness/shared";
 import { activityLog, finishedTranscript, runs, sessions, transcript as liveTranscript } from "./conversations";
-import { chiefs, cosBadge, cosChat, cosEvents, cosMemory } from "./cos";
+import { chiefs, cosBadge, cosChat, ticketEvents, cosMemory } from "./cos";
 import { changes, files } from "./files";
 import { projects } from "./projects";
 import { drivers, settings } from "./settings";
@@ -49,7 +49,7 @@ export const world = {
   activity: activityLog,
   watchers,
   chiefs,
-  cosEvents,
+  ticketEvents,
   cosChat,
   cosBadge,
   cosMemory,

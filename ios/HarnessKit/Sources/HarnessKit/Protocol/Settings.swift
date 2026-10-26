@@ -52,6 +52,8 @@ public struct Settings: Codable, Sendable, Equatable {
     /// it open in the app before the service suspends it (closes its page; it reloads when used). 0 = never. Integer 0–1440, default 5. The
     /// service always sends it; optional so clients tolerate an older service without it.
     public var browserIdleTabMinutes: Int?
+    /// Days a handled or ignored ticket event is kept (1–365, default 7). nil from an older service.
+    public var eventRetentionDays: Int?
     /// The user's prompt overrides (DESIGN.md "Prompt overrides"): prompt id → template text, or null
     /// for the built-in prompt that ships with the service. The service sends every id; unset ones
     /// are null, so they pick up the built-in text as it improves. PATCH merges per id; null or ""
@@ -79,7 +81,7 @@ public struct Settings: Codable, Sendable, Equatable {
         defaultModels: [String: String?] = [:], reviewModels: [String: String?] = [:],
         watcherDriver: Patch<String> = .absent, watcherModels: [String: String?]? = nil,
         anthropicApiKey: String? = nil, claudeOauthToken: String? = nil, copilotGithubToken: String? = nil, baseBranch: String? = nil,
-        listen: ListenSetting? = nil, browserIdleTabMinutes: Int? = nil, prompts: [String: String?]? = nil,
+        listen: ListenSetting? = nil, browserIdleTabMinutes: Int? = nil, eventRetentionDays: Int? = nil, prompts: [String: String?]? = nil,
         notifications: NotificationSettings? = nil, contextGaugeLimit: Int? = nil, saveOnBlur: Bool? = nil,
         cosEnabled: Bool? = nil, cosStatuses: [TicketStatus]? = nil, cosModel: Patch<PhaseChoice> = .absent,
         cosTriageModel: Patch<String> = .absent, cosTriagePermissionMode: Patch<TriagePermissionMode> = .absent
@@ -106,6 +108,7 @@ public struct Settings: Codable, Sendable, Equatable {
         self.baseBranch = baseBranch
         self.listen = listen
         self.browserIdleTabMinutes = browserIdleTabMinutes
+        self.eventRetentionDays = eventRetentionDays
         self.prompts = prompts
         self.notifications = notifications
     }
@@ -116,6 +119,13 @@ public struct Settings: Codable, Sendable, Equatable {
 public enum BrowserIdleTabs {
     public static let defaultMinutes = 5
     public static let maxMinutes = 1440
+}
+
+/// `DEFAULT_EVENT_RETENTION_DAYS` / `MAX_EVENT_RETENTION_DAYS`: Settings.eventRetentionDays when unset,
+/// and its upper bound (a year).
+public enum EventRetention {
+    public static let defaultDays = 7
+    public static let maxDays = 365
 }
 
 /// `Omit<Settings, "anthropicApiKey" | "claudeOauthToken" | "copilotGithubToken"> & {
@@ -139,6 +149,7 @@ public struct PublicSettings: Codable, Sendable, Equatable {
     public var baseBranch: String?
     public var listen: ListenSetting?
     public var browserIdleTabMinutes: Int?
+    public var eventRetentionDays: Int?
     /// Keyed by `PromptId.rawValue`.
     public var prompts: [String: String?]?
     /// nil from services older than notifications (Settings hides its Notifications switches then).
@@ -163,7 +174,7 @@ public struct PublicSettings: Codable, Sendable, Equatable {
         phaseModels: PhaseModels? = nil, defaultDriver: String, maxConcurrentRuns: Int, permissionMode: PermissionMode, classifier: ClassifierBackend,
         defaultModels: [String: String?] = [:], reviewModels: [String: String?] = [:],
         watcherDriver: Patch<String> = .absent, watcherModels: [String: String?]? = nil, baseBranch: String? = nil,
-        listen: ListenSetting? = nil, browserIdleTabMinutes: Int? = nil, prompts: [String: String?]? = nil,
+        listen: ListenSetting? = nil, browserIdleTabMinutes: Int? = nil, eventRetentionDays: Int? = nil, prompts: [String: String?]? = nil,
         notifications: NotificationSettings? = nil,
         anthropicApiKeySet: Bool, claudeOauthTokenSet: Bool? = nil, copilotGithubTokenSet: Bool? = nil, contextGaugeLimit: Int? = nil, saveOnBlur: Bool? = nil,
         cosEnabled: Bool? = nil, cosStatuses: [TicketStatus]? = nil, cosModel: Patch<PhaseChoice> = .absent,
@@ -188,6 +199,7 @@ public struct PublicSettings: Codable, Sendable, Equatable {
         self.baseBranch = baseBranch
         self.listen = listen
         self.browserIdleTabMinutes = browserIdleTabMinutes
+        self.eventRetentionDays = eventRetentionDays
         self.prompts = prompts
         self.notifications = notifications
         self.anthropicApiKeySet = anthropicApiKeySet
@@ -206,6 +218,9 @@ public struct PublicSettings: Codable, Sendable, Equatable {
 
     /// browserIdleTabMinutes, or the default when an older service doesn't send it.
     public var idleTabMinutes: Int { browserIdleTabMinutes ?? BrowserIdleTabs.defaultMinutes }
+
+    /// eventRetentionDays, or the default when an older service doesn't send it.
+    public var retentionDays: Int { eventRetentionDays ?? EventRetention.defaultDays }
 
     /// The override for one prompt, or nil when the built-in is used.
     public func promptOverride(_ id: PromptId) -> String? {

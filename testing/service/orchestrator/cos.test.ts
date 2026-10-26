@@ -130,11 +130,11 @@ test("create_ticket by a group's chief needs a project of its own, in scope, and
   expect(h.store.activity.listBySession(created.sessionId).map((e) => e.body)).toContain(`Chief of staff (${h.orch.listCos()[0]!.key}) created it`);
 });
 
-test("watchers and the Inbox belong to no project: only the All chief sees them", async () => {
+test("watchers belong to no project: only the All chief sees them", async () => {
   const { h, groupOf, asCos } = await board();
   h.orch.createWatcher({ name: "pager", command: "echo hi", mode: "interval", intervalSec: 60, enabled: false });
-  const scoped = await asCos({ group: groupOf("Work") }, [["list_watchers", {}], ["list_inbox", {}]]);
-  expect(scoped.map((r) => r.text)).toEqual(["No watchers are configured.", "The Inbox is empty."]);
+  const scoped = await asCos({ group: groupOf("Work") }, [["list_watchers", {}]]);
+  expect(scoped.map((r) => r.text)).toEqual(["No watchers are configured."]);
   const all = await asCos("all", [["list_watchers", {}]]);
   expect(all[0]!.text).toContain("pager");
 });
@@ -373,7 +373,7 @@ test("every operation that takes a key answers an out-of-scope key like a missin
     updateProject: (k) => ops.updateProject(ctx, k, { name: "x" }),
     deleteProject: (k) => ops.deleteProject(ctx, k),
   };
-  // Operations that take no reference to something with a scope of its own (or make something new, or refuse a chief outright: the subscriptions are for work and conductor runs).
+  // Operations that take no reference to something with a scope of its own (or make something new, the subscriptions act on the caller's own ticket).
   const unkeyed = [
     "postNote", "updateNotes", "wroteNotes", "statusLine", "readSpec", "editSpec", "updateSpec", "block", "unblock", "resumeWork", "returnToPlanning", "submitForReview", "updateBranch", "reviewDecision", "subscribeTicket", "unsubscribeTicket", "listSubscriptions",
     "listTickets", "searchTickets", "listProjects", "listInbox", "createTicket", "recordPullRequest", "requestApproval", "checkPermission", "fileOutputScope",
@@ -490,4 +490,85 @@ test("switching the chief's driver starts a fresh conversation instead of resumi
   await h.orch.sendMessage(cos.key, "back on the app's model"); // fake can't resume alt's either
   await h.settle();
   expect(h.driver.requests[1]!.state).toBeNull();
+});
+
+const subWakes = (h: { driver: FakeDriver }) => h.driver.requests.filter((r) => r.prompt.includes("Updates from tickets you subscribed to"));
+
+test("a chief subscribed to a ticket is woken once per change, and the activity feed doesn't wake it a second time", async () => {
+  const { h, a } = await board();
+  h.orch.updateSettings({ cosStatuses: ["review"] }); // the chief handles review, so the feed would wake it too
+  const cos = h.orch.openCos("all");
+  const { steps, results } = callTools([["subscribe_ticket", { key: a.key, mode: "forever" }]]);
+  h.driver.script(steps);
+  await h.orch.sendMessage(cos.key, "follow it");
+  await h.settle();
+  expect(results[0]).toMatchObject({ isError: false });
+  // Running service: the bus nudges the chief's feed the moment an entry is written, before the subscription's row exists
+  h.orch.start();
+  await h.orch.updateTicket(a.key, { status: "review" });
+  await h.settle();
+  const wakes = subWakes(h);
+  expect(wakes).toHaveLength(1);
+  expect(wakes[0]!.prompt).toContain(a.key);
+  // The move's activity entry is an ignored row, not a second wake; the row that woke the chief is in its Events too
+  const events = h.orch.eventsPage(cos.key, {}).items;
+  const feed = events.filter((e) => e.sourceKind === "activity");
+  expect(feed.length).toBeGreaterThan(0);
+  expect(feed.every((e) => e.status === "ignored" && /subscription/.test(e.reason ?? ""))).toBe(true);
+  expect(events.filter((e) => e.sourceKind === "subscription")).toHaveLength(1);
+  await h.orch.stop();
+});
+
+test("a note on a followed ticket wakes a subscribed chief once, in the running service", async () => {
+  const { h, a } = await board();
+  h.orch.updateSettings({ cosStatuses: ["planning"] });
+  const cos = h.orch.openCos("all");
+  h.driver.script(callTools([["subscribe_ticket", { key: a.key, mode: "once", events: ["note"] }]]).steps);
+  await h.orch.sendMessage(cos.key, "follow it");
+  await h.settle();
+  h.orch.start();
+  (h.orch as unknown as { addActivityLine(t: unknown, k: string, a: string, b: string): unknown }).addActivityLine(h.store.tickets.get(a.id), "note", "agent", "halfway there");
+  await h.settle();
+  expect(subWakes(h)).toHaveLength(1);
+  expect(h.orch.eventsPage(cos.key, {}).items.filter((e) => e.sourceKind === "activity" && e.status !== "ignored")).toHaveLength(0);
+  await h.orch.stop();
+});
+
+test("a switched-off chief isn't woken by a subscription, and the change doesn't wake it once it is switched on", async () => {
+  const { h, a } = await board();
+  const cos = h.orch.openCos("all");
+  h.driver.script(callTools([["subscribe_ticket", { key: a.key, mode: "forever" }]]).steps);
+  await h.orch.sendMessage(cos.key, "follow it");
+  await h.settle();
+  h.orch.setCosEnabled(cos.ticketId, false);
+  await h.orch.updateTicket(a.key, { status: "review" });
+  await h.settle();
+  // The change is kept as an ignored row the human can read, and the subscription stays
+  const rows = h.orch.eventsPage(cos.key, {}).items.filter((e) => e.sourceKind === "subscription");
+  expect(rows.map((e) => [e.status, e.reason])).toEqual([["ignored", "the chief of staff is switched off"]]);
+  expect(h.store.subscriptions.listBySubscriber(cos.ticketId)).toHaveLength(1);
+  h.orch.setCosEnabled(cos.ticketId, true);
+  await h.settle();
+  expect(subWakes(h)).toHaveLength(0);
+});
+
+test("a scoped chief can't subscribe outside its scope, and a ticket that leaves its scope stops waking it", async () => {
+  const { h, groupOf, o, w, work, project } = await board();
+  const cos = h.orch.openCos({ group: groupOf("Work") });
+  const { steps, results } = callTools([
+    ["subscribe_ticket", { key: o.key }],
+    ["subscribe_ticket", { key: w.key, mode: "forever" }],
+  ]);
+  h.driver.script(steps);
+  await h.orch.sendMessage(cos.key, "follow");
+  await h.settle();
+  expect(results.map((r) => r.isError)).toEqual([true, false]);
+  expect(h.store.subscriptions.listBySubscriber(cos.ticketId).map((s) => s.targetId)).toEqual([w.id]);
+  // Another project keeps the Work group alive while WORK1 moves out of it
+  project("SPARE", "Work");
+  h.orch.updateProject(work.id, { group: "Home" });
+  await h.orch.updateTicket(w.key, { status: "blocked" });
+  await h.settle();
+  expect(subWakes(h)).toHaveLength(0);
+  expect(h.store.subscriptions.listBySubscriber(cos.ticketId)).toHaveLength(0);
 });

@@ -106,16 +106,18 @@ export interface Cos {
 // Events: what wakes a chief of staff (DESIGN.md "Chief of staff", "Events")
 // ---------------------------------------------------------------------------
 
-export type CosEventSource = "activity" | "watcher" | "schedule";
+/** Every kind of event, in the order the filters list them. */
+export const TICKET_EVENT_SOURCES = ["activity", "watcher", "schedule", "subscription", "child"] as const;
+export type TicketEventSource = (typeof TICKET_EVENT_SOURCES)[number];
 
 /** Where an event is: pending (waiting for triage), triaging, escalated (for the next wake), handling (in a run), handled, or ignored. */
-export type CosEventStatus = "pending" | "triaging" | "escalated" | "handling" | "handled" | "ignored";
+export type TicketEventStatus = "pending" | "triaging" | "escalated" | "handling" | "handled" | "ignored";
 
 /** What triage said: not yet, ignore, escalate, or dropped by a coded rule (a chief's own activity, a net-zero move). */
-export type CosEventVerdict = "pending" | "ignore" | "escalate" | "filtered";
+export type TicketEventVerdict = "pending" | "ignore" | "escalate" | "filtered";
 
 /** Statuses that count toward the Inbox badge (an event somebody still has to see to). */
-export const COS_OPEN_STATUSES: readonly CosEventStatus[] = ["pending", "triaging", "escalated", "handling"];
+export const COS_OPEN_STATUSES: readonly TicketEventStatus[] = ["pending", "triaging", "escalated", "handling"];
 
 /** What the chief did about an event it was woken for: acted, found nothing to do, or needs the user to do something. */
 export const COS_OUTCOME_KINDS = ["acted", "no_action", "needs_user"] as const;
@@ -127,19 +129,19 @@ export interface CosOutcome {
   text: string;
 }
 
-/** One row of a chief of staff's Inbox (GET /cos/:id/events). */
-export interface CosEvent {
+/** One event: a row of a ticket's Events tab, or of a chief of staff's Inbox (GET /tickets/:key/events). */
+export interface TicketEvent {
   id: string;
-  /** The chief that owns it; null while no chief qualifies (unassigned) */
-  cosId: string | null;
+  /** The ticket the event wakes (a chief's id for the chief's own rows); null while no chief qualifies (unassigned) */
+  targetId: string | null;
   projectKey: string | null;
-  sourceKind: CosEventSource;
+  sourceKind: TicketEventSource;
   title: string;
   summary: string;
   /** Who caused it: "human", "agent", "system", "watcher:<name>", or "cos:<chief id>" */
   actor: string;
-  status: CosEventStatus;
-  verdict: CosEventVerdict;
+  status: TicketEventStatus;
+  verdict: TicketEventVerdict;
   reason: string | null;
   /** The model that triaged it; null when none did (filtered, or a fail-open escalation) */
   model: string | null;
@@ -154,9 +156,9 @@ export interface CosEvent {
   createdAt: number;
 }
 
-/** GET /cos/:id/events */
-export interface CosEventPage {
-  items: CosEvent[];
+/** GET /tickets/:key/events */
+export interface TicketEventPage {
+  items: TicketEvent[];
   nextCursor: string | null;
 }
 
@@ -187,7 +189,7 @@ export interface CosChatPage {
 
 /** Bus events for the Inbox and chat (not part of protocol.ts's HarnessEvent: clients that don't know them ignore them). */
 export type CosBusEvent =
-  | { kind: "cos.event.upserted"; event: CosEvent }
+  | { kind: "ticket.event.upserted"; event: TicketEvent }
   | { kind: "cos.badge"; total: number; byCos: Record<string, number> }
   | { kind: "cos.transcript.appended"; cosId: string; entry: CosChatEntry };
 
@@ -239,12 +241,8 @@ export const SCHEDULE_STALE_MS = 24 * 60 * 60_000;
 // Pure rules
 // ---------------------------------------------------------------------------
 
-/** Quiet time before a batch is triaged, and the longest an event waits however busy it is. */
-export const COS_QUIET_MS = 45_000;
-export const COS_CEILING_MS = 5 * 60_000;
-/** Full wakes per chief per hour; more join one later wake. */
-export const COS_WAKES_PER_HOUR = 6;
-export const COS_HOUR_MS = 60 * 60_000;
+/** How long a burst of events waits so one triage call sees it whole. A fixed delay from the burst's first event, not a quiet window: triage only batches, delivery has its own cap. */
+export const COS_TRIAGE_BATCH_MS = 10_000;
 
 /** A chief as ownership sees it. */
 export type CosChief = Pick<Cos, "ticketId" | "scope" | "groupId" | "enabled">;
@@ -264,17 +262,31 @@ export function ownerOf(
   return (group ?? chiefs.find((c) => c.enabled && c.scope === "all"))?.ticketId ?? null;
 }
 
-/** When a batch is due: 45s after its last event, but never later than 5 minutes after its first. Null for an empty batch. */
-export function nextWakeAt(createdAts: readonly number[]): number | null {
+/** When a batch is due for triage: a fixed delay after its first event. Null for an empty batch. */
+export function triageDueAt(createdAts: readonly number[]): number | null {
   if (!createdAts.length) return null;
-  return Math.min(Math.max(...createdAts) + COS_QUIET_MS, Math.min(...createdAts) + COS_CEILING_MS);
+  return Math.min(...createdAts) + COS_TRIAGE_BATCH_MS;
 }
 
-/** When a chief may be woken again: now, or once the oldest wake of the last hour ages out when `cap` are already in it. */
-export function nextWakeAllowedAt(wakeTimes: readonly number[], now: number, cap = COS_WAKES_PER_HOUR): number {
-  const recent = wakeTimes.filter((t) => t > now - COS_HOUR_MS).sort((a, b) => a - b);
-  return recent.length < cap ? now : recent[recent.length - cap]! + COS_HOUR_MS;
+/**
+ * When a target may be woken again under a cap: now, or once the oldest wake in the window ages out
+ * when `limit` are already in it.
+ */
+export function nextWakeAllowedAt(wakeTimes: readonly number[], now: number, cap: WakeCap): number {
+  const recent = wakeTimes.filter((t) => t > now - cap.windowMs).sort((a, b) => a - b);
+  return recent.length < cap.limit ? now : recent[recent.length - cap.limit]! + cap.windowMs;
 }
+
+/** At most `limit` wakes of a target (per event class) in `windowMs`; events over it are held and go in one later wake. */
+export interface WakeCap {
+  limit: number;
+  windowMs: number;
+}
+
+/** What every ticket that follows events (the chief of staff, a subscriber) is woken under: 8 wakes per 5 minutes. */
+export const EVENT_WAKE_CAP: WakeCap = { limit: 8, windowMs: 5 * 60_000 };
+/** A parent hearing about its children: generous, but finite so two tickets subscribed to each other can't ping-pong forever. */
+export const CHILD_EVENT_WAKE_CAP: WakeCap = { limit: 60, windowMs: 5 * 60_000 };
 
 export interface CollapsibleEvent {
   id: string;
@@ -314,8 +326,8 @@ export function collapseMoves(events: readonly CollapsibleEvent[]): { dropped: {
   return { dropped, net };
 }
 
-/** Every CosEventStatus, for validating ?status= */
-export const COS_EVENT_STATUSES: readonly CosEventStatus[] = ["pending", "triaging", "escalated", "handling", "handled", "ignored"];
+/** Every TicketEventStatus, for validating ?status= */
+export const TICKET_EVENT_STATUSES: readonly TicketEventStatus[] = ["pending", "triaging", "escalated", "handling", "handled", "ignored"];
 
 /** A chief of staff's memory (GET /tickets/:key/memory): one markdown document, and the revision a write is checked against. */
 export interface CosMemory {

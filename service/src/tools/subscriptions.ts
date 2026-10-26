@@ -1,4 +1,4 @@
-// Subscription tools: a work or conductor run asks to be woken when another ticket changes,
+// Subscription tools: a work, conductor or chief of staff run asks to be woken when another ticket changes,
 // instead of waiting with a shell sleep. See DESIGN.md "Ticket subscriptions".
 
 import { SUBSCRIPTION_EVENTS } from "../store/subscriptions";

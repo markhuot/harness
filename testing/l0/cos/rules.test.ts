@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { COS_CEILING_MS, COS_HOUR_MS, COS_QUIET_MS, collapseMoves, nextWakeAllowedAt, nextWakeAt, ownerOf, cosSeesStatus, resolveCosStatuses, routineActivityReason, type CosChief } from "../../../shared/src/cos";
+import { COS_TRIAGE_BATCH_MS, collapseMoves, nextWakeAllowedAt, triageDueAt, ownerOf, cosSeesStatus, resolveCosStatuses, routineActivityReason, type CosChief } from "../../../shared/src/cos";
 
 const chief = (ticketId: string, scope: CosChief["scope"], enabled = true): CosChief => ({ ticketId, scope, groupId: scope === "all" ? null : scope.slice(6), enabled });
 const all = chief("all-1", "all");
@@ -32,35 +32,36 @@ describe("ownerOf", () => {
   });
 });
 
-describe("nextWakeAt", () => {
-  test("is 45 seconds after the last event, so a quiet board triages soon after its one event", () => {
-    expect(nextWakeAt([1_000])).toBe(1_000 + COS_QUIET_MS);
-    expect(nextWakeAt([1_000, 20_000])).toBe(20_000 + COS_QUIET_MS);
-  });
-
-  test("never waits past five minutes from the first event, however busy it stays", () => {
-    const busy = Array.from({ length: 20 }, (_, i) => 1_000 + i * 30_000); // an event every 30s
-    expect(nextWakeAt(busy)).toBe(1_000 + COS_CEILING_MS);
+describe("triageDueAt", () => {
+  test("is a fixed batch window after the first event, however long the burst runs", () => {
+    expect(triageDueAt([1_000])).toBe(1_000 + COS_TRIAGE_BATCH_MS);
+    expect(triageDueAt([1_000, 5_000, 9_000])).toBe(1_000 + COS_TRIAGE_BATCH_MS);
   });
 
   test("has no time for an empty batch", () => {
-    expect(nextWakeAt([])).toBeNull();
+    expect(triageDueAt([])).toBeNull();
   });
 });
 
 describe("nextWakeAllowedAt", () => {
-  const now = 10 * COS_HOUR_MS;
-  test("is now while the hour holds fewer wakes than the cap", () => {
-    expect(nextWakeAllowedAt([now - 1000, now - 2000], now, 3)).toBe(now);
+  const cap = { limit: 3, windowMs: 5 * 60_000 };
+  const now = 10 * cap.windowMs;
+  test("is now while the window holds fewer wakes than the cap", () => {
+    expect(nextWakeAllowedAt([now - 1000, now - 2000], now, cap)).toBe(now);
   });
 
-  test("waits for the oldest wake in the hour to age out once the cap is spent", () => {
-    const wakes = [now - 50 * 60_000, now - 30 * 60_000, now - 10 * 60_000];
-    expect(nextWakeAllowedAt(wakes, now, 3)).toBe(now - 50 * 60_000 + COS_HOUR_MS);
+  test("waits for the oldest wake in the window to age out once the cap is spent", () => {
+    const wakes = [now - 4 * 60_000, now - 3 * 60_000, now - 1 * 60_000];
+    expect(nextWakeAllowedAt(wakes, now, cap)).toBe(now - 4 * 60_000 + cap.windowMs);
   });
 
-  test("ignores wakes older than an hour", () => {
-    expect(nextWakeAllowedAt([now - 2 * COS_HOUR_MS, now - 2 * COS_HOUR_MS, now - 2 * COS_HOUR_MS], now, 3)).toBe(now);
+  test("with more wakes than the cap, waits for the one that brings the window under it", () => {
+    const wakes = [now - 280_000, now - 270_000, now - 100_000, now - 50_000];
+    expect(nextWakeAllowedAt(wakes, now, cap)).toBe(now - 270_000 + cap.windowMs);
+  });
+
+  test("ignores wakes older than the window", () => {
+    expect(nextWakeAllowedAt([now - 2 * cap.windowMs, now - 2 * cap.windowMs, now - 2 * cap.windowMs], now, cap)).toBe(now);
   });
 });
 

@@ -102,3 +102,13 @@ describe("visibleTabsWithChanges", () => {
     expect(tabs.at(-1)).toBe("plugin:git:log");
   });
 });
+
+describe("Events through the Changes layer", () => {
+  const base = { conductor: false, workdir: null, pluginTabs: [] as { pluginId: string; id: string }[] };
+  test("the hasEvents flag reaches both the strip and the fallback", () => {
+    expect(visibleTabsWithChanges({ ...base, events: true })).toContain("events");
+    expect(visibleTabsWithChanges(base)).not.toContain("events");
+    expect(effectiveTabWithChanges("events", { ...base, events: true })).toBe("events");
+    expect(effectiveTabWithChanges("events", base)).toBe("spec");
+  });
+});

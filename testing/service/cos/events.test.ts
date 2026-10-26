@@ -2,13 +2,14 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { TICKET_STATUSES } from "../../../shared/src/protocol";
-import { COS_CEILING_MS, COS_HOUR_MS, COS_QUIET_MS, COS_WAKES_PER_HOUR } from "../../../shared/src/cos";
+import { COS_TRIAGE_BATCH_MS, EVENT_WAKE_CAP } from "../../../shared/src/cos";
+import { WAKE_MAX_ATTEMPTS, WAKE_MAX_EVENTS } from "../../../service/src/events/delivery";
 import { isSilentReply, WAKE_PROMPT_PREFIX } from "../../../service/src/cos/chat";
 import type { CosEngine } from "../../../service/src/cos/engine";
 import { LlmTriage, type CosTriage, type TriageInput, type TriageResult, type TriageVerdict } from "../../../service/src/cos/triage";
-import type { StoredCosEvent } from "../../../service/src/store/cos-events";
+import type { StoredTicketEvent } from "../../../service/src/store/ticket-events";
 import { handleMcpRequest } from "../../../service/src/api/mcp";
-import { COS_UNASSIGNED_MAX, COS_UNASSIGNED_RETENTION_MS, TRIAGE_CHUNK, WAKE_BODY_MAX, WAKE_MAX_ATTEMPTS, WAKE_MAX_EVENTS } from "../../../service/src/cos/engine";
+import { COS_UNASSIGNED_MAX, COS_UNASSIGNED_RETENTION_MS, TRIAGE_CHUNK, WAKE_BODY_MAX } from "../../../service/src/cos/engine";
 import { FakeDriver, gate, replyScript } from "../fake-driver";
 import { callTools, makeOrchestrator, stopAll } from "../orchestrator-harness";
 
@@ -88,8 +89,8 @@ async function setup(opts: { triage?: CosTriage | { unavailable: string }; drive
   /** Something happened on a ticket (an activity row, as the orchestrator writes them). */
   const happen = (t: { id: string; sessionId: string }, body: string, extra: { kind?: "note" | "moved" | "blocked" | "review_approved" | "approved" | "failed"; actor?: string; from?: string; to?: string } = {}) =>
     h.store.activity.add({ sessionId: t.sessionId, ticketId: t.id, kind: extra.kind ?? "note", author: "agent", body, actor: extra.actor, meta: extra.from ? { from: extra.from as never, to: extra.to as never } : {} });
-  const events = () => h.store.cosEvents.list({ limit: 500 }).reverse();
-  const eventOf = (marker: string): StoredCosEvent => {
+  const events = () => h.store.ticketEvents.list({ limit: 500 }).reverse();
+  const eventOf = (marker: string): StoredTicketEvent => {
     const found = events().filter((e) => e.title.includes(marker));
     if (found.length !== 1) throw new Error(`expected one event for "${marker}", found ${found.length}`);
     return found[0]!;
@@ -160,8 +161,8 @@ test("an event for a project whose chiefs are off isn't owned, so nothing is tri
   await s.after(10 * MIN);
   expect(s.eventOf("marker-off")).toMatchObject({ cosId: null, status: "pending" });
   expect(s.h.driver.requests.filter((r) => r.prompt.includes("marker-off"))).toHaveLength(0);
-  expect(s.h.store.cosEvents.badge().byCos[chief.ticketId]).toBeUndefined();
-  expect(s.h.store.cosEvents.badge().total).toBeGreaterThan(0); // unassigned events still count: nothing hides them
+  expect(s.h.store.ticketEvents.badge().byCos[chief.ticketId]).toBeUndefined();
+  expect(s.h.store.ticketEvents.badge().total).toBeGreaterThan(0); // unassigned events still count: nothing hides them
 });
 
 test("switching chiefs off in the app's settings stops triage and runs, and switching back on hands the events over again", async () => {
@@ -306,19 +307,19 @@ test("activity written while the service was down is read at startup, and events
   const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x", start: false });
   await h.settle();
   h.store.activity.add({ sessionId: t.sessionId, ticketId: t.id, kind: "note", author: "agent", body: "marker-offline" });
-  expect(h.store.cosEvents.list({ limit: 50 }).some((e) => e.title.includes("marker-offline"))).toBe(false);
+  expect(h.store.ticketEvents.list({ limit: 50 }).some((e) => e.title.includes("marker-offline"))).toBe(false);
   h.orch.start();
-  const e = h.store.cosEvents.list({ limit: 50 }).find((x) => x.title.includes("marker-offline"))!;
+  const e = h.store.ticketEvents.list({ limit: 50 }).find((x) => x.title.includes("marker-offline"))!;
   expect(e.status).toBe("pending");
 
   // A crash left it mid-triage with a batch id: it is pending again, to be triaged again.
-  h.store.cosEvents.update(e.id, { status: "triaging", wakeId: "batch-1" });
+  h.store.ticketEvents.update(e.id, { status: "triaging", wakeId: "batch-1" });
   h.orch.cosEngine.start();
-  expect(h.store.cosEvents.get(e.id)).toMatchObject({ status: "pending", wakeId: null });
+  expect(h.store.ticketEvents.get(e.id)).toMatchObject({ status: "pending", wakeId: null });
   // And a run that vanished mid-wake leaves its events to be delivered again.
-  h.store.cosEvents.update(e.id, { status: "handling", consumingRunId: "gone" });
+  h.store.ticketEvents.update(e.id, { status: "handling", consumingRunId: "gone" });
   h.orch.cosEngine.start();
-  expect(h.store.cosEvents.get(e.id)).toMatchObject({ status: "escalated", handledBy: null });
+  expect(h.store.ticketEvents.get(e.id)).toMatchObject({ status: "escalated", handledBy: null });
 });
 
 test("a ticket's moves in one batch are triaged as its net state: one move, or none when it ended where it began", async () => {
@@ -332,7 +333,7 @@ test("a ticket's moves in one batch are triaged as its net state: one move, or n
   s.happen(b, "marker-b1", { kind: "moved", from: "planning", to: "in_progress" });
   s.happen(b, "marker-b2", { kind: "moved", from: "in_progress", to: "review" });
   s.happen(b, "marker-b3", { kind: "moved", from: "review", to: "blocked" });
-  await s.after(COS_QUIET_MS + 1000);
+  await s.after(COS_TRIAGE_BATCH_MS + 1000);
   const asked = s.scripted!.calls[0]!.events.map((e) => e.title);
   expect(asked).toHaveLength(1); // a's moves cancelled out; b's three became one
   expect(asked[0]).toContain("marker-b3");
@@ -347,32 +348,16 @@ test("a ticket's moves in one batch are triaged as its net state: one move, or n
 // Debounce, steering, cap
 // ---------------------------------------------------------------------------
 
-test("a batch is triaged 45 seconds after its last event", async () => {
+test("a burst is triaged in one call a fixed window after its first event, and a trickle can't push it out", async () => {
   const s = await quiet();
-  s.happen(s.t, "marker-debounce");
-  await s.after(COS_QUIET_MS - 1000);
-  expect(s.scripted!.calls).toHaveLength(0);
-  s.happen(s.t, "marker-debounce-2"); // a new event pushes the quiet time out
-  await s.after(COS_QUIET_MS - 1000);
+  s.happen(s.t, "marker-batch-0");
+  await s.after(COS_TRIAGE_BATCH_MS / 2);
+  s.happen(s.t, "marker-batch-1"); // joins the batch; doesn't move its time
+  await s.after(COS_TRIAGE_BATCH_MS / 2 - 1000);
   expect(s.scripted!.calls).toHaveLength(0);
   await s.after(2000);
   expect(s.scripted!.calls).toHaveLength(1);
   expect(s.scripted!.calls[0]!.events).toHaveLength(2);
-});
-
-test("a steady trickle can't postpone triage past five minutes from the first event", async () => {
-  const s = await quiet();
-  s.happen(s.t, "marker-ceiling-0");
-  for (let i = 1; i < 10; i++) {
-    await s.after(30_000);
-    s.happen(s.t, `marker-ceiling-${i}`);
-  }
-  expect(s.scripted!.calls).toHaveLength(0);
-  const first = s.eventOf("marker-ceiling-0").createdAt;
-  s.h.clock.set(first + COS_CEILING_MS);
-  await s.engine.tick();
-  expect(s.scripted!.calls).toHaveLength(1);
-  expect(s.scripted!.calls[0]!.events.length).toBe(10);
 });
 
 test("the next due time arms one timer, rebuilt from the rows", async () => {
@@ -381,7 +366,7 @@ test("the next due time arms one timer, rebuilt from the rows", async () => {
   s.engine.nudge();
   const armed = [...s.timers.pending.values()];
   expect(armed).toHaveLength(1);
-  expect(armed[0]!.ms).toBe(COS_QUIET_MS);
+  expect(armed[0]!.ms).toBe(COS_TRIAGE_BATCH_MS);
 });
 
 test("one run per chief: a second wake steers into the running run, or waits to be the next run", async () => {
@@ -408,24 +393,26 @@ test("one run per chief: a second wake steers into the running run, or waits to 
   expect(s.eventOf("marker-second")).toMatchObject({ status: "handled" });
 });
 
-test("at most six wakes an hour: fail-open escalations count, and the overflow joins one later wake", async () => {
+test("the chief wakes under the shared cap: fail-open escalations count, and the overflow is held, then joins one later wake", async () => {
   const s = await quiet({ triage: { unavailable: "no model" } });
-  for (let i = 0; i < COS_WAKES_PER_HOUR; i++) {
+  const { limit, windowMs } = EVENT_WAKE_CAP;
+  const step = COS_TRIAGE_BATCH_MS * 2;
+  for (let i = 0; i < limit; i++) {
     s.happen(s.t, `marker-cap-${i}`);
-    await s.after(MIN);
+    await s.after(step);
   }
-  expect(s.h.driver.requests).toHaveLength(COS_WAKES_PER_HOUR);
+  expect(s.h.driver.requests).toHaveLength(limit);
   s.happen(s.t, "marker-over-1");
-  await s.after(MIN);
+  await s.after(step);
   s.happen(s.t, "marker-over-2");
-  await s.after(MIN);
-  expect(s.h.driver.requests).toHaveLength(COS_WAKES_PER_HOUR); // held
+  await s.after(step);
+  expect(s.h.driver.requests).toHaveLength(limit); // held
   expect(s.eventOf("marker-over-1").status).toBe("escalated");
   expect(s.eventOf("marker-over-2").status).toBe("escalated");
-  expect(s.timers.pending.size).toBe(1); // armed for when the oldest wake leaves the hour
+  expect(s.timers.pending.size).toBe(1); // armed for when the oldest wake leaves the window
 
-  await s.after(COS_HOUR_MS);
-  expect(s.h.driver.requests).toHaveLength(COS_WAKES_PER_HOUR + 1);
+  await s.after(windowMs);
+  expect(s.h.driver.requests).toHaveLength(limit + 1);
   const last = s.h.driver.requests.at(-1)!.prompt;
   expect(last).toContain("marker-over-1");
   expect(last).toContain("marker-over-2");
@@ -542,9 +529,9 @@ test("a watcher's output is an event with no project; triage's proposed project 
   s.scripted!.calls.splice(0);
   s.scripted!.answers.push((i) => i.events.map((e) => verdict(e.id, "escalate", { brief: "A WORK1 issue", project: "WORK1" })));
   const ev = s.engine.addExternal({ sourceKind: "watcher", sourceRef: "gh:sha256:1", actor: "watcher:gh", title: "gh: new issue", body: "Issue: login broken" })!;
-  expect(s.h.store.cosEvents.get(ev.id)).toMatchObject({ cosId: all.ticketId, projectId: null });
+  expect(s.h.store.ticketEvents.get(ev.id)).toMatchObject({ cosId: all.ticketId, projectId: null });
   await s.after(MIN);
-  expect(s.h.store.cosEvents.get(ev.id)).toMatchObject({ cosId: work.ticketId, projectKey: "WORK1", status: "handled" });
+  expect(s.h.store.ticketEvents.get(ev.id)).toMatchObject({ cosId: work.ticketId, projectKey: "WORK1", status: "handled" });
   expect(s.h.driver.requests.at(-1)!.prompt).toContain("Issue: login broken");
 });
 
@@ -572,7 +559,7 @@ test("tickets blocked or in review for days never wake the chief, and no timer i
 // Quiet by default: the chief messages the user only for a change, or an attention item
 // ---------------------------------------------------------------------------
 
-const wakeCount = (s: { h: { store: { cosEvents: { wakeTimes(c: string, k: "wake", since: number): number[] } } }; chief: { ticketId: string } }) => s.h.store.cosEvents.wakeTimes(s.chief.ticketId, "wake", 0).length;
+const wakeCount = (s: { h: { store: { ticketEvents: { wakeTimes(c: string, k: "wake", since: number): number[] } } }; chief: { ticketId: string } }) => s.h.store.ticketEvents.wakeTimes(s.chief.ticketId, "wake", 0).length;
 const chatOf = (s: { h: { orch: { cosTranscript(id: string, q: { limit: string }): { entries: { kind: string; text?: string }[] } } }; chief: { ticketId: string } }) => s.h.orch.cosTranscript(s.chief.ticketId, { limit: "100" }).entries;
 const liveOf = (s: { h: { events: { kind: string }[] } }) => s.h.events.flatMap((e) => (e.kind === "cos.transcript.appended" ? [(e as unknown as { entry: { kind: string; text?: string } }).entry] : []));
 
@@ -626,6 +613,7 @@ test("escalate anyway puts an ignored event in the chief's next wake; a handled 
 
   const out = await s.h.orch.escalateCosEvent(ignored.id);
   await s.h.settle();
+
   expect(out.verdict).toBe("escalate");
   expect(out.reason).toContain("Escalated by you");
   expect(s.h.driver.requests.at(-1)!.prompt).toContain("marker-skipped");
@@ -635,7 +623,7 @@ test("escalate anyway puts an ignored event in the chief's next wake; a handled 
   await expect(s.h.orch.escalateCosEvent("nope")).rejects.toThrow(/Unknown event/);
 });
 
-test("settled events are pruned after a month; events still open never are", async () => {
+test("settled events are pruned after the retention setting (7 days by default); events still open never are", async () => {
   const s = await quiet();
   const off = s.project("OFF1");
   s.h.orch.updateProject(off.id, { cosEnabled: false });
@@ -646,9 +634,23 @@ test("settled events are pruned after a month; events still open never are", asy
   expect(s.eventOf("marker-settled").status).toBe("ignored");
   await s.after(12 * 60 * MIN);
   expect(s.eventOf("marker-unowned").status).toBe("pending"); // waiting for an owner: kept for a day
-  await s.after(31 * 24 * 60 * MIN);
+  await s.after(5 * 24 * 60 * MIN);
+  expect(s.events().some((e) => e.title.includes("marker-settled"))).toBe(true); // 5½ days: inside the default week
+  await s.after(2 * 24 * 60 * MIN);
   expect(s.events().some((e) => e.title.includes("marker-settled"))).toBe(false);
   expect(s.events().some((e) => e.title.includes("marker-unowned"))).toBe(false); // …and no longer
+});
+
+test("an idle service still prunes, at the retention the setting names", async () => {
+  const s = await quiet();
+  s.happen(s.t, "marker-idle-prune");
+  await s.after(MIN);
+  expect(s.eventOf("marker-idle-prune").status).toBe("ignored");
+  s.h.orch.updateSettings({ eventRetentionDays: 2 });
+  await s.after(30 * 60 * MIN); // no activity at all: the prune runs on its own timer
+  expect(s.events().some((e) => e.title.includes("marker-idle-prune"))).toBe(true);
+  await s.after(20 * 60 * MIN);
+  expect(s.events().some((e) => e.title.includes("marker-idle-prune"))).toBe(false);
 });
 
 test("the Inbox badge counts what is still open, unassigned included", async () => {
@@ -783,7 +785,7 @@ test("a failed or cancelled wake hands its events back for the next one instead 
   expect(e.consumingRunId).toBeNull();
   expect(s.engine.badge().total).toBe(1);
   // The next wake brings it again, and a run that finishes closes it.
-  await s.after(COS_HOUR_MS / COS_WAKES_PER_HOUR);
+  await s.after(EVENT_WAKE_CAP.windowMs);
   expect(s.h.driver.requests.at(-1)!.prompt).toContain("marker-crash");
   expect(s.eventOf("marker-crash").status).toBe("handled");
 });
@@ -811,7 +813,7 @@ test("a restart leaves a wake whose run is still going alone, and sends again on
 test("events handled by a chief that was removed are put back for an owner instead of sticking", async () => {
   const s = await quiet();
   const e = s.engine.addExternal({ sourceKind: "watcher", sourceRef: "feed:x", actor: "watcher:feed", title: "marker-orphaned", body: "b" })!;
-  s.h.store.cosEvents.update(e.id, { status: "handling", cosId: "no-such-chief", consumingRunId: null });
+  s.h.store.ticketEvents.update(e.id, { status: "handling", cosId: "no-such-chief", consumingRunId: null });
   await s.after(MIN);
   expect(s.eventOf("marker-orphaned").status).not.toBe("handling");
 });
@@ -822,7 +824,7 @@ test("a wake that can't be handed over costs no wake and leaves nothing in the c
   s.happen(s.t, "marker-undeliverable");
   await s.after(MIN);
   expect(s.eventOf("marker-undeliverable").status).toBe("escalated");
-  expect(s.h.store.cosEvents.wakeTimes(s.chief.ticketId, "wake", 0)).toEqual([]);
+  expect(s.h.store.ticketEvents.wakeTimes(s.chief.ticketId, "wake", 0)).toEqual([]);
   const chat = s.h.orch.cosTranscript(s.chief.ticketId, {});
   expect(chat.entries.filter((x) => x.kind === "event_batch")).toEqual([]);
 });
@@ -832,9 +834,9 @@ test("escalate anyway gives a filtered or unowned event the owner its project ha
   s.happen(s.t, "marker-mine", { actor: `cos:${s.chief.ticketId}` });
   s.engine.drain();
   const filtered = s.eventOf("marker-mine");
-  expect(filtered.cosId).toBeNull();
+  expect(filtered.targetId).toBeNull();
   const out = await s.h.orch.escalateCosEvent(filtered.id);
-  expect(out.cosId).toBe(s.chief.ticketId);
+  expect(out.targetId).toBe(s.chief.ticketId);
 });
 
 test("chat pages don't skip entries when wake prompts crowd the message rows", async () => {
@@ -925,36 +927,37 @@ test("triage can only propose a project in the chief's scope, and is only told a
   const input = s.scripted!.calls[0]!;
   expect(input.projects.map((p) => p.key)).toContain("WORK1");
   expect(input.projects.map((p) => p.key)).not.toContain("PLAY1");
-  expect(s.h.store.cosEvents.get(ev.id)).toMatchObject({ cosId: work.ticketId, projectId: null });
+  expect(s.h.store.ticketEvents.get(ev.id)).toMatchObject({ cosId: work.ticketId, projectId: null });
 });
 
 test("two overlapping hand-offs to one chief send its events once", async () => {
   const s = await quiet({ triage: { unavailable: "no model" } });
   const ev = s.engine.addExternal({ sourceKind: "watcher", sourceRef: "gh:sha256:r", actor: "watcher:gh", title: "gh: issue", body: "once", cosId: s.chief.ticketId })!;
-  s.h.store.cosEvents.update(ev.id, { status: "escalated", verdict: "escalate" });
-  const deliver = (s.engine as unknown as { deliver(id: string): Promise<void> }).deliver.bind(s.engine);
+  s.h.store.ticketEvents.update(ev.id, { status: "escalated", verdict: "escalate" });
+  const { delivery } = s.engine as unknown as { delivery: { deliver(id: string): Promise<void> } };
+  const deliver = delivery.deliver.bind(delivery);
   await Promise.all([deliver(s.chief.ticketId), deliver(s.chief.ticketId)]);
   await s.h.settle();
   expect(s.h.driver.requests.filter((r) => r.prompt.includes("[Harness: 1 event for you]"))).toHaveLength(1);
-  expect(s.h.store.cosEvents.wakeTimes(s.chief.ticketId, "wake", 0)).toHaveLength(1);
+  expect(s.h.store.ticketEvents.wakeTimes(s.chief.ticketId, "wake", 0)).toHaveLength(1);
 });
 
 test("Inbox items converted at migration are never pruned as unassigned", async () => {
   const s = await quiet();
   const old = s.h.clock() - COS_UNASSIGNED_RETENTION_MS * 3;
-  const mk = (ref: string) => s.h.store.cosEvents.insert({ cosId: null, projectId: null, ticketId: null, sourceKind: "watcher", sourceRef: ref, kind: "", actor: "watcher:x", title: ref, summary: ref, payload: {}, createdAt: old })!;
+  const mk = (ref: string) => s.h.store.ticketEvents.insert({ cosId: null, projectId: null, ticketId: null, sourceKind: "watcher", sourceRef: ref, kind: "", actor: "watcher:x", title: ref, summary: ref, payload: {}, createdAt: old })!;
   const migrated = mk("triage:TRIAGE-1");
   const other = mk("gh:old");
-  s.h.store.cosEvents.pruneUnassigned(s.h.clock() - COS_UNASSIGNED_RETENTION_MS, COS_UNASSIGNED_MAX);
-  expect(s.h.store.cosEvents.get(migrated.id)).not.toBeNull();
-  expect(s.h.store.cosEvents.get(other.id)).toBeNull();
+  s.h.store.ticketEvents.pruneUnassigned(s.h.clock() - COS_UNASSIGNED_RETENTION_MS, COS_UNASSIGNED_MAX);
+  expect(s.h.store.ticketEvents.get(migrated.id)).not.toBeNull();
+  expect(s.h.store.ticketEvents.get(other.id)).toBeNull();
 });
 
 test("a chief whose runs keep failing isn't woken for the same event forever", async () => {
   const s = await quiet({ triage: { unavailable: "no model" } });
   for (let i = 0; i < 3; i++) s.h.driver.script([{ throw: new Error("boom") }]);
   s.happen(s.t, "marker-doomed");
-  for (let i = 0; i < 5; i++) await s.after(COS_HOUR_MS / COS_WAKES_PER_HOUR);
+  for (let i = 0; i < 5; i++) await s.after(EVENT_WAKE_CAP.windowMs);
   expect(s.h.driver.requests.filter((r) => r.prompt.includes("marker-doomed"))).toHaveLength(WAKE_MAX_ATTEMPTS);
   expect(s.eventOf("marker-doomed")).toMatchObject({ status: "ignored", reason: expect.stringContaining("failed 3 times") });
 });
@@ -984,7 +987,7 @@ test("the chief's recorded outcome is stored on each event it was woken for and 
   await s.after(MIN);
   expect(results[0]!.text).toContain("Recorded 3 of 4 outcomes.");
   expect(results[0]!.text).toContain("not-an-event");
-  const wire = (m: string) => s.h.orch.cosEvents(s.chief.ticketId, {}).items.find((e) => e.id === s.eventOf(m).id)!;
+  const wire = (m: string) => s.h.orch.eventsPage(s.chief.ticketId, {}).items.find((e) => e.id === s.eventOf(m).id)!;
   expect(wire("marker-a")).toMatchObject({ status: "handled", outcome: { kind: "acted", text: "Moved the ticket back to planning." } });
   expect(wire("marker-b").outcome).toEqual({ kind: "no_action", text: "The agent review approved it; it already waits for you." });
   expect(wire("marker-c").outcome?.kind).toBe("needs_user");
@@ -1017,7 +1020,7 @@ test("a failed run leaves no outcome behind, so the next successful run can't in
   s.happen(s.t, "marker-f");
   await s.after(MIN);
   expect(s.eventOf("marker-f")).toMatchObject({ status: "escalated", outcome: null });
-  await s.after(COS_HOUR_MS / COS_WAKES_PER_HOUR);
+  await s.after(EVENT_WAKE_CAP.windowMs);
   expect(s.eventOf("marker-f")).toMatchObject({ status: "handled", outcome: null });
 });
 

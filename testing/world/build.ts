@@ -36,6 +36,7 @@ export function ticket(o: Pick<Ticket, "key" | "projectId" | "title" | "status">
     driver: "claude-code",
     parentId: null,
     childCount: 0,
+    hasEvents: false,
     dependsOn: [],
     autoStart: false,
     agentReview: "pending",

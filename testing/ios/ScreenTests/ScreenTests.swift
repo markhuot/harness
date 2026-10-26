@@ -127,6 +127,15 @@ final class ScreenTests: ScreenTestCase {
         try await screen("cos-memory") { CosMemorySheet(chief: chief) }
     }
 
+    /// Settings → General, with the event history field (7 days from the world's settings).
+    func testGeneralSettings() async throws {
+        let settings = try XCTUnwrap(world.store.state.settings)
+        try await screen("general-settings") {
+            Form { SettingsGeneralSection(settings: settings) }
+                .settingsFormStyle(Palette(world.app.resolvedTheme(systemDark: false)))
+        }
+    }
+
     /// The chief of staff's switch, column boxes and model: the app's (Review checked; Default is the Work model),
     /// and a project that chose its own columns and model.
     func testCosSettings() async throws {
@@ -211,6 +220,11 @@ final class ScreenTests: ScreenTestCase {
     /// HARNESS-8: a conductor, with its two children on the Tickets tab.
     func testTicketChildren() async throws {
         try await screen("ticket-children", router: ticket("HARNESS-8", .children)) { RootView() }
+    }
+
+    /// HARNESS-8's Events tab: what woke the conductor (a child's change, a subscription), listed with the Inbox's rows.
+    func testTicketEvents() async throws {
+        try await screen("ticket-events", router: ticket("HARNESS-8", .events)) { RootView() }
     }
 
     /// HARNESS-9, a child of HARNESS-8 pushed onto its sheet: the glass Back circle and the "Part of" row.

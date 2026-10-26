@@ -50,8 +50,8 @@ describe("world invariants (a bad edit fails here, not as a blank screen)", () =
   });
 
   test("the chiefs of staff cover every Inbox state, an empty chief and a project with its chief off", () => {
-    expect(new Set(world.cosEvents.map((e) => e.status))).toEqual(new Set(["pending", "handling", "ignored", "escalated", "handled"]));
-    expect(world.chiefs.filter((c) => !world.cosEvents.some((e) => e.cosId === c.ticketId))).toHaveLength(1);
+    expect(new Set(world.ticketEvents.map((e) => e.status))).toEqual(new Set(["pending", "handling", "ignored", "escalated", "handled"]));
+    expect(world.chiefs.filter((c) => !world.ticketEvents.some((e) => e.targetId === c.ticketId))).toHaveLength(1);
     expect(world.projects.some((p) => p.cosEnabled === false)).toBe(true);
     expect(world.cosBadge.byCos["cos-all"]).toBe(3);
   });

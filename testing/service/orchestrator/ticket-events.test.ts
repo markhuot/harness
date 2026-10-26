@@ -1,7 +1,11 @@
 import { afterEach, expect, test } from "bun:test";
 import { executeTool } from "../../../service/src/drivers/types";
 import { FakeDriver, gate, replyScript, type Step } from "../fake-driver";
-import { callTools, makeOrchestrator, stopAll } from "../orchestrator-harness";
+import { ensureHome } from "../../../service/src/config";
+import { EventBus } from "../../../service/src/events";
+import { Orchestrator } from "../../../service/src/orchestrator/orchestrator";
+import { QuietBrowser } from "../../builders/harness";
+import { callTools, makeOrchestrator, stopAll, type OrchestratorRig } from "../orchestrator-harness";
 
 afterEach(stopAll);
 
@@ -61,7 +65,8 @@ test("changes of several children made while the parent's run is going arrive as
   const a = await h.orch.createTicket({ projectId: h.project.id, spec: "Child A", parentId: parent.key, ...ONE_RUN, start: true });
   const b = await h.orch.createTicket({ projectId: h.project.id, spec: "Child B", parentId: parent.key, ...ONE_RUN, start: true });
   await new Promise<void>((resolve) => {
-    const poll = setInterval(() => seen.length && (clearInterval(poll), resolve()), 5);
+    // The rows' debounce runs on the service's clock, which only moves when the test says so.
+    const poll = setInterval(() => (h.clock.advance(5), seen.length && (clearInterval(poll), resolve())), 5);
   });
   release.open();
   await h.settle();
@@ -150,22 +155,43 @@ test("a subscription is dropped when its subscriber's run is cancelled, so an ev
   expect(wakes(h)).toHaveLength(0);
 });
 
+test("stopping a run that was woken by a change doesn't restart the ticket once the backoff passes", async () => {
+  const { h, other, me } = await subscriber((key) => [["subscribe_ticket", { key, mode: "forever" }]]);
+  const hold = gate();
+  // Only the wake's run holds; the other ticket's own run answers at once.
+  h.driver.script((req) => (req.prompt.includes("Updates from tickets you subscribed to") ? [{ wait: hold }, ...replyScript("woken")] : replyScript("other")));
+  await h.orch.startTicket(other.key);
+  await new Promise<void>((resolve) => {
+    const poll = setInterval(() => (h.clock.advance(5), wakes(h).length && (clearInterval(poll), resolve())), 5);
+  });
+  await h.orch.cancelTicket(me.key);
+  const before = wakes(h).length;
+  h.clock.advance(60_000);
+  await h.settle();
+  expect(wakes(h)).toHaveLength(before);
+  expect(h.store.ticketEvents.byStatus("escalated", undefined, "ticket")).toHaveLength(0);
+  expect(h.store.ticketEvents.byStatus("handling", undefined, "ticket")).toHaveLength(0);
+});
+
 test("a subscriber is woken at most eight times in a window; the events past that are held, not lost, and arrive together once there is room", async () => {
   const { h, other } = await subscriber((key) => [["subscribe_ticket", { key, mode: "forever" }]]);
   await h.orch.startTicket(other.key);
   await h.settle();
-  for (let i = 0; i < 12; i++) {
+  for (let i = 0; i < 13; i++) {
     await h.orch.updateTicket(other.key, { status: i % 2 === 0 ? "blocked" : "planning" });
     await h.settle();
   }
   expect(wakes(h)).toHaveLength(8);
-  expect(h.logs.some((l) => l.includes("subscription events held"))).toBe(true);
-  // The window passes: the next change wakes it once, with every held change in the message.
+  // The rows past the cap wait in the table, not in memory.
+  expect(h.store.ticketEvents.byStatus("escalated", undefined, "ticket").length).toBeGreaterThan(0);
+  // The window passes: the next change wakes it once, with the held changes collapsed to the ticket's latest status.
   h.clock.advance(5 * 60_000 + 1);
-  await h.orch.updateTicket(other.key, { status: "blocked" });
+  await h.orch.updateTicket(other.key, { status: "review" });
   await h.settle();
   expect(wakes(h)).toHaveLength(9);
-  expect(wakes(h)[8]!.prompt.match(/^\d+\. /gm)!.length).toBeGreaterThan(1);
+  expect(wakes(h)[8]!.prompt).toContain("planning → review");
+  expect(wakes(h)[8]!.prompt.match(/^\d+\. /gm)).toHaveLength(1);
+  expect(h.store.ticketEvents.byStatus("escalated", undefined, "ticket")).toHaveLength(0);
 });
 
 test("a change the subscriber's own tool call set going doesn't hide the target's later change from it", async () => {
@@ -273,4 +299,190 @@ test("a conductor following its own child's status is told it already is woken f
   expect(results[0]!.isError).toBe(true);
   expect(results[0]!.text).toMatch(/already wake you/);
   expect(results[1]!.isError).toBe(false);
+});
+
+/** The service restarted: a second orchestrator over the same database, stopped by the test. */
+async function restart(h: OrchestratorRig, opts: { liveDebounceMs?: number } = {}) {
+  await h.orch.stop();
+  const orch = new Orchestrator({
+    store: h.store,
+    bus: new EventBus(),
+    drivers: [h.driver],
+    browser: new QuietBrowser(),
+    paths: ensureHome(h.home),
+    tools: () => [],
+    baseUrl: () => "http://127.0.0.1:1",
+    watchers: null,
+    log: () => {},
+    classifier: null,
+    reconcileIntervalMs: 0,
+    fetchPullRequestTitle: async () => null,
+    now: h.clock,
+    liveDebounceMs: 0,
+    ...opts,
+  });
+  orch.start();
+  const idle = () => orch.idle();
+  return { orch, idle, stop: () => orch.stop() };
+}
+
+const waitingRows = (h: OrchestratorRig) => h.store.ticketEvents.byStatus("escalated", undefined, "ticket");
+const childPrompts = (h: { driver: FakeDriver }) => h.driver.requests.filter((r) => r.prompt.includes("Child ticket updates"));
+
+test("a child's update held behind a parent run that can't take input is a row, and a restart delivers it", async () => {
+  const h = makeOrchestrator({ liveDebounceMs: 0 });
+  const hold = gate();
+  h.driver.script([{ wait: hold }, ...replyScript("parent one")]);
+  const parent = await h.orch.createTicket({ projectId: h.project.id, spec: "Conduct", kind: "conductor", ...ONE_RUN });
+  await h.driver.runStarted();
+  const child = await h.orch.createTicket({ projectId: h.project.id, spec: "Child", parentId: parent.key, ...ONE_RUN, start: true });
+  await h.driver.runStarted(2);
+  await Bun.sleep(20);
+  // The parent's run can't take the push: the update is a stored row, not a buffer.
+  expect(waitingRows(h)).toMatchObject([{ sourceKind: "child", targetId: parent.id, ticketId: child.id, status: "escalated" }]);
+  expect(childPrompts(h)).toHaveLength(0);
+
+  // The service goes down and comes back: the row is still there and the parent hears it in one run.
+  h.driver.script(replyScript("parent after restart"));
+  const again = await restart(h);
+  await again.idle();
+  expect(childPrompts(h)).toHaveLength(1);
+  expect(childPrompts(h)[0]!.prompt).toContain(`${child.key} "Child": in_progress → review`);
+  expect(h.store.ticketEvents.byStatus("handled", undefined, "ticket")).toHaveLength(1);
+  expect(waitingRows(h)).toHaveLength(0);
+  await again.stop();
+});
+
+test("rows held over a subscriber's wake cap survive a restart and are delivered once the window has room", async () => {
+  const h = makeOrchestrator({ tools: undefined, liveDebounceMs: 0 });
+  const other = await h.orch.createTicket({ projectId: h.project.id, spec: "Other", start: false });
+  await h.settle();
+  const { steps } = callTools([["subscribe_ticket", { key: other.key, mode: "forever" }]]);
+  h.driver.script(steps);
+  const me = await h.orch.createTicket({ projectId: h.project.id, spec: "Waiting on other", ...ONE_RUN });
+  await h.settle();
+  await h.orch.startTicket(other.key);
+  await h.settle();
+  for (let i = 0; i < 12; i++) {
+    await h.orch.updateTicket(other.key, { status: i % 2 === 0 ? "blocked" : "planning" });
+    await h.settle();
+  }
+  await h.orch.updateTicket(other.key, { status: "blocked" });
+  await h.settle();
+  expect(wakes(h)).toHaveLength(8);
+  expect(waitingRows(h).length).toBeGreaterThan(0);
+  const held = waitingRows(h).map((e) => e.targetId);
+  expect(new Set(held)).toEqual(new Set([me.id]));
+
+  // The cap counts the wakes already made, also after a restart: nothing is delivered yet.
+  const again = await restart(h);
+  await again.idle();
+  expect(wakes(h)).toHaveLength(8);
+  expect(waitingRows(h).length).toBeGreaterThan(0);
+  // The window passes and the next tick delivers what was held.
+  h.clock.advance(5 * 60_000 + 1);
+  await (again.orch as unknown as { ticketEvents: { tick(): Promise<void> } }).ticketEvents.tick();
+  await again.idle();
+  expect(wakes(h)).toHaveLength(9);
+  expect(waitingRows(h)).toHaveLength(0);
+  await again.stop();
+});
+
+test("a chief that subscribes to a ticket it dispatched hears each change once", async () => {
+  const h = makeOrchestrator({ tools: undefined, liveDebounceMs: 0 });
+  const parent = await h.orch.createTicket({ projectId: h.project.id, spec: "Conduct", kind: "conductor", ...ONE_RUN });
+  await h.settle();
+  const child = await h.orch.createTicket({ projectId: h.project.id, spec: "Child", parentId: parent.key, start: false });
+  h.store.subscriptions.upsert(parent.id, child.id, "forever", ["status", "note"]);
+  await h.orch.updateTicket(child.key, { status: "blocked" });
+  await h.settle();
+  const rows = h.store.ticketEvents.list({ targetId: parent.id, limit: 50 });
+  expect(rows).toHaveLength(1);
+  expect(rows[0]).toMatchObject({ sourceKind: "child" });
+});
+
+test("the same activity is one row per ticket it wakes, and a parent that also subscribes to the change gets only its child row", async () => {
+  const h = makeOrchestrator({ tools: undefined, liveDebounceMs: 0 });
+  const parent = await h.orch.createTicket({ projectId: h.project.id, spec: "Conduct", kind: "conductor", ...ONE_RUN });
+  const watcher = await h.orch.createTicket({ projectId: h.project.id, spec: "Watcher", start: false });
+  const child = await h.orch.createTicket({ projectId: h.project.id, spec: "Child", parentId: parent.key, start: false });
+  h.store.subscriptions.upsert(parent.id, child.id, "forever", ["status"]);
+  h.store.subscriptions.upsert(watcher.id, child.id, "forever", ["status"]);
+  await h.orch.updateTicket(child.key, { status: "blocked" });
+  const rows = [parent.id, watcher.id].flatMap((targetId) => h.store.ticketEvents.list({ targetId, limit: 50 }));
+  expect(rows.map((e) => [e.targetId, e.sourceKind]).sort()).toEqual(
+    [
+      [parent.id, "child"],
+      [watcher.id, "subscription"],
+    ].sort(),
+  );
+  expect(new Set(rows.map((e) => e.sourceRef)).size).toBe(1);
+});
+
+test("a ticket that is done closes its waiting rows as ignored with the reason", async () => {
+  const h = makeOrchestrator({ liveDebounceMs: 0 });
+  const hold = gate();
+  h.driver.script([{ wait: hold }, ...replyScript("parent one")]);
+  const parent = await h.orch.createTicket({ projectId: h.project.id, spec: "Conduct", kind: "conductor", ...ONE_RUN });
+  await h.driver.runStarted();
+  await h.orch.createTicket({ projectId: h.project.id, spec: "Child", parentId: parent.key, ...ONE_RUN, start: true });
+  await h.driver.runStarted(2);
+  await Bun.sleep(20);
+  expect(waitingRows(h)).toHaveLength(1);
+  await h.orch.updateTicket(parent.key, { status: "done" });
+  expect(waitingRows(h)).toHaveLength(0);
+  expect(h.store.ticketEvents.byStatus("ignored", undefined, "ticket")).toMatchObject([{ targetId: parent.id, reason: `${parent.key} is done` }]);
+  hold.open();
+  await h.settle();
+  expect(childPrompts(h)).toHaveLength(0);
+});
+
+test("a non-chief ticket's rows are pushed to clients when they are inserted and when their status changes", async () => {
+  const h = makeOrchestrator({ liveDebounceMs: 0 });
+  const hold = gate();
+  h.driver.script([{ wait: hold }, ...replyScript("parent one")]);
+  const parent = await h.orch.createTicket({ projectId: h.project.id, spec: "Conduct", kind: "conductor", ...ONE_RUN });
+  await h.driver.runStarted();
+  await h.orch.createTicket({ projectId: h.project.id, spec: "Child", parentId: parent.key, ...ONE_RUN, start: true });
+  await h.driver.runStarted(2);
+  await Bun.sleep(20);
+  const pushed = () => h.events.flatMap((e) => (e.kind === "ticket.event.upserted" && e.event.targetId === parent.id ? [`${e.event.id}:${e.event.status}`] : []));
+  const row = waitingRows(h)[0]!;
+  expect(pushed()).toContain(`${row.id}:escalated`);
+  await h.orch.updateTicket(parent.key, { status: "done" });
+  expect(pushed()).toContain(`${row.id}:ignored`);
+  hold.open();
+  await h.settle();
+});
+
+test("a subscription row never reaches a chief's triage, rehoming, Inbox list or badge", async () => {
+  const h = makeOrchestrator({ tools: undefined, liveDebounceMs: 0 });
+  const cos = h.orch.openCos("all");
+  const other = await h.orch.createTicket({ projectId: h.project.id, spec: "Other", start: false });
+  const row = h.store.ticketEvents.insert({ cosId: null, targetId: other.id, projectId: h.project.id, ticketId: other.id, sourceKind: "subscription", sourceRef: "a-x", actor: "system", title: "x", ready: true })!;
+  const pendingRow = h.store.ticketEvents.insert({ cosId: null, targetId: other.id, projectId: h.project.id, ticketId: other.id, sourceKind: "child", sourceRef: "a-y", actor: "system", title: "y" })!;
+  h.orch.cosEngine.rehome();
+  await h.orch.cosEngine.tick();
+  expect(h.store.ticketEvents.get(row.id)).toMatchObject({ cosId: null, status: "escalated" });
+  expect(h.store.ticketEvents.get(pendingRow.id)).toMatchObject({ cosId: null, status: "pending" });
+  expect(h.orch.eventsPage(cos.ticketId, {}).items.map((e) => e.id)).not.toContain(row.id);
+  expect(h.orch.cosEngine.badge().total).toBe(0);
+});
+
+test("a restart with an interrupted parent run starts one run for the held update, not a resumed run and a wake", async () => {
+  const h = makeOrchestrator({ liveDebounceMs: 0 });
+  const hold = gate();
+  h.driver.script([{ wait: hold }, ...replyScript("parent one")]);
+  const parent = await h.orch.createTicket({ projectId: h.project.id, spec: "Conduct", kind: "conductor", ...ONE_RUN });
+  await h.driver.runStarted();
+  await h.orch.createTicket({ projectId: h.project.id, spec: "Child", parentId: parent.key, ...ONE_RUN, start: true });
+  await h.driver.runStarted(2);
+  await Bun.sleep(20);
+  const before = h.driver.requests.length;
+  h.driver.script(replyScript("after restart"));
+  const again = await restart(h);
+  await again.idle();
+  expect(h.driver.requests.length - before).toBe(1);
+  expect(childPrompts(h)).toHaveLength(1);
+  await again.stop();
 });

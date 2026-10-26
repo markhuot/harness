@@ -100,7 +100,7 @@ import {
 import { ScopedStore, SpecConflictError, type GroupRepo, type Store } from "../store";
 import { SUBSCRIPTION_EVENTS, type Subscription, type SubscriptionEvent, type SubscriptionMode } from "../store/subscriptions";
 import {
-  COS_EVENT_STATUSES,
+  TICKET_EVENT_STATUSES,
   cosScopeKey,
   resolveTriageModel,
   resolveTriagePermissionMode,
@@ -110,9 +110,9 @@ import {
   type Cos,
   type CosBadge,
   type CosChatPage,
-  type CosEvent,
-  type CosEventPage,
-  type CosEventStatus,
+  type TicketEvent,
+  type TicketEventPage,
+  type TicketEventStatus,
   type CosScope,
 } from "@harness/shared";
 import { GroupNameTaken } from "../store/projects";
@@ -138,7 +138,6 @@ import type {
   BoardTranscriptEntry,
   CreateTicketInput,
   HarnessOps,
-  InboxItem,
   ProjectView,
   ReviewSkips,
   UpdateTicketInput,
@@ -146,6 +145,7 @@ import type {
   ToolContext,
   ToolDefinition,
 } from "../tools/types";
+import { LIST_INBOX_DEFAULT_LIMIT } from "../tools/board";
 import { RemoteIdError, truncateMiddle } from "../tools/util";
 import type { BrowserService } from "../browser/types";
 import type { HarnessPaths } from "../config";
@@ -205,7 +205,10 @@ import { PermissionGate, type GateEnv } from "../permissions/gate";
 import { AnthropicApiClassifier, ClaudeCliClassifier, type Classifier } from "../permissions/classifier";
 import { AutoModeRulesProvider } from "../permissions/rules";
 import { anthropicStructured, claudeCliStructured } from "../permissions/structured";
-import { CosEngine, wire as wireCosEvent, type Timers as CosTimers } from "../cos/engine";
+import { CosEngine, wire as wireCosEvent } from "../cos/engine";
+import { EventDelivery, type Timers as CosTimers } from "../events/delivery";
+import { CHILD_EVENT_WAKE_CAP, DEFAULT_EVENT_RETENTION_DAYS, EVENT_WAKE_CAP } from "@harness/shared";
+import type { StoredTicketEvent } from "../store/ticket-events";
 import { chatEntryOf, cosChat, isSilentReply, WAKE_PROMPT_PREFIX } from "../cos/chat";
 import { AgentTriage, LlmTriage, parseTriage, TriageIncomplete, type AgentTriageRequest, type AgentTriageRun, type CosTriage, type TriageVerdict } from "../cos/triage";
 import { triageDecision } from "../permissions/triage";
@@ -216,7 +219,12 @@ import { clockTime, isUsageLimit, usageLimitResumeAt } from "./usage-limit";
 import { applyCall, compactedContext } from "./context-usage";
 import { PlanUsageTracker, POLL_MS } from "./plan-usage";
 
+/** A change to a ticket, as the rows that wake the tickets watching it keep it (DESIGN.md "Conductor", "Ticket subscriptions"). */
 export interface ConductorChange {
+  /** The ticket that changed */
+  ticketId: string;
+  /** The activity entry that recorded the change: what makes one change one row per ticket it wakes */
+  sourceRef: string;
   key: string;
   title: string;
   from: TicketStatus;
@@ -227,15 +235,10 @@ export interface ConductorChange {
   specRevision?: number;
   /** What changed: a status move (the default), a note, or a spec revision */
   event?: SubscriptionEvent;
-  /** The change reached this ticket through a subscription, not as the parent of the ticket that changed */
-  subscribed?: boolean;
 }
 
-/** Wait this long after a change before pushing buffered updates into a live run, so a burst of changes is one message. */
+/** Wait this long after a change before pushing waiting updates into a live run, so a burst of changes is one message. */
 const LIVE_PUSH_DEBOUNCE_MS = 1000;
-/** A subscriber is woken at most this many times per window; a pair of tickets subscribed to each other can't loop. */
-const SUBSCRIPTION_WAKE_LIMIT = 8;
-const SUBSCRIPTION_WAKE_WINDOW_MS = 5 * 60_000;
 
 /** Who writes a spec revision: the human (PATCH), the service, or an agent's run. */
 export interface SpecAuthorship {
@@ -352,13 +355,6 @@ interface ActiveRun {
   compacted?: { before?: number; after?: number };
 }
 
-/** What the Inbox's old triage sessions (kept, read-only) stored: the output they were triaging. */
-interface LegacyTriageMeta {
-  source: string;
-  text: string;
-  prompt?: string;
-}
-
 /** One chunk of watcher (or injected) output on its way into the chief of staff's events. */
 export interface IngestInput {
   /** Dedupe scope: the watcher id, or inject:<source> */
@@ -443,8 +439,6 @@ const boardAgent = (s: Subagent, chars: number): BoardAgent => ({
 });
 /** search_tickets page size when the agent doesn't pass a limit (the HTTP default of 100 floods context) */
 export const BOARD_SEARCH_LIMIT = 20;
-/** list_inbox default page size */
-export const BOARD_INBOX_LIMIT = 20;
 export const APPROVAL_PENDING_MESSAGE =
   "A human must approve this tool call. The ticket is now blocked awaiting approval — stop now; you'll be resumed with the answer.";
 
@@ -604,12 +598,7 @@ export class Orchestrator {
   /** ticketId → classifier denials retried in a row without a human (MAX_AUTO_RETRIES) */
   private autoRetries = new Map<string, number>();
   private mcpRuns = new Map<string, { tools: ToolDefinition[]; ctx: ToolContext }>();
-  private conductorBuffer = new Map<string, ConductorChange[]>();
-  /** ticketId → the timer that pushes its buffered updates into its live run (flushConductor) */
-  private livePushTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private liveDebounceMs: number;
-  /** subscriberId → when subscriptions woke it lately (recordSubscriptionWake) */
-  private subscriptionWakes = new Map<string, number[]>();
   private starting = new Set<string>();
   private watcherRunner: WatcherSupervisor | null;
   private stopping = false;
@@ -634,6 +623,8 @@ export class Orchestrator {
   private classifierCache: { key: string; classifier: Classifier } | null = null;
   /** The chief-of-staff event pipeline (DESIGN.md "Events") */
   readonly cosEngine: CosEngine;
+  /** Child and subscription rows of `ticket_events`, delivered to ordinary tickets (DESIGN.md "Conductor") */
+  private readonly ticketEvents: EventDelivery;
   private readonly terminalAccess: TerminalAccess | undefined;
   private readonly macRequests: MacRequests | undefined;
   private cosOpts: Pick<OrchestratorOptions, "cosTriage">;
@@ -715,6 +706,11 @@ export class Orchestrator {
         if (w) this.bus.emit({ kind: "watcher.upserted", watcher: this.withLive(w) });
       },
     };
+    // A ticket's Events tab shows only once it has events (and goes when pruning leaves it none): push the ticket when that flips.
+    this.store.ticketEvents.onHasEventsChange = (id) => {
+      const t = this.store.tickets.get(id);
+      if (t) this.bus.emit({ kind: "ticket.upserted", ticket: t });
+    };
     this.cosEngine = new CosEngine({
       store: this.store,
       emit: (e) => this.bus.emit(e),
@@ -727,6 +723,27 @@ export class Orchestrator {
       log: this.log,
       timers: opts.cosTimers,
     });
+    this.ticketEvents = new EventDelivery({
+      store: this.store,
+      scope: "ticket",
+      now: () => this.now(),
+      log: this.log,
+      runStatus: (runId) => this.store.runs.get(runId)?.status ?? null,
+      retentionMs: () => (this.settings().eventRetentionDays ?? DEFAULT_EVENT_RETENTION_DAYS) * 24 * 60 * 60_000,
+      // A burst is batched into a live run; a ticket with no run going gets a run at once.
+      debounceMs: (id) => (this.liveRunOf(id) ? this.liveDebounceMs : 0),
+      open: (id) => this.deliverable(id),
+      targetExists: (id) => !!this.store.tickets.get(id),
+      onTargetGone: (e) => this.patchTicketEvent(e.id, { status: "ignored", reason: "its ticket no longer exists", wakeId: null, consumingRunId: null }),
+      patched: (e) => this.bus.emit({ kind: "ticket.event.upserted", event: wireCosEvent(e) }),
+      classOf: (e) => e.sourceKind,
+      capOf: (cls) => (cls === "child" ? CHILD_EVENT_WAKE_CAP : EVENT_WAKE_CAP),
+      describeRun: () => "The ticket's run",
+      render: (_id, events, more) => ({ text: this.ticketWakeText(events, more) }),
+      deliver: (id, text) => this.wakeTicket(id, text),
+    });
+    // Rows are written by call sites that can fire before start(): delivery runs from here, start() adds the sweep.
+    this.ticketEvents.activate();
     this.watcherRunner = opts.watchers === null ? null : opts.watchers ? opts.watchers(handlers) : new WatcherRunner({ ...handlers, now: this.now });
   }
 
@@ -757,13 +774,19 @@ export class Orchestrator {
         this.bus.emit({ kind: "cos.transcript.appended", cosId, entry: { id: m.id, cosId, createdAt: m.createdAt, kind: "message", role: m.role, text: m.content.text, ...(m.content.attachments?.length ? { attachments: m.content.attachments } : {}) } });
       }),
       this.bus.onKind("run.upserted", (e) => {
-        if (e.run.kind === "cos" && (e.run.status === "succeeded" || e.run.status === "failed" || e.run.status === "cancelled")) this.cosEngine.runEnded(e.run.id, e.run.status);
+        if (e.run.status === "succeeded" || e.run.status === "failed" || e.run.status === "cancelled") {
+          this.cosEngine.runEnded(e.run.id, e.run.status);
+          this.ticketEvents.runEnded(e.run.id, e.run.status);
+        }
       }),
     );
     this.cosEngine.start();
     if (this.store.projects.orphanedCosTickets().length) void this.pruneCos(); // a chief of staff whose group emptied while the service was down
     // Restarts that came due while the service was down run now; the rest at their time.
     this.kickResume();
+    // After the restart's own runs are settled and resumed, so a resumed run and a held wake don't both start.
+    this.ticketEvents.start();
+    this.ticketEvents.arm();
     if (this.reconcileIntervalMs > 0) {
       this.reconcileTimer = setInterval(() => {
         try {
@@ -840,8 +863,7 @@ export class Orchestrator {
     this.reconcileTimer = null;
     if (this.resumeTimer) clearTimeout(this.resumeTimer);
     this.resumeTimer = null;
-    for (const timer of this.livePushTimers.values()) clearTimeout(timer);
-    this.livePushTimers.clear();
+    this.ticketEvents.stop();
     this.queue.pause();
     await this.watcherRunner?.stopAll().catch(() => {});
     const actives = [...this.active.values()];
@@ -1185,8 +1207,6 @@ export class Orchestrator {
         const t = this.store.tickets.get(tid);
         if (t) this.bus.emit({ kind: "ticket.upserted", ticket: t });
       }
-      // Pending conductor notifications mention children by key.
-      for (const buf of this.conductorBuffer.values()) for (const c of buf) c.key = renamed.renames.get(c.key) ?? c.key;
       this.log(`project ${existing.key} → ${project.key}: renamed ${renamed.renames.size} ticket(s)`);
     }
     return project;
@@ -1269,11 +1289,12 @@ export class Orchestrator {
     void this.cosEngine.tick().catch((err) => this.log(`cos: tick failed: ${errMsg(err)}`));
   }
 
-  /** The Inbox page of a chief (GET /cos/:id/events). */
-  cosEvents(cosId: string, query: { status?: string | null; before?: string | null; limit?: string | null }): CosEventPage {
-    if (!this.store.cos.get(cosId)) throw notFound(`Unknown chief of staff: ${cosId}`);
+  /** A page of a ticket's events (GET /tickets/:key/events): for a chief its Inbox (its own and the unassigned ones), for any other ticket the events aimed at it. */
+  eventsPage(ref: string, query: { status?: string | null; before?: string | null; limit?: string | null }): TicketEventPage {
+    const ticket = this.store.tickets.getByKey(ref) ?? this.store.tickets.get(ref);
+    if (!ticket) throw notFound(`Unknown ticket: ${ref}`);
     const status = query.status || undefined;
-    if (status && !COS_EVENT_STATUSES.includes(status as CosEventStatus)) throw badRequest(`status must be one of ${COS_EVENT_STATUSES.join(", ")}`);
+    if (status && !TICKET_EVENT_STATUSES.includes(status as TicketEventStatus)) throw badRequest(`status must be one of ${TICKET_EVENT_STATUSES.join(", ")}`);
     const limit = Math.min(200, Math.max(1, Number(query.limit) || 50));
     let before: { createdAt: number; id: string } | undefined;
     if (query.before) {
@@ -1282,7 +1303,8 @@ export class Orchestrator {
       if (i <= 0 || !Number.isFinite(createdAt)) throw badRequest("before is not a cursor from a previous page");
       before = { createdAt, id: query.before.slice(i + 1) };
     }
-    const rows = this.store.cosEvents.list({ cosId, status: status as CosEventStatus | undefined, before, limit: limit + 1 });
+    const owner = ticket.kind === "cos" ? { cosId: ticket.id } : { targetId: ticket.id, hideFiltered: true };
+    const rows = this.store.ticketEvents.list({ ...owner, status: status as TicketEventStatus | undefined, before, limit: limit + 1 });
     const items = rows.slice(0, limit);
     const last = items[items.length - 1];
     return { items: items.map(wireCosEvent), nextCursor: rows.length > limit && last ? `${last.createdAt}:${last.id}` : null };
@@ -1293,7 +1315,7 @@ export class Orchestrator {
   }
 
   /** "Escalate anyway": an ignored event goes in the chief's next wake. */
-  async escalateCosEvent(id: string): Promise<CosEvent> {
+  async escalateCosEvent(id: string): Promise<TicketEvent> {
     const res = this.cosEngine.escalate(id);
     if ("error" in res) {
       if (res.error === "unknown") throw notFound(`Unknown event: ${id}`);
@@ -1301,7 +1323,7 @@ export class Orchestrator {
     }
     // The wake is the engine's to deliver; the answer doesn't wait on a triage call or a chief.
     void this.cosEngine.tick().catch((err) => this.log(`cos: tick failed: ${errMsg(err)}`));
-    return wireCosEvent(this.store.cosEvents.get(id)!);
+    return wireCosEvent(this.store.ticketEvents.get(id)!);
   }
 
   cosTranscript(cosId: string, query: { before?: string | null; limit?: string | null }): CosChatPage {
@@ -1479,6 +1501,9 @@ export class Orchestrator {
     const cos = this.store.cos.setEnabled(ticketId, enabled);
     if (!cos) throw notFound(`Unknown chief of staff: ${ticketId}`);
     this.touchTicket(cos.ticketId);
+    // Switched off, it hears nothing it subscribed to: waiting rows must not wake it when it is switched on again.
+    // Rows a live run is already reading stay: switching off doesn't stop that run.
+    if (!enabled) this.closeTicketEvents(cos.ticketId, "the chief of staff is switched off", ["escalated"]);
     this.rehomeCosEvents();
     return cos;
   }
@@ -2536,7 +2561,7 @@ export class Orchestrator {
       this.store.db.query("UPDATE tickets SET parent_id = NULL WHERE id = $id").run({ id: child.id });
       this.touchTicket(child.id);
     }
-    this.conductorBuffer.delete(ticket.id);
+    this.closeTicketEvents(ticket.id, "its ticket was deleted");
     await this.browser.close(ticket.sessionId).catch(() => {});
     if (stillWanted && !stillWanted()) return; // the awaits above let the world change (a chief of staff's group gained a project)
     // Its spec media go with it (their rows cascade), even when another ticket's message sent one
@@ -3228,7 +3253,10 @@ export class Orchestrator {
     this.dropPlanApproval(ticket.id, "Plan approval cleared: run cancelled; work not started");
     // Someone stopped this agent: an event must not start it again behind their back.
     this.store.subscriptions.deleteBySubscriber(ticket.id);
+    // Nor may the changes it was woken with: a cancelled run would put them back to waiting and the engine would retry them.
+    this.closeTicketEvents(ticket.id, "run stopped");
     await this.cancelSession(ticket.sessionId, true);
+    this.closeTicketEvents(ticket.id, "run stopped");
     return this.store.tickets.get(ticket.id)!;
   }
 
@@ -3263,7 +3291,7 @@ export class Orchestrator {
     if (kind === "triage") return [];
     // A chief of staff's conversation isn't on the board: it is read through /cos.
     const chiefs = new Set(this.store.cos.list().map((c) => c.ticketId));
-    // Old triage sessions (kept only for list_inbox) are not a list any app shows.
+    // Old triage sessions are not a list any app shows.
     return this.store.sessions.list(kind).filter((s) => s.kind !== "triage" && !(s.ticketId && chiefs.has(s.ticketId)));
   }
 
@@ -3429,7 +3457,7 @@ export class Orchestrator {
    * Feed output as if a watcher named `source` printed `text` (an object is taken as its JSON): an
    * event for the All chief of staff. Null when deduped or when the text is only whitespace.
    */
-  async injectOutput(source: string, text: unknown): Promise<CosEvent | null> {
+  async injectOutput(source: string, text: unknown): Promise<TicketEvent | null> {
     if (typeof source !== "string" || !source.trim()) throw badRequest("source is required");
     const raw = typeof text === "string" ? text : text === undefined || text === null ? "" : JSON.stringify(text);
     const output = toOutput(raw);
@@ -3439,7 +3467,7 @@ export class Orchestrator {
   }
 
   /** Dedupe (identical text from the same source is delivered once), then an event owned by the watcher's chief of staff. */
-  ingest(input: IngestInput): CosEvent | null {
+  ingest(input: IngestInput): TicketEvent | null {
     const hash = createHash("sha256").update(input.output.text).digest("hex");
     // Seen and event commit together: an insert that throws leaves the output unseen, to be delivered again.
     return this.store.transaction(() => {
@@ -3864,8 +3892,8 @@ ${numberLines(r.body)}`;
       const u = this.store.tickets.update(t.id, { agentReview: "approved" })!;
       this.touchSession(u.sessionId);
       this.appendStatus(u.sessionId, ctx.runId, "Agent review: approved");
-      this.addActivityLine(u, "review_approved", "agent", text || "Approved.", meta);
-      const approved: ConductorChange = { key: u.key, title: u.title, from: "review", to: "review", note: `Agent review approved. ${text}`.trim(), specRevision: u.specRevision };
+      const entry = this.addActivityLine(u, "review_approved", "agent", text || "Approved.", meta);
+      const approved: ConductorChange = { ticketId: u.id, sourceRef: entry.id, key: u.key, title: u.title, from: "review", to: "review", note: `Agent review approved. ${text}`.trim(), specRevision: u.specRevision };
       if (u.parentId) this.notifyConductor(u.parentId, approved);
       this.notifySubscribers(u, approved);
       this.noteReady(u);
@@ -3949,12 +3977,8 @@ ${numberLines(r.body)}`;
       const requested = String(key ?? "").trim().toUpperCase();
       const related = requested ? this.relatedTickets(sc, requested, null) : [];
       if (!related.length) {
-        // The Inbox isn't any project's: a group scope can't tell an item's key from a missing ticket's.
-        const item = requested && sc.scope === "all" ? this.store.sessions.list("triage").find((s) => s.triageStatus !== null && s.key.toUpperCase() === requested) : undefined;
-        if (item) {
-          const routed = item.outcome ? ` (${item.outcome})` : "";
-          throw new Error(`${item.key} is an Inbox item${routed}, not a ticket. Read it with list_inbox { key: "${item.key}", include_output: true }.`);
-        }
+        // Inbox items used to be keyed TRIAGE-n; they are events of the chief of staff now.
+        if (/^TRIAGE-\d+$/.test(requested)) throw new Error(`${requested} was an Inbox item, not a ticket. Inbox items are events now: read them with list_inbox.`);
         throw new Error(`Unknown ticket: ${key}`);
       }
       throw new RemoteIdError(`${this.remoteOnlyMessage(requested, related)} Call get_ticket with one of those keys.`, {
@@ -4037,34 +4061,16 @@ ${numberLines(r.body)}`;
     return this.scopeOf(ctx).projects.list().map((p) => this.projectView(p));
   }
 
-  async listInbox_(ctx: ToolContext, filter: Parameters<HarnessOps["listInbox"]>[1]): Promise<{ items: InboxItem[]; total: number }> {
-    // Inbox items belong to no project: a group scope has none.
-    if (this.scopeOf(ctx).scope !== "all") return { items: [], total: 0 };
-    const limit = Math.min(Math.max(1, filter.limit ?? BOARD_INBOX_LIMIT), 100);
-    const source = filter.source?.trim().toLowerCase();
+  async listInbox_(ctx: ToolContext, filter: Parameters<HarnessOps["listInbox"]>[1]): Promise<{ items: TicketEvent[]; total: number }> {
+    const limit = Math.min(Math.max(1, filter.limit ?? LIST_INBOX_DEFAULT_LIMIT), 100);
     const key = filter.key?.trim().toUpperCase();
-    const matches = this.store.sessions
-      .list("triage")
-      // A legacy Inbox item always has a triage status (the migration settled the open ones); a triage agent run has none.
-      .filter((s) => s.triageStatus !== null)
-      .map((s) => ({ s, meta: this.store.sessions.getMeta<LegacyTriageMeta>(s.id) }))
-      .filter(({ s, meta }) => {
-        if (key && s.key.toUpperCase() !== key) return false;
-        if (filter.statuses?.length && !filter.statuses.includes(s.triageStatus ?? "triaging")) return false;
-        return !source || (meta?.source ?? "").toLowerCase() === source;
-      })
-      .sort((a, b) => b.s.createdAt - a.s.createdAt || b.s.key.localeCompare(a.s.key, undefined, { numeric: true }));
-    const items = matches.slice(0, limit).map(({ s, meta }): InboxItem => ({
-      key: s.key,
-      title: s.title,
-      source: meta?.source ?? "",
-      status: s.triageStatus ?? "triaging",
-      outcome: s.outcome,
-      prompt: meta?.prompt ?? "",
-      ...(filter.output ? { output: truncateMiddle(meta?.text ?? "", BOARD_TRANSCRIPT_CHARS) } : {}),
-      createdAt: s.createdAt,
-    }));
-    return { items, total: matches.length };
+    // A chief reads what its Inbox shows (its own events and the unassigned ones), and so does the triage run working for it;
+    // any other ticket reads the events that wake it.
+    const cosId = ctx.runKind === "triage" ? this.triageRuns.get(ctx.session.id)?.cosId : ctx.ticket?.kind === "cos" ? ctx.ticket.id : undefined;
+    const owner = cosId ? { cosId } : { targetId: this.ctxTicket(ctx).id };
+    const find = { ...owner, sourceKind: filter.source, statuses: filter.statuses, key };
+    const items = this.store.ticketEvents.list({ ...find, limit });
+    return { items: items.map(wireCosEvent), total: this.store.ticketEvents.count(find) };
   }
 
   // --- board (write): work, conductor and chat runs; the HTTP API's code paths plus guard rails ---
@@ -4427,10 +4433,22 @@ ${numberLines(r.body)}`;
 
   // --- subscriptions ---
 
-  /** The in-progress ticket a work or conductor run subscribes for (DESIGN.md "Ticket subscriptions"). */
+  /** The in-progress ticket a work, conductor or chief of staff run subscribes for (DESIGN.md "Ticket subscriptions"). */
   private subscriberOf(ctx: ToolContext, tool: string): Ticket {
-    if (ctx.runKind !== "work" && ctx.runKind !== "conductor") throw new Error(`${tool} is only available in work and conductor runs`);
+    if (ctx.runKind !== "work" && ctx.runKind !== "conductor" && ctx.runKind !== "cos") throw new Error(`${tool} is only available in work, conductor and chief of staff runs`);
     return this.ctxTicket(ctx);
+  }
+
+  /**
+   * Whether a chief of staff subscribed to `t` may be told about it now: it is switched on and `t` is
+   * still inside its scope (read fresh, like scopeOf, so a group change takes effect at once).
+   * A chief whose scope is gone, or whose ticket is outside it, drops that subscription.
+   */
+  private cosHearsOf(cosTicket: Ticket, t: Ticket): "yes" | "off" | "out" {
+    const row = this.store.cos.get(cosTicket.id);
+    const scope = row ? parseCosScopeKey(row.scope) : null;
+    if (!row || !scope || !new ScopedStore(this.store, scope).inScope(t)) return "out";
+    return row.enabled ? "yes" : "off";
   }
 
   subscribeTicket_(ctx: ToolContext, key: string, mode: SubscriptionMode, events: SubscriptionEvent[] | undefined): Subscription & { key: string } {
@@ -5235,17 +5253,16 @@ ${numberLines(r.body)}`;
       // a block keeps the running conversation and leaving Blocked resumes it; every other move
       // starts the next run fresh.
       if (from !== "blocked" && to !== "blocked" && !move.keepSession) this.newSession(t.sessionId);
-      if (!recorded) this.addActivityLine(t, "moved", move.by ?? "system", move.line ?? status ?? "", { from, to });
-      if (t.parentId && !(from === "planning" && to === "in_progress")) {
-        this.notifyConductor(t.parentId, { key: t.key, title: t.title, from, to, note, specRevision: t.specRevision });
-      }
-      this.notifySubscribers(t, { key: t.key, title: t.title, from, to, note, specRevision: t.specRevision });
+      const entryId = recorded ? pending!.entryId : this.addActivityLine(t, "moved", move.by ?? "system", move.line ?? status ?? "", { from, to }).id;
+      const change: ConductorChange = { ticketId: t.id, sourceRef: entryId, key: t.key, title: t.title, from, to, note, specRevision: t.specRevision };
+      if (t.parentId && !(from === "planning" && to === "in_progress")) this.notifyConductor(t.parentId, change);
+      this.notifySubscribers(t, change);
       // Waiting on events is over once the ticket is no longer in progress; reopened work subscribes again.
       if (to !== "in_progress" && to !== "blocked") this.store.subscriptions.deleteBySubscriber(t.id);
       // Nothing follows a ticket that is over; its subscribers were told above.
       if (to === "done") this.store.subscriptions.deleteByTarget(t.id);
-      if (to === "done") this.conductorBuffer.delete(t.id);
-      if (to === "in_progress" && this.conductorBuffer.has(t.id)) queueMicrotask(() => this.flushConductor(t.id));
+      if (to === "done") this.closeTicketEvents(t.id, `${t.key} is done`);
+      if (to === "in_progress") this.deliverTicketEvents(t.id);
       if (to === "review") this.track(this.refreshHasChanges(t));
       if (to === "done") {
         // A done ticket's pages would otherwise keep running (and rendering) in Chrome for good. Its tabs stay, to reload when someone looks.
@@ -5302,7 +5319,10 @@ ${numberLines(r.body)}`;
     if (why !== "cancelled" && t.parentId && this.managedChild(t)) {
       const conductor = this.store.tickets.get(t.parentId)!;
       this.appendStatus(t.sessionId, null, `${what}: still approved, waiting on ${conductor.key} to complete it again`);
+      const entry = this.addActivity(t, "system", "system", `${what}: still approved, waiting on ${conductor.key} to complete it again`);
       this.notifyConductor(t.parentId, {
+        ticketId: t.id,
+        sourceRef: entry.id,
         key: t.key,
         title: t.title,
         from: "review",
@@ -5537,17 +5557,45 @@ ${numberLines(r.body)}`;
     this.armResume();
   }
 
+  /** One row per change for the ticket it wakes, written where the change happens (the caller is only known there, via `callerContext`). */
+  private insertTicketEvent(targetId: string, sourceKind: "child" | "subscription", change: ConductorChange): StoredTicketEvent | null {
+    const source = this.store.tickets.get(change.ticketId);
+    const event = change.event ?? "status";
+    const moved = event === "status" && change.from !== change.to;
+    const what = event === "note" ? "posted a note" : event === "spec" ? "revised its spec" : moved ? `${change.from} → ${change.to}` : "changed";
+    const row = this.store.ticketEvents.insert({
+      cosId: null,
+      targetId,
+      projectId: source?.projectId ?? null,
+      ticketId: change.ticketId,
+      sourceKind,
+      sourceRef: change.sourceRef,
+      // Only a status move collapses with the ticket's other moves
+      kind: moved ? "moved" : event === "status" ? "status" : event,
+      actor: this.actorContext.getStore() ?? "system",
+      title: `${change.key}: ${what}`,
+      summary: `${change.key} ${what}`,
+      payload: { key: change.key, title: change.title, from: change.from, to: change.to, note: change.note, specRevision: change.specRevision, event },
+      ready: true,
+    });
+    return row;
+  }
+
+  /** A child changed: its parent hears it (a row of source kind `child`). */
   private notifyConductor(conductorId: string, change: ConductorChange) {
-    const buf = this.conductorBuffer.get(conductorId) ?? [];
-    buf.push(change);
-    this.conductorBuffer.set(conductorId, buf);
-    queueMicrotask(() => this.flushConductor(conductorId));
+    const row = this.insertTicketEvent(conductorId, "child", change);
+    if (row) {
+      this.bus.emit({ kind: "ticket.event.upserted", event: wireCosEvent(row) });
+      this.deliverTicketEvents(conductorId, true);
+    }
   }
 
   /**
    * Tell the tickets subscribed to `t` about a change (DESIGN.md "Ticket subscriptions"). A parent
    * hears a status change through notifyConductor already. A subscriber doesn't hear changes it
-   * made itself, and a ticket that is over (done) drops its subscriptions instead.
+   * made itself, and a ticket that is over (done) drops its subscriptions instead. A `once`
+   * subscription is deleted in the same transaction as its row, so a crash can't leave a row
+   * without its subscription gone or the reverse.
    */
   private notifySubscribers(t: Ticket, change: ConductorChange) {
     const event = change.event ?? "status";
@@ -5556,98 +5604,125 @@ ${numberLines(r.body)}`;
       if (!sub.events.includes(event)) continue;
       if (event === "status" && sub.subscriberId === t.parentId) continue;
       if (sub.subscriberId === caller) continue;
+      let off = false;
       const subscriber = this.store.tickets.get(sub.subscriberId);
       if (!subscriber || subscriber.status === "done") {
         this.store.subscriptions.deleteBySubscriber(sub.subscriberId);
         continue;
       }
-      if (sub.mode === "once") this.store.subscriptions.delete(sub.subscriberId, sub.targetId);
-      this.notifyConductor(subscriber.id, { ...change, event, subscribed: true });
+      if (subscriber.kind === "cos") {
+        const hears = this.cosHearsOf(subscriber, t);
+        if (hears === "out") {
+          this.store.subscriptions.delete(sub.subscriberId, sub.targetId);
+          continue;
+        }
+        off = hears === "off";
+      }
+      const row = this.store.transaction(() => {
+        const inserted = this.insertTicketEvent(subscriber.id, "subscription", { ...change, event });
+        // Switched off, it isn't woken, and the change isn't kept for when it is switched on again: the row shows as ignored
+        if (inserted && off) this.store.ticketEvents.update(inserted.id, { status: "ignored", reason: "the chief of staff is switched off", wakeId: null, consumingRunId: null });
+        // A `once` subscription isn't spent by a change the chief never heard
+        if (sub.mode === "once" && !off) this.store.subscriptions.delete(sub.subscriberId, sub.targetId);
+        return inserted && off ? this.store.ticketEvents.get(inserted.id) : inserted;
+      });
+      if (row) {
+        // After the transaction: a rolled-back row is never announced
+        this.bus.emit({ kind: "ticket.event.upserted", event: wireCosEvent(row) });
+        if (!off) this.deliverTicketEvents(subscriber.id, true);
+      }
     }
   }
 
-  /** Whether `subscriberId` may be woken by subscriptions again: fewer than SUBSCRIPTION_WAKE_LIMIT wakes within the window. */
-  private subscriptionWakeAllowed(subscriberId: string): boolean {
-    return this.recentSubscriptionWakes(subscriberId).length < SUBSCRIPTION_WAKE_LIMIT;
+  /** Whether `ticketId` has a subscription event waiting to be delivered. */
+  private hasWaitingSubscriptionEvent(ticketId: string): boolean {
+    return this.store.ticketEvents.byTarget("escalated", ticketId, "ticket").some((e) => e.sourceKind === "subscription");
   }
 
-  private recentSubscriptionWakes(subscriberId: string): number[] {
-    const now = this.now();
-    const recent = (this.subscriptionWakes.get(subscriberId) ?? []).filter((at) => now - at < SUBSCRIPTION_WAKE_WINDOW_MS);
-    if (recent.length) this.subscriptionWakes.set(subscriberId, recent);
-    else this.subscriptionWakes.delete(subscriberId);
-    return recent;
+  /** The ticket's waiting rows are closed: nothing will read them (it is done or deleted). */
+  private closeTicketEvents(ticketId: string, why: string, statuses: readonly ("escalated" | "handling")[] = ["escalated", "handling"]) {
+    for (const status of statuses) {
+      for (const e of this.store.ticketEvents.byTarget(status, ticketId, "ticket")) this.patchTicketEvent(e.id, { status: "ignored", reason: why, wakeId: null, consumingRunId: null });
+    }
   }
 
-  private recordSubscriptionWake(subscriberId: string): void {
-    this.subscriptionWakes.set(subscriberId, [...this.recentSubscriptionWakes(subscriberId), this.now()]);
-  }
-
-  /** Whether `conductorId` has a subscription event waiting to be delivered. */
-  private hasBufferedSubscriptionEvent(conductorId: string): boolean {
-    return !!this.conductorBuffer.get(conductorId)?.some((c) => c.subscribed);
-  }
-
-  /** The message a ticket gets for its buffered child changes and subscription events. */
-  private conductorMessage(buf: ConductorChange[]): string {
-    const own = buf.filter((c) => !c.subscribed);
-    const subscribed = buf.filter((c) => c.subscribed);
-    return [own.length ? this.prompts().conductorUpdatePrompt(own) : "", subscribed.length ? this.prompts().ticketEventsPrompt(subscribed) : ""].filter(Boolean).join("\n\n");
+  /** Change a row and push it, so an open Events tab follows its status. */
+  private patchTicketEvent(id: string, patch: Parameters<Store["ticketEvents"]["update"]>[1]): StoredTicketEvent | null {
+    const e = this.store.ticketEvents.update(id, patch);
+    if (e) this.bus.emit({ kind: "ticket.event.upserted", event: wireCosEvent(e) });
+    return e;
   }
 
   /**
-   * Deliver the changes buffered for `conductorId` (a parent's children, a subscriber's targets):
-   * as one run when the ticket is idle, and into its run when that is still going (a run waiting on a
-   * background task stays live for hours), after a short debounce so a burst is one message. Held
-   * back while the ticket isn't in progress or a run is queued, or when the live run can't take
-   * input: afterRun flushes once a work or conductor run is over. A subscriber woken
-   * SUBSCRIPTION_WAKE_LIMIT times lately keeps its subscription events buffered (they arrive together
-   * in one message) until the window has room again.
+   * Wake the ticket with what is waiting for it (the ticket feed of EventDelivery): as one run when it is idle,
+   * and into its run when that is still going (a run waiting on a background task stays live for hours),
+   * after a short debounce so a burst is one message. `arm` also schedules the debounce's end.
    */
-  private flushConductor(conductorId: string, debounced = false) {
-    const buf = this.conductorBuffer.get(conductorId);
-    if (!buf?.length || this.stopping) return;
-    const c = this.store.tickets.get(conductorId);
-    if (!c) {
-      this.conductorBuffer.delete(conductorId);
-      return;
-    }
-    if (c.status !== "in_progress") return; // keep buffered until it is back in progress
-    if (this.queue.pendingFor(c.sessionId).length) return;
-    if (this.hasBufferedSubscriptionEvent(c.id) && !this.subscriptionWakeAllowed(c.id)) {
-      const key = `wake:${c.id}`;
-      if (!this.livePushTimers.has(key)) {
-        const oldest = Math.min(...this.recentSubscriptionWakes(c.id));
-        this.log(`subscription events held for ${c.id}: ${SUBSCRIPTION_WAKE_LIMIT} wakes within ${SUBSCRIPTION_WAKE_WINDOW_MS / 60_000} minutes`);
-        this.livePushTimers.set(key, setTimeout(() => {
-          this.livePushTimers.delete(key);
-          this.flushConductor(c.id);
-        }, Math.max(1000, oldest + SUBSCRIPTION_WAKE_WINDOW_MS - this.now() + 1)));
-      }
-      return;
-    }
-    const active = [...this.active.values()].find((a) => a.run.sessionId === c.sessionId);
+  private deliverTicketEvents(ticketId: string, arm = false) {
+    queueMicrotask(() => {
+      if (this.stopping) return;
+      void this.ticketEvents
+        .deliver(ticketId)
+        .catch((err) => this.log(`events: delivery to ${ticketId} failed: ${err instanceof Error ? err.message : String(err)}`))
+        .finally(() => {
+          if (arm) this.ticketEvents.arm();
+        });
+    });
+    if (arm) this.ticketEvents.arm();
+  }
+
+  /**
+   * Whether the ticket's rows may be delivered now. Held while it isn't in progress or a run is
+   * queued, or when the live run can't take input or is another kind than the ticket's work:
+   * afterRun delivers once that run is over.
+   */
+  private deliverable(ticketId: string): boolean {
+    const c = this.store.tickets.get(ticketId);
+    if (!c || c.status !== "in_progress" || c.draft) return false;
+    if (c.kind === "cos" && !this.store.cos.get(c.id)?.enabled) return false;
+    if (this.queue.pendingFor(c.sessionId).length) return false;
+    const active = this.liveRunOf(ticketId);
+    if (!active) return true;
+    return !active.cancelled && !!active.input && !active.input.isClosed && active.run.kind === this.workKind(c);
+  }
+
+  private liveRunOf(ticketId: string) {
+    const sessionId = this.store.tickets.get(ticketId)?.sessionId;
+    return sessionId ? [...this.active.values()].find((a) => a.run.sessionId === sessionId) : undefined;
+  }
+
+  /** Hand the ticket the wake: pushed into its live run, else queued as a run of its own kind. */
+  private async wakeTicket(ticketId: string, text: string): Promise<{ runId: string | null; live?: boolean }> {
+    const c = this.store.tickets.get(ticketId);
+    if (!c) throw new Error("the ticket no longer exists");
+    const active = this.liveRunOf(ticketId);
     if (active) {
-      const input = active.input;
-      if (active.cancelled || !input || input.isClosed || active.run.kind !== this.workKind(c)) return;
-      if (!debounced) {
-        if (!this.livePushTimers.has(c.id)) this.livePushTimers.set(c.id, setTimeout(() => {
-          this.livePushTimers.delete(c.id);
-          this.flushConductor(c.id, true);
-        }, this.liveDebounceMs));
-        return;
-      }
-      const text = this.conductorMessage(buf);
-      if (!input.push(text)) return;
-      this.conductorBuffer.delete(conductorId);
-      if (buf.some((b) => b.subscribed)) this.recordSubscriptionWake(c.id);
+      if (!active.input?.push(text)) throw new Error("the live run can't take input");
       this.append(c.sessionId, active.run.id, "user", messageContent({ text, attachments: [] }));
       this.touchSession(c.sessionId);
-      return;
+      return { runId: active.run.id, live: true };
     }
-    this.conductorBuffer.delete(conductorId);
-    if (buf.some((b) => b.subscribed)) this.recordSubscriptionWake(c.id);
-    this.enqueueRun(c.sessionId, this.workKind(c), this.conductorMessage(buf));
+    // A subscription wake isn't about one project: a chief's new run starts on the app's model (a push into a live run changes nothing)
+    if (c.kind === "cos") this.cosWakeProject.set(c.id, null);
+    return { runId: this.enqueueRun(c.sessionId, this.workKind(c), text).id };
+  }
+
+  /** What a ticket reads in a wake: its children's changes and its subscriptions' events, one prompt each. */
+  private ticketWakeText(events: StoredTicketEvent[], more: number): string {
+    const change = (e: StoredTicketEvent) => ({
+      // The key follows its ticket (a rename); the one written at the time stands in for a ticket deleted since.
+      key: e.ticketKey ?? String(e.payload.key ?? ""),
+      title: String(e.payload.title ?? ""),
+      from: e.payload.from as TicketStatus,
+      to: e.payload.to as TicketStatus,
+      note: typeof e.payload.note === "string" ? e.payload.note : undefined,
+      specRevision: typeof e.payload.specRevision === "number" ? e.payload.specRevision : undefined,
+      event: e.payload.event as SubscriptionEvent | undefined,
+    });
+    const own = events.filter((e) => e.sourceKind === "child").map(change);
+    const subscribed = events.filter((e) => e.sourceKind === "subscription").map(change);
+    const tail = more ? `(${more} more change${more === 1 ? " is" : "s are"} waiting and come in the next message.)` : "";
+    return [own.length ? this.prompts().conductorUpdatePrompt(own) : "", subscribed.length ? this.prompts().ticketEventsPrompt(subscribed) : "", tail].filter(Boolean).join("\n\n");
   }
 
   // =========================================================================
@@ -6238,8 +6313,8 @@ ${numberLines(r.body)}`;
     if (active.submitted) {
       if (ticket.status === "review") this.enqueueReview(ticket);
     } else if (ticket.status === "in_progress") {
-      // A subscription event still buffered (debounce, rate limit) is more work too: it would otherwise sit unread in review.
-      const moreWork = this.queue.pendingFor(ticket.sessionId).some((j) => RUNNABLE_WORK.includes(j.kind)) || this.hasBufferedSubscriptionEvent(ticket.id);
+      // A subscription event still waiting (debounce, rate limit) is more work too: it would otherwise sit unread in review.
+      const moreWork = this.queue.pendingFor(ticket.sessionId).some((j) => RUNNABLE_WORK.includes(j.kind)) || this.hasWaitingSubscriptionEvent(ticket.id);
       if (!moreWork && run.kind !== "conductor" && endsWithQuestion(active.lastText)) {
         // The agent is asking the human something: block with its question instead of submitting.
         const question = active.lastText!.trim();
@@ -6251,7 +6326,7 @@ ${numberLines(r.body)}`;
         this.enqueueReview(this.store.tickets.get(ticket.id)!);
       }
     }
-    this.flushConductor(ticket.id);
+    this.deliverTicketEvents(ticket.id);
   }
 
   /** Whether `ticket` waits on a subscription: a target that is done (or gone) will never change again, so it doesn't count. */
@@ -6374,7 +6449,7 @@ ${numberLines(r.body)}`;
     if (meta.to && kind !== "moved") this.movesRecorded.set(ticket.id, { to: meta.to, entryId: entry.id });
     if (kind === "note" || kind === "spec_revised") {
       const t = this.store.tickets.get(ticket.id);
-      if (t) this.notifySubscribers(t, { key: t.key, title: t.title, from: t.status, to: t.status, note: body, specRevision: t.specRevision, event: kind === "note" ? "note" : "spec" });
+      if (t) this.notifySubscribers(t, { ticketId: t.id, sourceRef: entry.id, key: t.key, title: t.title, from: t.status, to: t.status, note: body, specRevision: t.specRevision, event: kind === "note" ? "note" : "spec" });
     }
     return entry;
   }

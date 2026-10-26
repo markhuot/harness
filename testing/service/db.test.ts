@@ -42,8 +42,8 @@ test("a database from a newer service is refused rather than downgraded", () => 
 
 test("a failing migration rolls back whole and leaves the version where it was", () => {
   const db = dbAt(SCHEMA_VERSION - 1);
-  // Break the last migration's target: it adds a column that is already there.
-  db.exec("ALTER TABLE projects ADD COLUMN cos_statuses TEXT");
+  // Break the last migration's target: it creates an index that is already there.
+  db.exec("CREATE INDEX ticket_events_target ON ticket_events(id)");
   expect(() => migrate(db, paths())).toThrow();
   expect(version(db)).toBe(SCHEMA_VERSION - 1);
 });
@@ -243,14 +243,86 @@ test("migration 46 seeds the event cursor at the end of existing activity, so th
   for (const id of ["a", "b", "c"]) db.query("INSERT INTO activity (id, session_id, ticket_id, kind, author, body, meta, created_at) VALUES ($id, 's1', 't1', 'note', 'agent', 'x', '{}', 0)").run({ id });
   migrate(db, paths());
   const store = new Store(db);
-  expect(store.cosEvents.activitySeq()).toBe(3);
-  expect(store.activity.listAfter(store.cosEvents.activitySeq(), 10)).toEqual([]);
+  expect(store.ticketEvents.activitySeq()).toBe(3);
+  expect(store.activity.listAfter(store.ticketEvents.activitySeq(), 10)).toEqual([]);
   // The old rows carry no actor: they never count as a chief's.
   expect(db.query("SELECT actor FROM activity WHERE id = 'a'").get()).toEqual({ actor: null });
   // A source is only ever one event.
   const base = { cosId: null, projectId: null, ticketId: null, sourceKind: "watcher" as const, sourceRef: "r", actor: "watcher:x", title: "t" };
-  expect(store.cosEvents.insert(base)).not.toBeNull();
-  expect(store.cosEvents.insert(base)).toBeNull();
+  expect(store.ticketEvents.insert(base)).not.toBeNull();
+  expect(store.ticketEvents.insert(base)).toBeNull();
+});
+
+test("migration 55 renames cos_events to ticket_events, keeps its rows and gives each a target", () => {
+  const db = dbAt(54);
+  const ins = db.query("INSERT INTO cos_events (id, cos_id, project_id, ticket_id, source_kind, source_ref, kind, actor, title, payload, status, created_at, updated_at) VALUES ($id, $cos, NULL, $ticket, $sk, $ref, 'moved', 'a', 't', '{\"x\":1}', 'handled', 5, 6)");
+  ins.run({ id: "e1", cos: "chief", ticket: "t1", sk: "activity", ref: "r1" });
+  ins.run({ id: "e2", cos: null, ticket: null, sk: "watcher", ref: "r2" });
+  migrate(db, paths());
+  expect(db.query("SELECT name FROM sqlite_master WHERE name LIKE 'cos_events%'").all()).toEqual([]);
+  expect(db.query("SELECT id, cos_id AS cosId, target_id AS targetId, ticket_id AS ticketId, payload, status, created_at AS c, updated_at AS u FROM ticket_events ORDER BY id").all()).toEqual([
+    { id: "e1", cosId: "chief", targetId: "chief", ticketId: "t1", payload: '{"x":1}', status: "handled", c: 5, u: 6 },
+    { id: "e2", cosId: null, targetId: null, ticketId: null, payload: '{"x":1}', status: "handled", c: 5, u: 6 },
+  ]);
+});
+
+test("ticket_events dedupes a source once without a target and once per target with one", () => {
+  const db = dbAt(54);
+  migrate(db, paths());
+  const store = new Store(db);
+  const base = { cosId: null, projectId: null, ticketId: null, actor: "a", title: "t" };
+  // No target: the same (kind, ref) is one event.
+  expect(store.ticketEvents.insert({ ...base, sourceKind: "watcher", sourceRef: "w" })).not.toBeNull();
+  expect(store.ticketEvents.insert({ ...base, sourceKind: "watcher", sourceRef: "w" })).toBeNull();
+  // One activity wakes several targets, but each only once.
+  expect(store.ticketEvents.insert({ ...base, sourceKind: "subscription", sourceRef: "a1", targetId: "T1" })).not.toBeNull();
+  expect(store.ticketEvents.insert({ ...base, sourceKind: "subscription", sourceRef: "a1", targetId: "T2" })).not.toBeNull();
+  expect(store.ticketEvents.insert({ ...base, sourceKind: "subscription", sourceRef: "a1", targetId: "T1" })).toBeNull();
+  // The same change reaches a ticket once, whether as its parent or as a subscriber.
+  expect(store.ticketEvents.insert({ ...base, sourceKind: "child", sourceRef: "a1", targetId: "T1" })).toBeNull();
+  expect(store.ticketEvents.insert({ ...base, sourceKind: "child", sourceRef: "a1", targetId: "T3" })).not.toBeNull();
+});
+
+test("a chief of staff row's target follows its owner, and a repeat of its source still dedupes after triage rehomes it", () => {
+  const db = dbAt(54);
+  migrate(db, paths());
+  const store = new Store(db);
+  const base = { cosId: null, projectId: null, ticketId: null, sourceKind: "watcher" as const, sourceRef: "w", actor: "a", title: "t" };
+  const ev = store.ticketEvents.insert(base)!;
+  const target = (id: string) => (db.query("SELECT target_id AS t FROM ticket_events WHERE id = $id").get({ id }) as { t: string | null }).t;
+  expect(target(ev.id)).toBeNull();
+  store.ticketEvents.update(ev.id, { cosId: "chief" });
+  expect(target(ev.id)).toBe("chief");
+  expect(store.ticketEvents.insert(base)).toBeNull();
+  expect(store.ticketEvents.insert({ ...base, cosId: "chief", sourceRef: "x" })).not.toBeNull();
+  expect((db.query("SELECT target_id AS t FROM ticket_events WHERE source_ref = 'x'").get() as { t: string }).t).toBe("chief");
+});
+
+test("rehoming or unassigning a row aimed at another ticket keeps its target, so two such rows with one ref don't collide", () => {
+  const db = dbAt(54);
+  migrate(db, paths());
+  const store = new Store(db);
+  const base = { cosId: "chief", projectId: null, ticketId: null, sourceKind: "subscription" as const, sourceRef: "a1", actor: "a", title: "t" };
+  const a = store.ticketEvents.insert({ ...base, targetId: "T1" })!;
+  const b = store.ticketEvents.insert({ ...base, targetId: "T2" })!;
+  store.ticketEvents.update(a.id, { cosId: null });
+  store.ticketEvents.update(b.id, { cosId: null });
+  const target = (id: string) => (db.query("SELECT target_id AS t FROM ticket_events WHERE id = $id").get({ id }) as { t: string | null }).t;
+  expect([target(a.id), target(b.id)]).toEqual(["T1", "T2"]);
+});
+
+test("the dedupe lookup on (source_kind, source_ref) is served by an index", () => {
+  const db = dbAt(54);
+  migrate(db, paths());
+  const plan = db.query("EXPLAIN QUERY PLAN SELECT 1 FROM ticket_events WHERE source_kind = 'a' AND source_ref = 'b'").all() as { detail: string }[];
+  expect(plan.map((p) => p.detail).join(" ")).toContain("USING");
+});
+
+test("a ticket's events are found by its target, newest first, through an index", () => {
+  const db = dbAt(56);
+  migrate(db, paths());
+  const plan = db.query("EXPLAIN QUERY PLAN SELECT 1 FROM ticket_events WHERE target_id = 'x' ORDER BY created_at DESC").all() as { detail: string }[];
+  expect(plan.map((p) => p.detail).join(" ")).toContain("ticket_events_target");
 });
 
 /** An install at migration 48 with the All chief, a watcher and one TRIAGE session per outcome. */
@@ -269,7 +341,7 @@ function triageInstall(withAllChief = true) {
   return db;
 }
 const eventRows = (db: Database) =>
-  db.query("SELECT source_ref AS ref, cos_id AS cosId, status, verdict, reason, actor, payload FROM cos_events WHERE source_kind = 'watcher' ORDER BY created_at").all() as {
+  db.query("SELECT source_ref AS ref, cos_id AS cosId, status, verdict, reason, actor, payload FROM ticket_events WHERE source_kind = 'watcher' ORDER BY created_at").all() as {
     ref: string; cosId: string | null; status: string; verdict: string; reason: string | null; actor: string; payload: string;
   }[];
 
@@ -305,7 +377,10 @@ test("migration 49 with no All chief yet leaves the events unassigned, and repla
   migrate(db, paths());
   expect(eventRows(db).every((r) => r.cosId === null)).toBe(true);
   const before = eventRows(db).length;
+  // The step is written for the table as migration 49 left it, so replay it against that name.
+  db.exec("ALTER TABLE ticket_events RENAME TO cos_events");
   MIGRATION_CODE[49]!(db, paths());
+  db.exec("ALTER TABLE cos_events RENAME TO ticket_events");
   expect(eventRows(db)).toHaveLength(before);
 });
 
@@ -319,13 +394,25 @@ test("deleting a group's chief hands its watchers to All (cos_id goes NULL)", ()
   expect((db.query("SELECT cos_id FROM watchers WHERE id = 'w'").get() as { cos_id: string | null }).cos_id).toBeNull();
 });
 
-test("migration 53 drops cos_wakes.reported and keeps the wakes", () => {
+test("migration 53 drops cos_wakes.reported and keeps the wakes (which migration 56 then renames)", () => {
   const db = dbAt(52);
   db.exec(`INSERT INTO cos_wakes (id, cos_id, kind, started_at, event_count, run_id, outcome, reported) VALUES ('w1', 'chief', 'wake', 5, 2, 'r1', 'spoke', '{"t1":"blocked:x"}')`);
   expect(columns(db, "cos_wakes")).toContain("reported");
   migrate(db, paths());
-  expect(columns(db, "cos_wakes")).not.toContain("reported");
-  expect(db.query("SELECT id, event_count, run_id, outcome FROM cos_wakes").all()).toEqual([{ id: "w1", event_count: 2, run_id: "r1", outcome: "spoke" }]);
+  expect(columns(db, "event_wakes")).not.toContain("reported");
+  expect(db.query("SELECT id, event_count, run_id, outcome FROM event_wakes").all()).toEqual([{ id: "w1", event_count: 2, run_id: "r1", outcome: "spoke" }]);
+});
+
+test("migration 56 keys the wake log by the ticket woken and keeps every wake, in the chief's cap class", () => {
+  const db = dbAt(55);
+  db.exec(`INSERT INTO cos_wakes (id, cos_id, kind, started_at, event_count) VALUES ('w1', 'chief', 'wake', 5, 2), ('w2', 'chief', 'triage', 6, 1)`);
+  migrate(db, paths());
+  expect(columns(db, "event_wakes")).toEqual(expect.arrayContaining(["target_id", "event_class"]));
+  expect(columns(db, "event_wakes")).not.toContain("cos_id");
+  expect(db.query("SELECT id, target_id, event_class, kind FROM event_wakes ORDER BY id").all()).toEqual([
+    { id: "w1", target_id: "chief", event_class: "", kind: "wake" },
+    { id: "w2", target_id: "chief", event_class: "", kind: "triage" },
+  ]);
 });
 
 test("migration 54 keeps an old CoS can-unblock choice as the Blocked box, every other column off, for the app and per project", () => {

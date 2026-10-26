@@ -154,3 +154,11 @@ test("the triage model and permission mode: a model name or null, read-only or a
   // There is no human to ask during triage.
   for (const v of ["ask", "yolo", true]) bad(() => validateSettingsPatch({ cosTriagePermissionMode: v }), /cosTriagePermissionMode must be one of read_only, auto/);
 });
+
+test("eventRetentionDays accepts whole days from 1 to 365 and defaults to a week", () => {
+  expect(validateSettingsPatch({ eventRetentionDays: 1 })).toEqual({ eventRetentionDays: 1 });
+  expect(validateSettingsPatch({ eventRetentionDays: 365 })).toEqual({ eventRetentionDays: 365 });
+  for (const v of [0, -1, 366, 1.5, "7", null]) bad(() => validateSettingsPatch({ eventRetentionDays: v }), /eventRetentionDays must be an integer between 1 and 365/);
+  expect(resolveSettings({}).eventRetentionDays).toBe(7);
+  expect(resolveSettings({ eventRetentionDays: 30 }).eventRetentionDays).toBe(30);
+});

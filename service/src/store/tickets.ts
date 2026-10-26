@@ -61,6 +61,7 @@ interface TicketRow {
   compacting?: number;
   context?: string | null;
   child_count: number;
+  has_events?: number;
 }
 
 /**
@@ -104,8 +105,10 @@ const COMPLETING = `EXISTS(SELECT 1 FROM runs r WHERE r.session_id = t.session_i
 const COMPACTING = `EXISTS(SELECT 1 FROM runs r WHERE r.session_id = t.session_id AND r.kind = 'compact' AND r.status IN ('queued','running')) AS compacting`;
 const CONTEXT = `(SELECT s.context FROM sessions s WHERE s.id = t.session_id) AS context`;
 const CHILD_COUNT = `(SELECT COUNT(*) FROM tickets c WHERE c.parent_id = t.id) AS child_count`;
+/** Whether the Events tab has anything to show: rows aimed at the ticket, less the ones a coded rule dropped on the way in. */
+const HAS_EVENTS = `EXISTS(SELECT 1 FROM ticket_events e WHERE e.target_id = t.id AND e.verdict <> 'filtered') AS has_events`;
 /** Columns computed per row on top of `t.*`. */
-const DERIVED = `${BUSY}, ${COMPLETING}, ${COMPACTING}, ${CONTEXT}, ${CHILD_COUNT}`;
+const DERIVED = `${BUSY}, ${COMPLETING}, ${COMPACTING}, ${CONTEXT}, ${CHILD_COUNT}, ${HAS_EVENTS}`;
 const SELECT = `SELECT t.*, ${DERIVED} FROM tickets t`;
 
 type SqlParams = Record<string, string | number | null>;
@@ -318,6 +321,7 @@ export class TicketRepo {
       compacting: bool(r.compacting ?? 0),
       context: toContextUsage(fromJson<StoredContext | null>(r.context ?? null, null)),
       childCount: r.child_count ?? 0,
+      hasEvents: bool(r.has_events ?? 0),
       pendingApproval: fromJson<PendingApproval | null>(r.pending_approval, null),
       allowedTools: fromJson<string[]>(r.allowed_tools, []),
       model: choices.get(r.id)!.model,

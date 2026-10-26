@@ -1,7 +1,7 @@
 // The chiefs of staff in the world: one for All projects, one for the Work group (with an empty
 // Inbox and chat), and the All chief's Inbox, chat and memory.
 
-import { COS_OPEN_STATUSES, type Cos, type CosBadge, type CosChatEntry, type CosEvent, type CosMemory } from "@harness/shared";
+import { COS_OPEN_STATUSES, type Cos, type CosBadge, type CosChatEntry, type TicketEvent, type CosMemory } from "@harness/shared";
 import { minutesAgo } from "./time";
 
 export const chiefs: Cos[] = [
@@ -9,9 +9,9 @@ export const chiefs: Cos[] = [
   { ticketId: "cos-work", key: "COS-2", scope: "group:group-work", groupId: "group-work", enabled: true, createdAt: minutesAgo(60 * 24 * 3) },
 ];
 
-const event = (id: string, patch: Partial<CosEvent>): CosEvent => ({
+const event = (id: string, patch: Partial<TicketEvent>): TicketEvent => ({
   id,
-  cosId: "cos-all",
+  targetId: "cos-all",
   projectKey: "HARNESS",
   sourceKind: "activity",
   title: id,
@@ -29,8 +29,8 @@ const event = (id: string, patch: Partial<CosEvent>): CosEvent => ({
   ...patch,
 });
 
-/** An Inbox with every state: waiting, ignored (with its reason), escalated, handling and handled, a watcher item and a schedule. */
-export const cosEvents: CosEvent[] = [
+/** An Inbox with every state (and, for the iPad conductor, the events its Events tab shows): waiting, ignored (with its reason), escalated, handling and handled, a watcher item and a schedule. */
+export const ticketEvents: TicketEvent[] = [
   event("ev-waiting", { title: "HARNESS-201 moved to in progress", ticketKey: "HARNESS-201", createdAt: minutesAgo(1) }),
   event("ev-handling", { title: "HARNESS-202 is blocked", summary: "Needs a decision on the migration order", ticketKey: "HARNESS-202", status: "handling", verdict: "escalate", reason: "A blocked ticket waiting on the human", model: "claude-haiku-5-5", wakeId: "wake-2", createdAt: minutesAgo(4) }),
   event("ev-ignored", { title: "HARNESS-203 moved to review", summary: "An agent finished its work", ticketKey: "HARNESS-203", status: "ignored", verdict: "ignore", reason: "Routine move; the agent review is already running", model: "claude-haiku-5-5", createdAt: minutesAgo(12) }),
@@ -38,6 +38,9 @@ export const cosEvents: CosEvent[] = [
   event("ev-handled", { title: "HARNESS-190 landed on main", ticketKey: "HARNESS-190", status: "handled", verdict: "escalate", reason: "Done tickets are worth a summary", model: "claude-haiku-5-5", wakeId: "wake-1", handledBy: "run-9", outcome: { kind: "acted", text: "Posted the summary to the chat and moved HARNESS-205 to planning." }, createdAt: minutesAgo(90) }),
   event("ev-needs-user", { title: "HARNESS-206 needs a decision on the release tag", ticketKey: "HARNESS-206", status: "handled", verdict: "escalate", reason: "A blocked ticket waiting on the human", model: "claude-haiku-5-5", wakeId: "wake-1", handledBy: "run-9", outcome: { kind: "needs_user", text: "Pick the release tag: the ticket is blocked until you answer." }, createdAt: minutesAgo(95) }),
   event("ev-no-action", { title: "HARNESS-207 review approved", ticketKey: "HARNESS-207", status: "handled", verdict: "escalate", reason: "A review decision", model: "claude-haiku-5-5", wakeId: "wake-1", handledBy: "run-9", outcome: { kind: "no_action", text: "The agent review approved it and it already waits for you; nothing to do." }, createdAt: minutesAgo(97) }),
+  // What woke the iPad conductor: a child's change and a subscription. Not the chief's, so they show in the ticket's Events tab only.
+  event("ev-child", { targetId: "ticket-HARNESS-8", sourceKind: "child", title: "HARNESS-9 moved to review", summary: "iPad: two-column board is waiting on its review", ticketKey: "HARNESS-9", actor: "agent", status: "handled", verdict: "escalate", handledBy: "run-4", createdAt: minutesAgo(12) }),
+  event("ev-subscription", { targetId: "ticket-HARNESS-8", sourceKind: "subscription", title: "HARNESS-3 moved to done", ticketKey: "HARNESS-3", actor: "human", status: "escalated", verdict: "escalate", createdAt: minutesAgo(35) }),
   event("ev-schedule", { title: "Friday review of open tickets", sourceKind: "schedule", actor: "system", projectKey: null, status: "handled", verdict: "escalate", reason: "A schedule the chief set", wakeId: "wake-1", handledBy: "run-9", createdAt: minutesAgo(100) }),
 ];
 
@@ -57,8 +60,8 @@ export const cosChat: CosChatEntry[] = [
 
 /** What GET /cos/events/badge answers: the open events of each chief. */
 export const cosBadge: CosBadge = {
-  total: cosEvents.filter((e) => e.cosId && COS_OPEN_STATUSES.includes(e.status)).length,
-  byCos: Object.fromEntries(chiefs.map((c) => [c.ticketId, cosEvents.filter((e) => e.cosId === c.ticketId && COS_OPEN_STATUSES.includes(e.status)).length])),
+  total: ticketEvents.filter((e) => chiefs.some((c) => c.ticketId === e.targetId) && COS_OPEN_STATUSES.includes(e.status)).length,
+  byCos: Object.fromEntries(chiefs.map((c) => [c.ticketId, ticketEvents.filter((e) => e.targetId === c.ticketId && COS_OPEN_STATUSES.includes(e.status)).length])),
 };
 
 /** The chiefs' memory, written once for both (GET /tickets/:key/memory). */

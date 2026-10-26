@@ -7,11 +7,11 @@ import Foundation
 /// and the badge. Held beside the reducer's state (the TS reducer's slices have no Swift twin).
 public struct CosState: Equatable, Sendable {
     public var chiefs: [String: Cos] = [:]
-    public var events: [String: CosEvent] = [:]
+    public var events: [String: TicketEvent] = [:]
     public var chat: [String: [CosChatEntry]] = [:]
     public var badge: CosBadge?
 
-    public init(chiefs: [String: Cos] = [:], events: [String: CosEvent] = [:], chat: [String: [CosChatEntry]] = [:], badge: CosBadge? = nil) {
+    public init(chiefs: [String: Cos] = [:], events: [String: TicketEvent] = [:], chat: [String: [CosChatEntry]] = [:], badge: CosBadge? = nil) {
         self.chiefs = chiefs
         self.events = events
         self.chat = chat
@@ -41,7 +41,7 @@ public struct CosState: Equatable, Sendable {
         chiefs[t.id] = chief
     }
 
-    public mutating func mergeEvents(_ page: [CosEvent]) {
+    public mutating func mergeEvents(_ page: [TicketEvent]) {
         for e in page { events[e.id] = e }
     }
 
@@ -66,11 +66,11 @@ public struct CosState: Equatable, Sendable {
         return hole
     }
 
-    /// The Inbox twin of `loadNewestChat`: drops the chief's loaded rows (and the unassigned ones)
-    /// when the newest page leaves a hole above them.
+    /// The events twin of `loadNewestChat`: drops the ticket's loaded rows (and, for a chief's Inbox,
+    /// the unassigned ones) when the newest page leaves a hole above them.
     @discardableResult
-    public mutating func loadNewestEvents(_ cosId: String, _ page: [CosEvent], hasOlder: Bool) -> Bool {
-        let own = events.values.filter { $0.cosId == cosId || $0.cosId == nil }
+    public mutating func loadNewestEvents(_ ticketId: String, _ page: [TicketEvent], hasOlder: Bool, chief: Bool = true) -> Bool {
+        let own = events.values.filter { $0.targetId == ticketId || (chief && $0.targetId == nil) }
         let hole = hasOlder && !own.isEmpty && !page.contains { events[$0.id] != nil }
         if hole {
             let newest = page.map(\.createdAt).max() ?? 0
@@ -87,8 +87,15 @@ public struct CosState: Equatable, Sendable {
 
     /// The rows a chief's Inbox shows: its own events and the unassigned ones, newest first. Rows its
     /// own rules dropped (filtered) stay out, except a reminder: it went to the person, so it shows.
-    public func inbox(_ cosId: String) -> [CosEvent] {
-        CosLogic.mergeEvents([], events.values.filter { ($0.cosId == cosId || $0.cosId == nil) && ($0.verdict != .filtered || $0.sourceKind == .schedule) })
+    public func inbox(_ cosId: String) -> [TicketEvent] { rows(ticketId: cosId, chief: true) }
+
+    /// The rows of an events list, newest first: a chief's Inbox (`chief`) is its own events and the
+    /// unassigned ones; any other ticket's Events tab is the events aimed at it. Rows a coded rule
+    /// dropped (filtered) stay out of both, except a reminder in the Inbox.
+    public func rows(ticketId: String, chief: Bool) -> [TicketEvent] {
+        CosLogic.mergeEvents([], events.values.filter {
+            ($0.targetId == ticketId || (chief && $0.targetId == nil)) && ($0.verdict != .filtered || (chief && $0.sourceKind == .schedule))
+        })
     }
 }
 
@@ -108,6 +115,19 @@ public enum CosTab: String, CaseIterable, Sendable, Hashable {
 /// What an Inbox row says happened to the event, in a word.
 public enum CosInboxState: String, Sendable {
     case waiting, ignored, escalated, handling, acted, noAction, needsUser, reviewed, filtered
+
+    /// What the row says: in a chief's Inbox (`chief`) a verdict; in a ticket's Events tab, where no
+    /// chief judges the rows, how far delivery has come.
+    public func label(chief: Bool) -> String {
+        if chief { return label }
+        switch self {
+        case .waiting: return "Waiting to be delivered"
+        case .escalated: return "Queued for the ticket"
+        case .handling: return "In the ticket's run"
+        case .acted, .noAction, .needsUser, .reviewed: return "Delivered"
+        case .ignored, .filtered: return label
+        }
+    }
 
     public var label: String {
         switch self {
@@ -259,10 +279,10 @@ public enum CosLogic {
     }
 
     /// Statuses that count toward the badge (an event somebody still has to see to).
-    public static let openStatuses: [CosEventStatus] = [.pending, .triaging, .escalated, .handling]
+    public static let openStatuses: [TicketEventStatus] = [.pending, .triaging, .escalated, .handling]
 
     /// A handled event shows what the chief recorded for it; one it recorded nothing for is only reviewed.
-    public static func inboxState(status: CosEventStatus, verdict: CosEventVerdict, outcome: CosOutcome? = nil) -> CosInboxState {
+    public static func inboxState(status: TicketEventStatus, verdict: TicketEventVerdict, outcome: CosOutcome? = nil) -> CosInboxState {
         if verdict == .filtered { return .filtered }
         switch status {
         case .pending, .triaging: return .waiting
@@ -280,14 +300,14 @@ public enum CosLogic {
         }
     }
 
-    public static func inboxState(_ e: CosEvent) -> CosInboxState { inboxState(status: e.status, verdict: e.verdict, outcome: e.outcome) }
+    public static func inboxState(_ e: TicketEvent) -> CosInboxState { inboxState(status: e.status, verdict: e.verdict, outcome: e.outcome) }
 
     /// Ignored events (and only those) can be escalated by hand.
-    public static func canEscalate(_ e: CosEvent) -> Bool { e.status == .ignored && e.verdict != .filtered }
+    public static func canEscalate(_ e: TicketEvent) -> Bool { e.status == .ignored && e.verdict != .filtered }
 
     /// The line a row says about the verdict: the reason for an ignored or escalated one, the chief's
     /// recorded outcome for a handled one, else nil.
-    public static func verdictLine(_ e: CosEvent) -> String? {
+    public static func verdictLine(_ e: TicketEvent) -> String? {
         switch inboxState(e) {
         case .ignored, .escalated: e.reason.flatMap { $0.isEmpty ? nil : $0 }
         case .acted, .noAction, .needsUser: e.outcome?.text
@@ -295,11 +315,13 @@ public enum CosLogic {
         }
     }
 
-    public static func sourceLabel(_ s: CosEventSource) -> String {
+    public static func sourceLabel(_ s: TicketEventSource) -> String {
         switch s {
         case .activity: "Ticket"
         case .watcher: "Watcher"
         case .schedule: "Schedule"
+        case .subscription: "Subscription"
+        case .child: "Child"
         case .unknown: "Event"
         }
     }
@@ -318,7 +340,7 @@ public enum CosLogic {
     }
 
     /// The Inbox's rows: newest first, each id once.
-    public static func mergeEvents(_ existing: [CosEvent], _ incoming: [CosEvent]) -> [CosEvent] {
+    public static func mergeEvents(_ existing: [TicketEvent], _ incoming: [TicketEvent]) -> [TicketEvent] {
         var byId = Dictionary(existing.map { ($0.id, $0) }, uniquingKeysWith: { _, b in b })
         for e in incoming { byId[e.id] = e }
         return byId.values.sorted { $0.createdAt != $1.createdAt ? $0.createdAt > $1.createdAt : JSString.less($1.id, $0.id) }

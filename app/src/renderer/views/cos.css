@@ -203,3 +203,16 @@
   background: var(--red-soft);
   color: var(--red);
 }
+
+/* A ticket's Events tab: the same list as the Inbox, in the tab body */
+.events-tab {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+/* The tab is narrower than the Inbox: the verdict goes under the event instead of beside it */
+.events-tab .cos-event {
+  flex-direction: column;
+  gap: 6px;
+}

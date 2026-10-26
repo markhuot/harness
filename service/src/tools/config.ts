@@ -163,7 +163,7 @@ function settingsView(settings: PublicSettings): unknown {
 export const getSettings = defineTool<{ include_prompts?: boolean }>({
   name: "get_settings",
   description:
-    "Get the harness settings: the driver and model for each run phase (phaseModels: plan, work, review, adviser, complete; defaultDriver, defaultModels and reviewModels are the legacy view of them), concurrent run limit, default permission mode, classifier, the network listen mode, the default base branch (baseBranch), after how many minutes an unused browser tab is suspended (browserIdleTabMinutes), and which built-in prompts the user has customized (customizedPrompts, by prompt id). The Anthropic API key, the long-lived Claude token and the GitHub Copilot token are never shown; anthropicApiKeySet, claudeOauthTokenSet and copilotGithubTokenSet say whether one is stored.",
+    "Get the harness settings: the driver and model for each run phase (phaseModels: plan, work, review, adviser, complete; defaultDriver, defaultModels and reviewModels are the legacy view of them), concurrent run limit, default permission mode, classifier, the network listen mode, the default base branch (baseBranch), after how many minutes an unused browser tab is suspended (browserIdleTabMinutes), how many days ticket event history is kept (eventRetentionDays), and which built-in prompts the user has customized (customizedPrompts, by prompt id). The Anthropic API key, the long-lived Claude token and the GitHub Copilot token are never shown; anthropicApiKeySet, claudeOauthTokenSet and copilotGithubTokenSet say whether one is stored.",
   inputSchema: schema({
     include_prompts: {
       type: "boolean",
@@ -421,6 +421,7 @@ type SettingsInput = {
   default_driver?: string;
   max_concurrent_runs?: number;
   browser_idle_tab_minutes?: number;
+  event_retention_days?: number;
   permission_mode?: string;
   classifier?: string;
   default_models?: Record<string, string | null>;
@@ -436,6 +437,7 @@ function settingsPatch(i: SettingsInput): Record<string, unknown> {
     defaultDriver: "default_driver",
     maxConcurrentRuns: "max_concurrent_runs",
     browserIdleTabMinutes: "browser_idle_tab_minutes",
+    eventRetentionDays: "event_retention_days",
     permissionMode: "permission_mode",
     classifier: "classifier",
     defaultModels: "default_models",
@@ -463,6 +465,7 @@ export const updateSettings = defineGatedTool<SettingsInput>({
       maximum: 1440,
       description: "Minutes a session browser tab may go unused while nobody has it open in the app before it is suspended: its page closes to free memory, and the tab reloads its URL when next used. 0 never suspends one. Default 5.",
     },
+    event_retention_days: { type: "integer", minimum: 1, maximum: 365, description: "Days a handled or ignored ticket event is kept before it is pruned. Default 7." },
     permission_mode: { type: "string", enum: [...PERMISSION_MODES], description: "Default permission mode for tickets whose project and ticket don't set one." },
     classifier: { type: "string", enum: ["claude-cli", "anthropic-api", "off"], description: "Who judges actions in auto mode for drivers without built-in permissions (\"off\" asks a human)." },
     default_models: { ...modelMapProp, description: "Legacy: driver id → model id for Planning, Work and Review on the default driver. Prefer phase_models." },

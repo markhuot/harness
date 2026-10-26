@@ -173,9 +173,9 @@ private struct TicketDetailBody: View {
         let draft = store.messageDraft(for: ticket)
         let outgoing = draft.attachments
         let attachTarget: (any PromptAttachmentTarget)? = TicketDetailLogic.acceptsMessageAttachments(ticket) ? outgoing : nil
-        let shown = ChangesTab.effectiveTab(tab, conductor: ticket.isConductor, workdir: ticket.workdir, pluginTabs: pluginTabs, subagents: state.subagentsOf(ticket.sessionId))
+        let shown = ChangesTab.effectiveTab(tab, conductor: ticket.isConductor, workdir: ticket.workdir, pluginTabs: pluginTabs, subagents: state.subagentsOf(ticket.sessionId), events: ticket.hasEvents ?? false)
         let tornOff = WindowDirectory.shared.tornOff(ticket.key)
-        let tabs = ChangesTab.visibleTabs(conductor: ticket.isConductor, workdir: ticket.workdir, subagents: state.subagentsOf(ticket.sessionId), pluginTabs: pluginTabs)
+        let tabs = ChangesTab.visibleTabs(conductor: ticket.isConductor, workdir: ticket.workdir, subagents: state.subagentsOf(ticket.sessionId), pluginTabs: pluginTabs, events: ticket.hasEvents ?? false)
         let _ = relay.update(onTab: onTab, annotate: { annotating = $0 }, focusComposer: { focusComposer += 1 },
                              tabs: tabs, shown: shown)
         ZStack(alignment: .top) {
@@ -264,7 +264,7 @@ private struct TicketDetailBody: View {
     /// Transcript jumping to its bottom, say) can't hide or show it.
     private func pager(_ shown: TicketTab, tornOff: TornOffTabs) -> some View {
         let strip = Tabs.tabStripTab(shown)
-        var pages = ChangesTab.visibleTabs(conductor: ticket.isConductor, workdir: ticket.workdir, subagents: store.state.subagentsOf(ticket.sessionId), pluginTabs: pluginTabs)
+        var pages = ChangesTab.visibleTabs(conductor: ticket.isConductor, workdir: ticket.workdir, subagents: store.state.subagentsOf(ticket.sessionId), pluginTabs: pluginTabs, events: ticket.hasEvents ?? false)
         // A plugin tab from a link, before the ticket's plugin tabs have loaded.
         if !pages.contains(strip) { pages.append(strip) }
         let selection = Binding<TicketTab>(get: { strip }, set: { t in
@@ -354,6 +354,7 @@ struct TicketTabBody: View {
             case .children: TicketDetailChildrenTab(ticket: ticket)
             case .transcript: TranscriptView(sessionId: ticket.sessionId)
             case .agents: AgentsTabView(ticket: ticket)
+            case .events: EventsView(ticketId: ticket.id, chief: ticket.kind == .cos, emptyText: "No events yet.", identifier: "ticket-events")
             case .browser: BrowserTabView(ticket: ticket, pinnedTab: browserTab)
             case .details: TicketDetailDetailsTab(ticket: ticket)
             case .activity: TicketDetailActivityTab(ticket: ticket)
@@ -390,7 +391,7 @@ private struct TicketPinnedBody: View {
                 Spacer(minLength: 0)
             } else {
                 let shown = ChangesTab.effectiveTab(agentTab ?? tab, conductor: ticket.isConductor, workdir: ticket.workdir, pluginTabs: pluginTabs,
-                                                    subagents: store.state.subagentsOf(ticket.sessionId))
+                                                    subagents: store.state.subagentsOf(ticket.sessionId), events: ticket.hasEvents ?? false)
                 TicketTabBody(ticket: ticket, tab: shown, pluginTabs: pluginTabs, browserTab: value.browserTab)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .environment(\.ticketDetailOpenTab, TicketDetailTabOpener { t in

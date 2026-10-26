@@ -33,6 +33,9 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
     /// How many tickets have this one as their parent. Any ticket with children acts as a conductor
     /// (see `isConductor`), whatever its kind. Optional only so older services and fixtures type-check.
     public var childCount: Int?
+    /// Whether any event (other than ones a coded rule dropped) is aimed at this ticket: the Events tab
+    /// shows only then. Optional so older services and fixtures decode; nil means false.
+    public var hasEvents: Bool?
     /// Keys of tickets that must be done before this one can start
     public var dependsOn: [String]
     /// Start automatically once every dependency is done (used by conductors)
@@ -146,7 +149,7 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
     public init(
         id: String, key: String, projectId: String, kind: TicketKind = .task, title: String, spec: String, specRevision: Int? = nil,
         specBaselineRevision: Patch<Int> = .absent, agentNotes: Patch<String> = .absent,
-        status: TicketStatus, sessionId: String, driver: String, phaseModels: PhaseModels? = nil, parentId: String? = nil, childCount: Int? = nil,
+        status: TicketStatus, sessionId: String, driver: String, phaseModels: PhaseModels? = nil, parentId: String? = nil, childCount: Int? = nil, hasEvents: Bool? = nil,
         dependsOn: [String] = [], autoStart: Bool = false, startAfterPlan: Bool? = nil, agentReview: ReviewState = .pending,
         humanReview: ReviewState = .pending, externalRef: ExternalRef? = nil, workdir: String? = nil,
         branch: String? = nil, requestedBranch: Patch<String> = .absent, baseBranch: Patch<String> = .absent,
@@ -173,6 +176,7 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
         self.phaseModels = phaseModels
         self.parentId = parentId
         self.childCount = childCount
+        self.hasEvents = hasEvents
         self.dependsOn = dependsOn
         self.autoStart = autoStart
         self.startAfterPlan = startAfterPlan

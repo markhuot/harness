@@ -2,13 +2,13 @@
 // tick looks for due rows; there is no per-schedule timer, so a Mac that slept or a service that
 // restarted catches up on its next tick. A schedule that was due more than once fires ONCE and moves
 // on from now (an interval keeps its phase). Each fire has an id, '<schedule id>:<scheduled time>':
-// a wake's cos_events row is written with it as the dedupe key in the same transaction that moves
+// a wake's ticket_events row is written with it as the dedupe key in the same transaction that moves
 // the schedule on, so a wake happens exactly once; a reminder's push goes out after that commit, so
 // it happens at most once.
 
 import {
   SCHEDULE_STALE_MS,
-  type CosEvent,
+  type TicketEvent,
   type Schedule,
   type ScheduleOutcome,
   type ScheduleStatus,
@@ -30,7 +30,7 @@ export interface CosEventSink {
     cosId?: string | null;
     /** Record the event as handled without a wake, with this reason (a reminder) */
     filtered?: string;
-  }): CosEvent | null;
+  }): TicketEvent | null;
 }
 
 /** How a reminder reaches the human (NotificationService.remind). */
@@ -137,7 +137,7 @@ export class Scheduler {
     const body = s.message
       ? `${s.message}\n\nScheduled for ${when}.`
       : `Scheduled for ${when}.`;
-    let event: CosEvent | null = null;
+    let event: TicketEvent | null = null;
     const cancelled = new Error("cancelled");
     try {
       store.transaction(() => {

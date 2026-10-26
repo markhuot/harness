@@ -823,6 +823,12 @@ chief's UI reads `state.chiefs`, never its ticket.
 Its ticket can't be deleted (409) or created or changed through `POST`/`PATCH /tickets` (`cos` isn't a
 valid kind there).
 
+**Routing.** A CoS sends a specific request to the project it belongs to instead of doing it: the
+`system.cos` prompt has it resolve the project from `list_projects` (name, key, path and group; there
+are no per-project descriptions) and `create_ticket` there. When no project fits or several could, it
+asks the human. The one exception is research across projects: it creates a ticket in each, and when
+their events wake it, reads each outcome with `get_ticket` and summarizes. The prompt names no domain.
+
 Each project group has one CoS, and an **All projects** CoS covers the rest. Table `cos` (migration
 45): `ticket_id`, `scope` (`all` or `group:<group id>`, UNIQUE, since SQLite lets a nullable unique
 column repeat), `group_id`, `enabled` (the CoS's own switch, how All is turned off). `openCos(scope)`
@@ -860,7 +866,7 @@ included. A test lists every `HarnessOps` method and fails for one that isn't cl
 not, and runs every keyed one against an out-of-scope key.
 
 **Tools.** `RUN_TOOLS.cos`: `post_note`, `update_notes`, the read board tools, the board write tools,
-the terminal tools (below) and the config read tools. No spec or lifecycle tools, no config writes (so no way to change the
+the subscription tools (it follows the tickets it dispatches), the terminal tools (below) and the config read tools. No spec or lifecycle tools, no config writes (so no way to change the
 `cos*` settings), no files or shell of its own, and no sub-agents: `buildClaudeArgs` passes
 `--disallowedTools Agent Task` for a `cos` run. `create_ticket` needs `project_key` (a CoS has no
 project) and takes no `child`. Its system prompt (`system.cos`, static, so the prefix stays
@@ -873,8 +879,16 @@ setting and the ticket's question; reading it stays available. Human-only approv
 (`noPendingApproval`). What a CoS changes on a ticket is added to that ticket's Activity as "Chief of
 staff (KEY) …".
 
-**Events.** What wakes a CoS is a row in `cos_events` (migration 46), not the in-process bus, so a
-restart loses nothing. One drain path (`cos/engine.ts` `drain`) reads `activity` rows after a cursor
+**Events.** What wakes a CoS is a row in `ticket_events` (created as `cos_events` by migration 46, renamed by
+migration 55), not the in-process bus, so a restart loses nothing. The table is the one events table for any ticket: `target_id` is the ticket
+an event wakes (the chief's id for every CoS row, `NULL` until triage rehomes one; `ticket_id` stays the ticket the event is about), and
+`source_kind` is `activity`, `watcher`, `schedule`, `subscription` or `child`. A row without a target dedupes on
+`(source_kind, source_ref)` and a row with one on `(source_kind, source_ref, target_id)` (two partial unique indexes, since
+SQLite treats NULLs as distinct), so one activity can wake several tickets. The indexes don't dedupe the CoS rows,
+though: a triaged row can sit under two chiefs, so its pair repeats across targets. The store's `insert` does it in
+code, checking `(source_kind, source_ref)` for any row it doesn't give a target (served by `ticket_events_ref`), so a
+rehomed row keeps deduping; a write that skips `insert` gets no such guarantee. `cos_id` still routes the CoS wakes
+and moves `target_id` with it, except on a row aimed at another ticket, which keeps its target. One drain path (`cos/engine.ts` `drain`) reads `activity` rows after a cursor
 (`cos_state.activity_seq`, an `activity.seq`: a monotonic counter, not the rowid, which SQLite reuses
 after a session's delete; seeded at the current end so the first boot doesn't triage history) and inserts events with the cursor advance in one transaction; the bus
 `activity.added` only nudges it to run now, and `start()` catches up after a restart. Watcher output
@@ -895,8 +909,9 @@ project's `cosEnabled` or group changed, the app setting changed, a project dele
 triaged or handled are never moved. A watcher event has no project: it belongs to the All CoS, and
 triage may propose a project, which moves it to that project's owner.
 
-**Batching and triage.** A batch is due 45 seconds after its last event, never later than 5 minutes
-after its first (`nextWakeAt`); one timer is armed for the next due time and rebuilt from the rows.
+**Batching and triage.** A batch is due 10 seconds after its first event (`triageDueAt`, `COS_TRIAGE_BATCH_MS`):
+a fixed window that only gathers a burst into one triage call, not a quiet time. The one timer
+(`EventDelivery`) is armed for the next due time, the batch included, and rebuilt from the rows.
 A ticket's status moves in a batch collapse to its net state (`collapseMoves`). The batch goes to
 triage (`cos/triage.ts`), a read-only **agent run** on the `claude-cli` backend (model `HAIKU_MODELS`,
 overridable with `settings.cosTriageModel`, which Settings shows as "Triage model" with Haiku as its
@@ -938,7 +953,7 @@ changed it before judging, and that unsure means escalate; tool results (PR bodi
 are declared untrusted too. A watcher's `prompt` goes in as a "Guidance from the human" block per
 watcher, outside the fence (the human wrote it), listing the events it applies to; the events stay
 fenced. The run's tool calls are its record: each judged event keeps the session id (`triageSession` in
-its payload, `CosEvent.triageSessionId`), and the Inbox row links to that transcript. The brief now
+its payload, `TicketEvent.triageSessionId`), and the Inbox row links to that transcript. The brief now
 carries what the agent found and names the ticket the event belongs to (a PR, a Jira key, a branch);
 triage only names it, the chief acts. The brief is capped at 600 characters and the wake prompt fences
 it, since it can repeat text an attacker wrote. A backend with no agent to run (`anthropic-api`, or no
@@ -949,38 +964,48 @@ bodies fenced `<untrusted-event>`, with each event's actor and title inside the 
 escalation a brief and the project. An error, timeout, garbage, an id the answer left out, or no
 backend at all escalates (fail-open); `Cos.triageUnavailable` says why when none can run. Prompt over
 rules: what is worth waking for is the prompt's call; code keeps only the invariants. A batch goes in
-calls of 5 events for an agent run (at most 30 a pass, 4 minutes each; 20, 100 and a minute for the
+calls of 5 events for an agent run (at most 30 a pass, 19 minutes each; 20, 100 and a minute for the
 one-shot call), oldest first, each failing open on its own. A run that ends early (failure, timeout)
 keeps the verdicts it recorded: the others escalate with the reason. The pre-triage filter (no ticket,
 caused by a chief, a chief's own ticket) stays: it decides by origin, which no lookup would change.
 
-**Hand-off.** Escalated events become one wake: `steerOrEnqueue` into the CoS session with the briefs,
-the raw events (untrusted), a one-line digest of what was ignored since the last wake. A CoS runs one run at a time, so a wake steers into a running run or queues the next. At
-most 6 wakes an hour per CoS (`nextWakeAllowedAt`); fail-open escalations count, and the overflow
-waits and goes in one later wake. A wake holds at most 40 events with bodies clipped to 2000
+**Hand-off.** Escalated events are delivered by `EventDelivery` (`events/delivery.ts`), the one delivery engine
+for every ticket's events: the CoS hands it escalated rows and hooks (the wake prompt with the briefs, the raw
+events (untrusted) and a one-line digest of what was ignored since the last wake; `steerOrEnqueue` into the CoS
+session; the chief's switch as the gate). A CoS runs one run at a time, so a wake steers into a running run or
+queues the next. The chief follows the same cap as any ticket that follows events: at most 8 wakes per 5 minutes
+(`EVENT_WAKE_CAP`, `nextWakeAllowedAt`); fail-open escalations count, and the overflow is held and goes in one
+later wake. The cap is keyed by the target ticket and an event class, so a batch can carry a strict cap next to
+the generous `CHILD_EVENT_WAKE_CAP`. A wake holds at most 40 events with bodies clipped to 2000
 characters, and says how many more wait. It is recorded (cap, chat) only once the chief took it. Events
-are `handling` with the run that took them and `handled` when it succeeds; a run that fails or is
-cancelled, or is gone after a restart, puts them back to `escalated`, while one still queued or running
-keeps them. Ignored, filtered and handled events are pruned after 30 days. `cos_wakes` logs each wake and
-triage call (tokens, model) for the cap and the token log.
+are `handling` with the run that took them and `handled` when it succeeds (a push into a live run of a
+non-chief target settles its rows at the push instead, since that run may live for hours); a run that fails or is
+cancelled, or is gone after a restart (`sweep`), puts them back to `escalated` with a try counted, and after
+`WAKE_MAX_ATTEMPTS` they close as `ignored` with the reason, while a run still queued or running
+keeps them. Repeated moves of one ticket waiting for a wake collapse to the net move. Ignored, filtered and handled
+events are pruned after `settings.eventRetentionDays` (7 by default) by the same timer, so an idle service prunes
+too. `event_wakes` (keyed by `target_id` and `event_class`) logs each wake and triage call (tokens, model) for
+the cap and the token log.
 
 **Quiet by default.** A wake messages the user only for a change they would care about, an item that needs
 their attention or a decision; every wake prompt says so, forbids narration between
 tool calls, and tells the chief to reply exactly `[quiet]` otherwise. Housekeeping (hand-offs, notes, tickets)
 happens either way. `isSilentReply` (`cos/chat.ts`) treats an empty or `[quiet]` reply as silent: the live
 `cos.transcript.appended` emit and `cosChat()` both leave it out (the raw transcript keeps it). The wake's
-`event_batch` card is emitted when its run ends (`settleWake`) and only if the run said something; `cos_wakes.outcome`
+`event_batch` card is emitted when its run ends (`settleWake`) and only if the run said something; `event_wakes.outcome`
 (`spoke`, `quiet`, `failed`) hides a quiet wake's card from history, and a failed run still shows it. Wakes come only from escalated events
 (a chief's own schedule is one); nothing wakes a chief because a ticket has sat blocked or in review, and triage
 judges each event on its own, with no list of waiting tickets.
 
 **Wire contract** (`shared/src/cos.ts`; the Mac and iOS Inbox and chat build on it):
-`CosEvent`, `CosChatEntry` (`message`, `ticket_created`, `ticket_moved`, `event_batch`). `GET
-/cos/:id/events?status=&before=&limit=` (newest first; the chief's own plus unassigned, so a stuck or
-disabled CoS never hides events), `GET /cos/events/badge`, `POST /cos/events/:id/escalate` ("Escalate
+`TicketEvent` (`targetId` is the ticket it wakes, null while no chief qualifies; `sourceKind` is any of
+`TICKET_EVENT_SOURCES`), `CosChatEntry` (`message`, `ticket_created`, `ticket_moved`, `event_batch`). `GET
+/tickets/:key/events?status=&before=&limit=` (newest first; the key may also be the ticket's id. For a chief it is the
+Inbox, the chief's own plus unassigned, so a stuck or disabled CoS never hides events; for any other ticket it is the
+rows with that `target_id`, served by the `(target_id, created_at)` index), `GET /cos/events/badge`, `POST /cos/events/:id/escalate` ("Escalate
 anyway"; 409 once handled), `GET /cos/:id/transcript?before=&limit=` (newest page first; a projection
 over the CoS session, its stamped activity and its wakes), `POST /cos/:id/messages { text,
-attachments? }` → `{ entryId }`. Bus events `cos.event.upserted`, `cos.badge`, `cos.transcript.appended`
+attachments? }` → `{ entryId }`. Bus events `ticket.event.upserted`, `cos.badge`, `cos.transcript.appended`
 (typed `CosBusEvent`, not part of `HarnessEvent`, so clients that don't know them ignore them).
 
 #### The Mac
@@ -995,13 +1020,13 @@ All chief when the project has no group. A click makes the chief if it doesn't e
 `state/paneModel.ts`; one chief pane at a time, so another scope replaces it and the same one comes
 forward). The pane has the header (title, Memory, close) and a **Chat** and an **Inbox** tab, and no
 on/off switch: a chief is switched on or off in Settings (app-wide) and a project's settings
-(per project), which is also where its column checkboxes live. The store holds `chiefs`, `cosEvents` (by
+(per project), which is also where its column checkboxes live. The store holds `chiefs`, `ticketEvents` (by
 id, so a pushed event replaces its row), `cosChat` (oldest first, merged by id so a page and a live
 push never show an entry twice) and `cosBadge`; the pure rules (tab set, merges, inbox states, the
 tri-state of a project's override, the scroll anchor kept when an older page loads) are in
 `shared/src/state/cos.ts`. Chat pages in as the reader nears the top and keeps what they were
 reading under their eye; the Inbox is a plain list that never needs the chief running (a reminder is
-the one filtered event it shows, since it went to you), and its **+** sends the chief a message in
+the one filtered event it shows, since it went to you; it is the same `EventsList` a ticket's Events tab uses, below), and its **+** sends the chief a message in
 chat, because the chief creates listeners with its own tools. Memory is a sheet from the header,
 saved against the revision it opened. The app's two switches are in Settings → Chief of staff; a
 project's are Inherit/On/Off selects (`null` clears the override). The old watcher Inbox, its ⌘2
@@ -1071,7 +1096,7 @@ chief's ticket.
 which reads `clock.now()` and takes the rows whose `next_fire_at` has passed; `start()` runs one
 tick first as the catch-up after a restart. A schedule due several times fires **once** and moves to
 the first occurrence after now (an interval keeps its phase); a one-shot more than a day late is
-marked `missed`. Each fire has the id `<schedule id>:<scheduled time>`, used as the `cos_events`
+marked `missed`. Each fire has the id `<schedule id>:<scheduled time>`, used as the `ticket_events`
 dedupe key, written in the same transaction that moves the schedule on, so a wake happens exactly once
 across restarts; a reminder is pushed after that commit, so it happens at most once, and a repeated
 fire id never pushes again. The event's body says when it was scheduled and, if late, when it fired.
@@ -1119,17 +1144,28 @@ automatically; while any child isn't done, a run that ends without submitting le
 progress, and `submit_for_review` is refused (a parent in review or done would strand children
 whose reviews and merges are its job).
 
-Child changes reach the parent in one of two ways (`flushConductor`). A parent with no run going
-gets one run, with every buffered change in it. A parent whose run is still going (it may sit for
-hours waiting on a background task) gets the changes pushed into that run through the run's input,
-after a short debounce (`liveDebounceMs`, default 1s) so a burst is one message; the push is
-recorded in the run's transcript, not queued as a run. When the run can't take input (its driver
-has none, or it is cancelled or ending) the changes stay buffered and `afterRun` flushes them. The
-buffer also waits while the parent isn't in progress.
+Child changes reach the parent as rows of `ticket_events` (`source_kind` `child`, `target_id` the parent, `source_ref`
+the activity entry that recorded the change, `ticket_id` the child). `notifyConductor` inserts one synchronously where the
+change happens, with the facts at event time in `payload` (from, to, note, spec revision, title); the key is read from
+the child's ticket at delivery, so a project rename needs no fix-up, and the payload's copy stands in for a child deleted
+since. The ticket feed's `EventDelivery` instance (scope `ticket`, separate from the chief's, which never reads these
+kinds) delivers them. The gate (`deliverable`) holds the rows while the parent isn't in progress, a run is queued for it,
+or its live run is cancelled, can't take input or is another kind than its work. Otherwise, a parent with no run going
+gets one run (`workKind`) carrying the waiting changes, and a parent whose run is still going (it may sit for hours
+waiting on a background task) gets them pushed into that run through its input, after a short debounce
+(`liveDebounceMs`, default 1s, measured from the oldest waiting row, and only when a run is live) so a burst is one
+message; the push is recorded in the run's transcript, not queued as a run, and settles the rows at once. A run that
+was queued settles them when it ends. Moves of one child that wait together collapse to its latest status (a ticket
+that ended where it started is dropped), a wake carries at most 40 rows, and a parent is woken at most 60 times per 5
+minutes (`CHILD_EVENT_WAKE_CAP`). `afterRun` and a move to in progress deliver what was held, and the restart sweep (run
+after interrupted runs are failed and restarts resumed, so a resumed run and a wake never both start) settles rows
+whose wake died with the process and delivers the rest: a held update survives a restart. A wake whose run fails or is
+cancelled goes back to waiting (3 tries, then the rows close with the reason) and backs off before the next try. A row for
+a ticket that is done or deleted is closed `ignored` with the reason.
 
 ### Ticket subscriptions
 
-A work or conductor run subscribes to another ticket with `subscribe_ticket` { key, mode, events }
+A work, conductor or chief of staff run subscribes to another ticket with `subscribe_ticket` { key, mode, events }
 to be woken when it changes, instead of waiting with a shell `sleep` (no prompt recommends that).
 `mode` is `once` (the row is deleted at the first delivery, the default) or `forever`; `events` are
 `status` (moves, review approvals; the default), `note` and `spec`. Rows live in
@@ -1137,19 +1173,45 @@ to be woken when it changes, instead of waiting with a shell `sleep` (no prompt 
 `list_subscriptions` complete the set. A parent is an implicit subscriber to its children's status
 changes (no row, so it can't drift); subscribing to your own child's status is refused.
 
-Delivery reuses the parent's path: `notifySubscribers` (called from `transition`, the review
-approval and `addActivity` for notes and spec revisions) buffers a change for the subscriber, and
-`flushConductor` pushes it into its live run or starts a run with `ticketEventsPrompt`. Guard rails:
-a change the subscriber's own tool call caused is skipped (`callerContext`, set around every run's
-tool calls and cleared again when a queued run starts, so a run the call queued isn't "its" change); a
-subscriber is woken at most 8 times per 5 minutes (`SUBSCRIPTION_WAKE_LIMIT`, counted per delivered
-message), so two tickets subscribed to each other can't loop, and events past the limit stay buffered
-and arrive together once the window has room; and a subscriber's rows are deleted when its ticket
-leaves in progress and blocked, or its runs are cancelled (an event must not restart an agent someone
-stopped). A ticket that ends its turn with a subscription on a ticket that isn't done, or with an
-event still buffered, isn't auto-submitted, since it is waiting for events: it calls
-`submit_for_review` when it is done. A done ticket can't be subscribed to, and its subscribers' rows
-are dropped once they have heard it is done, so no ticket waits on something that can't change.
+Delivery is the parent's path above, with rows of `source_kind` `subscription` (`target_id` the subscriber). Guard rails:
+`notifySubscribers` (called from `transition`, the review approval and `addActivity` for notes and spec revisions) writes
+the row at insert time, where `callerContext` (set around every run's tool calls and cleared again when a queued run
+starts, so a run the call queued isn't "its" change) can still tell who caused the change: a change the subscriber's own
+tool call caused gets no row. A `once` subscription is deleted in the same transaction as its row. A parent doesn't get a
+subscription row for a change it already gets as a `child` row: one change reaches a ticket once, whichever way it
+subscribed (the store's `insert` checks the target and `source_ref` across the two kinds). A subscriber is woken at most 8
+times per 5 minutes (`EVENT_WAKE_CAP`, counted per delivered wake from the `event_wakes` log, so it holds across a
+restart); rows past the limit stay stored and arrive together, collapsed, once the window has room, so two tickets
+subscribed to each other can't loop. A subscriber's rows are deleted when its ticket leaves in progress and blocked, or
+its runs are cancelled (an event must not restart an agent someone stopped). A ticket that ends its turn with a
+subscription on a ticket that isn't done, or with a subscription row still waiting, isn't auto-submitted, since it is
+waiting for events: it calls `submit_for_review` when it is done.
+
+A chief of staff subscribes the same way, to follow the tickets it dispatches (its prompt says to, and to summarize them when
+they are done). Its ticket never leaves in progress, so its subscriptions are never cleaned up by a move: instead
+`notifySubscribers` checks at every change that the chief is switched on (a switched-off chief gets no row and nothing
+is kept for when it is switched on again; switching it off also closes its waiting rows) and that the ticket is still
+inside its scope (read fresh, so a group change takes effect at once; a ticket out of scope drops the subscription).
+The row is delivered by the ticket feed like any other, held while the chief is off. The chief's own activity feed
+skips an event its subscription already delivered (`TicketEventRepo.hasTicketRow`, recorded as ignored with the reason
+"follows this ticket through a subscription"), so one change wakes it once. A done ticket can't be subscribed to, and its
+subscribers' rows are dropped once they have heard it is done, so no ticket waits on something that can't change.
+
+**Events tab.** `Ticket.hasEvents` (a boolean, so a busy feed doesn't push the ticket on every event) is true while a
+row that isn't `filtered` has the ticket as its `target_id`. The service pushes the ticket again when a change to the rows (an insert, a row re-pointed or filtered, a prune) leaves its
+flag different from before, once the change's transaction is over, so a rolled-back insert pushes nothing and the tab appears and
+goes while a ticket is open. Every ticket's rows also go out as `ticket.event.upserted` on insert and on each status change, so an
+open tab follows them live; a requested Events tab on a ticket without events opens the Spec (`effectiveTab`). The tab sits after Agents & tasks
+on the Mac and on iPhone, iPad and Duo (`shared/src/state/tabs.ts`, `Logic/Tabs.swift`) and shows `eventRows`: the rows aimed
+at the ticket, newest first, without the filtered ones, each with its kind (Ticket, Watcher, Schedule, Subscription, Child),
+and, since no chief judges a ticket's own rows, delivery wording (waiting to be delivered, queued for the ticket, delivered)
+in place of the Inbox's verdicts. "Escalate anyway" and the **+** exist only in a chief's Inbox. How long rows are kept is
+Settings → General → "Keep event history for" on both apps (`eventRetentionDays`, 1 to 365, default 7).
+
+Explicit subscription and child rows skip the chief's triage and rehoming: the chief's engine and its Inbox only read
+`activity`, `watcher` and `schedule` rows (the store's scope), and the ticket feed only the other two. The rows show in
+the target's own `list_inbox`. Wakes of the two feeds are told apart in the wake log by event class (`child`,
+`subscription`; the chief's is empty), so a chief that is also a parent or subscriber keeps its chat cards to its own events.
 
 ### Watchers
 
@@ -1220,8 +1282,8 @@ event, a declined or failed one an ignored event, with the outcome as the reason
 `triage:TRIAGE-n`, so a rerun adds nothing). The old triage sessions, their runs, `sessions.triage_status`
 and the `seen_items` rows stay in place, unread, because tickets and Activity link to TRIAGE-n. `TRIAGE`
 stays a reserved project key. `GET /sessions?kind=triage` is still accepted and answers `[]`, and
-`Session.triageStatus` stays on the wire, so installed apps keep decoding; `list_inbox` still reads
-the old items. Dropping all of that waits for a release after the apps lose their Inbox.
+`Session.triageStatus` stays on the wire, so installed apps keep decoding; `list_inbox` no longer
+reads them. Dropping all of that waits for a release after the apps lose their Inbox.
 
 ## Tools
 
@@ -1249,8 +1311,9 @@ stubs whose full description `tool_search` returns, see "Stubs and tool_search" 
 | `get_ticket` | all | `{ key, include_transcript?: 1..50, include_agents? }`: any project, drafts included (`draft: true`), old keys resolve (`resolvedFrom`), remote IDs never do: a key only tickets carry as their remote ID returns `{ ticket: null, requested, relatedTickets }`, and a found ticket carries `externalKey`, `externalUrl` and `relatedTickets` ("Remote IDs"). Spec, `specRevision`, `specBaselineRevision`, `agentNotes` (see "Agent notes"; `list_tickets` and `search_tickets` leave them out), status, reviews, blocked reason, parent/children keys, dependsOn, driver/model, branches (`branch`, `requestedBranch`, `baseBranch`, `effectiveBaseBranch` + `baseBranchSource`), `activity` (kind, author, body, meta, createdAt), `attachments` (id, name, kind and stored file `path`), `promptAttachments` (name, path, `missing`); with include_transcript the last N text/status/error transcript entries, each clipped to 2000 chars; with include_agents `agents`, its sub-agents and background tasks oldest first (id, kind, description, agentType, model, status, parentId, command, result clipped to 500 chars, startedAt, endedAt) |
 | `get_ticket_agent` | all | `{ key, id, include_transcript?: 1..50 }` → one sub-agent or task of that ticket's session (`Orchestrator.getTicketAgent_`): its `agent` fields plus `prompt`, prompt and result clipped to 8000 chars; a sub-agent's own last N (default 20) text/status/error `transcript` entries, or a task's `output` (its last 8000 chars, `truncated`, `done`, `available`; a task with no output file reads as unavailable). An unknown id fails pointing at `get_ticket`'s include_agents |
 | `search_tickets` | all | `{ query, project_key?, limit?, cursor?, include_drafts? (default true) }` → `{ total, hits: [{ key, title, status, draft, project, snippet }], nextCursor }`. Same matching, ranking and cursors as `GET /tickets/search` ("Paging and search"); default limit 20 |
+| `subscribe_ticket` | work, conductor, chat, cos | `{ key, mode?, events? }`: get woken when another ticket changes (see "Ticket subscriptions"); `unsubscribe_ticket` `{ key }` and `list_subscriptions` `{}` complete the set |
 | `list_projects` | all | `{}` → each project's key, name, path and settings, with `completionAction`, the offered `completionActions` and `pullRequestHost` |
-| `list_inbox` | all (a legacy read; its prompt text no longer points agents at it) | `{ status?: TriageStatus[], source?, key?, limit?, include_output? }` (`key` picks one item, e.g. `TRIAGE-12`; `get_ticket` on an Inbox key fails pointing here) → Inbox items (triage sessions) newest first: key, title, source (watcher name), status, outcome, the watcher prompt, and with include_output the output (clipped to 2000 chars). Default limit 20, max 100, with a "Showing n of total" note |
+| `list_inbox` | all | `{ status?: TicketEventStatus[], source?, key?, limit? }` (`source` is an event source kind; `key` an event id or a ticket key) → the events addressed to the calling ticket (`target_id`), newest first: id, title, summary, source, status, verdict, reason, the ticket it is about, created_at. A chief (and the triage run working for it) reads its Inbox instead: its own events plus the unassigned ones, the same rows `GET /tickets/:key/events` returns for the chief. Status, source and key are filtered in the query and the total is a `COUNT`, so it is exact however many events there are. Default limit 20, max 100, with a "Showing n of total events" note. `get_ticket` on a `TRIAGE-n` key says Inbox items are events now |
 | `start_ticket` | work, conductor | `{ key }` → `startTicket` (any ticket, not only children). While the ticket's planning run is going it approves the plan instead and the work starts when the run ends |
 | `message_ticket` | work, conductor, chat | `{ key, text }` → `sendMessage`, as a human message (never with `move`: the ticket stays in its column and its agent moves it) |
 | `cancel_ticket` | work, conductor | `{ key }` → `cancelTicket` (abort the active run, drop queued runs) |
@@ -1421,7 +1484,7 @@ client state, not service state.
 | Board | approve a review choosing how it lands (merge, open PR, "Approve and…" with instructions, take no action), request changes, re-run the agent review, complete or mark done; open a ticket's pull request | parents only, for their own children: `review_ticket`, `complete_ticket` (`action`) | reviews and merges are the reviewers' and the human's; an agent can't sign off its own or a sibling's work |
 | Board | answer a tool approval (allow once, always allow, deny) | none | a human's decision by design; a message to a ticket waiting on one is refused |
 | Chief of staff | open a board's chief, read its Chat and Inbox, escalate an ignored event, edit its memory | the chief's own tools (`list_tickets`, `query_activity`, `read_memory`, `update_memory_section`, `schedule_*`); a ticket agent has no CoS tool | the apps have no screen for schedules yet |
-| Inbox (legacy) | list the old triage items | `list_inbox` (`include_output`), `get_ticket` | the apps have no Inbox actions beyond reading |
+| Inbox | read the events addressed to a ticket | `list_inbox` | the apps' Inbox is the chief of staff's events; agents have no Inbox actions beyond reading |
 | Watchers | create, edit (command line, cwd, mode, interval), pause or resume, run now, delete | a chief's `create_watcher`, `update_watcher` (`enabled`), `run_watcher`, `delete_watcher` (all gated); `list_watchers` | `env` is tool-only (the forms don't edit it); values are never shown |
 | Projects | add, rename, change key or folder, default driver and models, permission mode, worktrees, base branch, review defaults, what approving does ("When approved"), color, group, remove | `create_project`, `update_project`, `delete_project` (gated); `list_projects` | reveal in Finder and "new session here" are Local |
 | Settings | default driver, concurrent runs, default and review models, permission mode, classifier, network listen mode, base branch | `update_settings` (gated), `get_settings` | |

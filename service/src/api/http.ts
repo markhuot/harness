@@ -255,14 +255,14 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
   add("GET", "/cos", () => o.listCos());
   add("POST", "/cos", async ({ body }) => o.openCos(cosScopeOf(await body())));
   add("PATCH", "/cos/:id", async ({ params, body }) => o.setCosEnabled(params.id!, ((await body()) ?? {}).enabled));
-  // Chief-of-staff Inbox and chat (DESIGN.md "Events"): events with their owner, verdict and status; the chat is a projection.
+  // Events of a ticket, and a chief's Inbox (DESIGN.md "Events"): events with their target, verdict and status; the chief's chat is a projection.
   // Schedules of the chiefs of staff (DESIGN.md "Schedules"): the human sees and stops them.
   add("GET", "/schedules", ({ url }) => o.listSchedules({ all: url.searchParams.get("all") === "1" }));
   add("DELETE", "/schedules/:id", ({ params }) => o.cancelSchedule(params.id!));
   add("GET", "/cos/events/badge", () => o.cosBadge());
   add("POST", "/cos/events/:id/escalate", async ({ params }) => o.escalateCosEvent(params.id!));
-  add("GET", "/cos/:id/events", ({ params, url }) =>
-    o.cosEvents(params.id!, { status: url.searchParams.get("status"), before: url.searchParams.get("before"), limit: url.searchParams.get("limit") }),
+  add("GET", "/tickets/:key/events", ({ params, url }) =>
+    o.eventsPage(params.key!, { status: url.searchParams.get("status"), before: url.searchParams.get("before"), limit: url.searchParams.get("limit") }),
   );
   add("GET", "/cos/:id/transcript", ({ params, url }) => o.cosTranscript(params.id!, { before: url.searchParams.get("before"), limit: url.searchParams.get("limit") }));
   add("POST", "/cos/:id/messages", async ({ params, body }) => o.sendCosMessage(params.id!, (await body()) ?? {}));

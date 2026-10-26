@@ -2,7 +2,7 @@ import HarnessKit
 import SwiftUI
 
 /// The ticket's tabs: Spec, Activity, Tickets (conductors), Transcript,
-/// Agents & tasks (once there are sub-agents or background tasks), Browser, Changes (when the service
+/// Agents & tasks (once there are sub-agents or background tasks), Events (once the ticket has some), Browser, Changes (when the service
 /// lists the git plugin's tab), Details, then the plugin tabs. Counts and a live dot ride along; a
 /// sub-agent's or task's view highlights Agents & tasks. On iPad each tab drags out into a window
 /// of its own (TearOff.swift); a torn-off tab stays here with a window mark.
@@ -53,7 +53,7 @@ struct TicketDetailTabStrip: View {
         // The order, Changes included (built in; the git plugin's own tab never shows), is
         // ChangesTab.visibleTabs'; this adds labels, counts, live dots and plugin icons.
         let plugins = ChangesTab.otherPluginTabs(pluginTabs) ?? []
-        return ChangesTab.visibleTabs(conductor: conductor, workdir: ticket.workdir, subagents: subagents, pluginTabs: pluginTabs).map { tab in
+        return ChangesTab.visibleTabs(conductor: conductor, workdir: ticket.workdir, subagents: subagents, pluginTabs: pluginTabs, events: ticket.hasEvents ?? false).map { tab in
             if tab == .changes {
                 let icon = ChangesTab.icon(pluginTabs)
                 return Item(id: tab, label: ChangesTab.label, icon: Icons.isIconName(icon) ? icon : ChangesTab.defaultIcon)

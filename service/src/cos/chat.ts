@@ -56,8 +56,8 @@ export function cosChat(store: Store, cosId: string, rawCursor: string | null, l
     if (entry) found.push(entry);
   }
 
-  for (const w of store.cosEvents.wakesBefore(cosId, cursor, fetch)) {
-    found.push({ id: `wake:${w.id}`, cosId, createdAt: w.startedAt, kind: "event_batch", wakeId: w.id, eventIds: store.cosEvents.byWake(w.id).map((e) => e.id), digest: w.digest });
+  for (const w of store.ticketEvents.wakesBefore(cosId, cursor, fetch)) {
+    found.push({ id: `wake:${w.id}`, cosId, createdAt: w.startedAt, kind: "event_batch", wakeId: w.id, eventIds: store.ticketEvents.byWake(w.id).map((e) => e.id), digest: w.digest });
   }
 
   const older = found.sort((a, b) => b.createdAt - a.createdAt || (a.id < b.id ? 1 : -1));

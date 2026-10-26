@@ -68,8 +68,11 @@ final class WorldTransport: HTTPTransport, @unchecked Sendable {
         default: break
         }
         let parts = path.split(separator: "/").map(String.init)
-        if parts.count == 3, parts[0] == "cos", parts[2] == "events" {
-            return ["items": w.list("cosEvents").filter { $0["cosId"] as? String == parts[1] }, "nextCursor": NSNull()] as [String: Any]
+        if parts.count == 3, parts[0] == "tickets", parts[2] == "events" {
+            // A chief's page is its Inbox (its own rows and the unassigned ones); any other ticket's is the rows aimed at it. By key or id.
+            let id = w.list("tickets").first { $0["key"] as? String == parts[1] }?["id"] as? String ?? parts[1]
+            let chief = w.list("chiefs").contains { $0["ticketId"] as? String == id }
+            return ["items": w.list("ticketEvents").filter { ($0["targetId"] as? String == id) || (chief && $0["targetId"] is NSNull) }, "nextCursor": NSNull()] as [String: Any]
         }
         if parts.count == 3, parts[0] == "cos", parts[2] == "transcript" {
             // Newest page first, as the service sends it; the world's chat is one page.

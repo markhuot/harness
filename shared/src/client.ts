@@ -64,7 +64,7 @@ import type {
   PlanUsageReport,
   SessionActionBody,
 } from "./protocol";
-import type { ClientEvent, Cos, CosBadge, CosChatPage, CosEvent, CosEventPage, CosEventStatus, CosMemory, CosScopeKey, MemoryConflict, PutCosMemoryBody } from "./cos";
+import type { ClientEvent, Cos, CosBadge, CosChatPage, TicketEvent, TicketEventPage, TicketEventStatus, CosMemory, CosScopeKey, MemoryConflict, PutCosMemoryBody } from "./cos";
 import type { Device, NotificationStatus, Presence, RegisterDeviceBody, TestNotificationResult } from "./notifications";
 import type { FileMatch } from "./mentions";
 import type { CommandMatch } from "./commands";
@@ -292,16 +292,16 @@ export class HarnessClient {
   setCosEnabled(id: string, enabled: boolean) {
     return this.request<Cos>("PATCH", `/cos/${id}`, { enabled });
   }
-  /** A chief's Inbox, newest first; `before` is the previous page's nextCursor. */
-  cosEvents(id: string, opts: { status?: CosEventStatus; before?: string | null; limit?: number } = {}) {
-    return this.request<CosEventPage>("GET", `/cos/${id}/events${query({ status: opts.status, before: opts.before, limit: opts.limit })}`);
+  /** A ticket's events (a chief's Inbox, for a chief), newest first; `before` is the previous page's nextCursor. */
+  ticketEvents(key: string, opts: { status?: TicketEventStatus; before?: string | null; limit?: number } = {}) {
+    return this.request<TicketEventPage>("GET", `/tickets/${encodeURIComponent(key)}/events${query({ status: opts.status, before: opts.before, limit: opts.limit })}`);
   }
   cosBadge() {
     return this.request<CosBadge>("GET", "/cos/events/badge");
   }
   /** An ignored event joins the chief's next wake. */
   escalateCosEvent(id: string) {
-    return this.request<CosEvent>("POST", `/cos/events/${id}/escalate`);
+    return this.request<TicketEvent>("POST", `/cos/events/${id}/escalate`);
   }
   /** A chief's chat, newest page first; `before` is the previous page's nextCursor. */
   cosTranscript(id: string, opts: { before?: string | null; limit?: number } = {}) {
@@ -439,7 +439,7 @@ export class HarnessClient {
    * already seen.
    */
   injectOutput(source: string, text: unknown) {
-    return this.request<CosEvent | null>("POST", `/watchers/inject`, { source, text });
+    return this.request<TicketEvent | null>("POST", `/watchers/inject`, { source, text });
   }
 
   // Drivers & settings

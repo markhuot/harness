@@ -63,6 +63,7 @@ import { PluginFrame, usePluginTabs } from "./PluginTab";
 import { ChangesTab } from "./ChangesTab";
 import { ChildrenTab } from "./ChildrenTab";
 import { AgentsTab, SubagentView, TaskView } from "./AgentsTab";
+import { EventsTab } from "./EventsList";
 import { ParentCrumb } from "../components/Conductor";
 import { MentionTextarea } from "../components/MentionTextarea";
 import { useBoardScope, useOpenTicket, usePaneScope, usePopout } from "../components/paneContext";
@@ -259,11 +260,11 @@ export function TicketDetail({
   const subagents = ticket ? subagentsOf(state, ticket.sessionId) : null;
   // Changes is built in (ChangesTab.tsx), after Browser and ahead of Details; the git plugin's own
   // tab never shows, and a saved "plugin:git:changes" opens the built-in one.
-  const tabs = ticket ? visibleTabsWithChanges({ conductor: isConductor(ticket), workdir: ticket.workdir, subagents, pluginTabs }) : [];
+  const tabs = ticket ? visibleTabsWithChanges({ conductor: isConductor(ticket), workdir: ticket.workdir, subagents, pluginTabs, events: ticket.hasEvents }) : [];
   // A plugin tab that doesn't apply (or no longer exists) falls back to the Spec once tabs are known.
   // Likewise the conductor-only Tickets tab on a plain ticket, Agents on a session without sub-agents,
-  // and Changes on a ticket without a diff.
-  const tab = ticket ? effectiveTabWithChanges(paneTab, { conductor: isConductor(ticket), workdir: ticket.workdir, pluginTabs, subagents }) : normalizeChangesTab(paneTab);
+  // Events on a ticket without any, and Changes on a ticket without a diff.
+  const tab = ticket ? effectiveTabWithChanges(paneTab, { conductor: isConductor(ticket), workdir: ticket.workdir, pluginTabs, subagents, events: ticket.hasEvents }) : normalizeChangesTab(paneTab);
   // A tab change from the keyboard keeps the focus on the strip when it was there.
   const refocusTab = useRef(false);
   const goTab = (t: TicketTab | null) => {
@@ -467,6 +468,7 @@ export function TicketTabBody({
       {tab === "children" && <ChildrenTab ticket={ticket} />}
       {tab === "transcript" && <Transcript sessionId={ticket.sessionId} onOpenSubagent={openSubagent} emptyHint="The agent's conversation will stream in here." />}
       {tab === "agents" && <AgentsTab ticket={ticket} onOpen={openSubagent} />}
+      {tab === "events" && <EventsTab ticket={ticket} />}
       {openAgent &&
         (openedTask ? (
           <TaskView key={openAgent} ticket={ticket} subagentId={openAgent} onBack={() => setTab("agents")} />

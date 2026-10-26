@@ -3,8 +3,63 @@ import { TicketDetail } from "../../app/src/renderer/views/TicketDetail";
 import { world } from "../world";
 import { all, click, edited, mount, text } from "./render";
 
-const detail = (key: string, tab: "spec" | "activity" | "transcript" | "details" = "spec") => <TicketDetail paneId="p1" ticketKey={key} tab={tab} zoomed={false} />;
+const detail = (key: string, tab: "spec" | "activity" | "transcript" | "details" | "events" = "spec") => <TicketDetail paneId="p1" ticketKey={key} tab={tab} zoomed={false} />;
 const buttons = (m: { container: HTMLElement }) => all(m.container, "button").map((b) => text(b));
+
+const tabs = (m: { container: HTMLElement }) => all(m.container, "[role=tab]").map((t) => t.dataset.tab ?? t.dataset.pluginTab);
+const eventRows = (m: { container: HTMLElement }) => all(m.container, '[data-testid="cos-event"]');
+
+describe("TicketDetail Events tab", () => {
+  test("a ticket with no events has no Events tab, and asking for it opens the Spec", async () => {
+    const m = await mount(detail("HARNESS-2", "events"));
+    await m.until("loads", () => text(m.container).includes("Fix socket reconnect after sleep"));
+    expect(tabs(m)).not.toContain("events");
+    expect(all(m.container, '[data-tab="spec"]')[0]!.getAttribute("aria-selected")).toBe("true");
+    expect(m.client.requests.some((r) => r.endsWith("/events") || r.includes("/events?"))).toBe(false);
+  });
+
+  test("a ticket with events shows them, newest first, with what kind each is and no Escalate button", async () => {
+    const m = await mount(detail("HARNESS-8", "events"));
+    await m.until("the events", () => eventRows(m).length > 0);
+    expect(tabs(m)).toContain("events");
+    expect(m.client.requests).toContain("GET /tickets/ticket-HARNESS-8/events?limit=50");
+    expect(eventRows(m).map((e) => e.dataset.event)).toEqual(["ev-child", "ev-subscription"]);
+    expect(text(eventRows(m)[0])).toContain("Child");
+    expect(text(eventRows(m)[0])).toContain("HARNESS-9 moved to review");
+    expect(text(eventRows(m)[1])).toContain("Subscription");
+    // Nobody triages these: they wait for delivery instead of for a verdict.
+    expect(text(eventRows(m)[1])).toContain("Queued for the ticket");
+    expect(all(m.container, '[data-testid="cos-escalate"]')).toHaveLength(0);
+    expect(all(m.container, '[data-testid="cos-listen"]')).toHaveLength(0);
+  });
+
+  test("rows the chief's rules dropped and rows aimed at other tickets stay out", async () => {
+    const world = edited((w) => {
+      const base = w.ticketEvents.find((e) => e.id === "ev-child")!;
+      w.ticketEvents.push({ ...base, id: "ev-dropped", verdict: "filtered", status: "ignored" }, { ...base, id: "ev-elsewhere", targetId: "ticket-HARNESS-9" });
+    });
+    const m = await mount(detail("HARNESS-8", "events"), { world });
+    await m.until("the events", () => eventRows(m).length > 0);
+    expect(eventRows(m).map((e) => e.dataset.event)).toEqual(["ev-child", "ev-subscription"]);
+  });
+
+  test("a live event appears in the open tab", async () => {
+    const m = await mount(detail("HARNESS-8", "events"));
+    await m.until("the events", () => eventRows(m).length > 0);
+    const base = m.client.world.ticketEvents.find((e) => e.id === "ev-child")!;
+    await m.settle(() => m.client.push({ kind: "ticket.event.upserted", event: { ...base, id: "ev-live", title: "HARNESS-10 started", createdAt: base.createdAt + 1 } }));
+    expect(eventRows(m)[0]!.dataset.event).toBe("ev-live");
+  });
+
+  test("when pruning leaves the ticket with no events the tab goes and the Spec opens", async () => {
+    const m = await mount(detail("HARNESS-8", "events"));
+    await m.until("the events", () => eventRows(m).length > 0);
+    const ticket = m.client.world.tickets.find((t) => t.key === "HARNESS-8")!;
+    await m.settle(() => m.client.push({ kind: "ticket.upserted", ticket: { ...ticket, hasEvents: false } }));
+    expect(tabs(m)).not.toContain("events");
+    expect(all(m.container, '[data-tab="spec"]')[0]!.getAttribute("aria-selected")).toBe("true");
+  });
+});
 
 describe("TicketDetail", () => {
   test("a ticket in review whose agent review passed offers approve and request changes", async () => {

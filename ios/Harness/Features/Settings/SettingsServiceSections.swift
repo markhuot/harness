@@ -90,6 +90,14 @@ struct SettingsGeneralSection: View {
                 .frame(maxWidth: 80)
                 .accessibilityLabel("Suspend unused browser tabs after")
             }
+            SettingsRow(label: "Keep event history for", hint: "In days, 1 to 365. Events a chief or ticket has dealt with are deleted after this long; the ones still waiting are kept.") {
+                DraftField(value: String(settings.retentionDays)) { v in
+                    if let n = SettingsRules.eventRetentionDays(v) { save(SettingsPatch(eventRetentionDays: n)) }
+                }
+                .keyboardType(.numberPad)
+                .frame(maxWidth: 80)
+                .accessibilityLabel("Keep event history for")
+            }
             SettingsRow(label: "Save on blur", hint: "Save an edited file when its editor loses focus, you leave the file, or the app goes to the background. Off, leaving asks first.") {
                 Toggle("Save on blur", isOn: Binding(
                     get: { SettingsRules.saveOnBlur(settings.saveOnBlur) },
@@ -156,8 +164,8 @@ struct SettingsPermissionsSection: View {
     }
 }
 
-/// The chiefs of staff's two app-wide switches (projects may override both): whether they run, and
-/// whether they may unblock tickets.
+/// The chiefs of staff's app-wide settings (projects may override them): whether they run, the columns
+/// they handle, the chief's and triage's models and the triage permissions.
 struct SettingsCosSection: View {
     let settings: PublicSettings
 
