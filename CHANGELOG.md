@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261026.1226](https://github.com/markhuot/harness/releases/tag/app-20261026.1226) - 2026-10-26
+
 ### Added
 
 - A blocked ticket now shows its status, the agent's question and an Unblock button at the top of the Spec tab on the Mac and on iPhone and iPad, so you can answer without switching to Activity. A usage-limit block shows when it restarts, and a waiting tool approval shows its Allow and Deny buttons. The callout is only drawn over the spec; it is never saved into the spec text.
