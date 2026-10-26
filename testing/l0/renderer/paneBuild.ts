@@ -5,7 +5,7 @@ export const leaf = (id: string, content: PaneContent): PaneLeaf => ({ type: "le
 export const board = (id = "B") => leaf(id, { kind: "board" });
 export const ticket = (id: string, key: string, tab: "spec" | "transcript" | "details" | "browser" | "activity" = "spec") => leaf(id, { kind: "ticket", ticketKey: key, tab });
 export const term = (id: string, sessionId: string, cwd = "/work") => leaf(id, { kind: "terminal", sessionId, cwd });
-export const torn = (id: string, key: string, tab: "transcript" | "browser" | "composer" | "changes" | "details" = "transcript", browserTab?: number) =>
+export const torn = (id: string, key: string, tab: "transcript" | "browser" | "changes" | "details" = "transcript", browserTab?: number) =>
   leaf(id, { kind: "ticketTab", ticketKey: key, tab, ...(browserTab !== undefined ? { browserTab } : {}) });
 export const file = (id: string, path: string, root: { ticketKey: string } | { projectId: string } = { projectId: "pr" }) => leaf(id, { kind: "file", root, path });
 export const compose = (id: string, composeId: string) => leaf(id, { kind: "compose", id: composeId });

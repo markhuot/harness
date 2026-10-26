@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import {
-  boardLeaf, bareBoardId, canPopOut, composeLeafById, COMPOSER_TAB, cwdName, defaultPanes, fileKey, fileLeafByKey, fileRootTicket, findLeaf, focusedTicket, isPopoutScope, leaves,
+  boardLeaf, bareBoardId, canPopOut, composeLeafById, cwdName, defaultPanes, fileKey, fileLeafByKey, fileRootTicket, findLeaf, focusedTicket, isPopoutScope, leaves,
   minSize, newComposeContent, paneLabel, paneTicket, PANE_MIN_HEIGHT, PANE_MIN_WIDTH, popoutIdOf, popoutScope, resetPaneIds, seedPaneIds, tabContent, terminalContent, terminalLeafBySession,
   ticketLeafByKey, tornId, tornKey, tornLeafByKey, tornTabLabel, zoneAt, type PaneContent,
 } from "../../../app/src/renderer/state/paneModel";
@@ -53,8 +53,7 @@ describe("tornId / tornKey / tornTabLabel", () => {
   test("a torn-off Browser without a pin is just the browser tab", () => {
     expect(tornId({ tab: "browser" })).toBe("browser");
   });
-  test("the composer, a sub-agent transcript (the Agents strip entry) and plain tabs", () => {
-    expect(tornId({ tab: COMPOSER_TAB })).toBe("composer");
+  test("a sub-agent transcript (the Agents strip entry) and plain tabs", () => {
     expect(tornId({ tab: "agent:abc" })).toBe("agents");
     expect(tornId({ tab: "agents" })).toBe("agents");
     expect(tornId({ tab: "transcript" })).toBe("transcript");
@@ -63,8 +62,7 @@ describe("tornId / tornKey / tornTabLabel", () => {
     expect(tornKey({ ticketKey: "A-1", tab: "agent:x" })).toBe(tornKey({ ticketKey: "A-1", tab: "agents" }));
     expect(tornKey({ ticketKey: "A-1", tab: "details" })).not.toBe(tornKey({ ticketKey: "A-2", tab: "details" }));
   });
-  test("labels: composer, changes, browser tab, built-in, plugin, sub-agent, unknown", () => {
-    expect(tornTabLabel({ tab: COMPOSER_TAB })).toBe("Composer");
+  test("labels: changes, browser tab, built-in, plugin, sub-agent, unknown", () => {
     expect(tornTabLabel({ tab: "changes" })).toBe("Changes");
     expect(tornTabLabel({ tab: "browser", browserTab: 2 })).toBe("Browser tab");
     expect(tornTabLabel({ tab: "browser" })).toBe("Browser");

@@ -1,4 +1,4 @@
-// One of a ticket's tabs (or its composer) torn off into a pane of its own (state/panes.ts
+// One of a ticket's tabs torn off into a pane of its own (state/panes.ts
 // "ticketTab"), so a Spec and a Transcript, or two browser tabs and the Spec, show at once. The body
 // is the same component the ticket pane shows for that tab, with the same handlers (TicketTabBody,
 // MessageComposer), so it's fully working: the spec edits, Details changes settings, the browser
@@ -11,7 +11,6 @@ import { effectiveTabWithChanges, subagentsOf, tabAfterSend, type TicketTab } fr
 import { useStore } from "../state/store";
 import {
   closePane,
-  COMPOSER_TAB,
   getPanes,
   isPopoutScope,
   openTicket,
@@ -96,24 +95,15 @@ function TornTab({
   const owner = `ticketTab:${paneId}`;
   const ref = useRef<HTMLElement>(null);
   const [browserTitle, setBrowserTitle] = useState("");
-  const composer = content.tab === COMPOSER_TAB;
   const pinned = content.browserTab !== undefined;
   const back = () => returnTabPane(boardScope, ticket.key, tornId(content));
   const zoom = () => updatePanes(scope, (s) => toggleZoom(s, paneId));
   // The ticket's actions work from here as from its pane (the palette, the approval card).
   const { modals } = useTicketActions(owner, ticket, onClose);
   useCommands(owner, {
-    "ticket.compose": () => focusTicketComposer(ticket.key, torn.get(COMPOSER_TAB), boardScope),
+    "ticket.compose": () => focusTicketComposer(ticket.key),
     ...scrollCommands(() => ref.current?.querySelector(".detail-body") ?? null),
   });
-
-  // A composer in a window of its own: when `i` brings the window forward, the input takes the keyboard.
-  useEffect(() => {
-    if (!popout || !composer) return;
-    const focus = () => ref.current?.querySelector<HTMLElement>(".composer-input")?.focus();
-    addEventListener("focus", focus);
-    return () => removeEventListener("focus", focus);
-  }, [popout, composer]);
 
   /** The ticket's own pane, in this board or a pop-out window (null when it's closed). */
   const ticketPaneOpen = Object.entries(store.scopes).some(([sc, s]) => (sc === boardScope || isPopoutScope(sc)) && !!ticketLeafByKey(s.root, ticket.key));
@@ -124,26 +114,19 @@ function TornTab({
     else updatePanes(boardScope, (s) => openTicket(s, ticket.key, t));
   };
 
-  // After a send from a torn-off composer, the ticket pane shows the Transcript (unless that's torn off too).
-  const afterSend = () => {
-    if (torn.has("transcript")) return;
-    const leaf = ticketLeafByKey(getPanes(boardScope).root, ticket.key);
-    if (leaf?.content.kind === "ticket") updatePanes(boardScope, (s) => setPaneTab(s, leaf.id, tabAfterSend(leaf.content.kind === "ticket" ? leaf.content.tab : "spec", true)));
-  };
-
   const subagents = subagentsOf(state, ticket.sessionId);
-  const tab = composer ? null : effectiveTabWithChanges(content.tab as TicketTab, { conductor: isConductor(ticket), workdir: ticket.workdir, pluginTabs, subagents, events: ticket.hasEvents });
+  const tab = effectiveTabWithChanges(content.tab as TicketTab, { conductor: isConductor(ticket), workdir: ticket.workdir, pluginTabs, subagents, events: ticket.hasEvents });
   // The tab doesn't apply to this ticket (any more): there's nothing to show.
-  const gone = tab !== null && tornId({ tab }) !== tornId({ tab: content.tab });
+  const gone = tornId({ tab }) !== tornId({ tab: content.tab });
   const name = tornTabName(content.tab, pluginTabs);
   const browser: BrowserOpts = pinned
     ? { pinnedTab: content.browserTab, onPinnedClosed: onClose, onTitle: setBrowserTitle }
     : { tear: { ticketKey: ticket.key, scope, boardScope, paneId, torn } };
   // An approval shows where it gets answered (beside the composer or the transcript), or anywhere with the ticket's pane closed.
-  const approval = ticket.pendingApproval && (composer || content.tab === "transcript" || !ticketPaneOpen);
+  const approval = ticket.pendingApproval && (content.tab === "transcript" || !ticketPaneOpen);
 
   return (
-    <aside className={`detail torn-pane ${composer ? "torn-composer" : ""}`} ref={ref} {...keysArea("ticket", owner)} data-torn-tab={tornId(content)}>
+    <aside className={"detail torn-pane"} ref={ref} {...keysArea("ticket", owner)} data-torn-tab={tornId(content)}>
       <div className="view-header detail-titlebar torn-titlebar">
         <PaneGrip paneId={paneId} chip={ticket.key} label={keyLabel(ticket)} title={ticket.title} />
         <span className="detail-key selectable">
@@ -197,15 +180,13 @@ function TornTab({
           <ApprovalCard key={ticket.pendingApproval!.id} ticket={ticket} approval={ticket.pendingApproval!} />
         </div>
       )}
-      {composer ? (
-        <MessageComposer ticket={ticket} key={ticket.id} onSent={afterSend} fill />
-      ) : gone ? (
+      {gone ? (
         <div className="empty" style={{ flex: 1 }}>
           <strong>{name} isn't available on {keyLabel(ticket)}</strong>
         </div>
       ) : (
         <div className="detail-body">
-          <TicketTabBody ticket={ticket} tab={tab!} requested={content.tab as TicketTab} pluginTabs={pluginTabs} related={related} specAttachments={specAttachments} setTab={setTab} browser={browser} />
+          <TicketTabBody ticket={ticket} tab={tab} requested={content.tab as TicketTab} pluginTabs={pluginTabs} related={related} specAttachments={specAttachments} setTab={setTab} browser={browser} />
         </div>
       )}
       {modals}

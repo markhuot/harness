@@ -7,7 +7,7 @@ import Foundation
 /// back with `init(userInfo:)`, as it does from the scene session's saved userInfo on relaunch.
 ///
 /// A pinned window is one torn-off tab of the ticket: it shows only `tab` (the Browser tab pinned to
-/// `browserTab` when set, or the composer when `tab` is `.composer`), and the ticket's other
+/// `browserTab` when set), and the ticket's other
 /// windows show a Return to this window placeholder in that tab's place (`TornOffTabs`).
 public struct TicketWindowValue: Codable, Hashable, Sendable {
     public var key: String
@@ -17,25 +17,23 @@ public struct TicketWindowValue: Codable, Hashable, Sendable {
     /// A pinned Browser window's browser tab; nil for the whole Browser tab (its chip strip and all).
     public var browserTab: Int?
 
-    /// The composer's tab id: only a pinned window shows it, as the message box on its own.
-    public static let composer = TicketTab("composer")
-
     public init(key: String, tab: TicketTab?, pinned: Bool = false, browserTab: Int? = nil) {
         self.key = key
         self.pinned = pinned && tab != nil
-        // A full window opens on a real tab, never the composer.
-        self.tab = !self.pinned && tab == Self.composer ? nil : tab
+        self.tab = tab
         self.browserTab = self.pinned && tab == .browser ? browserTab : nil
     }
 
     private enum CodingKeys: String, CodingKey { case key, tab, pinned, browserTab }
 
     /// SwiftUI saves the WindowGroup's value with the scene: one saved before pinned windows has no
-    /// `pinned` and is a full window.
+    /// `pinned` and is a full window. A saved tab that isn't one (any more) is dropped, so its
+    /// window comes back as the whole ticket.
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.init(
-            key: try c.decode(String.self, forKey: .key), tab: try c.decodeIfPresent(TicketTab.self, forKey: .tab),
+            key: try c.decode(String.self, forKey: .key),
+            tab: ChangesTab.ticketTabFrom(try c.decodeIfPresent(TicketTab.self, forKey: .tab)?.rawValue),
             pinned: try c.decodeIfPresent(Bool.self, forKey: .pinned) ?? false, browserTab: try c.decodeIfPresent(Int.self, forKey: .browserTab))
     }
 
@@ -50,7 +48,7 @@ public struct TicketWindowValue: Codable, Hashable, Sendable {
         self.init(key: key, tab: tab)
     }
 
-    public var route: Route { .ticket(key: key, tab: tab == Self.composer ? nil : tab) }
+    public var route: Route { .ticket(key: key, tab: tab) }
 
     /// What makes two windows the same window, so opening one that's open brings it forward: the
     /// ticket for a full window (whichever tab it's on), the ticket, tab and browser tab for a
@@ -85,7 +83,7 @@ public struct TicketWindowValue: Codable, Hashable, Sendable {
         guard let key = (userInfo?["key"] as? String)?.trimmingCharacters(in: .whitespaces), !key.isEmpty else { return nil }
         let raw = userInfo?["tab"] as? String
         let pinned = userInfo?["pinned"] as? String == "1"
-        let tab = pinned && raw == Self.composer.rawValue ? Self.composer : ChangesTab.ticketTabFrom(raw)
+        let tab = ChangesTab.ticketTabFrom(raw)
         let browserTab = (userInfo?["browserTab"] as? String).flatMap { Int($0) }
         self.init(key: key, tab: tab, pinned: pinned, browserTab: browserTab)
     }
@@ -98,8 +96,6 @@ public struct TornOffTabs: Equatable, Sendable {
     public private(set) var tabs: Set<TicketTab> = []
     /// Browser tabs pinned one by one.
     public private(set) var browserTabs: Set<Int> = []
-    /// The composer is in a window of its own.
-    public private(set) var composer = false
 
     public static let none = TornOffTabs()
 
@@ -111,9 +107,7 @@ public struct TornOffTabs: Equatable, Sendable {
         let k = key.uppercased()
         for w in windows where w.pinned && w.key.uppercased() == k {
             guard let tab = w.tab else { continue }
-            if tab == TicketWindowValue.composer {
-                composer = true
-            } else if tab == .browser, let id = w.browserTab {
+            if tab == .browser, let id = w.browserTab {
                 browserTabs.insert(id)
             } else {
                 tabs.insert(tab)
@@ -121,11 +115,10 @@ public struct TornOffTabs: Equatable, Sendable {
         }
     }
 
-    public var isEmpty: Bool { tabs.isEmpty && browserTabs.isEmpty && !composer }
+    public var isEmpty: Bool { tabs.isEmpty && browserTabs.isEmpty }
 
     /// The pinned window showing `tab` here (`browserTab` within the Browser tab), if it's torn off.
     public func window(_ key: String, tab: TicketTab, browserTab: Int? = nil) -> TicketWindowValue? {
-        if tab == TicketWindowValue.composer { return composer ? .pinned(key, tab) : nil }
         if tabs.contains(tab) { return .pinned(key, tab) }
         if tab == .browser, let browserTab, browserTabs.contains(browserTab) { return .pinned(key, .browser, browserTab: browserTab) }
         return nil
@@ -134,10 +127,9 @@ public struct TornOffTabs: Equatable, Sendable {
 
 extension TornOffTabs {
     /// What a torn-off thing is called in its placeholder and its window's title: the tab's label
-    /// (a plugin tab's title once `pluginTabs` have loaded), "Message" for the composer and the
+    /// (a plugin tab's title once `pluginTabs` have loaded), and the
     /// browser tab's own label (`browserTabLabel`, else "Browser tab N") for a pinned browser tab.
     public static func name(_ tab: TicketTab, browserTab: Int? = nil, browserTabLabel: String? = nil, pluginTabs: [PluginTab]? = nil) -> String {
-        if tab == TicketWindowValue.composer { return "Message" }
         if tab == .browser, let browserTab { return browserTabLabel ?? "Browser tab \(browserTab)" }
         if tab == .changes { return ChangesTab.label }
         if let b = tab.builtin { return Tabs.tabLabel[b] ?? b.rawValue }

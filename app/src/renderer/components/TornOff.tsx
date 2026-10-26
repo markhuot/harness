@@ -22,20 +22,6 @@ export function TornPlaceholder({ name, torn, onReturn }: { name: string; torn: 
   );
 }
 
-/** Where the composer was, while it's torn off: one line with the way back. */
-export function ComposerReturnBar({ torn, onReturn }: { torn: TornOff; onReturn: () => void }) {
-  return (
-    <div className="composer-return" data-testid="composer-return">
-      <Icon name="popout" size={13} />
-      <span className="muted">The message box is {where(torn)}</span>
-      <div className="grow" />
-      <button className="btn btn-ghost btn-sm" data-testid="torn-return" onClick={onReturn}>
-        <Icon name="popin" /> Return to this window
-      </button>
-    </div>
-  );
-}
-
 /** The small mark a torn-off tab's button (or browser chip) carries in the strip. */
 export function TornMark({ torn }: { torn: TornOff }) {
   return (

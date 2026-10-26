@@ -9,6 +9,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Removed
+
+- The message box on a ticket is a fixed part of the ticket again: it no longer has a grip to drag it out into a pane or window of its own, on the Mac or on iPad, and it has no Open in New Window menu or "message box is in another window" bar. Tabs and browser tabs still tear off as before. A saved pane or window that held the message box opens as the ticket instead.
+
 ### Changed
 
 - The chief of staff chat is much quieter. The "Updates from tickets you subscribed to" message and the chief's reply restating it no longer appear: a change to a ticket the chief follows goes to the triage agent first, and you only hear about it when triage decides it matters (the ticket is blocked, failed, done, or met what the chief said it was waiting for). Changes triage ignores show in the Inbox as ignored, with the reason, and a one-time watch stays armed until a change that matters.

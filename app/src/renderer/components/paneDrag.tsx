@@ -1,12 +1,12 @@
 // Dragging tickets, tabs and panes onto the pane workspace, or out of the window. Sources (board
-// cards, conductor child rows, a pane's header grip, a ticket's tab buttons, browser chips and the
-// composer's grip) call `dragProps`; while one of them is being dragged, the workspace shows a drop
+// cards, conductor child rows, a pane's header grip, a ticket's tab buttons, and browser chips)
+// call `dragProps`; while one of them is being dragged, the workspace shows a drop
 // layer over every pane (PaneWorkspace.tsx) that previews and applies the drop through the pure
 // helpers in state/panes.ts (zoneAt, dropTargetAt, applyDrop, dropInStore).
 //
 // A drag released outside the window with nothing taking it (state/dragOut.ts) pops what it carries
 // out into a window of its own under the pointer: a pane grip its pane, a card or child row its
-// ticket (the pane it's open in, if it is), a tab or the composer its torn-off pane. That lives
+// ticket (the pane it's open in, if it is), a tab its torn-off pane. That lives
 // here once, in dragProps' dragend, so every drag source gets it.
 //
 // The dragged thing is in the DataTransfer under our own types, so the layer can ignore drags that
@@ -132,7 +132,7 @@ export function dragOut(source: DragSource, boardScope: string, at: ScreenPoint)
 
 /**
  * Props that make an element a drag source for `source`: a ticket (a card or child row), a tab
- * (a tab button, browser chip or the composer's grip), or a pane (its header grip). `boardScope`
+ * (a tab button or browser chip), or a pane (its header grip). `boardScope`
  * is the board this window shows (useBoardScope), where a drag released outside the window takes
  * what it carries from.
  */
@@ -201,7 +201,7 @@ export async function ticketContextMenu(e: MouseEvent, scope: string, ticketKey:
 }
 
 /**
- * Right-click on a ticket's tab, a browser chip or the composer's grip: open it as a pane of its
+ * Right-click on a ticket's tab, or a browser chip: open it as a pane of its
  * own beside the pane it's in (`fromPaneId`, in `scope`), or in a window, or bring it back once
  * it's torn off (`torn`). The keyboard way to do what dragging the tab does.
  */

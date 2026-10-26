@@ -6,7 +6,7 @@ import UIKit
 // each with its own Router) and ticket windows (TicketWindowRoot, keyed by TicketWindowValue).
 // AppModel, the BoardStore and Actions are shared by all of them. On iPad at regular
 // width, opening a ticket opens (or brings forward) its window. A pinned ticket window is one
-// torn-off tab (or browser tab, or the composer): the ticket's other windows read which ones are
+// torn-off tab (or browser tab): the ticket's other windows read which ones are
 // open (WindowDirectory.tornOff) and show Return to this window in their place.
 
 /// The scene ids HarnessApp's WindowGroups use.
@@ -206,7 +206,7 @@ final class WindowDirectory {
     }
 }
 
-/// Dragging a ticket, tab, browser tab or the composer out of its window (iPad): the item carries
+/// Dragging a ticket, tab or browser tab out of its window (iPad): the item carries
 /// the window's activity, so dropping it outside the window has iPadOS open that window.
 enum TicketWindowDrag {
     static func provider(_ value: TicketWindowValue) -> NSItemProvider {

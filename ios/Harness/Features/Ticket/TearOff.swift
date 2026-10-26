@@ -1,7 +1,7 @@
 import HarnessKit
 import SwiftUI
 
-// Tearing a ticket's tabs, browser tabs and composer off into windows of their own (iPad,
+// Tearing a ticket's tabs and browser tabs off into windows of their own (iPad,
 // ARCHITECTURE.md § Windows). Each one drags out of its window (TicketWindowDrag) and has Open in
 // New Window in its context menu; once it's torn off, its place in the ticket shows Return to this
 // window, which closes the pinned window and shows it here again. Only where the app can open
@@ -103,57 +103,5 @@ struct TornOffPlaceholder: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(c.bg)
-    }
-}
-
-/// Where the composer was, once it's torn off: one line with Return to this window.
-struct ComposerReturnBar: View {
-    let value: TicketWindowValue
-
-    @Environment(\.palette) private var c
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "macwindow").foregroundStyle(c.text3)
-            Text("The message box is in another window")
-                .font(.scaled(size: 13.5))
-                .foregroundStyle(c.text2)
-                .lineLimit(1)
-            Spacer(minLength: 4)
-            Button("Return to this window") { TearOff.returnHere(value) {} }
-                .font(.scaled(size: 13.5, weight: .semibold))
-                .buttonStyle(.glass)
-                .accessibilityIdentifier("tornOff.composer.return")
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
-        .glassEffect(.regular, in: .capsule)
-        .padding(.horizontal, 12)
-        .padding(.bottom, 8)
-    }
-}
-
-/// The composer's grip (iPad, regular width): a small handle over the field that drags the
-/// composer out into a window of its own, and opens one from its context menu.
-struct ComposerGrip: View {
-    let ticketKey: String
-
-    @Environment(\.canTearOff) private var canTearOff
-    @Environment(\.palette) private var c
-
-    var body: some View {
-        if canTearOff {
-            Capsule()
-                .fill(c.text3.opacity(0.6))
-                .frame(width: 36, height: 5)
-                .frame(width: 88, height: 16)
-                .contentShape(.rect)
-                .tearOff(.pinned(ticketKey, TicketWindowValue.composer), tornOff: false)
-                .accessibilityLabel("Message box")
-                .accessibilityHint("Drag out of the window, or touch and hold, to open it in a window of its own.")
-                .accessibilityAction(named: "Open in New Window") {
-                    WindowDirectory.shared.openTicket(.pinned(ticketKey, TicketWindowValue.composer), from: nil)
-                }
-        }
     }
 }

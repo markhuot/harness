@@ -6,9 +6,6 @@ const plugin = (pluginId: string, id: string, title: string) => ({ pluginId, id,
 const plugins = [plugin("git", "blame", "Blame"), plugin("lint", "blame", "Lint blame")];
 
 describe("tornTabName", () => {
-  test("the composer is the Message box", () => {
-    expect(tornTabName("composer", plugins)).toBe("Message box");
-  });
   test("the built-in Changes tab, and built-in tabs by label", () => {
     expect(tornTabName("changes", null)).toBe("Changes");
     expect(tornTabName("spec", null)).toBe("Spec");

@@ -70,11 +70,11 @@ describe("parsePanes: leaf contents", () => {
     expect(parseOne({ kind: "ticket", ticketKey: "A-1", tab: "plugin:git:changes" })).toEqual([{ kind: "ticket", ticketKey: "A-1", tab: "changes" }]);
     expect(parseOne({ kind: "ticket", ticketKey: "A-1", tab: "plugin:x:y" })).toEqual([{ kind: "ticket", ticketKey: "A-1", tab: "plugin:x:y" }]);
   });
-  test("a torn-off tab: valid tabs and the composer stay, an unknown tab drops the pane (it doesn't become the Spec)", () => {
+  test("a torn-off tab: valid tabs stay, an unknown tab (a saved composer pane included) drops the pane (it doesn't become the Spec)", () => {
     expect(parseOne({ kind: "ticketTab", ticketKey: "A-1", tab: "transcript" })).toEqual([{ kind: "ticketTab", ticketKey: "A-1", tab: "transcript" }]);
-    expect(parseOne({ kind: "ticketTab", ticketKey: "A-1", tab: "composer" })).toEqual([{ kind: "ticketTab", ticketKey: "A-1", tab: "composer" }]);
     expect(parseOne({ kind: "ticketTab", ticketKey: "A-1", tab: "plugin:git:changes" })).toEqual([{ kind: "ticketTab", ticketKey: "A-1", tab: "changes" }]);
     expect(parseOne({ kind: "ticketTab", ticketKey: "A-1", tab: "bogus" })).toEqual([]);
+    expect(parseOne({ kind: "ticketTab", ticketKey: "A-1", tab: "composer" })).toEqual([]);
     expect(parseOne({ kind: "ticketTab", ticketKey: "A-1" })).toEqual([]);
     expect(parseOne({ kind: "ticketTab", ticketKey: "", tab: "transcript" })).toEqual([]);
   });

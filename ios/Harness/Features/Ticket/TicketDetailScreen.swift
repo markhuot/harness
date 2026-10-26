@@ -216,17 +216,7 @@ private struct TicketDetailBody: View {
         // A plain safe-area inset: it insets the scroll content and rides the keyboard, with no
         // scroll-edge blur or background behind the composer (safeAreaBar adds both).
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            Group {
-                // Torn off into a window of its own: one line to bring it back instead.
-                if let window = tornOff.window(ticket.key, tab: TicketWindowValue.composer) {
-                    ComposerReturnBar(value: window)
-                } else {
-                    VStack(spacing: 0) {
-                        ComposerGrip(ticketKey: ticket.key)
-                        TicketDetailComposer(ticket: ticket, tab: shown, draft: draft, uploader: uploader, focusRequest: focusComposer, onTab: onTab).id(ticket.id)
-                    }
-                }
-            }
+            TicketDetailComposer(ticket: ticket, tab: shown, draft: draft, uploader: uploader, focusRequest: focusComposer, onTab: onTab).id(ticket.id)
             .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { readComposerTop($0) }
         }
         // ⇧⌘] and ⇧⌘[ step through the tabs, round the ends, as on the desktop.
@@ -377,37 +367,19 @@ private struct TicketPinnedBody: View {
     @Environment(\.palette) private var c
     /// A sub-agent or task the pinned Agents & tasks tab opened.
     @State private var agentTab: TicketTab?
-    @State private var uploader = PromptAttachmentUploader()
-
-    private var isComposer: Bool { tab == TicketWindowValue.composer }
 
     var body: some View {
-        let draft = store.messageDraft(for: ticket)
-        let outgoing = draft.attachments
-        let attachTarget: (any PromptAttachmentTarget)? = isComposer && TicketDetailLogic.acceptsMessageAttachments(ticket) ? outgoing : nil
         VStack(spacing: 0) {
             TicketDetailHero(ticket: ticket)
-            if isComposer {
-                Spacer(minLength: 0)
-            } else {
-                let shown = ChangesTab.effectiveTab(agentTab ?? tab, conductor: ticket.isConductor, workdir: ticket.workdir, pluginTabs: pluginTabs,
-                                                    subagents: store.state.subagentsOf(ticket.sessionId), events: ticket.hasEvents ?? false)
-                TicketTabBody(ticket: ticket, tab: shown, pluginTabs: pluginTabs, browserTab: value.browserTab)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .environment(\.ticketDetailOpenTab, TicketDetailTabOpener { t in
-                        guard tab == .agents else { return }
-                        agentTab = Tabs.parseSubagentTab(t) != nil ? t : nil
-                    })
-            }
+            let shown = ChangesTab.effectiveTab(agentTab ?? tab, conductor: ticket.isConductor, workdir: ticket.workdir, pluginTabs: pluginTabs,
+                                                subagents: store.state.subagentsOf(ticket.sessionId), events: ticket.hasEvents ?? false)
+            TicketTabBody(ticket: ticket, tab: shown, pluginTabs: pluginTabs, browserTab: value.browserTab)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .environment(\.ticketDetailOpenTab, TicketDetailTabOpener { t in
+                    guard tab == .agents else { return }
+                    agentTab = Tabs.parseSubagentTab(t) != nil ? t : nil
+                })
         }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            if isComposer {
-                // `.transcript`: a send has no tab to move to here.
-                TicketDetailComposer(ticket: ticket, tab: .transcript, draft: draft, uploader: uploader, onTab: { _ in }).id(ticket.id)
-            }
-        }
-        .modifier(PromptAttachmentDrop(target: attachTarget, uploader: uploader))
-        .modifier(PromptAttachmentPickers(target: attachTarget, uploader: uploader))
         .modifier(TicketPinnedHeader(ticket: ticket, value: value, name: TornOffTabs.name(tab, browserTab: value.browserTab, pluginTabs: pluginTabs)))
     }
 }

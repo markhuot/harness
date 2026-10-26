@@ -59,12 +59,8 @@ export interface FileContent {
   /** Which tab shows; the Diff tab only exists while the file has uncommitted changes. Default "file". */
   tab?: FileTab;
 }
-/** The composer, torn off like a tab (it isn't in the strip, but it drags and docks like one). */
-export const COMPOSER_TAB = "composer";
-/** What a ticket can tear off into a pane of its own: any of its tabs, or its composer. */
-export type TornTab = TicketTab | typeof COMPOSER_TAB;
 /**
- * One of a ticket's tabs (or its composer) torn off into a pane of its own (views/TicketTabPane.tsx),
+ * One of a ticket's tabs torn off into a pane of its own (views/TicketTabPane.tsx),
  * fully working, as it does in the ticket pane. `browserTab` pins a Browser pane to one tab of the
  * session's browser (no chip strip); without it a torn-off Browser keeps its strip. At most one
  * pane per ticket and tab, and per ticket and browser tab (tornKey), across a board and its pop-outs.
@@ -73,7 +69,7 @@ export type TornTab = TicketTab | typeof COMPOSER_TAB;
 export interface TicketTabContent {
   kind: "ticketTab";
   ticketKey: string;
-  tab: TornTab;
+  tab: TicketTab;
   browserTab?: number;
 }
 /** A chief of staff's pane (its Chat and Inbox tabs), opened from the board's callout card. */
@@ -180,19 +176,18 @@ export const fileRootTicket = (c: FileContent): string | null => ("ticketKey" in
 
 /**
  * Which torn-off tab a pane is, within its ticket: "browser:<n>" for a pinned browser tab, else the
- * tab's strip entry (a sub-agent's transcript is the Agents tab's), or "composer".
+ * tab's strip entry (a sub-agent's transcript is the Agents tab's).
  */
 export function tornId(c: Pick<TicketTabContent, "tab" | "browserTab">): string {
   if (c.browserTab !== undefined) return `browser:${c.browserTab}`;
-  return c.tab === COMPOSER_TAB ? COMPOSER_TAB : tabStripTab(c.tab);
+  return tabStripTab(c.tab);
 }
 /** What makes two torn-off panes the same: the ticket and the tornId. */
 export const tornKey = (c: Pick<TicketTabContent, "ticketKey" | "tab" | "browserTab">): string => `${c.ticketKey}\u0000${tornId(c)}`;
 export const tornLeafByKey = (root: PaneNode, key: string): PaneLeaf | null => leaves(root).find((l) => l.content.kind === "ticketTab" && tornKey(l.content) === key) ?? null;
 
-/** A torn-off tab's name: "Transcript", "Composer", "Changes", a plugin tab's id… (views have the live titles). */
+/** A torn-off tab's name: "Transcript", "Changes", a plugin tab's id… (views have the live titles). */
 export function tornTabLabel(c: Pick<TicketTabContent, "tab" | "browserTab">): string {
-  if (c.tab === COMPOSER_TAB) return "Composer";
   if (c.tab === "changes") return "Changes";
   if (c.browserTab !== undefined) return "Browser tab";
   if (Object.hasOwn(TAB_LABEL, c.tab)) return TAB_LABEL[c.tab as keyof typeof TAB_LABEL];
@@ -1089,11 +1084,11 @@ export function clampSizes(sizes: readonly number[], mins: readonly number[], to
 // Drag and drop
 // ---------------------------------------------------------------------------
 
-/** A ticket's tab (a tab button, a browser chip with `browserTab`, the composer's grip) being dragged off into a pane of its own. */
+/** A ticket's tab (a tab button, a browser chip with `browserTab`) being dragged off into a pane of its own. */
 export interface TabDrag {
   kind: "tab";
   ticketKey: string;
-  tab: TornTab;
+  tab: TicketTab;
   browserTab?: number;
 }
 /** What's being dragged onto the workspace: a ticket (a board card or child row), a ticket's tab, or a pane by its header. */
@@ -1213,7 +1208,7 @@ export function splitTarget(state: PaneState, fromLeafId: string | null = null, 
 
 /** The narrowest a pane may get: the board keeps its columns usable, a ticket its header and tabs, a terminal ~40 columns, a file ~40 columns past its line numbers. */
 export const PANE_MIN_WIDTH = { board: 320, ticket: 360, ticketTab: 360, cos: 360, terminal: 320, compose: 360, file: 360 } as const;
-/** The shortest any pane may get in a column split (a torn-off composer included: its input, attachments and send bar). */
+/** The shortest any pane may get in a column split. */
 export const PANE_MIN_HEIGHT = 200;
 
 /**
@@ -1450,7 +1445,7 @@ function parseContent(v: unknown): PaneContent | null {
   if (v.kind === "cos" && typeof v.scope === "string" && v.scope) return { kind: "cos", scope: v.scope, tab: isCosTab(v.tab) ? v.tab : "chat" };
   if (v.kind === "ticketTab" && typeof v.ticketKey === "string" && v.ticketKey && typeof v.tab === "string") {
     // A tab that isn't one (any more) has nothing to show: the pane goes, rather than turn into the Spec.
-    const tab: TornTab | null = v.tab === COMPOSER_TAB ? COMPOSER_TAB : ticketTabWithChanges(v.tab);
+    const tab = ticketTabWithChanges(v.tab);
     if (!tab) return null;
     const t: TicketTabContent = { kind: "ticketTab", ticketKey: v.ticketKey, tab };
     if (tab === "browser" && typeof v.browserTab === "number" && Number.isInteger(v.browserTab) && v.browserTab >= 0) t.browserTab = v.browserTab;
@@ -1655,7 +1650,7 @@ export interface TornOff {
 }
 
 /**
- * Which of `ticketKey`'s tabs are torn off, by tornId ("transcript", "composer", "browser:3"…), as
+ * Which of `ticketKey`'s tabs are torn off, by tornId ("transcript", "browser:3"…), as
  * board `boardScope` sees them: in its own tree or in a pop-out window. Read from the shared store,
  * so the main window and the pop-outs agree.
  */
@@ -1687,10 +1682,10 @@ const FALLBACK_TABS: TicketTab[] = ["spec", "activity", "transcript", "details"]
 /**
  * `torn` was just torn off: a ticket pane of its ticket showing that tab (in the board or a pop-out)
  * moves to another one rather than sit on its placeholder, so tearing Transcript off a ticket on
- * the Transcript leaves the two side by side. The composer and a browser tab have no tab to leave.
+ * the Transcript leaves the two side by side. A browser tab has no tab to leave.
  */
 function leaveTornTab(store: PaneStore, boardScope: string, torn: TicketTabContent): PaneStore {
-  if (torn.tab === COMPOSER_TAB || torn.browserTab !== undefined) return store;
+  if (torn.browserTab !== undefined) return store;
   const gone = tornOffTabs(store, torn.ticketKey, boardScope);
   const to = FALLBACK_TABS.find((t) => !gone.has(t));
   if (!to) return store;
@@ -1749,15 +1744,14 @@ export function popOutContent(store: PaneStore, boardScope: string, content: Pan
 /**
  * Return to this window: close the torn-off tab `id` of `ticketKey` (its pane, or its pop-out
  * window) and show the tab in the ticket's pane again, focused (a browser tab shows the Browser
- * tab; the composer has no tab to show). The same store when it isn't torn off.
+ * tab). The same store when it isn't torn off.
  */
 export function returnTab(store: PaneStore, boardScope: string, ticketKey: string, id: string): PaneStore {
   const torn = tornOffTabs(store, ticketKey, boardScope).get(id);
   if (!torn) return store;
   let next = withScope(store, torn.scope, torn.window ? null : closePane(store.scopes[torn.scope]!, torn.leafId));
   const c = torn.content;
-  const tab: TicketTab | null = c.tab === COMPOSER_TAB ? null : c.browserTab !== undefined ? "browser" : c.tab;
-  if (!tab) return next;
+  const tab: TicketTab = c.browserTab !== undefined ? "browser" : c.tab;
   for (const scope of windowScopes(next, boardScope)) {
     const s = next.scopes[scope]!;
     const pane = ticketLeafByKey(s.root, ticketKey);

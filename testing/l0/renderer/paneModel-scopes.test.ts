@@ -26,7 +26,7 @@ const storeOk = (s: PaneStore) => {
   expect(new Set(ids).size).toBe(ids.length);
 };
 const tk = (key: string, tab: "spec" | "transcript" | "details" | "activity" = "spec"): PaneContent => ({ kind: "ticket", ticketKey: key, tab });
-const tab = (key: string, t: "transcript" | "browser" | "composer" | "details" | "spec", browserTab?: number): PaneContent =>
+const tab = (key: string, t: "transcript" | "browser" | "changes" | "details" | "spec", browserTab?: number): PaneContent =>
   ({ kind: "ticketTab", ticketKey: key, tab: t, ...(browserTab !== undefined ? { browserTab } : {}) }) as PaneContent;
 const popoutOf = (leaf: ReturnType<typeof ticket>): PaneState => st(leaf, leaf.id);
 
@@ -141,14 +141,14 @@ describe("tornOffTabs / popoutShowing", () => {
   const s = store({
     p1: st(row("r", [board("B"), ticket("t", "A-1"), torn("g", "A-1", "transcript"), torn("o", "A-2", "transcript")])),
     p2: st(row("r2", [board("B2"), torn("h", "A-1", "details")])),
-    "popout:w1": popoutOf(torn("w", "A-1", "composer")),
+    "popout:w1": popoutOf(torn("w", "A-1", "changes")),
     "popout:w2": popoutOf(torn("v", "A-1", "browser", 3)),
   });
   test("collects the board's own tab and every pop-out's, keyed by tornId, with where each is", () => {
     const m = tornOffTabs(s, "A-1", "p1");
-    expect([...m.keys()].sort()).toEqual(["browser:3", "composer", "transcript"]);
+    expect([...m.keys()].sort()).toEqual(["browser:3", "changes", "transcript"]);
     expect(m.get("transcript")).toMatchObject({ scope: "p1", leafId: "g", window: false });
-    expect(m.get("composer")).toMatchObject({ scope: "popout:w1", leafId: "w", window: true });
+    expect(m.get("changes")).toMatchObject({ scope: "popout:w1", leafId: "w", window: true });
   });
   test("another board's torn-off tabs don't count, and neither do other tickets'", () => {
     expect(tornOffTabs(s, "A-1", "p1").has("details")).toBe(false);
@@ -157,14 +157,14 @@ describe("tornOffTabs / popoutShowing", () => {
     expect([...tornOffTabs(s, "A-2", "p1").keys()]).toEqual(["transcript"]);
   });
   test("a board scope with no stored panes sees only the pop-outs", () => {
-    expect([...tornOffTabs(s, "A-1", "never-opened").keys()].sort()).toEqual(["browser:3", "composer"]);
+    expect([...tornOffTabs(s, "A-1", "never-opened").keys()].sort()).toEqual(["browser:3", "changes"]);
   });
   test("when a tab is torn off in the board and a window, the board's wins", () => {
     const both = store({ p1: st(row("r", [board("B"), torn("g", "A-1", "transcript")])), "popout:w": popoutOf(torn("w", "A-1", "transcript")) });
     expect(tornOffTabs(both, "A-1", "p1").get("transcript")!.scope).toBe("p1");
   });
   test("popoutShowing finds the window of a ticket or torn-off tab, never the board or a board scope", () => {
-    expect(popoutShowing(s, tab("A-1", "composer"))?.scope).toBe("popout:w1");
+    expect(popoutShowing(s, tab("A-1", "changes"))?.scope).toBe("popout:w1");
     expect(popoutShowing(s, tab("A-1", "browser", 3))?.scope).toBe("popout:w2");
     expect(popoutShowing(s, tab("A-1", "browser", 4))).toBeNull();
     expect(popoutShowing(s, tab("A-1", "transcript"))).toBeNull(); // only torn off in a board
@@ -212,11 +212,9 @@ describe("popOutContent", () => {
     const withSpec = popOutContent(popOutContent(start, "p1", tab("A-1", "spec"), "w0"), "p1", tab("A-1", "transcript"), "w1");
     expect(findLeaf(withSpec.scopes.p1!.root, "t")!.content).toMatchObject({ tab: "activity" });
   });
-  test("a ticket pane on another tab is left alone, as are the composer and a pinned browser tab", () => {
+  test("a ticket pane on another tab is left alone, as is one on a pinned browser tab", () => {
     const s = popOutContent(base(), "p1", tab("A-2", "details"), "w1");
     expect(findLeaf(s.scopes.p1!.root, "u")!.content).toMatchObject({ tab: "spec" });
-    const c = popOutContent(base(), "p1", tab("A-1", "composer"), "w2");
-    expect(findLeaf(c.scopes.p1!.root, "t")!.content).toMatchObject({ tab: "transcript" });
     const b = popOutContent(store({ p1: st(row("r", [board("B"), ticket("t", "A-1", "browser")])) }), "p1", tab("A-1", "browser", 1), "w3");
     expect(findLeaf(b.scopes.p1!.root, "t")!.content).toMatchObject({ tab: "browser" });
   });
@@ -257,14 +255,10 @@ describe("returnTab", () => {
     expect(findLeaf(out.scopes["popout:a"]!.root, "t")!.content).toMatchObject({ tab: "details" });
     expect(out.scopes["popout:b"]).toBeUndefined();
   });
-  test("a pinned browser tab returns to the Browser tab; the composer has no tab to show", () => {
+  test("a pinned browser tab returns to the Browser tab", () => {
     const b = store({ p1: st(row("r", [board("B"), ticket("t", "A-1"), torn("g", "A-1", "browser", 2)])) });
     const out = returnTab(b, "p1", "A-1", "browser:2");
     expect(findLeaf(out.scopes.p1!.root, "t")!.content).toMatchObject({ tab: "browser" });
-    const c = store({ p1: st(row("r", [board("B"), ticket("t", "A-1", "details"), torn("g", "A-1", "composer")]), "t") });
-    const back = returnTab(c, "p1", "A-1", "composer");
-    expect(leaves(back.scopes.p1!.root).map((l) => l.id)).toEqual(["B", "t"]);
-    expect(findLeaf(back.scopes.p1!.root, "t")!.content).toMatchObject({ tab: "details" });
   });
   test("with no ticket pane to return to, the torn-off pane still closes", () => {
     const s = store({ p1: st(row("r", [board("B"), torn("g", "A-1", "transcript")])) });
@@ -330,7 +324,7 @@ describe("dropInStore", () => {
     expect(out.scopes["popout:w"]).toBeUndefined();
     expect(leaves(out.scopes.p1!.root).filter((l) => l.content.kind === "ticketTab")).toHaveLength(1);
   });
-  test("the composer and a browser tab torn off leave the ticket's tab alone", () => {
+  test("a browser tab torn off leaves the ticket's tab alone", () => {
     const s = store({ p1: st(row("r", [board("B"), ticket("t", "A-1", "browser")])) });
     const out = dropInStore(s, "p1", { kind: "tab", ticketKey: "A-1", tab: "browser", browserTab: 1 }, "t", "right");
     expect(findLeaf(out.scopes.p1!.root, "t")!.content).toMatchObject({ tab: "browser" });

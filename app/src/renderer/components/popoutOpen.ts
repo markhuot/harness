@@ -1,6 +1,6 @@
 // Opening pop-out windows from the renderer: popping a pane out (its header button, ⇧⌘O, dragging
-// its grip out of the window), opening content straight into a window (dragging a card, a tab or
-// the composer out, Open in New Window), and putting a pop-out back on its board. The store side is
+// its grip out of the window), opening content straight into a window (dragging a card or a tab
+// out, Open in New Window), and putting a pop-out back on its board. The store side is
 // state/panes.ts ("Pop-out windows"); main.ts owns the windows.
 
 import { projectGroups, type Project } from "@harness/shared";

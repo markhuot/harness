@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type MouseEvent } from "react";
 import { conductorManagedReason, isConductor, keyLabel, managingConductor, MAX_PROMPT_ATTACHMENTS, resolveBaseBranch, type Attachment, type RelatedTicket, type RemoteKeyMatches, type Ticket } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import { messageDraftSession, unloadMessageDrafts } from "../state/messageDraftSession";
@@ -69,13 +69,10 @@ import { MentionTextarea } from "../components/MentionTextarea";
 import { useBoardScope, useOpenTicket, usePaneScope, usePopout } from "../components/paneContext";
 import { PaneGrip, PaneWindowButton } from "../components/paneHeader";
 import { dragProps, tabContextMenu } from "../components/paneDrag";
-import { ComposerReturnBar, TornMark, TornPlaceholder } from "../components/TornOff";
-import { formatRoute } from "../state/route";
+import { TornMark, TornPlaceholder } from "../components/TornOff";
 import { tornTabName } from "../state/tornTabName";
 import {
   closePane,
-  COMPOSER_TAB,
-  popoutIdOf,
   renameTicketKey,
   returnTabPane,
   setTab as setPaneTab,
@@ -85,8 +82,6 @@ import {
   updatePanes,
   useTornOffTabs,
   type TabDrag,
-  type TornOff,
-  type TornTab,
 } from "../state/panes";
 import { keysArea, useCommands } from "../components/commands";
 import { commandKeys } from "../state/keys";
@@ -136,18 +131,9 @@ export function scrollCommands(root: () => HTMLElement | null) {
   };
 }
 
-/**
- * `i` from anywhere in a ticket: its composer, wherever it is. There's one per ticket, in its
- * ticket pane or torn off, so the first in this window is it; a composer torn off into a window of
- * its own brings that window forward (its pane focuses the input there: TicketTabPane).
- */
-export function focusTicketComposer(ticketKey: string, torn: TornOff | undefined, boardScope: string) {
-  const el = document.querySelector<HTMLElement>(`.pane[data-pane-ticket="${CSS.escape(ticketKey)}"] .composer-input`);
-  if (el) return el.focus();
-  if (torn?.window) {
-    const id = popoutIdOf(torn.scope);
-    void window.harness?.popout.open({ id, route: formatRoute({ view: "popout", id, fromScope: boardScope }) });
-  }
+/** `i` from anywhere in a ticket: its composer, the one in the first of the ticket's panes in this window. */
+export function focusTicketComposer(ticketKey: string) {
+  document.querySelector<HTMLElement>(`.pane[data-pane-ticket="${CSS.escape(ticketKey)}"] .composer-input`)?.focus();
 }
 
 /**
@@ -246,7 +232,7 @@ export function TicketDetail({
   const scope = usePaneScope();
   const boardScope = useBoardScope();
   const { ticket, missing, related, pluginTabs, specAttachments } = useTicketData(ticketKey);
-  // Which of its tabs (and its composer) are torn off into panes or windows of their own.
+  // Which of its tabs are torn off into panes or windows of their own.
   const torn = useTornOffTabs(ticket?.key ?? ticketKey, boardScope);
 
   // Escape (closing the focused pane, or ending a zoom) is handled by the workspace.
@@ -282,7 +268,7 @@ export function TicketDetail({
     "tab.next": tabs.length > 1 && (() => goTab(nextTab(tabs, tab, 1))),
     "tab.prev": tabs.length > 1 && (() => goTab(nextTab(tabs, tab, -1))),
     ...Object.fromEntries(Array.from({ length: 9 }, (_, i) => [`tab.${i + 1}`, !!tabs[i] && (() => goTab(tabs[i]!))])),
-    "ticket.compose": !!ticket && (() => focusTicketComposer(ticket!.key, torn.get(COMPOSER_TAB), boardScope)),
+    "ticket.compose": !!ticket && (() => focusTicketComposer(ticket!.key)),
     ...scrollCommands(() => asideRef.current?.querySelector(".detail-body") ?? null),
   });
   /** ←/→ (and Home/End) on a focused tab move along the strip, as in any tablist. */
@@ -331,9 +317,8 @@ export function TicketDetail({
   const agentsRunning = subagents?.some((a) => a.status === "running") ?? false;
   // The tab shown, when it's torn off: its body is a placeholder with the way back.
   const tornShown = torn.get(tornId({ tab }));
-  const tornComposer = torn.get(COMPOSER_TAB);
   const back = (id: string) => returnTabPane(boardScope, ticket.key, id);
-  const tabDrag = (t: TornTab): TabDrag => ({ kind: "tab", ticketKey: ticket.key, tab: t });
+  const tabDrag = (t: TicketTab): TabDrag => ({ kind: "tab", ticketKey: ticket.key, tab: t });
 
   // role=tab props: one tab stop (the current tab, where pane focus lands), the rest by ←/→. Each
   // drags off into a pane of its own (or out of the window), and its menu does the same.
@@ -401,17 +386,12 @@ export function TicketDetail({
           />
         )}
       </div>
-      {tornComposer ? (
-        <ComposerReturnBar torn={tornComposer} onReturn={() => back(COMPOSER_TAB)} />
-      ) : (
-        <MessageComposer
-          ticket={ticket}
-          key={ticket.id}
-          // The Transcript shows what was sent, unless it's torn off (it's on screen there).
-          onSent={() => !torn.has("transcript") && setTab(tabAfterSend(tab, true))}
-          grip={<ComposerGrip ticket={ticket} scope={scope} boardScope={boardScope} paneId={paneId} />}
-        />
-      )}
+      <MessageComposer
+        ticket={ticket}
+        key={ticket.id}
+        // The Transcript shows what was sent, unless it's torn off (it's on screen there).
+        onSent={() => !torn.has("transcript") && setTab(tabAfterSend(tab, true))}
+      />
     </aside>
   );
 }
@@ -487,22 +467,6 @@ export function TicketTabBody({
     </FileLinkScope>
     </SpecAttachmentsScope>
     </AnnotateScope>
-  );
-}
-
-/** The composer's grip, on its top edge: drags it off into a pane (or window) of its own, like a tab. */
-export function ComposerGrip({ ticket, scope, boardScope, paneId }: { ticket: Ticket; scope: string; boardScope: string; paneId: string }) {
-  const drag: TabDrag = { kind: "tab", ticketKey: ticket.key, tab: COMPOSER_TAB };
-  return (
-    <div
-      className="composer-grip"
-      data-testid="composer-grip"
-      title="Drag to put the message box in a pane of its own (or out of the window)"
-      {...dragProps(drag, { chip: keyLabel(ticket), title: ticket.title, tab: tornTabName(COMPOSER_TAB, null) }, boardScope)}
-      onContextMenu={(e) => void tabContextMenu(e, scope, boardScope, paneId, drag, undefined)}
-    >
-      <span className="composer-grip-bar" />
-    </div>
   );
 }
 
@@ -825,8 +789,8 @@ interface ComposerAnnotate {
 }
 
 /**
- * Each ticket's composer in this window, by ticket key: there's one per ticket, in its pane or
- * torn off into a pane of its own, and Annotate from any of its tabs adds to it.
+ * Each ticket's composer in this window, by ticket key: there's one per ticket, in its pane,
+ * and Annotate from any of its tabs adds to it.
  */
 const ticketComposers = new Map<string, ComposerAnnotate>();
 
@@ -835,7 +799,7 @@ const ticketComposers = new Map<string, ComposerAnnotate>();
 addEventListener("beforeunload", () => void unloadMessageDrafts());
 addEventListener("pagehide", () => void unloadMessageDrafts());
 
-/** The ticket's composer in this window; torn off into a window of its own, it can't take notes from here. */
+/** The ticket's composer in this window; the ticket's pane in another window can't take notes from here. */
 function composerFor(ticketKey: string): ComposerAnnotate {
   const c = ticketComposers.get(ticketKey);
   if (!c) throw new Error("The message box is in another window. Bring it back to this one to add notes to your message");
@@ -845,14 +809,13 @@ function composerFor(ticketKey: string): ComposerAnnotate {
 /**
  * The ticket's composer. Once a message is sent, onSent shows the Transcript, where it and the
  * answer appear. (+) attaches files the way a New session does (pick, or paste an image; drops and
- * ⌘V of files work too); they show above the input until the message goes, and go with it. `grip`
- * (on its top edge) drags it off into a pane of its own; torn off, it fills that pane (`fill`).
+ * ⌘V of files work too); they show above the input until the message goes, and go with it.
  * Annotate (anywhere in the ticket) adds the image here with its notes (metadata on the attachment;
  * the image isn't changed) and focuses the input for the human to say why; annotating a waiting
  * image again edits its notes in place. Send, at the input's right with its shortcut in it (like
  * New session's Start session), sends the files with their notes.
  */
-export function MessageComposer({ ticket, onSent, grip, fill = false }: { ticket: Ticket; onSent: () => void; grip?: ReactNode; fill?: boolean }) {
+export function MessageComposer({ ticket, onSent }: { ticket: Ticket; onSent: () => void }) {
   const { client, dispatch, toast } = useStore();
   const act = useAction();
   const [sending, setSending] = useState(false);
@@ -902,7 +865,7 @@ export function MessageComposer({ ticket, onSent, grip, fill = false }: { ticket
   };
   const annotateRef = useRef<ComposerAnnotate | null>(null);
   annotateRef.current = { add: annotate, annotationOf: (a) => waitingAnnotation(listRef.current, a) };
-  // This window's composer for the ticket while it's mounted (in its pane, or torn off into one).
+  // This window's composer for the ticket while it's mounted (in its pane).
   useEffect(() => {
     const entry: ComposerAnnotate = { add: (a) => annotateRef.current!.add(a), annotationOf: (a) => annotateRef.current!.annotationOf(a) };
     ticketComposers.set(ticket.key, entry);
@@ -924,11 +887,9 @@ export function MessageComposer({ ticket, onSent, grip, fill = false }: { ticket
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    // A torn-off composer's input fills its pane (CSS); one in a ticket grows with its text.
-    if (fill) return void (el.style.height = "");
     el.style.height = "auto";
     el.style.height = Math.min(el.scrollHeight, 220) + "px";
-  }, [text, fill]);
+  }, [text]);
 
   // Focus the reply box when the agent is waiting on an answer.
   useEffect(() => {
@@ -953,16 +914,14 @@ export function MessageComposer({ ticket, onSent, grip, fill = false }: { ticket
     } else draft.sendFailed();
   };
 
-  // Its own Annotate scope: a waiting image's lightbox annotates it here, also when the composer
-  // is torn off into a pane of its own (away from the tabs' scope).
+  // Its own Annotate scope: a waiting image's lightbox annotates it here (outside the tabs' scope).
   return (
     <AnnotateScope onAdd={annotate} annotationOf={(a) => waitingAnnotation(listRef.current, a)}>
     <div
-      className={`composer ${ticket.status === "blocked" ? "attention" : ""} ${attach.dropping ? "dropping" : ""} ${fill ? "composer-fill" : ""}`}
+      className={`composer ${ticket.status === "blocked" ? "attention" : ""} ${attach.dropping ? "dropping" : ""}`}
       data-testid="composer"
       {...attach.dropProps}
     >
-      {grip}
       <PromptAttachmentList
         items={attachments}
         onRemove={attach.remove}

@@ -3591,12 +3591,11 @@ collapses and resizes (`state/layout.ts`); the rest of the window (`<main>`) sho
   button. File panes persist with the rest of the tree, follow a ticket rename, and close when
   their ticket is deleted.
 - **Torn-off tabs.** Any tab of a ticket pane (Spec, Activity, Transcript, Agents, Tickets,
-  Changes, Details, Browser, sub-agent and plugin tabs), one chip of its browser strip, or its
-  composer can be torn off into a pane of its own: a `ticketTab` leaf, `tab` being a `TicketTab`
-  or the reserved `"composer"`, and `browserTab` pinning a Browser pane to one browser tab.
+  Changes, Details, Browser, sub-agent and plugin tabs), or one chip of its browser strip
+  can be torn off into a pane of its own: a `ticketTab` leaf, `tab` being a `TicketTab`, and `browserTab` pinning a Browser pane to one browser tab.
   `views/TicketTabPane.tsx` renders it with a slim header (grip, key, the tab's name, a pinned
   page's title; More has Return to ticket and the Move pane rows, unlike the full ticket pane, whose title bar has no menu) and no strip. Its body is the
-  ticket pane's own (`TicketTabBody`, `MessageComposer`), with the same handlers, so it's fully
+  ticket pane's own (`TicketTabBody`), with the same handlers, so it's fully
   working, and it registers the ticket's actions (`useTicketActions`) and carries
   `data-pane-ticket`, so the palette's ticket commands, j/k/Space/g/G and `i` (the ticket's one
   composer, wherever it is: `focusTicketComposer`) work from it. A pinned browser pane has no chip
@@ -3611,13 +3610,11 @@ collapses and resizes (`state/layout.ts`); the rest of the window (`<main>`) sho
   and where, read from the shared store so the main window and pop-outs agree. The ticket pane
   keeps a torn-off tab in its strip with a mark; selecting it shows "Transcript is in another
   pane / window" with **Return to this window** (`returnTab`: close that pane or pop-out, then
-  show and focus the tab in the ticket pane). A torn-off chip's canvas gets the same placeholder,
-  and a torn-off composer leaves a one-line bar. Closing a torn-off pane any other way brings the
-  tab back by itself, since the placeholder is derived from the store. Each tab, chip and the
-  composer's grip has a context menu: Open to the Right/Below/Left/Above, Open in New Window, and
+  show and focus the tab in the ticket pane). A torn-off chip's canvas gets the same placeholder. Closing a torn-off pane any other way brings the
+  tab back by itself, since the placeholder is derived from the store. Each tab and chip has a context menu: Open to the Right/Below/Left/Above, Open in New Window, and
   Return to this window once torn off.
 - **Drag to split.** Board cards, a conductor's child rows, a pane's header grip, a ticket's tab
-  buttons, browser chips and the composer's top-edge grip are drag sources (`dragProps` in
+  buttons, and browser chips are drag sources (`dragProps` in
   `components/paneDrag.tsx`). They put the ticket key (`application/x-harness-ticket`), the pane's
   leaf id (`application/x-harness-pane`) or `{ ticketKey, tab, browserTab? }` as JSON
   (`application/x-harness-ticket-tab`) in the DataTransfer, along with a compact key-and-title
@@ -3636,7 +3633,7 @@ collapses and resizes (`state/layout.ts`); the rest of the window (`<main>`) sho
   asks `dragOutPoint` (`state/dragOut.ts`): a drag nobody took (`dropEffect` "none") let go
   outside the window's outer bounds pops what it carries into a window under the pointer. A grip
   pops its pane out (`popOut`); a card or child row moves its ticket's open pane, else opens a new
-  ticket leaf; a tab, chip or the composer moves its torn-off pane, else opens a new one
+  ticket leaf; a tab or chip moves its torn-off pane, else opens a new one
   (`popOutContent`, deduped like `dropContent`; content already in a window brings that window
   forward). Escape ends a drag with the pointer inside the window, so it never pops out; a drag
   let go over another app does, since no other app takes our types. Docking against the board leaves
@@ -3672,7 +3669,7 @@ collapses and resizes (`state/layout.ts`); the rest of the window (`<main>`) sho
   are gone from the View menu, and Actual Size stays so an old zoom can be undone. While dragging, a full-window overlay
   (`useDragOverlay`, shared with the sidebar's handle) keeps iframes and the browser canvas from
   taking the pointer. Minimums: the board 320 px wide, a ticket or torn-off tab 360 px, a terminal 320 px, a file 360 px, any
-  pane (a torn-off composer included) 200 px tall.
+  pane 200 px tall.
   They also hold at layout time. `layoutPanes` gets the workspace's measured size and clamps
   each split's stored sizes (`clampSizes`), so a narrow window or a layout saved somewhere wider
   never shows a pane below its minimum while there's room. The stored sizes stay as they were
@@ -3984,8 +3981,8 @@ the conventions, and ios/README.md the build and test commands.
   reference and open again at their place. The docked tickets come back after the app is quit or
   relaunched (kept on the device only). Pop-out opens the ticket in a
   window of its own, as does Open in New Window in a card's or the ticket's menu. Narrow windows
-  keep the phone's bottom sheet and dock. Any ticket tab, any single browser tab and the
-  composer tear off into a pinned window of their own: dragged out of the window (the drag
+  keep the phone's bottom sheet and dock. Any ticket tab and any single browser tab
+  tear off into a pinned window of their own: dragged out of the window (the drag
   carries the window's NSUserActivity, so iPadOS opens it) or from the thing's context menu
   (Open in New Window). A pinned window shows only that one tab, fully working, under the
   ticket's title line. The ticket's other windows show **Return to this window** in its place,
