@@ -80,6 +80,11 @@ public struct TicketActionSet: Equatable, Sendable {
 }
 
 public enum TicketActions {
+    /// A block that waits on the human: no restart time, no run going, no tool approval to answer.
+    public static func canUnblock(_ ticket: Ticket) -> Bool {
+        ticket.status == .blocked && ticket.draft != true && Conductor.restartsAt(ticket) == nil && !ticket.busy && ticket.pendingApproval == nil
+    }
+
     /// What `ticket` offers now. `deps` are its dependencies' states, `parent` its parent ticket
     /// (a managing conductor), `settingsBaseBranch` the app's base branch setting.
     public static func set(for ticket: Ticket, project: Project?, parent: Ticket?, deps: [DepState], settingsBaseBranch: String?) -> TicketActionSet {
@@ -96,7 +101,7 @@ public enum TicketActions {
         }
 
         // A block that waits on the human: no restart time, no run going, no tool approval to answer.
-        if ticket.status == .blocked, Conductor.restartsAt(ticket) == nil, !ticket.busy, ticket.pendingApproval == nil {
+        if canUnblock(ticket) {
             primary.append(TicketActionItem(.unblock, enabled: !compacting))
         }
 

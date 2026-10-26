@@ -22,6 +22,8 @@ struct TicketDetailSpecTab: View {
     @State private var failed: String?
     /// Why the revision Show changes compares with couldn't load
     @State private var previousFailed: String?
+    /// Runs the callout's Unblock (its notes sheet): the same runner type the header uses
+    @State private var runner = TicketActionRunner()
 
     var body: some View {
         let state = store.state
@@ -36,10 +38,12 @@ struct TicketDetailSpecTab: View {
         VStack(spacing: 0) {
             SpecHistoryBar(ticket: ticket, scrubber: $scrubber, showChanges: $showChanges, rendered: $rendered, menu: menu, latest: latest)
             if source, let body {
+                TicketBlockedCallout(ticket: ticket, runner: runner).padding([.horizontal, .top], 14)
                 SpecSourceView(text: body)
             } else {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
+                    TicketBlockedCallout(ticket: ticket, runner: runner)
                     if !deps.isEmpty {
                         FlowLayout(spacing: 6) {
                             SectionTitle("Depends on")
@@ -90,6 +94,7 @@ struct TicketDetailSpecTab: View {
             .ticketHeroScroll()
             }
         }
+        .modifier(TicketActionHost(runner: runner))
         // The revision list: once, and again when a revision it doesn't have shows up.
         .task(id: "\(ticket.id)#\(latest)#\(store.epoch)") {
             guard SpecHistory.needsRevisions(store.state, ticketId: ticket.id, latest: latest), let api = store.api else { return }
@@ -354,6 +359,65 @@ private struct TicketPromptAttachments: View {
                 if downloading { ProgressView().controlSize(.mini) }
             }
             OpenablePromptAttachmentList(tiles: tiles, downloading: $downloading)
+        }
+    }
+}
+
+/// The blocked ticket's status, question and buttons at the top of the Spec tab, so the human can
+/// answer the agent without leaving the spec (BlockedCallout decides what shows). Display-only:
+/// drawn above the spec, never part of its text. Unblock runs the header's action, through the
+/// tab's own runner and its notes sheet.
+struct TicketBlockedCallout: View {
+    let ticket: Ticket
+    let runner: TicketActionRunner
+
+    @Environment(BoardStore.self) private var store
+    @Environment(Actions.self) private var actions
+    @State private var expanded = false
+
+    /// A question longer than this many characters (or lines) is clamped until Show all.
+    private static let clampChars = 600
+    private static let clampLines = 10
+
+    var body: some View {
+        switch BlockedCallout.of(ticket) {
+        case .none:
+            EmptyView()
+        case .approval(let approval):
+            TicketDetailApprovalCard(ticket: ticket, approval: approval).id(approval.id)
+        case .restart(let at, let reason):
+            let time = Date(timeIntervalSince1970: at / 1000).formatted(date: .omitted, time: .shortened)
+            Callout(tone: .amber, icon: "clock", title: "Blocked · restarts at \(time)") {
+                VStack(alignment: .leading, spacing: 6) {
+                    if !reason.isEmpty { question(reason) }
+                    Text(Conductor.restartTitle(time)).font(.scaled(size: 13)).foregroundStyle(.secondary)
+                }
+            }
+            .accessibilityIdentifier("blocked-callout")
+        case .question(let text, let unblock):
+            Callout(tone: .amber, icon: "alert", title: "Blocked · waiting on your answer") {
+                VStack(alignment: .leading, spacing: 8) {
+                    if !text.isEmpty { question(text) }
+                    if unblock {
+                        HButton("Unblock", icon: "play", variant: .primary, small: true, fullWidth: false, haptic: nil) {
+                            runner.run(.unblock, ticket: ticket, api: store.api, actions: actions)
+                        }
+                        .disabled(ticket.compacting == true)
+                    }
+                }
+            }
+            .accessibilityIdentifier("blocked-callout")
+        }
+    }
+
+    @ViewBuilder private func question(_ text: String) -> some View {
+        let long = text.count > Self.clampChars || text.split(separator: "\n", omittingEmptySubsequences: false).count > Self.clampLines
+        MarkdownView(text: text, size: 15)
+            .frame(maxHeight: long && !expanded ? 170 : nil, alignment: .top)
+            .clipped()
+        if long {
+            Button(expanded ? "Show less" : "Show all") { expanded.toggle() }
+                .font(.scaled(size: 13, weight: .semibold))
         }
     }
 }

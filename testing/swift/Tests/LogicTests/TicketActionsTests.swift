@@ -79,3 +79,40 @@ private func primary(_ t: Ticket) -> [TicketAction] {
         #expect(Conductor.approvedStandIn(ticket(.review, human: .approved), managed: true) == nil)
     }
 }
+
+@Suite struct BlockedCalloutTests {
+    private func blocked(_ reason: String? = "  Postgres or SQLite?\n", resumeAt: Timestamp? = nil, pending: PendingApproval? = nil, busy: Bool = false, draft: Bool? = nil) -> Ticket {
+        var t = ticket(.blocked, resumeAt: resumeAt, pending: pending, busy: busy, draft: draft)
+        t.blockedReason = reason
+        return t
+    }
+
+    @Test func onlyABlockedTicketHasOne() {
+        var t = blocked()
+        t.status = .inProgress
+        #expect(BlockedCallout.of(t) == .none)
+        #expect(BlockedCallout.of(blocked(draft: true)) == .none)
+    }
+
+    @Test func aBlockWaitingOnTheHumanShowsTheTrimmedQuestionWithUnblock() {
+        #expect(BlockedCallout.of(blocked()) == .question("Postgres or SQLite?", unblock: true))
+        #expect(BlockedCallout.of(blocked(nil)) == .question("", unblock: true))
+    }
+
+    @Test func aRunGoingHidesUnblockButKeepsTheQuestion() {
+        #expect(BlockedCallout.of(blocked(busy: true)) == .question("Postgres or SQLite?", unblock: false))
+    }
+
+    @Test func aRestartTimeShowsWhenItRestartsAndNoUnblock() {
+        #expect(BlockedCallout.of(blocked("Usage limit", resumeAt: 5000)) == .restart(at: 5000, reason: "Usage limit"))
+    }
+
+    @Test func aPendingApprovalWinsOverTheReasonAndTheRestartTime() {
+        let approval = PendingApproval(id: "a", runId: "r", toolName: "Bash", input: .null, requestedAt: 0)
+        guard case .approval(let shown) = BlockedCallout.of(blocked(resumeAt: 5000, pending: approval)) else {
+            Issue.record("not an approval")
+            return
+        }
+        #expect(shown.id == "a")
+    }
+}
