@@ -11,6 +11,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Added
 
+- A blocked ticket now shows its status, the agent's question and an Unblock button at the top of the Spec tab on the Mac and on iPhone and iPad, so you can answer without switching to Activity. A usage-limit block shows when it restarts, and a waiting tool approval shows its Allow and Deny buttons. The callout is only drawn over the spec; it is never saved into the spec text.
 - The chief of staff can now follow the tickets it dispatches with `subscribe_ticket` and is woken, once per change, to summarize them when they finish (especially research across several projects). A switched-off chief isn't woken, and a ticket that leaves a scoped chief's group stops waking it.
 - A ticket that has had events aimed at it (a child ticket's change, a subscription) now has an **Events** tab on the Mac and on iPhone, iPad and iPhone Duo, listing them newest first with what kind each is. The tab only shows once there is something in it, and goes away if its events are cleaned up. A ticket's agents already read the same events with `list_inbox`.
 - Settings → General has **Keep event history for** on the Mac and on iPhone and iPad (1 to 365 days, 7 by default): how long handled and ignored events are kept.
