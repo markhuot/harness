@@ -1,6 +1,6 @@
 // What a ticket pane shows in place of a tab that's torn off into a pane or window of its own
 // (state/panes.ts "ticketTab"): the tab stays in the strip, and selecting it shows where it went
-// with a Return to this window button. The composer gets a one-line bar instead.
+// with a Return to this window button.
 
 import type { TornOff } from "../state/panes";
 import { Icon } from "./Icon";

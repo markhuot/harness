@@ -157,7 +157,7 @@ private struct SceneChrome: ViewModifier {
             }
             .fullScreenCover(item: coverBinding(whenSheet: false)) { CoverHost(cover: $0) }
             .environment(\.palette, palette)
-            // Tabs, browser tabs, the composer and cards tear off into windows (TearOff.swift).
+            // Tabs, browser tabs and cards tear off into windows (TearOff.swift).
             .environment(\.canTearOff, multipleWindows && sizeClass == .regular)
             .tint(palette.accent)
             .background(palette.bg.ignoresSafeArea())

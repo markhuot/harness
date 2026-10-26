@@ -23,7 +23,7 @@ import { popOutContentToWindow, popOutToWindow, type ScreenPoint } from "./popou
 
 export const TICKET_MIME = "application/x-harness-ticket";
 export const PANE_MIME = "application/x-harness-pane";
-/** A ticket's tab, a browser chip or the composer: JSON `{ ticketKey, tab, browserTab? }`. */
+/** A ticket's tab or a browser chip: JSON `{ ticketKey, tab, browserTab? }`. */
 export const TAB_MIME = "application/x-harness-ticket-tab";
 
 let active: DragSource | null = null;

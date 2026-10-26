@@ -355,7 +355,7 @@ struct TicketTabBody: View {
 }
 
 /// A pinned window's ticket (iPad): only its one tab, fully working, under the hero collapsed to
-/// its title line (the approval card still shows there); or, for the composer, only the composer.
+/// its title line (the approval card still shows there).
 /// The Agents & tasks tab still opens a sub-agent or task in place.
 private struct TicketPinnedBody: View {
     let ticket: Ticket
