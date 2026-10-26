@@ -224,6 +224,11 @@ export class TicketEventRepo {
     return res.changes ? this.get(id) : null;
   }
 
+  /** Whether a ticket already has a row (child or subscription) for this source event: the chief's subscription heard it. */
+  hasTicketRow(targetId: string, sourceRef: string): boolean {
+    return !!this.db.query(`SELECT 1 FROM ticket_events e WHERE e.target_id = $t AND e.source_ref = $r AND ${scopeSql("ticket")}`).get({ t: targetId, r: sourceRef });
+  }
+
   get(id: string): StoredTicketEvent | null {
     const r = this.db.query(`${SELECT} WHERE e.id = $id`).get({ id }) as Row | null;
     return r ? toEvent(r) : null;

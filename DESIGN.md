@@ -866,7 +866,7 @@ included. A test lists every `HarnessOps` method and fails for one that isn't cl
 not, and runs every keyed one against an out-of-scope key.
 
 **Tools.** `RUN_TOOLS.cos`: `post_note`, `update_notes`, the read board tools, the board write tools,
-the terminal tools (below) and the config read tools. No spec or lifecycle tools, no config writes (so no way to change the
+the subscription tools (it follows the tickets it dispatches), the terminal tools (below) and the config read tools. No spec or lifecycle tools, no config writes (so no way to change the
 `cos*` settings), no files or shell of its own, and no sub-agents: `buildClaudeArgs` passes
 `--disallowedTools Agent Task` for a `cos` run. `create_ticket` needs `project_key` (a CoS has no
 project) and takes no `child`. Its system prompt (`system.cos`, static, so the prefix stays
@@ -1165,7 +1165,7 @@ a ticket that is done or deleted is closed `ignored` with the reason.
 
 ### Ticket subscriptions
 
-A work or conductor run subscribes to another ticket with `subscribe_ticket` { key, mode, events }
+A work, conductor or chief of staff run subscribes to another ticket with `subscribe_ticket` { key, mode, events }
 to be woken when it changes, instead of waiting with a shell `sleep` (no prompt recommends that).
 `mode` is `once` (the row is deleted at the first delivery, the default) or `forever`; `events` are
 `status` (moves, review approvals; the default), `note` and `spec`. Rows live in
@@ -1185,7 +1185,16 @@ restart); rows past the limit stay stored and arrive together, collapsed, once t
 subscribed to each other can't loop. A subscriber's rows are deleted when its ticket leaves in progress and blocked, or
 its runs are cancelled (an event must not restart an agent someone stopped). A ticket that ends its turn with a
 subscription on a ticket that isn't done, or with a subscription row still waiting, isn't auto-submitted, since it is
-waiting for events: it calls `submit_for_review` when it is done. A done ticket can't be subscribed to, and its
+waiting for events: it calls `submit_for_review` when it is done.
+
+A chief of staff subscribes the same way, to follow the tickets it dispatches (its prompt says to, and to summarize them when
+they are done). Its ticket never leaves in progress, so its subscriptions are never cleaned up by a move: instead
+`notifySubscribers` checks at every change that the chief is switched on (a switched-off chief gets no row and nothing
+is kept for when it is switched on again; switching it off also closes its waiting rows) and that the ticket is still
+inside its scope (read fresh, so a group change takes effect at once; a ticket out of scope drops the subscription).
+The row is delivered by the ticket feed like any other, held while the chief is off. The chief's own activity feed
+skips an event its subscription already delivered (`TicketEventRepo.hasTicketRow`, recorded as ignored with the reason
+"follows this ticket through a subscription"), so one change wakes it once. A done ticket can't be subscribed to, and its
 subscribers' rows are dropped once they have heard it is done, so no ticket waits on something that can't change.
 
 **Events tab.** `Ticket.hasEvents` (a boolean, so a busy feed doesn't push the ticket on every event) is true while a
@@ -1302,6 +1311,7 @@ stubs whose full description `tool_search` returns, see "Stubs and tool_search" 
 | `get_ticket` | all | `{ key, include_transcript?: 1..50, include_agents? }`: any project, drafts included (`draft: true`), old keys resolve (`resolvedFrom`), remote IDs never do: a key only tickets carry as their remote ID returns `{ ticket: null, requested, relatedTickets }`, and a found ticket carries `externalKey`, `externalUrl` and `relatedTickets` ("Remote IDs"). Spec, `specRevision`, `specBaselineRevision`, `agentNotes` (see "Agent notes"; `list_tickets` and `search_tickets` leave them out), status, reviews, blocked reason, parent/children keys, dependsOn, driver/model, branches (`branch`, `requestedBranch`, `baseBranch`, `effectiveBaseBranch` + `baseBranchSource`), `activity` (kind, author, body, meta, createdAt), `attachments` (id, name, kind and stored file `path`), `promptAttachments` (name, path, `missing`); with include_transcript the last N text/status/error transcript entries, each clipped to 2000 chars; with include_agents `agents`, its sub-agents and background tasks oldest first (id, kind, description, agentType, model, status, parentId, command, result clipped to 500 chars, startedAt, endedAt) |
 | `get_ticket_agent` | all | `{ key, id, include_transcript?: 1..50 }` → one sub-agent or task of that ticket's session (`Orchestrator.getTicketAgent_`): its `agent` fields plus `prompt`, prompt and result clipped to 8000 chars; a sub-agent's own last N (default 20) text/status/error `transcript` entries, or a task's `output` (its last 8000 chars, `truncated`, `done`, `available`; a task with no output file reads as unavailable). An unknown id fails pointing at `get_ticket`'s include_agents |
 | `search_tickets` | all | `{ query, project_key?, limit?, cursor?, include_drafts? (default true) }` → `{ total, hits: [{ key, title, status, draft, project, snippet }], nextCursor }`. Same matching, ranking and cursors as `GET /tickets/search` ("Paging and search"); default limit 20 |
+| `subscribe_ticket` | work, conductor, chat, cos | `{ key, mode?, events? }`: get woken when another ticket changes (see "Ticket subscriptions"); `unsubscribe_ticket` `{ key }` and `list_subscriptions` `{}` complete the set |
 | `list_projects` | all | `{}` → each project's key, name, path and settings, with `completionAction`, the offered `completionActions` and `pullRequestHost` |
 | `list_inbox` | all | `{ status?: TicketEventStatus[], source?, key?, limit? }` (`source` is an event source kind; `key` an event id or a ticket key) → the events addressed to the calling ticket (`target_id`), newest first: id, title, summary, source, status, verdict, reason, the ticket it is about, created_at. A chief (and the triage run working for it) reads its Inbox instead: its own events plus the unassigned ones, the same rows `GET /tickets/:key/events` returns for the chief. Status, source and key are filtered in the query and the total is a `COUNT`, so it is exact however many events there are. Default limit 20, max 100, with a "Showing n of total events" note. `get_ticket` on a `TRIAGE-n` key says Inbox items are events now |
 | `start_ticket` | work, conductor | `{ key }` → `startTicket` (any ticket, not only children). While the ticket's planning run is going it approves the plan instead and the work starts when the run ends |

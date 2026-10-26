@@ -1495,6 +1495,8 @@ export class Orchestrator {
     const cos = this.store.cos.setEnabled(ticketId, enabled);
     if (!cos) throw notFound(`Unknown chief of staff: ${ticketId}`);
     this.touchTicket(cos.ticketId);
+    // Switched off, it hears nothing it subscribed to: waiting rows must not wake it when it is switched on again.
+    if (!enabled) this.closeTicketEvents(cos.ticketId, "the chief of staff is switched off");
     this.rehomeCosEvents();
     return cos;
   }
@@ -4424,10 +4426,22 @@ ${numberLines(r.body)}`;
 
   // --- subscriptions ---
 
-  /** The in-progress ticket a work or conductor run subscribes for (DESIGN.md "Ticket subscriptions"). */
+  /** The in-progress ticket a work, conductor or chief of staff run subscribes for (DESIGN.md "Ticket subscriptions"). */
   private subscriberOf(ctx: ToolContext, tool: string): Ticket {
-    if (ctx.runKind !== "work" && ctx.runKind !== "conductor") throw new Error(`${tool} is only available in work and conductor runs`);
+    if (ctx.runKind !== "work" && ctx.runKind !== "conductor" && ctx.runKind !== "cos") throw new Error(`${tool} is only available in work, conductor and chief of staff runs`);
     return this.ctxTicket(ctx);
+  }
+
+  /**
+   * Whether a chief of staff subscribed to `t` may be told about it now: it is switched on and `t` is
+   * still inside its scope (read fresh, like scopeOf, so a group change takes effect at once).
+   * A chief whose scope is gone, or whose ticket is outside it, drops that subscription.
+   */
+  private cosHearsOf(cosTicket: Ticket, t: Ticket): "yes" | "off" | "out" {
+    const row = this.store.cos.get(cosTicket.id);
+    const scope = row ? parseCosScopeKey(row.scope) : null;
+    if (!row || !scope || !new ScopedStore(this.store, scope).inScope(t)) return "out";
+    return row.enabled ? "yes" : "off";
   }
 
   subscribeTicket_(ctx: ToolContext, key: string, mode: SubscriptionMode, events: SubscriptionEvent[] | undefined): Subscription & { key: string } {
@@ -5588,6 +5602,15 @@ ${numberLines(r.body)}`;
         this.store.subscriptions.deleteBySubscriber(sub.subscriberId);
         continue;
       }
+      if (subscriber.kind === "cos") {
+        const hears = this.cosHearsOf(subscriber, t);
+        if (hears === "out") {
+          this.store.subscriptions.delete(sub.subscriberId, sub.targetId);
+          continue;
+        }
+        // Switched off, it isn't woken, and the change isn't kept for when it is switched on again
+        if (hears === "off") continue;
+      }
       const row = this.store.transaction(() => {
         const inserted = this.insertTicketEvent(subscriber.id, "subscription", { ...change, event });
         if (sub.mode === "once") this.store.subscriptions.delete(sub.subscriberId, sub.targetId);
@@ -5646,6 +5669,7 @@ ${numberLines(r.body)}`;
   private deliverable(ticketId: string): boolean {
     const c = this.store.tickets.get(ticketId);
     if (!c || c.status !== "in_progress" || c.draft) return false;
+    if (c.kind === "cos" && !this.store.cos.get(c.id)?.enabled) return false;
     if (this.queue.pendingFor(c.sessionId).length) return false;
     const active = this.liveRunOf(ticketId);
     if (!active) return true;
@@ -5661,6 +5685,8 @@ ${numberLines(r.body)}`;
   private async wakeTicket(ticketId: string, text: string): Promise<{ runId: string | null; live?: boolean }> {
     const c = this.store.tickets.get(ticketId);
     if (!c) throw new Error("the ticket no longer exists");
+    // A subscription wake isn't about one project: a chief's run starts on the app's model
+    if (c.kind === "cos") this.cosWakeProject.set(c.id, null);
     const active = this.liveRunOf(ticketId);
     if (active) {
       if (!active.input?.push(text)) throw new Error("the live run can't take input");

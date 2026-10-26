@@ -373,7 +373,7 @@ test("every operation that takes a key answers an out-of-scope key like a missin
     updateProject: (k) => ops.updateProject(ctx, k, { name: "x" }),
     deleteProject: (k) => ops.deleteProject(ctx, k),
   };
-  // Operations that take no reference to something with a scope of its own (or make something new, or refuse a chief outright: the subscriptions are for work and conductor runs).
+  // Operations that take no reference to something with a scope of its own (or make something new, the subscriptions act on the caller's own ticket).
   const unkeyed = [
     "postNote", "updateNotes", "wroteNotes", "statusLine", "readSpec", "editSpec", "updateSpec", "block", "unblock", "resumeWork", "returnToPlanning", "submitForReview", "updateBranch", "reviewDecision", "subscribeTicket", "unsubscribeTicket", "listSubscriptions",
     "listTickets", "searchTickets", "listProjects", "listInbox", "createTicket", "recordPullRequest", "requestApproval", "checkPermission", "fileOutputScope",
@@ -490,4 +490,61 @@ test("switching the chief's driver starts a fresh conversation instead of resumi
   await h.orch.sendMessage(cos.key, "back on the app's model"); // fake can't resume alt's either
   await h.settle();
   expect(h.driver.requests[1]!.state).toBeNull();
+});
+
+const subWakes = (h: { driver: FakeDriver }) => h.driver.requests.filter((r) => r.prompt.includes("Updates from tickets you subscribed to"));
+
+test("a chief subscribed to a ticket is woken once per change, and the activity feed doesn't wake it a second time", async () => {
+  const { h, a } = await board();
+  h.orch.updateSettings({ cosStatuses: ["review"] }); // the chief handles review, so the feed would wake it too
+  const cos = h.orch.openCos("all");
+  const { steps, results } = callTools([["subscribe_ticket", { key: a.key, mode: "forever" }]]);
+  h.driver.script(steps);
+  await h.orch.sendMessage(cos.key, "follow it");
+  await h.settle();
+  expect(results[0]).toMatchObject({ isError: false });
+  await h.orch.updateTicket(a.key, { status: "review" });
+  await h.settle();
+  expect(subWakes(h)).toHaveLength(1);
+  expect(subWakes(h)[0]!.prompt).toContain(a.key);
+  // The move's activity entry reached the chief's feed as an ignored row, not a second wake
+  h.orch.cosEngine.drain();
+  const feed = h.orch.eventsPage(cos.key, {}).items.filter((e) => e.sourceKind === "activity");
+  expect(feed.length).toBeGreaterThan(0);
+  expect(feed.every((e) => e.status === "ignored" && /subscription/.test(e.reason ?? ""))).toBe(true);
+});
+
+test("a switched-off chief isn't woken by a subscription, and the change doesn't wake it once it is switched on", async () => {
+  const { h, a } = await board();
+  const cos = h.orch.openCos("all");
+  h.driver.script(callTools([["subscribe_ticket", { key: a.key, mode: "forever" }]]).steps);
+  await h.orch.sendMessage(cos.key, "follow it");
+  await h.settle();
+  h.orch.setCosEnabled(cos.ticketId, false);
+  await h.orch.updateTicket(a.key, { status: "review" });
+  await h.settle();
+  h.orch.setCosEnabled(cos.ticketId, true);
+  await h.settle();
+  expect(subWakes(h)).toHaveLength(0);
+});
+
+test("a scoped chief can't subscribe outside its scope, and a ticket that leaves its scope stops waking it", async () => {
+  const { h, groupOf, o, w, work, project } = await board();
+  const cos = h.orch.openCos({ group: groupOf("Work") });
+  const { steps, results } = callTools([
+    ["subscribe_ticket", { key: o.key }],
+    ["subscribe_ticket", { key: w.key, mode: "forever" }],
+  ]);
+  h.driver.script(steps);
+  await h.orch.sendMessage(cos.key, "follow");
+  await h.settle();
+  expect(results.map((r) => r.isError)).toEqual([true, false]);
+  expect(h.store.subscriptions.listBySubscriber(cos.ticketId).map((s) => s.targetId)).toEqual([w.id]);
+  // Another project keeps the Work group alive while WORK1 moves out of it
+  project("SPARE", "Work");
+  h.orch.updateProject(work.id, { group: "Home" });
+  await h.orch.updateTicket(w.key, { status: "blocked" });
+  await h.settle();
+  expect(subWakes(h)).toHaveLength(0);
+  expect(h.store.subscriptions.listBySubscriber(cos.ticketId)).toHaveLength(0);
 });

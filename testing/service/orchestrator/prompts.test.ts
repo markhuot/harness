@@ -162,7 +162,9 @@ test("the chief of staff prompt routes a request to its project, asks when unsur
   expect(prompt).toMatch(/If no project fits, or several could, ask the human/);
   expect(prompt).toMatch(/research that touches several projects/);
   expect(prompt).toContain("`get_ticket`");
-  // the CoS has no subscribe_ticket tool, so the prompt must not point it at one
-  expect(prompt).not.toContain("subscribe_ticket");
+  // it follows what it dispatches and summarizes when the tickets finish
+  expect(prompt).toContain("`subscribe_ticket`");
+  expect(prompt).toMatch(/When a ticket is done, read its outcome with `get_ticket`/);
+  expect(prompt).toMatch(/wait until every ticket you dispatched has finished/);
   expect(prompt).not.toMatch(/grocer|chocolate|recipe|shopping|list items/i);
 });

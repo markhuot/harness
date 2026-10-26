@@ -174,6 +174,11 @@ export class CosEngine {
           else if (actor?.startsWith("cos:")) filtered = "caused by a chief of staff";
           else if (ticket.kind === "cos" || store.projects.isInternal(project.id)) filtered = "a chief of staff's own ticket";
           else if (!cosSeesStatus(project, this.d.settings(), ticket.status)) filtered = `${ticket.status} isn't a column the chief of staff handles`;
+          // A chief subscribed to the ticket was woken by that row already: the same change doesn't wake it twice
+          if (!filtered) {
+            const owner = this.ownerFor(project, chiefs);
+            if (owner && store.ticketEvents.hasTicketRow(owner, entry.id)) filtered = "the chief of staff follows this ticket through a subscription";
+          }
           // Routine events keep their owner, so they show in its Inbox with the reason like any ignored one.
           const routine = filtered ? undefined : routineActivityReason({ kind: entry.kind, from: entry.meta.from ?? null, to: entry.meta.to ?? null }, ticket!.status) ?? undefined;
           const ev = store.ticketEvents.insert({

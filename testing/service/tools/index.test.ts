@@ -142,7 +142,7 @@ test("only a chief of staff can arrange the Mac's panes, whatever the run kind o
 
 test("subscriptions are offered to the runs that work on a ticket (a chat run is refused by the service), and subscribe_ticket offers exactly the events the store knows", () => {
   for (const tool of ["subscribe_ticket", "unsubscribe_ticket", "list_subscriptions"]) {
-    expect(RUN_KINDS.filter((k) => names(k).includes(tool)), tool).toEqual(["work", "conductor", "chat"]);
+    expect(RUN_KINDS.filter((k) => names(k).includes(tool)), tool).toEqual(["work", "conductor", "chat", "cos"]);
   }
   const events = (subscribeTicket.inputSchema.properties as { events: { items: { enum: string[] } } }).events;
   expect(events.items.enum).toEqual([...SUBSCRIPTION_EVENTS]);

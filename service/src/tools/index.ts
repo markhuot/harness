@@ -153,7 +153,7 @@ const RUN_TOOLS: Record<Exclude<RunKind, "chat" | "compact">, { harness: ToolDef
   // sub-agents (drivers/claude-code.ts keeps Agent and Task off it) and no files or shell of its own (it can read
   // and, with approval, type into the terminals of tickets it covers): deeper work goes to tickets it creates. Everything it reads or changes is scoped (store/scope.ts).
   triage: { harness: [...boardTools, triageVerdict], native: "none" },
-  cos: { harness: [postNote, ...memoryTools, ...scheduleTools, ...terminalTools, ...paneTools, ...watcherTools, ...boardTools, ...boardWriteTools, ...configReadTools, ...outcomeTools], native: "none" },
+  cos: { harness: [postNote, ...memoryTools, ...scheduleTools, ...terminalTools, ...paneTools, ...watcherTools, ...boardTools, ...boardWriteTools, ...subscriptionTools, ...configReadTools, ...outcomeTools], native: "none" },
 };
 
 /**
