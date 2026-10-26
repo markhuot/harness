@@ -66,6 +66,11 @@ export function replyScript(text: string, opts: { sessionId?: string } = {}): St
   ];
 }
 
+/** A reply whose model call read `prefix` tokens, as a long conversation's does. */
+export function bigReplyScript(text: string, prefix = 150_000): Step[] {
+  return replyScript(text).map((s) => ("type" in s && s.type === "call" ? { type: "call", call: { input: 10, cacheRead: prefix - 10, cacheWrite: 0, output: 5 } } : s));
+}
+
 /** A run that reports an error then fails, as claude-code does when the CLI exits non-zero. */
 export function failScript(message: string): Step[] {
   return [{ type: "error", message }, { throw: new Error(message) }];
@@ -77,6 +82,10 @@ export interface FakeDriverOptions {
   supportsSteering?: boolean;
   /** Asks permission through the harness's permission_prompt tool, as claude-code does */
   usesPermissionPromptTool?: boolean;
+  /** Prompt-cache lifetime the driver declares (Driver.cacheTtlMs); unset: sessions never expire */
+  cacheTtlMs?: number;
+  /** The driver's sub-agent tool (Driver.subagentTool) */
+  subagentTool?: string;
   /** Scripts for the runs, in order; later runs get the default reply */
   scripts?: Script[];
 }
@@ -93,6 +102,8 @@ export class FakeDriver implements Driver {
   readonly hasBuiltinTools = true;
   readonly supportsSteering: boolean;
   readonly usesPermissionPromptTool: boolean;
+  readonly cacheTtlMs?: number;
+  readonly subagentTool?: string;
   readonly requests: RunRequest[] = [];
   private scripts: Script[];
   private waiters: { n: number; resolve: (req: RunRequest) => void }[] = [];
@@ -103,6 +114,8 @@ export class FakeDriver implements Driver {
     this.id = opts.id ?? "fake";
     this.supportsSteering = opts.supportsSteering ?? false;
     this.usesPermissionPromptTool = opts.usesPermissionPromptTool ?? false;
+    this.cacheTtlMs = opts.cacheTtlMs;
+    this.subagentTool = opts.subagentTool;
     this.scripts = [...(opts.scripts ?? [])];
   }
 

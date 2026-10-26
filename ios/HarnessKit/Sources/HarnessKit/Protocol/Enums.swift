@@ -410,7 +410,7 @@ public enum WatcherLiveState: OpenEnum {
 public enum PromptId: OpenEnum {
     case systemIntro, systemSession, systemContext, systemLifecycle, systemPlan, systemWork, systemReview
     case systemCompleteMerge, systemCompletePr, systemCompleteCleanup, systemCompleteCustom, systemConductor, systemChat, systemCos
-    case systemChildren, systemBranches, systemFiles, systemTurns, systemSpec, systemNotes, systemFileLinks
+    case systemSessionHandoff, systemChildren, systemBranches, systemFiles, systemTurns, systemSpec, systemNotes, systemFileLinks
     case systemBoard, systemBoardChanges, systemConfig, systemApprovals, systemBrowser
     case runWorkStart, runConductorStart, runReview, runCompleteMerge, runCompletePr, runCompleteCleanup, runCompleteCustom
     case runConductorUpdate, runTicketEvents, runChangesRequested, runReopen, runUnblock, runReplan
@@ -419,7 +419,7 @@ public enum PromptId: OpenEnum {
     public static let allKnown: [Self] = [
         .systemIntro, .systemSession, .systemContext, .systemLifecycle, .systemPlan, .systemWork, .systemReview,
         .systemCompleteMerge, .systemCompletePr, .systemCompleteCleanup, .systemCompleteCustom, .systemConductor, .systemChat, .systemCos,
-        .systemChildren, .systemBranches, .systemFiles, .systemTurns, .systemSpec, .systemNotes, .systemFileLinks,
+        .systemSessionHandoff, .systemChildren, .systemBranches, .systemFiles, .systemTurns, .systemSpec, .systemNotes, .systemFileLinks,
         .systemBoard, .systemBoardChanges, .systemConfig, .systemApprovals, .systemBrowser,
         .runWorkStart, .runConductorStart, .runReview, .runCompleteMerge, .runCompletePr, .runCompleteCleanup, .runCompleteCustom,
         .runConductorUpdate, .runTicketEvents, .runChangesRequested, .runReopen, .runUnblock, .runReplan,
@@ -440,6 +440,7 @@ public enum PromptId: OpenEnum {
         case .systemConductor: "system.conductor"
         case .systemChat: "system.chat"
         case .systemCos: "system.cos"
+        case .systemSessionHandoff: "system.session_handoff"
         case .systemChildren: "system.children"
         case .systemBranches: "system.branches"
         case .systemFiles: "system.files"

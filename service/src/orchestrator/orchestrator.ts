@@ -217,6 +217,7 @@ import { claudeCliEnv, resolveClaudeBin } from "../drivers/claude-code";
 import { DEFAULT_ANTHROPIC_MODEL } from "../drivers/anthropic-api";
 import { clockTime, isUsageLimit, usageLimitResumeAt } from "./usage-limit";
 import { applyCall, compactedContext } from "./context-usage";
+import { idleLabel, sessionExpiry } from "./session-expiry";
 import { PlanUsageTracker, POLL_MS } from "./plan-usage";
 
 /** A change to a ticket, as the rows that wake the tickets watching it keep it (DESIGN.md "Conductor", "Ticket subscriptions"). */
@@ -349,6 +350,8 @@ interface ActiveRun {
   cwd: string | null;
   /** The session's epoch when the run started (Orchestrator.sessionEpochs) */
   sessionEpoch: number;
+  /** This run started a new session because the previous one sat idle past the prompt cache (see expireIdleSession) */
+  idleHandoff: boolean;
   /** Model calls the session's agent made so far this run (the gauge never counts a run's first as a cache miss) */
   modelCalls: number;
   /** What a compact run reported (its driver's "compacted" event) */
@@ -5832,6 +5835,8 @@ ${numberLines(r.body)}`;
     const ticket = session.ticketId ? this.store.tickets.get(session.ticketId) : null;
     const project = ticket ? this.store.projects.get(ticket.projectId) : null;
     const driver = this.drivers.get(run.driver);
+    // Before the epoch is read below: starting a new session bumps it, and the run saves its own state under the new one.
+    const idleHandoff = this.expireIdleSession(run, session, ticket, driver);
     const controller = new AbortController();
     const active: ActiveRun = {
       run,
@@ -5852,6 +5857,7 @@ ${numberLines(r.body)}`;
       input: driver?.supportsSteering && STEERABLE_RUN_KINDS.has(run.kind) ? new RunInput() : null,
       cwd: null,
       sessionEpoch: this.sessionEpochs.get(session.id) ?? 0,
+      idleHandoff,
       modelCalls: 0,
     };
     this.active.set(run.id, active);
@@ -5910,6 +5916,29 @@ ${numberLines(r.body)}`;
       this.log(`post-run handling failed for ${run.id}: ${errMsg(err)}`);
     }
     this.kickScheduler();
+  }
+
+  /**
+   * A run that would resume a conversation whose prompt cache has expired starts a new session
+   * instead (DESIGN.md "Driver state and sessions"): resuming reads the whole history uncached,
+   * with the old context steering the agent. True when it did, so the run's context points at the
+   * old conversation. Checked once, as the run starts, and never while another run of the session
+   * is going: a new session would drop that run's state save.
+   */
+  private expireIdleSession(run: Run, session: Session, ticket: Ticket | null, driver: Driver | undefined): boolean {
+    if (!driver || FRESH_RUN_KINDS.has(run.kind) || run.kind === "compact") return false;
+    if ([...this.active.values()].some((a) => a.run.sessionId === session.id)) return false;
+    if (this.store.sessions.getDriverState(session.id, run.driver) == null) return false;
+    const last = this.store.sessions.lastCall(session.id);
+    const now = this.now();
+    const idle = sessionExpiry({ lastCallAt: last?.at ?? null, now, ttlMs: driver.cacheTtlMs, contextTokens: last?.tokens ?? 0 });
+    if (idle == null) return false;
+    this.newSession(session.id);
+    const text = `New session: the previous one was idle for ${idleLabel(idle)}, past the ${idleLabel(driver.cacheTtlMs!)} cache.`;
+    this.appendStatus(session.id, run.id, text);
+    if (ticket) this.addActivityLine(ticket, "system", "system", text);
+    this.touchSession(session.id);
+    return true;
   }
 
   /** Start the driver and consume its events; returns the run error, if any. */
@@ -5999,6 +6028,7 @@ ${numberLines(r.body)}`;
           branches: ticket ? this.branchContext(ticket, project) : undefined,
           activity: ticket ? this.store.activity.listBySession(ticket.sessionId).slice(-PROMPT_ACTIVITY_ENTRIES) : undefined,
           schedules: ticket?.kind === "cos" ? this.store.schedules.list({ cosId: ticket.id }) : undefined,
+          idleHandoff: active.idleHandoff,
         };
         const req: RunRequest = {
           runId: run.id,

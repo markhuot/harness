@@ -64,6 +64,8 @@ export interface PromptInfo {
   activity?: ActivityEntry[];
   /** A chief of staff's active schedules, soonest first (runContext lists them) */
   schedules?: Schedule[];
+  /** This run started a new session because the previous one went idle past the prompt cache (runContext points at the old conversation) */
+  idleHandoff?: boolean;
 }
 
 /** What a review run reads (Orchestrator.reviewContext). */
@@ -504,6 +506,7 @@ export function runContext(info: PromptInfo): string {
   const changes = kind === "work" || kind === "conductor" || kind === "chat";
   return join(
     contextSection(info, o),
+    info.idleHandoff && handoffSection(info, o),
     instructionsSection(info, o),
     // A task ticket that has taken children conducts them too; conductor runs list theirs in their instructions.
     // A chat (conductor tickets too) gets the same child-steering notes, since its instructions don't list them.
@@ -519,6 +522,16 @@ export function runContext(info: PromptInfo): string {
     kind === "cos" && memorySection(ticket?.agentNotes),
     kind === "cos" && schedulesSection(info),
   );
+}
+
+/**
+ * Where to read the conversation an idle-expired session left behind. A chief of staff has Agent
+ * and Task withheld (drivers/claude-code.ts), so only a ticket agent on a driver with a sub-agent
+ * tool is sent to one.
+ */
+function handoffSection(info: PromptInfo, o: PromptOverrides | null | undefined): string {
+  const cos = info.kind === "cos";
+  return renderPrompt("system.session_handoff", { ticket: info.ticket ? ticketLabel(info.ticket) : "", subagent: !cos && !!info.subagentTool, cos }, o);
 }
 
 /**

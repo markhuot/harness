@@ -947,6 +947,8 @@ export class ClaudeCodeDriver implements Driver {
   readonly name = "Claude Code";
   readonly description = "Runs the claude CLI with your Claude login (team plan). Harness tools are provided over MCP.";
   readonly hasBuiltinTools = true;
+  // Measured from driver_calls on this Mac: calls after a gap of 5-60 minutes read a median 97% of their prefix from the cache, calls after more than an hour read none.
+  readonly cacheTtlMs = 60 * 60 * 1000;
   readonly adviserTool = "Claude Code's `Agent` tool with the `general-purpose` subagent type";
   readonly subagentTool = "Claude Code's `Agent` tool (`Task` in older versions) with the `Explore` subagent type";
   readonly usesPermissionPromptTool = true;

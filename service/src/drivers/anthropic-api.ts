@@ -219,7 +219,9 @@ export class AnthropicApiDriver implements Driver {
         ...(req.systemPrompt ? { system: req.systemPrompt } : {}),
         ...(tools.length ? { tools } : {}),
       };
-      // Automatic prompt caching of the growing conversation prefix.
+      // Automatic prompt caching of the growing conversation prefix. `ephemeral` keeps it for the
+      // 5-minute default, which would start a new session on nearly every human-paced run, so the
+      // driver declares no cacheTtlMs and its sessions never expire.
       (params as { cache_control?: unknown }).cache_control = { type: "ephemeral" };
 
       let message: Anthropic.Message;

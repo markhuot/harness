@@ -389,6 +389,20 @@ Each wake lists events: before you finish it, call \`record_event_outcomes\` onc
 Say what you changed when you changed it. Your actions show on the tickets' Activity under your name.`,
   },
 
+  "system.session_handoff": {
+    group: "system",
+    label: "New session",
+    description:
+      "The first run after a session was replaced because it sat idle past the driver's prompt-cache lifetime, in the run context: where to read the old conversation. It carries no excerpt of it, since a partial history would steer the agent wrongly.",
+    variables: {
+      ticket: TICKET,
+      subagent: "True when the run can launch a sub-agent to read the old conversation (false for a chief of staff and for drivers without sub-agents)",
+      cos: "True for a chief of staff, whose own notes are its memory",
+    },
+    template: `## New session
+We're starting a new session because the previous one went idle. If you need context beyond the spec, your {{#if cos}}memory{{else}}notes{{/if}} and the user's message, you can read the old conversation and summarize it.{{#if subagent}} Read it in a sub-agent, so it stays out of your own context: have the sub-agent call \`get_ticket\` for {{ticket}} with \`include_transcript\` (1-50 messages) and report back what matters.{{else}} Call \`get_ticket\` for {{ticket}} with \`include_transcript\` (1-50 messages) to read its transcript{{#if cos}}, and \`query_activity\` for its Activity{{/if}}.{{/if}}`,
+  },
+
   "system.children": {
     group: "system",
     label: "Child tickets",

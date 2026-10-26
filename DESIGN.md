@@ -359,6 +359,17 @@ chat is mid-run and already started fresh when the ticket entered Review or Done
 working in its own conversation, which becomes the In progress session; its later
 `submit_for_review` clears it as usual. Review and complete runs (`FRESH_RUN_KINDS`) always start
 fresh (an independent reviewer; a completion needs only its prompt) and never write state back.
+A conversation also ends when it outlives the driver's prompt cache (`Driver.cacheTtlMs`: one hour
+for claude-code, measured from `driver_calls`; a driver that declares none never expires one). As a
+run starts (`expireIdleSession`, before the session epoch is read), if the newest call of the
+resumable conversation (a review or complete run's calls don't count) is more than the TTL old and
+its prefix is at least 100k tokens (`SESSION_EXPIRY_MIN_TOKENS`; a smaller conversation is cheap to
+read cold and keeps its continuity), the run takes the human's "New session" path and starts fresh,
+with a transcript status line and an Activity note. Its run context then gets a `system.session_handoff`
+block pointing at the old conversation through `get_ticket` `include_transcript` (read in a
+sub-agent where the run can launch one; never an excerpt, since a partial history would mislead).
+The check is skipped while another run of the session is going. Memory, notes, spec and the
+Harness transcript are untouched.
 Since each phase can run on its own driver, the saved state records the driver that wrote it
 (`sessions.driver_state_driver`, migration 38); a run on a different driver starts fresh instead
 of handing one driver another's conversation. A

@@ -185,6 +185,23 @@ export class SessionRepo {
     ).map((r) => ({ runId: r.run_id, at: r.at, input: r.input, cacheRead: r.cache_read, cacheWrite: r.cache_write, output: r.output, estimated: !!r.estimated }));
   }
 
+  /**
+   * The newest model call of the conversation the session's next run resumes: when it was made and
+   * the prefix it sent (null: none recorded). Review and complete runs start fresh conversations
+   * of their own, so their calls neither refresh that conversation's cache nor measure it.
+   */
+  lastCall(sessionId: string): { at: number; tokens: number } | null {
+    const r = this.db
+      .query(
+        `SELECT c.at AS at, c.input + c.cache_read + c.cache_write AS tokens FROM driver_calls c JOIN runs r ON r.id = c.run_id
+         WHERE c.session_id = $sessionId AND r.kind NOT IN ('review', 'complete') ORDER BY c.id DESC LIMIT 1`,
+      )
+      .get({ sessionId }) as
+      | { at: number; tokens: number }
+      | null;
+    return r ?? null;
+  }
+
   getMeta<T>(id: string): T | null {
     const r = this.db.query("SELECT meta FROM sessions WHERE id = $id").get({ id }) as { meta: string | null } | null;
     return fromJson<T | null>(r?.meta, null);

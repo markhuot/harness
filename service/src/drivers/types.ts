@@ -175,6 +175,13 @@ export interface Driver {
   /** True if the driver brings its own file/shell tools (so "native" group tools are withheld). */
   hasBuiltinTools: boolean;
   /**
+   * How long the provider keeps the conversation's prompt cache after a call. A run that starts
+   * later than this after the session's last call starts a new session instead of resuming (once
+   * the conversation is big enough to matter; orchestrator/session-expiry.ts). Unset: the driver
+   * never expires a session. Declared on every driver, so adding one forces the decision.
+   */
+  cacheTtlMs?: number;
+  /**
    * The driver's own sub-agent tool for exploring the codebase, as prompt text (e.g. "the `task`
    * tool with the `explore` agent type"). The system prompt then makes exploring through it a rule.
    * Unset: the driver has no sub-agents, and the rule is left out.

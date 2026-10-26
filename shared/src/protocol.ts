@@ -1133,6 +1133,7 @@ export const PROMPT_IDS = [
   "system.conductor",
   "system.chat",
   "system.cos",
+  "system.session_handoff",
   "system.children",
   "system.branches",
   "system.files",
