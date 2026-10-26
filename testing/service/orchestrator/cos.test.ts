@@ -503,15 +503,35 @@ test("a chief subscribed to a ticket is woken once per change, and the activity 
   await h.orch.sendMessage(cos.key, "follow it");
   await h.settle();
   expect(results[0]).toMatchObject({ isError: false });
+  // Running service: the bus nudges the chief's feed the moment an entry is written, before the subscription's row exists
+  h.orch.start();
   await h.orch.updateTicket(a.key, { status: "review" });
   await h.settle();
-  expect(subWakes(h)).toHaveLength(1);
-  expect(subWakes(h)[0]!.prompt).toContain(a.key);
-  // The move's activity entry reached the chief's feed as an ignored row, not a second wake
-  h.orch.cosEngine.drain();
-  const feed = h.orch.eventsPage(cos.key, {}).items.filter((e) => e.sourceKind === "activity");
+  const wakes = subWakes(h);
+  expect(wakes).toHaveLength(1);
+  expect(wakes[0]!.prompt).toContain(a.key);
+  // The move's activity entry is an ignored row, not a second wake; the row that woke the chief is in its Events too
+  const events = h.orch.eventsPage(cos.key, {}).items;
+  const feed = events.filter((e) => e.sourceKind === "activity");
   expect(feed.length).toBeGreaterThan(0);
   expect(feed.every((e) => e.status === "ignored" && /subscription/.test(e.reason ?? ""))).toBe(true);
+  expect(events.filter((e) => e.sourceKind === "subscription")).toHaveLength(1);
+  await h.orch.stop();
+});
+
+test("a note on a followed ticket wakes a subscribed chief once, in the running service", async () => {
+  const { h, a } = await board();
+  h.orch.updateSettings({ cosStatuses: ["planning"] });
+  const cos = h.orch.openCos("all");
+  h.driver.script(callTools([["subscribe_ticket", { key: a.key, mode: "once", events: ["note"] }]]).steps);
+  await h.orch.sendMessage(cos.key, "follow it");
+  await h.settle();
+  h.orch.start();
+  (h.orch as unknown as { addActivityLine(t: unknown, k: string, a: string, b: string): unknown }).addActivityLine(h.store.tickets.get(a.id), "note", "agent", "halfway there");
+  await h.settle();
+  expect(subWakes(h)).toHaveLength(1);
+  expect(h.orch.eventsPage(cos.key, {}).items.filter((e) => e.sourceKind === "activity" && e.status !== "ignored")).toHaveLength(0);
+  await h.orch.stop();
 });
 
 test("a switched-off chief isn't woken by a subscription, and the change doesn't wake it once it is switched on", async () => {
@@ -523,6 +543,10 @@ test("a switched-off chief isn't woken by a subscription, and the change doesn't
   h.orch.setCosEnabled(cos.ticketId, false);
   await h.orch.updateTicket(a.key, { status: "review" });
   await h.settle();
+  // The change is kept as an ignored row the human can read, and the subscription stays
+  const rows = h.orch.eventsPage(cos.key, {}).items.filter((e) => e.sourceKind === "subscription");
+  expect(rows.map((e) => [e.status, e.reason])).toEqual([["ignored", "the chief of staff is switched off"]]);
+  expect(h.store.subscriptions.listBySubscriber(cos.ticketId)).toHaveLength(1);
   h.orch.setCosEnabled(cos.ticketId, true);
   await h.settle();
   expect(subWakes(h)).toHaveLength(0);

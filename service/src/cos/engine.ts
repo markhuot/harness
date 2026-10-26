@@ -174,10 +174,12 @@ export class CosEngine {
           else if (actor?.startsWith("cos:")) filtered = "caused by a chief of staff";
           else if (ticket.kind === "cos" || store.projects.isInternal(project.id)) filtered = "a chief of staff's own ticket";
           else if (!cosSeesStatus(project, this.d.settings(), ticket.status)) filtered = `${ticket.status} isn't a column the chief of staff handles`;
-          // A chief subscribed to the ticket was woken by that row already: the same change doesn't wake it twice
+          // A chief subscribed to the ticket is woken by the subscription's row: the same change doesn't wake it twice.
+          // The activity is read as it is written, before the subscription's row exists, so the subscription itself
+          // decides (a row already written covers a `once` subscription that is gone and a drain that ran late).
           if (!filtered) {
             const owner = this.ownerFor(project, chiefs);
-            if (owner && store.ticketEvents.hasTicketRow(owner, entry.id)) filtered = "the chief of staff follows this ticket through a subscription";
+            if (owner && (store.ticketEvents.hasTicketRow(owner, entry.id) || this.followsThroughSubscription(owner, ticket!.id, entry))) filtered = "the chief of staff follows this ticket through a subscription";
           }
           // Routine events keep their owner, so they show in its Inbox with the reason like any ignored one.
           const routine = filtered ? undefined : routineActivityReason({ kind: entry.kind, from: entry.meta.from ?? null, to: entry.meta.to ?? null }, ticket!.status) ?? undefined;
@@ -209,6 +211,15 @@ export class CosEngine {
     }
     if (made) this.emitBadge();
     return made;
+  }
+
+  /** Whether the switched-on chief has a subscription to the ticket that hears this entry (a status move, a note or a spec revision). */
+  private followsThroughSubscription(cosId: string, ticketId: string, entry: { kind: string; meta: { from?: string | null; to?: string | null } }): boolean {
+    const sub = this.d.store.subscriptions.get(cosId, ticketId);
+    if (!sub || !this.d.store.cos.get(cosId)?.enabled) return false;
+    if (entry.kind === "note" && sub.events.includes("note")) return true;
+    if (entry.kind === "spec_revised" && sub.events.includes("spec")) return true;
+    return !!entry.meta.to && entry.meta.to !== entry.meta.from && sub.events.includes("status");
   }
 
   /** Something other than activity happened (a watcher's output, a schedule): an event with no project yet, owned by the All chief. */

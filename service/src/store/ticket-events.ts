@@ -239,7 +239,8 @@ export class TicketEventRepo {
     const where: string[] = ["1 = 1"];
     const args: Record<string, string | number> = {};
     if (opts.cosId) {
-      where.push(`(e.cos_id = $cosId OR e.cos_id IS NULL) AND ${scopeSql("chief")}`);
+      // A chief's own subscription rows (the change that woke it) show beside its pipeline's
+      where.push(`(((e.cos_id = $cosId OR e.cos_id IS NULL) AND ${scopeSql("chief")}) OR (e.target_id = $cosId AND e.source_kind = 'subscription'))`);
       args.cosId = opts.cosId;
     }
     if (opts.hideFiltered) where.push("e.verdict <> 'filtered'");

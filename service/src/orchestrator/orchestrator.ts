@@ -1496,7 +1496,8 @@ export class Orchestrator {
     if (!cos) throw notFound(`Unknown chief of staff: ${ticketId}`);
     this.touchTicket(cos.ticketId);
     // Switched off, it hears nothing it subscribed to: waiting rows must not wake it when it is switched on again.
-    if (!enabled) this.closeTicketEvents(cos.ticketId, "the chief of staff is switched off");
+    // Rows a live run is already reading stay: switching off doesn't stop that run.
+    if (!enabled) this.closeTicketEvents(cos.ticketId, "the chief of staff is switched off", ["escalated"]);
     this.rehomeCosEvents();
     return cos;
   }
@@ -5597,6 +5598,7 @@ ${numberLines(r.body)}`;
       if (!sub.events.includes(event)) continue;
       if (event === "status" && sub.subscriberId === t.parentId) continue;
       if (sub.subscriberId === caller) continue;
+      let off = false;
       const subscriber = this.store.tickets.get(sub.subscriberId);
       if (!subscriber || subscriber.status === "done") {
         this.store.subscriptions.deleteBySubscriber(sub.subscriberId);
@@ -5608,18 +5610,20 @@ ${numberLines(r.body)}`;
           this.store.subscriptions.delete(sub.subscriberId, sub.targetId);
           continue;
         }
-        // Switched off, it isn't woken, and the change isn't kept for when it is switched on again
-        if (hears === "off") continue;
+        off = hears === "off";
       }
       const row = this.store.transaction(() => {
         const inserted = this.insertTicketEvent(subscriber.id, "subscription", { ...change, event });
-        if (sub.mode === "once") this.store.subscriptions.delete(sub.subscriberId, sub.targetId);
-        return inserted;
+        // Switched off, it isn't woken, and the change isn't kept for when it is switched on again: the row shows as ignored
+        if (inserted && off) this.store.ticketEvents.update(inserted.id, { status: "ignored", reason: "the chief of staff is switched off", wakeId: null, consumingRunId: null });
+        // A `once` subscription isn't spent by a change the chief never heard
+        if (sub.mode === "once" && !off) this.store.subscriptions.delete(sub.subscriberId, sub.targetId);
+        return inserted && off ? this.store.ticketEvents.get(inserted.id) : inserted;
       });
       if (row) {
         // After the transaction: a rolled-back row is never announced
         this.bus.emit({ kind: "ticket.event.upserted", event: wireCosEvent(row) });
-        this.deliverTicketEvents(subscriber.id, true);
+        if (!off) this.deliverTicketEvents(subscriber.id, true);
       }
     }
   }
@@ -5630,8 +5634,8 @@ ${numberLines(r.body)}`;
   }
 
   /** The ticket's waiting rows are closed: nothing will read them (it is done or deleted). */
-  private closeTicketEvents(ticketId: string, why: string) {
-    for (const status of ["escalated", "handling"] as const) {
+  private closeTicketEvents(ticketId: string, why: string, statuses: readonly ("escalated" | "handling")[] = ["escalated", "handling"]) {
+    for (const status of statuses) {
       for (const e of this.store.ticketEvents.byTarget(status, ticketId, "ticket")) this.patchTicketEvent(e.id, { status: "ignored", reason: why, wakeId: null, consumingRunId: null });
     }
   }
@@ -5685,8 +5689,6 @@ ${numberLines(r.body)}`;
   private async wakeTicket(ticketId: string, text: string): Promise<{ runId: string | null; live?: boolean }> {
     const c = this.store.tickets.get(ticketId);
     if (!c) throw new Error("the ticket no longer exists");
-    // A subscription wake isn't about one project: a chief's run starts on the app's model
-    if (c.kind === "cos") this.cosWakeProject.set(c.id, null);
     const active = this.liveRunOf(ticketId);
     if (active) {
       if (!active.input?.push(text)) throw new Error("the live run can't take input");
@@ -5694,6 +5696,8 @@ ${numberLines(r.body)}`;
       this.touchSession(c.sessionId);
       return { runId: active.run.id, live: true };
     }
+    // A subscription wake isn't about one project: a chief's new run starts on the app's model (a push into a live run changes nothing)
+    if (c.kind === "cos") this.cosWakeProject.set(c.id, null);
     return { runId: this.enqueueRun(c.sessionId, this.workKind(c), text).id };
   }
 
