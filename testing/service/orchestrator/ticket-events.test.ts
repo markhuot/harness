@@ -437,6 +437,24 @@ test("a ticket that is done closes its waiting rows as ignored with the reason",
   expect(childPrompts(h)).toHaveLength(0);
 });
 
+test("a non-chief ticket's rows are pushed to clients when they are inserted and when their status changes", async () => {
+  const h = makeOrchestrator({ liveDebounceMs: 0 });
+  const hold = gate();
+  h.driver.script([{ wait: hold }, ...replyScript("parent one")]);
+  const parent = await h.orch.createTicket({ projectId: h.project.id, spec: "Conduct", kind: "conductor", ...ONE_RUN });
+  await h.driver.runStarted();
+  await h.orch.createTicket({ projectId: h.project.id, spec: "Child", parentId: parent.key, ...ONE_RUN, start: true });
+  await h.driver.runStarted(2);
+  await Bun.sleep(20);
+  const pushed = () => h.events.flatMap((e) => (e.kind === "ticket.event.upserted" && e.event.targetId === parent.id ? [`${e.event.id}:${e.event.status}`] : []));
+  const row = waitingRows(h)[0]!;
+  expect(pushed()).toContain(`${row.id}:escalated`);
+  await h.orch.updateTicket(parent.key, { status: "done" });
+  expect(pushed()).toContain(`${row.id}:ignored`);
+  hold.open();
+  await h.settle();
+});
+
 test("a subscription row never reaches a chief's triage, rehoming, Inbox list or badge", async () => {
   const h = makeOrchestrator({ tools: undefined, liveDebounceMs: 0 });
   const cos = h.orch.openCos("all");

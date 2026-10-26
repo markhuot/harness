@@ -80,3 +80,39 @@ test("pruning the last event takes the flag away and pushes the ticket; pruning 
   expect(await hasEvents(a)).toBe(false);
   expect(pushedOff()).toBe(1);
 });
+
+test("filtering the last visible row takes the flag away and pushes the ticket", async () => {
+  const { rig, a, add, hasEvents } = await twoTickets();
+  const store = rig.harness.store.ticketEvents;
+  const offPushes = (t: Ticket) => rig.busEvents.filter((e) => e.kind === "ticket.upserted" && e.ticket.id === t.id && !e.ticket.hasEvents).length;
+  const row = add(a, "a-1");
+  await hasEvents(a);
+  const before = offPushes(a);
+
+  // The row is dropped by a rule: the tab has nothing to show.
+  store.update(row.id, { verdict: "filtered", status: "ignored" });
+  expect(await hasEvents(a)).toBe(false);
+  expect(offPushes(a)).toBe(before + 1);
+});
+
+test("a rolled-back insert pushes nothing", async () => {
+  const { rig, a, hasEvents, add } = await twoTickets();
+  const pushes = () => rig.busEvents.filter((e) => e.kind === "ticket.upserted" && e.ticket.id === a.id && e.ticket.hasEvents).length;
+  expect(() =>
+    rig.harness.store.transaction(() => {
+      add(a, "a-1");
+      throw new Error("cancelled");
+    }),
+  ).toThrow("cancelled");
+  expect(await hasEvents(a)).toBe(false);
+  expect(pushes()).toBe(0);
+});
+
+test("the Events tab page leaves out rows a filter dropped, so a page is never empty behind a Load more", async () => {
+  const { rig, a, add } = await twoTickets();
+  add(a, "a-filtered", { filtered: "its own move", createdAt: 3000 });
+  const shown = add(a, "a-shown", { createdAt: 1000 });
+  const page = await rig.ok<TicketEventPage>("GET", `/tickets/${a.key}/events?limit=1`);
+  expect(page.items.map((e) => e.id)).toEqual([shown.id]);
+  expect(page.nextCursor).toBeNull();
+});

@@ -168,6 +168,8 @@ export interface EventFilter {
   /** An event id or the key of the ticket it is about */
   key?: string;
   before?: { createdAt: number; id: string };
+  /** Leave out rows a filter dropped (a ticket's Events tab never shows them) */
+  hideFiltered?: boolean;
 }
 
 /** The events table (DESIGN.md "Events"): every event with its owner, target, verdict and status. A ticket's Events tab, a chief's Inbox and the delivery engines read it. */
@@ -194,7 +196,7 @@ export class TicketEventRepo {
     // One change reaches a ticket once, whether it came as the parent or as a subscriber.
     if (input.targetId && (TICKET_SOURCE_KINDS as readonly string[]).includes(input.sourceKind) && this.db.query(`SELECT 1 FROM ticket_events e WHERE e.target_id = $t AND e.source_ref = $r AND ${scopeSql("ticket")}`).get({ t: input.targetId, r: input.sourceRef })) return null;
     const target = input.targetId === undefined ? input.cosId : input.targetId;
-    const flips = !filtered && !!target && !this.hasEvents(target);
+    this.touch(target);
     const res = this.db
       .query(
         `INSERT OR IGNORE INTO ticket_events (id, cos_id, target_id, project_id, ticket_id, source_kind, source_ref, kind, actor, title, summary, payload, verdict, reason, status, created_at, updated_at)
@@ -219,7 +221,6 @@ export class TicketEventRepo {
         createdAt: input.createdAt ?? t,
         t,
       });
-    if (res.changes && flips) this.onHasEventsChange?.(target!);
     return res.changes ? this.get(id) : null;
   }
 
@@ -236,6 +237,7 @@ export class TicketEventRepo {
       where.push(`(e.cos_id = $cosId OR e.cos_id IS NULL) AND ${scopeSql("chief")}`);
       args.cosId = opts.cosId;
     }
+    if (opts.hideFiltered) where.push("e.verdict <> 'filtered'");
     if (opts.targetId) {
       where.push("e.target_id = $targetId");
       args.targetId = opts.targetId;
@@ -275,8 +277,26 @@ export class TicketEventRepo {
     return !!this.db.query("SELECT 1 FROM ticket_events WHERE target_id = $targetId AND verdict <> 'filtered' LIMIT 1").get({ targetId });
   }
 
-  /** Called with a ticket's id when its `hasEvents` flips on (an insert, a chief taking a row) or off (a prune): the ticket is then pushed again. */
+  /**
+   * Called with a ticket's id when its `hasEvents` differs from before a change (an insert, a row re-pointed or filtered, a prune):
+   * the ticket is then pushed again. It runs once the change's transaction is over (a microtask), so a rolled-back insert pushes nothing.
+   */
   onHasEventsChange: ((targetId: string) => void) | null = null;
+
+  /** Each touched target's `hasEvents` from before the change, until the flush compares it with now. */
+  private touched = new Map<string, boolean>();
+
+  private touch(targetId: string | null | undefined) {
+    if (!targetId || this.touched.has(targetId)) return;
+    this.touched.set(targetId, this.hasEvents(targetId));
+    if (this.touched.size === 1) queueMicrotask(() => this.flushTouched());
+  }
+
+  private flushTouched() {
+    const touched = this.touched;
+    this.touched = new Map();
+    for (const [id, was] of touched) if (this.hasEvents(id) !== was) this.onHasEventsChange?.(id);
+  }
 
   /** Events with a status, oldest first; `cosId` null for the unassigned ones, undefined for every owner. */
   byStatus(status: TicketEventStatus, cosId?: string | null, scope: EventScope = "chief"): StoredTicketEvent[] {
@@ -308,10 +328,11 @@ export class TicketEventRepo {
     for (const [k, v] of Object.entries(patch)) if (v !== undefined) args[k] = k === "payload" ? JSON.stringify(v) : (v as string | null);
     // A chief taking over a row is the row's target too, but a row aimed at another ticket keeps its target (DESIGN.md "Events")
     if (patch.cosId !== undefined) sets.push("target_id = CASE WHEN target_id IS cos_id THEN $cosId ELSE target_id END");
-    const before = patch.cosId ? this.get(id) : null;
-    const flips = !!patch.cosId && !!before && before.targetId === before.cosId && !this.hasEvents(patch.cosId);
+    if (patch.cosId !== undefined || patch.verdict !== undefined) {
+      this.touch(this.get(id)?.targetId);
+      this.touch(patch.cosId);
+    }
     this.db.query(`UPDATE ticket_events SET ${sets.join(", ")}, updated_at = $t WHERE id = $id`).run(args);
-    if (flips && this.hasEvents(patch.cosId!)) this.onHasEventsChange?.(patch.cosId!);
     return this.get(id);
   }
 
@@ -347,12 +368,11 @@ export class TicketEventRepo {
     return this.deleteWhere("status IN ('ignored', 'handled') AND updated_at < $before", { before });
   }
 
-  /** Delete rows, then tell `onHasEventsChange` about each target that is left with none. */
+  /** Delete rows; `onHasEventsChange` hears of each target whose `hasEvents` that flipped. */
   private deleteWhere(where: string, args: Record<string, string | number>): number {
     const targets = (this.db.query(`SELECT DISTINCT target_id FROM ticket_events WHERE target_id IS NOT NULL AND ${where}`).all(args) as { target_id: string }[]).map((r) => r.target_id);
-    const changes = this.db.query(`DELETE FROM ticket_events WHERE ${where}`).run(args).changes;
-    for (const id of targets) if (!this.hasEvents(id)) this.onHasEventsChange?.(id);
-    return changes;
+    for (const id of targets) this.touch(id);
+    return this.db.query(`DELETE FROM ticket_events WHERE ${where}`).run(args).changes;
   }
 
   /** Delete unowned events still waiting (pending, escalated) that are older than `before`, and all but the newest `keep` of the rest. */

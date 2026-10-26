@@ -294,7 +294,7 @@ export class HarnessClient {
   }
   /** A ticket's events (a chief's Inbox, for a chief), newest first; `before` is the previous page's nextCursor. */
   ticketEvents(key: string, opts: { status?: TicketEventStatus; before?: string | null; limit?: number } = {}) {
-    return this.request<TicketEventPage>("GET", `/tickets/${key}/events${query({ status: opts.status, before: opts.before, limit: opts.limit })}`);
+    return this.request<TicketEventPage>("GET", `/tickets/${encodeURIComponent(key)}/events${query({ status: opts.status, before: opts.before, limit: opts.limit })}`);
   }
   cosBadge() {
     return this.request<CosBadge>("GET", "/cos/events/badge");

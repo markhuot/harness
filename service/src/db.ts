@@ -982,7 +982,7 @@ export const MIGRATIONS: string[] = [
   `,
   // 57: a ticket's Events tab (GET /tickets/:key/events) and its hasEvents flag read the rows aimed at it, newest first.
   `
-  CREATE INDEX ticket_events_target ON ticket_events(target_id, created_at);
+  CREATE INDEX ticket_events_target ON ticket_events(target_id, created_at, verdict);
   `,
 ];
 

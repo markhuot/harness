@@ -728,7 +728,8 @@ export class Orchestrator {
       debounceMs: (id) => (this.liveRunOf(id) ? this.liveDebounceMs : 0),
       open: (id) => this.deliverable(id),
       targetExists: (id) => !!this.store.tickets.get(id),
-      onTargetGone: (e) => this.store.ticketEvents.update(e.id, { status: "ignored", reason: "its ticket no longer exists", wakeId: null, consumingRunId: null }),
+      onTargetGone: (e) => this.patchTicketEvent(e.id, { status: "ignored", reason: "its ticket no longer exists", wakeId: null, consumingRunId: null }),
+      patched: (e) => this.bus.emit({ kind: "ticket.event.upserted", event: wireCosEvent(e) }),
       classOf: (e) => e.sourceKind,
       capOf: (cls) => (cls === "child" ? CHILD_EVENT_WAKE_CAP : EVENT_WAKE_CAP),
       describeRun: () => "The ticket's run",
@@ -1296,7 +1297,7 @@ export class Orchestrator {
       if (i <= 0 || !Number.isFinite(createdAt)) throw badRequest("before is not a cursor from a previous page");
       before = { createdAt, id: query.before.slice(i + 1) };
     }
-    const owner = ticket.kind === "cos" ? { cosId: ticket.id } : { targetId: ticket.id };
+    const owner = ticket.kind === "cos" ? { cosId: ticket.id } : { targetId: ticket.id, hideFiltered: true };
     const rows = this.store.ticketEvents.list({ ...owner, status: status as TicketEventStatus | undefined, before, limit: limit + 1 });
     const items = rows.slice(0, limit);
     const last = items[items.length - 1];
@@ -5561,7 +5562,11 @@ ${numberLines(r.body)}`;
 
   /** A child changed: its parent hears it (a row of source kind `child`). */
   private notifyConductor(conductorId: string, change: ConductorChange) {
-    if (this.insertTicketEvent(conductorId, "child", change)) this.deliverTicketEvents(conductorId, true);
+    const row = this.insertTicketEvent(conductorId, "child", change);
+    if (row) {
+      this.bus.emit({ kind: "ticket.event.upserted", event: wireCosEvent(row) });
+      this.deliverTicketEvents(conductorId, true);
+    }
   }
 
   /**
@@ -5588,7 +5593,11 @@ ${numberLines(r.body)}`;
         if (sub.mode === "once") this.store.subscriptions.delete(sub.subscriberId, sub.targetId);
         return inserted;
       });
-      if (row) this.deliverTicketEvents(subscriber.id, true);
+      if (row) {
+        // After the transaction: a rolled-back row is never announced
+        this.bus.emit({ kind: "ticket.event.upserted", event: wireCosEvent(row) });
+        this.deliverTicketEvents(subscriber.id, true);
+      }
     }
   }
 
@@ -5600,8 +5609,15 @@ ${numberLines(r.body)}`;
   /** The ticket's waiting rows are closed: nothing will read them (it is done or deleted). */
   private closeTicketEvents(ticketId: string, why: string) {
     for (const status of ["escalated", "handling"] as const) {
-      for (const e of this.store.ticketEvents.byTarget(status, ticketId, "ticket")) this.store.ticketEvents.update(e.id, { status: "ignored", reason: why, wakeId: null, consumingRunId: null });
+      for (const e of this.store.ticketEvents.byTarget(status, ticketId, "ticket")) this.patchTicketEvent(e.id, { status: "ignored", reason: why, wakeId: null, consumingRunId: null });
     }
+  }
+
+  /** Change a row and push it, so an open Events tab follows its status. */
+  private patchTicketEvent(id: string, patch: Parameters<Store["ticketEvents"]["update"]>[1]): StoredTicketEvent | null {
+    const e = this.store.ticketEvents.update(id, patch);
+    if (e) this.bus.emit({ kind: "ticket.event.upserted", event: wireCosEvent(e) });
+    return e;
   }
 
   /**

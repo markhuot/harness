@@ -1189,9 +1189,10 @@ waiting for events: it calls `submit_for_review` when it is done. A done ticket 
 subscribers' rows are dropped once they have heard it is done, so no ticket waits on something that can't change.
 
 **Events tab.** `Ticket.hasEvents` (a boolean, so a busy feed doesn't push the ticket on every event) is true while a
-row that isn't `filtered` has the ticket as its `target_id`. The service pushes the ticket again when an insert (or a chief
-taking over a row) flips it on and when pruning leaves a ticket with no rows, so the tab appears and goes while a ticket is
-open; a requested Events tab on a ticket without events opens the Spec (`effectiveTab`). The tab sits after Agents & tasks
+row that isn't `filtered` has the ticket as its `target_id`. The service pushes the ticket again when a change to the rows (an insert, a row re-pointed or filtered, a prune) leaves its
+flag different from before, once the change's transaction is over, so a rolled-back insert pushes nothing and the tab appears and
+goes while a ticket is open. Every ticket's rows also go out as `ticket.event.upserted` on insert and on each status change, so an
+open tab follows them live; a requested Events tab on a ticket without events opens the Spec (`effectiveTab`). The tab sits after Agents & tasks
 on the Mac and on iPhone, iPad and Duo (`shared/src/state/tabs.ts`, `Logic/Tabs.swift`) and shows `eventRows`: the rows aimed
 at the ticket, newest first, without the filtered ones, each with its kind (Ticket, Watcher, Schedule, Subscription, Child),
 and, since no chief judges a ticket's own rows, delivery wording (waiting to be delivered, queued for the ticket, delivered)
