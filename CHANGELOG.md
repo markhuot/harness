@@ -15,6 +15,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
+- When new work comes up for a ticket that already exists, the chief of staff now sends it to that ticket instead of starting an unrelated one: it messages the ticket's agent if the ticket is in progress or in review, and re-opens it if it is done. A ticket re-opened this way keeps its original spec as the Goal; its agent creates the new work as a child ticket and checks the result against that spec before it submits again. The chief only does this when the event clearly names the ticket, and triage briefs now carry the ticket's key and status for it.
 - The chief of staff chat is much quieter. The "Updates from tickets you subscribed to" message and the chief's reply restating it no longer appear: a change to a ticket the chief follows goes to the triage agent first, and you only hear about it when triage decides it matters (the ticket is blocked, failed, done, or met what the chief said it was waiting for). Changes triage ignores show in the Inbox as ignored, with the reason, and a one-time watch stays armed until a change that matters.
 - When the chief of staff follows a ticket it now states why (`subscribe_ticket` takes a `reason`, required for the chief, optional for work and conductor tickets), and its instructions tell it to follow only what it will act on and to post only when you must act or decide, or the work it dispatched is finished. A ticket reaching done is always reported and ends the watch.
 

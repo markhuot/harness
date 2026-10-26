@@ -169,3 +169,13 @@ test("the chief of staff prompt routes a request to its project, asks when unsur
   expect(prompt).toMatch(/one summary once every ticket is done/);
   expect(prompt).not.toMatch(/grocer|chocolate|recipe|shopping|list items/i);
 });
+
+test("a re-open by the chief of staff keeps the Goal and sends the work to a child; the human's re-open merges it into the Goal", () => {
+  const t = makeTicket({ status: "done", key: "ACME-1" });
+  const byCos = reopenPrompt(t, "More", "main", true);
+  const byHuman = reopenPrompt(t, "More", "main");
+  expect(byCos).toContain("child: true");
+  expect(byCos).not.toContain("add what the human wants to its Goal");
+  expect(byHuman).toContain("add what the human wants to its Goal");
+  expect(byHuman).not.toContain("child: true");
+});

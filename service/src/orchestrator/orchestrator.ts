@@ -2920,7 +2920,7 @@ export class Orchestrator {
   }
 
   /** Send a done ticket back to in progress with the human's notes (the done-column "request changes"). */
-  async reopenTicket(key: string, body: ReopenBody): Promise<Ticket> {
+  async reopenTicket(key: string, body: ReopenBody, byCos = false): Promise<Ticket> {
     const ticket = this.requireTicket(key);
     this.notCos(ticket, "re-opened");
     this.notDraft(ticket, "re-opened");
@@ -2928,8 +2928,8 @@ export class Orchestrator {
     if (ticket.status !== "done") throw conflict(`${ticket.key} is not done; only done tickets can be re-opened`);
     const notes = typeof body?.notes === "string" ? body.notes.trim() : "";
     if (!notes) throw badRequest("notes are required");
-    this.addActivity(ticket, "reopened", "human", notes, this.moveMeta(ticket, "in_progress"));
-    return this.reopen(ticket, this.prompts().reopenPrompt(ticket, notes, (await this.refreshBaseBranch(ticket)).branch), "Re-opened by human");
+    this.addActivity(ticket, "reopened", byCos ? "agent" : "human", notes, this.moveMeta(ticket, "in_progress"));
+    return this.reopen(ticket, this.prompts().reopenPrompt(ticket, notes, (await this.refreshBaseBranch(ticket)).branch, byCos), byCos ? "Re-opened by chief of staff" : "Re-opened by human");
   }
 
   /**
@@ -4426,7 +4426,7 @@ ${numberLines(r.body)}`;
   async reopenTicket_(ctx: ToolContext, key: string, notes: string): Promise<Ticket> {
     const { actor, target } = this.boardTarget(ctx, key, "reopen_ticket");
     this.notLooserThanCaller(actor, target);
-    const reopened = await this.asTool(() => this.reopenTicket(target.key, { notes }));
+    const reopened = await this.asTool(() => this.reopenTicket(target.key, { notes }, actor.kind === "cos"));
     this.cosNote(actor, reopened, "re-opened it");
     return reopened;
   }

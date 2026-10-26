@@ -607,3 +607,46 @@ test("a scoped chief can't subscribe outside its scope, and a ticket that leaves
   expect(subWakes(h)).toHaveLength(0);
   expect(h.store.subscriptions.listBySubscriber(cos.ticketId)).toHaveLength(0);
 });
+
+test("a chief of staff that re-opens a done ticket sends its agent a follow-on prompt that keeps the Goal and routes the work to a child; the human's re-open still merges into the Goal", async () => {
+  const { h, work, asCos, ticket } = await board();
+  const done = await ticket(work.id, "Ship the walrus page");
+  h.store.tickets.update(done.id, { status: "done" });
+  const sent = () => h.driver.requests.map((r) => r.prompt).filter((p) => p.includes("What the human wants"));
+  const results = await asCos("all", [["reopen_ticket", { key: done.key, notes: "Also cover the narwhal page" }], ["reopen_ticket", { key: done.key, notes: "again" }]]);
+  await h.settle();
+  expect(results[0]!.isError).toBe(false);
+  expect(h.ticket(done.key).status).not.toBe("done");
+  expect(sent()[0]).toContain("Also cover the narwhal page");
+  expect(sent()[0]).toContain("child: true");
+  expect(sent()[0]).not.toContain("add what the human wants to its Goal");
+  // The ticket is no longer done: the chief's second re-open is refused, so it must message instead.
+  expect(results[1]!.isError).toBe(true);
+  expect(results[1]!.text).toMatch(/not done/);
+
+  h.store.tickets.update(done.id, { status: "done" });
+  await h.orch.reopenTicket(done.key, { notes: "Human wants more" });
+  await h.settle();
+  expect(sent().at(-1)).toContain("add what the human wants to its Goal");
+  expect(sent().at(-1)).not.toContain("child: true");
+});
+
+test("a re-opened parent that creates its follow-on as a child can't submit until the child is done; without child: true the work lands as an unlinked ticket", async () => {
+  const { h, work, ticket } = await board();
+  const done = await ticket(work.id, "Ship the walrus page");
+  h.store.tickets.update(done.id, { status: "done" });
+  const { steps, results } = callTools([
+    ["create_ticket", { title: "Narwhal page", spec: "Follow-on: cover narwhals", child: true }],
+    ["create_ticket", { title: "Loose", spec: "No link" }],
+    ["submit_for_review", { note: "n", spec_is_up_to_date: true }],
+  ]);
+  h.driver.script(steps);
+  await h.orch.reopenTicket(done.key, { notes: "Also narwhals" }, true);
+  await h.settle();
+  const linked = h.store.tickets.list({ parentId: done.id });
+  expect(linked.map((c) => c.title)).toEqual(["Narwhal page"]);
+  expect(h.store.tickets.list().find((t) => t.title === "Loose")!.parentId).toBeNull();
+  expect(results[2]!.isError).toBe(true);
+  expect(results[2]!.text).toMatch(/child tickets that aren't done/);
+  expect(h.ticket(done.key).status).toBe("in_progress");
+});
