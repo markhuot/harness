@@ -164,7 +164,8 @@ test("the chief of staff prompt routes a request to its project, asks when unsur
   expect(prompt).toContain("`get_ticket`");
   // it follows what it dispatches and summarizes when the tickets finish
   expect(prompt).toContain("`subscribe_ticket`");
-  expect(prompt).toMatch(/When a ticket is done, read its outcome with `get_ticket`/);
-  expect(prompt).toMatch(/wait until every ticket you dispatched has finished/);
+  expect(prompt).toMatch(/Every subscription needs a `reason`/);
+  expect(prompt).toMatch(/post to the human only when they must act or decide/);
+  expect(prompt).toMatch(/one summary once every ticket is done/);
   expect(prompt).not.toMatch(/grocer|chocolate|recipe|shopping|list items/i);
 });

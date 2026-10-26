@@ -2,6 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { resolveCosSetting, resolveCosStatuses, type Cos, type CosScope } from "@harness/shared";
+import type { CosTriage } from "../../../service/src/cos/triage";
 import { FakeDriver } from "../fake-driver";
 import { callTools, makeOrchestrator, stopAll } from "../orchestrator-harness";
 
@@ -11,8 +12,8 @@ afterEach(stopAll);
  * Three projects: ACME (in no group), WORK1 (group Work) and HOME1 (group Home), a ticket in each,
  * and a runner that sends a message to a chief of staff whose scripted run calls `calls`.
  */
-async function board() {
-  const h = makeOrchestrator({ tools: undefined });
+async function board(opts: { cosTriage?: CosTriage } = {}) {
+  const h = makeOrchestrator<FakeDriver>({ tools: undefined, ...opts });
   const project = (key: string, group?: string) => {
     const dir = join(h.home, "proj", key.toLowerCase());
     mkdirSync(dir, { recursive: true });
@@ -492,13 +493,26 @@ test("switching the chief's driver starts a fresh conversation instead of resumi
   expect(h.driver.requests[1]!.state).toBeNull();
 });
 
-const subWakes = (h: { driver: FakeDriver }) => h.driver.requests.filter((r) => r.prompt.includes("Updates from tickets you subscribed to"));
+/** The wakes a chief got for a followed ticket: they carry the reason it subscribed with. */
+const subWakes = (h: { driver: FakeDriver }) => h.driver.requests.filter((r) => r.prompt.includes("Your reason for following"));
+const REASON = "waiting for it to reach review";
+const escalateAll: CosTriage = {
+  backend: "fake",
+  model: "m",
+  triage: async (i) => ({ verdicts: i.events.map((e) => ({ id: e.id, verdict: "escalate", reason: "r", brief: "b", project: null })), model: "m", tokensIn: 0, tokensOut: 0 }),
+};
+/** Let the batch window pass and triage what is waiting. */
+const triaged = async (h: { clock: { advance(ms: number): void }; orch: { cosEngine: { tick(): Promise<void> } }; settle(): Promise<void> }) => {
+  h.clock.advance(6 * 60_000);
+  await h.orch.cosEngine.tick();
+  await h.settle();
+};
 
-test("a chief subscribed to a ticket is woken once per change, and the activity feed doesn't wake it a second time", async () => {
-  const { h, a } = await board();
+test("a chief subscribed to a ticket is woken once per change through triage, and the activity feed doesn't wake it a second time", async () => {
+  const { h, a } = await board({ cosTriage: escalateAll });
   h.orch.updateSettings({ cosStatuses: ["review"] }); // the chief handles review, so the feed would wake it too
   const cos = h.orch.openCos("all");
-  const { steps, results } = callTools([["subscribe_ticket", { key: a.key, mode: "forever" }]]);
+  const { steps, results } = callTools([["subscribe_ticket", { key: a.key, mode: "forever", reason: REASON }]]);
   h.driver.script(steps);
   await h.orch.sendMessage(cos.key, "follow it");
   await h.settle();
@@ -507,9 +521,12 @@ test("a chief subscribed to a ticket is woken once per change, and the activity 
   h.orch.start();
   await h.orch.updateTicket(a.key, { status: "review" });
   await h.settle();
+  await triaged(h);
   const wakes = subWakes(h);
   expect(wakes).toHaveLength(1);
   expect(wakes[0]!.prompt).toContain(a.key);
+  expect(wakes[0]!.prompt).toContain(REASON);
+  expect(wakes[0]!.prompt).not.toContain("Updates from tickets you subscribed to");
   // The move's activity entry is an ignored row, not a second wake; the row that woke the chief is in its Events too
   const events = h.orch.eventsPage(cos.key, {}).items;
   const feed = events.filter((e) => e.sourceKind === "activity");
@@ -520,24 +537,25 @@ test("a chief subscribed to a ticket is woken once per change, and the activity 
 });
 
 test("a note on a followed ticket wakes a subscribed chief once, in the running service", async () => {
-  const { h, a } = await board();
+  const { h, a } = await board({ cosTriage: escalateAll });
   h.orch.updateSettings({ cosStatuses: ["planning"] });
   const cos = h.orch.openCos("all");
-  h.driver.script(callTools([["subscribe_ticket", { key: a.key, mode: "once", events: ["note"] }]]).steps);
+  h.driver.script(callTools([["subscribe_ticket", { key: a.key, mode: "once", events: ["note"], reason: REASON }]]).steps);
   await h.orch.sendMessage(cos.key, "follow it");
   await h.settle();
   h.orch.start();
   (h.orch as unknown as { addActivityLine(t: unknown, k: string, a: string, b: string): unknown }).addActivityLine(h.store.tickets.get(a.id), "note", "agent", "halfway there");
   await h.settle();
+  await triaged(h);
   expect(subWakes(h)).toHaveLength(1);
   expect(h.orch.eventsPage(cos.key, {}).items.filter((e) => e.sourceKind === "activity" && e.status !== "ignored")).toHaveLength(0);
   await h.orch.stop();
 });
 
 test("a switched-off chief isn't woken by a subscription, and the change doesn't wake it once it is switched on", async () => {
-  const { h, a } = await board();
+  const { h, a } = await board({ cosTriage: escalateAll });
   const cos = h.orch.openCos("all");
-  h.driver.script(callTools([["subscribe_ticket", { key: a.key, mode: "forever" }]]).steps);
+  h.driver.script(callTools([["subscribe_ticket", { key: a.key, mode: "forever", reason: REASON }]]).steps);
   await h.orch.sendMessage(cos.key, "follow it");
   await h.settle();
   h.orch.setCosEnabled(cos.ticketId, false);
@@ -549,15 +567,32 @@ test("a switched-off chief isn't woken by a subscription, and the change doesn't
   expect(h.store.subscriptions.listBySubscriber(cos.ticketId)).toHaveLength(1);
   h.orch.setCosEnabled(cos.ticketId, true);
   await h.settle();
+  await triaged(h);
   expect(subWakes(h)).toHaveLength(0);
+});
+
+test("a chief of staff has to give a reason when it subscribes", async () => {
+  const { h, a } = await board();
+  const cos = h.orch.openCos("all");
+  const { steps, results } = callTools([
+    ["subscribe_ticket", { key: a.key }],
+    ["subscribe_ticket", { key: a.key, reason: "   " }],
+    ["subscribe_ticket", { key: a.key, reason: "only tell me if it ends up blocked" }],
+  ]);
+  h.driver.script(steps);
+  await h.orch.sendMessage(cos.key, "follow it");
+  await h.settle();
+  expect(results.map((r) => r.isError)).toEqual([true, true, false]);
+  expect(results[0]!.text).toMatch(/reason is required/);
+  expect(h.store.subscriptions.get(cos.ticketId, a.id)?.reason).toBe("only tell me if it ends up blocked");
 });
 
 test("a scoped chief can't subscribe outside its scope, and a ticket that leaves its scope stops waking it", async () => {
   const { h, groupOf, o, w, work, project } = await board();
   const cos = h.orch.openCos({ group: groupOf("Work") });
   const { steps, results } = callTools([
-    ["subscribe_ticket", { key: o.key }],
-    ["subscribe_ticket", { key: w.key, mode: "forever" }],
+    ["subscribe_ticket", { key: o.key, reason: REASON }],
+    ["subscribe_ticket", { key: w.key, mode: "forever", reason: REASON }],
   ]);
   h.driver.script(steps);
   await h.orch.sendMessage(cos.key, "follow");

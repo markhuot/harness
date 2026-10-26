@@ -98,7 +98,7 @@ import {
   withLegacyChoice,
 } from "@harness/shared";
 import { ScopedStore, SpecConflictError, type GroupRepo, type Store } from "../store";
-import { SUBSCRIPTION_EVENTS, type Subscription, type SubscriptionEvent, type SubscriptionMode } from "../store/subscriptions";
+import { SUBSCRIPTION_EVENTS, SUBSCRIPTION_REASON_MAX, type Subscription, type SubscriptionEvent, type SubscriptionMode } from "../store/subscriptions";
 import {
   TICKET_EVENT_STATUSES,
   cosScopeKey,
@@ -4451,8 +4451,10 @@ ${numberLines(r.body)}`;
     return row.enabled ? "yes" : "off";
   }
 
-  subscribeTicket_(ctx: ToolContext, key: string, mode: SubscriptionMode, events: SubscriptionEvent[] | undefined): Subscription & { key: string } {
+  subscribeTicket_(ctx: ToolContext, key: string, mode: SubscriptionMode, events: SubscriptionEvent[] | undefined, reason?: string): Subscription & { key: string } {
     const own = this.subscriberOf(ctx, "subscribe_ticket");
+    const why = typeof reason === "string" ? reason.replace(/\s+/g, " ").trim().slice(0, SUBSCRIPTION_REASON_MAX) : "";
+    if (own.kind === "cos" && !why) throw new Error("reason is required: say what you are waiting for or when you want to hear about it (e.g. \"waiting for planning to finish so I can create dependent tickets\"). Triage judges each change against it.");
     const target = this.agentTarget(this.scopeOf(ctx), String(key ?? "").trim());
     if (!target) throw new Error(`Unknown ticket: ${key}`);
     if (target.id === own.id) throw new Error(`${target.key} is your own ticket: subscribe to other tickets.`);
@@ -4464,7 +4466,7 @@ ${numberLines(r.body)}`;
     }
     if (target.status === "done") throw new Error(`${target.key} is done: it won't change again.`);
     if (own.status !== "in_progress") throw new Error(`${own.key} is ${own.status}: only an in-progress ticket waits for events.`);
-    const sub = this.store.subscriptions.upsert(own.id, target.id, mode, [...new Set(chosen)]);
+    const sub = this.store.subscriptions.upsert(own.id, target.id, mode, [...new Set(chosen)], why || null);
     return { ...sub, key: target.key };
   }
 
@@ -5557,14 +5559,19 @@ ${numberLines(r.body)}`;
     this.armResume();
   }
 
-  /** One row per change for the ticket it wakes, written where the change happens (the caller is only known there, via `callerContext`). */
-  private insertTicketEvent(targetId: string, sourceKind: "child" | "subscription", change: ConductorChange): StoredTicketEvent | null {
+  /**
+   * One row per change for the ticket it wakes, written where the change happens (the caller is only known there, via `callerContext`).
+   * A chief of staff's subscription row (`cos`) is pinned to that chief and waits for triage like the chief's other events:
+   * it carries the subscription's reason and mode.
+   */
+  private insertTicketEvent(targetId: string, sourceKind: "child" | "subscription", change: ConductorChange, cos?: { reason: string | null; mode: SubscriptionMode }): StoredTicketEvent | null {
     const source = this.store.tickets.get(change.ticketId);
     const event = change.event ?? "status";
     const moved = event === "status" && change.from !== change.to;
     const what = event === "note" ? "posted a note" : event === "spec" ? "revised its spec" : moved ? `${change.from} → ${change.to}` : "changed";
+    const detail = change.note ? `\n\n${change.note}` : "";
     const row = this.store.ticketEvents.insert({
-      cosId: null,
+      cosId: cos ? targetId : null,
       targetId,
       projectId: source?.projectId ?? null,
       ticketId: change.ticketId,
@@ -5575,8 +5582,17 @@ ${numberLines(r.body)}`;
       actor: this.actorContext.getStore() ?? "system",
       title: `${change.key}: ${what}`,
       summary: `${change.key} ${what}`,
-      payload: { key: change.key, title: change.title, from: change.from, to: change.to, note: change.note, specRevision: change.specRevision, event },
-      ready: true,
+      payload: {
+        key: change.key,
+        title: change.title,
+        from: change.from,
+        to: change.to,
+        note: change.note,
+        specRevision: change.specRevision,
+        event,
+        ...(cos ? { body: `${change.key} "${change.title}" ${what}${detail}`, reason: cos.reason, mode: cos.mode } : {}),
+      },
+      ...(cos ? {} : { ready: true }),
     });
     return row;
   }
@@ -5593,9 +5609,9 @@ ${numberLines(r.body)}`;
   /**
    * Tell the tickets subscribed to `t` about a change (DESIGN.md "Ticket subscriptions"). A parent
    * hears a status change through notifyConductor already. A subscriber doesn't hear changes it
-   * made itself, and a ticket that is over (done) drops its subscriptions instead. A `once`
-   * subscription is deleted in the same transaction as its row, so a crash can't leave a row
-   * without its subscription gone or the reverse.
+   * made itself, and a ticket that is over (done) drops its subscriptions instead. A work or conductor
+   * ticket's `once` subscription is deleted in the same transaction as its row, so a crash can't leave a row
+   * without its subscription gone or the reverse. A chief of staff's rows go through its triage (CosEngine).
    */
   private notifySubscribers(t: Ticket, change: ConductorChange) {
     const event = change.event ?? "status";
@@ -5617,19 +5633,29 @@ ${numberLines(r.body)}`;
           continue;
         }
         off = hears === "off";
+        // The chief's row is triaged, not delivered: triage decides whether it ever reaches the chat, and
+        // the engine spends a `once` subscription when the row escalates (an ignored change leaves it armed).
+        // Switched off, it isn't woken, and the change isn't kept for when it is switched on again.
+        const row = this.store.transaction(() => {
+          const inserted = this.insertTicketEvent(subscriber.id, "subscription", { ...change, event }, { reason: sub.reason, mode: sub.mode });
+          if (inserted && off) return this.store.ticketEvents.update(inserted.id, { status: "ignored", verdict: "ignore", reason: "the chief of staff is switched off", wakeId: null, consumingRunId: null });
+          return inserted;
+        });
+        if (row) {
+          this.bus.emit({ kind: "ticket.event.upserted", event: wireCosEvent(row) });
+          if (!off) this.cosEngine.pending();
+        }
+        continue;
       }
       const row = this.store.transaction(() => {
         const inserted = this.insertTicketEvent(subscriber.id, "subscription", { ...change, event });
-        // Switched off, it isn't woken, and the change isn't kept for when it is switched on again: the row shows as ignored
-        if (inserted && off) this.store.ticketEvents.update(inserted.id, { status: "ignored", reason: "the chief of staff is switched off", wakeId: null, consumingRunId: null });
-        // A `once` subscription isn't spent by a change the chief never heard
-        if (sub.mode === "once" && !off) this.store.subscriptions.delete(sub.subscriberId, sub.targetId);
-        return inserted && off ? this.store.ticketEvents.get(inserted.id) : inserted;
+        if (sub.mode === "once") this.store.subscriptions.delete(sub.subscriberId, sub.targetId);
+        return inserted;
       });
       if (row) {
         // After the transaction: a rolled-back row is never announced
         this.bus.emit({ kind: "ticket.event.upserted", event: wireCosEvent(row) });
-        if (!off) this.deliverTicketEvents(subscriber.id, true);
+        this.deliverTicketEvents(subscriber.id, true);
       }
     }
   }
@@ -6392,7 +6418,7 @@ ${numberLines(r.body)}`;
       messageTicket: (c, k, t) => this.messageTicket_(c, k, t),
       cancelTicket: (c, k) => this.cancelTicket_(c, k),
       reopenTicket: (c, k, n) => this.reopenTicket_(c, k, n),
-      subscribeTicket: (c, k, m, e) => this.subscribeTicket_(c, k, m, e),
+      subscribeTicket: (c, k, m, e, r) => this.subscribeTicket_(c, k, m, e, r),
       unsubscribeTicket: (c, k) => this.unsubscribeTicket_(c, k),
       listSubscriptions: (c) => this.listSubscriptions_(c),
       // --- conductor ---

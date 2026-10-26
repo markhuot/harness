@@ -91,7 +91,11 @@ export class CosEngine {
       open: (cosId) => !!d.store.cos.get(cosId)?.enabled,
       targetExists: (cosId) => !!d.store.cos.get(cosId),
       // A chief that was removed: its rows wait for whoever owns their project now.
-      onTargetGone: (e) => this.patch(e.id, { status: "escalated", wakeId: null, consumingRunId: null, cosId: null }),
+      // A subscription row is pinned to its chief: with the chief gone, nobody is left to hear it.
+      onTargetGone: (e) =>
+        e.sourceKind === "subscription"
+          ? this.patch(e.id, { status: "ignored", reason: "its chief of staff no longer exists", wakeId: null, consumingRunId: null })
+          : this.patch(e.id, { status: "escalated", wakeId: null, consumingRunId: null, cosId: null }),
       render: (cosId, events, more) => this.render(cosId, events, more),
       deliver: async (cosId, text, events) => {
         const keys = new Set(events.map((e) => e.projectKey));
@@ -134,6 +138,13 @@ export class CosEngine {
 
   stop() {
     this.delivery.stop();
+  }
+
+  /** A row was written for triage outside the activity feed (a chief's subscription): count it and schedule the batch. */
+  pending() {
+    if (this.stopped) return;
+    this.emitBadge();
+    this.arm();
   }
 
   /** The bus saw activity: read it now rather than at the next tick. */
@@ -311,6 +322,8 @@ export class CosEngine {
     let moved = 0;
     // Escalations waiting for a wake (held by the cap, or by a chief that is off) move with the rest; ones being handled don't.
     for (const e of [...store.ticketEvents.byStatus("pending"), ...store.ticketEvents.byStatus("escalated")]) {
+      // A subscription row belongs to the chief that subscribed, wherever the ticket's project sits.
+      if (e.sourceKind === "subscription") continue;
       const project = e.projectId ? store.projects.get(e.projectId) : null;
       // A schedule's wake belongs to the chief that made it, wherever its project sits.
       const schedule = e.sourceKind === "schedule" ? store.schedules.get(e.sourceRef.split(":")[0]!) : null;
@@ -370,8 +383,9 @@ export class CosEngine {
     this.triaging.add(cosId);
     try {
       // Net state per ticket: five moves in one batch are one move, or none.
+      // A subscription row stands alone: it carries the reason its change is judged against.
       const { dropped, net } = collapseMoves(
-        pending.map((e) => ({ id: e.id, ticketId: e.ticketId, kind: e.kind, from: e.payload.from as string | null, to: e.payload.to as string | null, createdAt: e.createdAt })),
+        pending.filter((e) => e.sourceKind !== "subscription").map((e) => ({ id: e.id, ticketId: e.ticketId, kind: e.kind, from: e.payload.from as string | null, to: e.payload.to as string | null, createdAt: e.createdAt })),
       );
       const gone = new Set(dropped.map((x) => x.id));
       for (const { id, into } of dropped) this.patch(id, { status: "ignored", verdict: "filtered", reason: into ? "merged into a later move of the same ticket" : "moves cancelled out: the ticket ended where it started" });
@@ -456,6 +470,10 @@ export class CosEngine {
 
     for (const e of batch) {
       const v = verdicts.get(e.id);
+      if (e.sourceKind === "subscription") {
+        this.settleSubscriptionRow(e, v, { failure, model, session, lookup });
+        continue;
+      }
       if (v?.verdict === "ignore") {
         this.patch(e.id, { status: "ignored", verdict: "ignore", reason: noteLookup(v.reason, lookup), model, wakeId: null, ...(session ? { payload: { ...e.payload, triageSession: session } } : {}) });
         continue;
@@ -476,6 +494,35 @@ export class CosEngine {
       this.patch(e.id, patch);
     }
     this.emitBadge();
+  }
+
+  /**
+   * A chief's subscription row gets its verdict. The row and the subscription change in one transaction: an escalation spends a
+   * `once` subscription, an ignore leaves it armed (the chief's watch isn't lost to a change that didn't matter). A target that
+   * reached done always escalates and always ends the subscription, whatever triage said. A `forever` subscription cancelled
+   * while the row waited records the change as ignored, since nobody is following the ticket any more.
+   */
+  private settleSubscriptionRow(e: StoredTicketEvent, v: TriageVerdict | undefined, ctx: { failure: string | null; model: string | null; session: string | null; lookup: boolean }) {
+    const { store } = this.d;
+    const done = e.payload.event === "status" && e.payload.to === "done";
+    const cosId = e.cosId!;
+    const sub = e.ticketId ? store.subscriptions.get(cosId, e.ticketId) : null;
+    const cancelled = !done && !sub && e.payload.mode === "forever";
+    const ignore = !done && (cancelled || v?.verdict === "ignore");
+    const payload = { ...e.payload, ...(!ignore && v?.brief ? { brief: v.brief } : {}), ...(ctx.session ? { triageSession: ctx.session } : {}) };
+    const reason = cancelled ? "the chief of staff stopped following this ticket" : done && v?.verdict === "ignore" ? "the ticket is done: the chief always hears that" : v ? noteLookup(v.reason, ctx.lookup) : (ctx.failure ?? "triage gave no verdict for this event");
+    const next = store.transaction(() => {
+      const row = this.d.store.ticketEvents.update(e.id, ignore ? { status: "ignored", verdict: "ignore", reason, model: ctx.model, wakeId: null, payload } : { status: "escalated", verdict: "escalate", reason, model: v ? ctx.model : null, wakeId: null, payload });
+      if (!ignore) this.spendSubscription(e, done);
+      return row;
+    });
+    if (next) this.d.emit({ kind: "ticket.event.upserted", event: wire(next) });
+  }
+
+  /** The subscription an escalated row came from ends if it was a `once` one, or if its target is done. Call inside the transaction that marks the row. */
+  private spendSubscription(e: StoredTicketEvent, done: boolean) {
+    if (!e.cosId || !e.ticketId) return;
+    if (done || e.payload.mode === "once") this.d.store.subscriptions.delete(e.cosId, e.ticketId);
   }
 
   private setUnavailable(reason: string | null) {
@@ -505,6 +552,7 @@ export class CosEngine {
         ticket: ticket ? `${ticket.key} "${ticket.title}" (${ticket.status})` : null,
         body: String(e.payload.body ?? e.summary),
         watcher: this.watcherOf(e),
+        intent: e.sourceKind === "subscription" && typeof e.payload.reason === "string" ? e.payload.reason : null,
       };
     });
     return { cosId, guidance, projects, events };
@@ -533,6 +581,8 @@ export class CosEngine {
     for (const e of events) {
       const brief = typeof e.payload.brief === "string" ? `Triage brief: ${clip(e.payload.brief, 500)}\n` : "";
       const why = e.reason ? `Triage reason: ${clip(e.reason, 300)}\n` : "";
+      // The chief wrote its own reason, so it sits outside the fence.
+      if (e.sourceKind === "subscription" && typeof e.payload.reason === "string" && e.payload.reason) lines.push(`Your reason for following ${e.ticketKey ?? "this ticket"}: ${clip(e.payload.reason, 300)}`);
       lines.push(`${e.id} (${e.sourceKind})${e.ticketKey ? ` ${e.ticketKey}` : ""}`, fenceUntrusted(e.id, `${brief}${why}${clip(e.title, 200)} (by ${clip(e.actor, 200)})\n\n${clip(String(e.payload.body ?? e.summary), WAKE_BODY_MAX)}`), "");
     }
     lines.push(digest.count ? `Ignored since the last wake: ${digest.count} event${digest.count === 1 ? "" : "s"}.` : "Ignored since the last wake: nothing.");
@@ -597,10 +647,20 @@ export class CosEngine {
     if (e.status === "escalated" || e.status === "handling") return { event: e };
     const was = e.reason ? ` (was: ${firstLine(e.reason, 120)})` : "";
     const project = e.projectId ? this.d.store.projects.get(e.projectId) : null;
-    const next = this.patch(id, { status: "escalated", verdict: "escalate", reason: `Escalated by you${was}`, model: null, cosId: this.ownerFor(project) })!;
+    const patch = { status: "escalated" as const, verdict: "escalate" as const, reason: `Escalated by you${was}`, model: null };
+    // A subscription row stays with the chief that subscribed, and escalating it spends a `once` subscription like any escalation.
+    const next =
+      e.sourceKind === "subscription"
+        ? this.d.store.transaction(() => {
+            const row = this.d.store.ticketEvents.update(id, patch);
+            this.spendSubscription(e, e.payload.event === "status" && e.payload.to === "done");
+            return row;
+          })
+        : this.patch(id, { ...patch, cosId: this.ownerFor(project) });
+    if (e.sourceKind === "subscription" && next) this.d.emit({ kind: "ticket.event.upserted", event: wire(next) });
     this.emitBadge();
     this.arm();
-    return { event: next };
+    return { event: next! };
   }
 
   // -------------------------------------------------------------------------

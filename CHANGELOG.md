@@ -9,6 +9,11 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Changed
+
+- The chief of staff chat is much quieter. The "Updates from tickets you subscribed to" message and the chief's reply restating it no longer appear: a change to a ticket the chief follows goes to the triage agent first, and you only hear about it when triage decides it matters (the ticket is blocked, failed, done, or met what the chief said it was waiting for). Changes triage ignores show in the Inbox as ignored, with the reason, and a one-time watch stays armed until a change that matters.
+- When the chief of staff follows a ticket it now states why (`subscribe_ticket` takes a `reason`, required for the chief, optional for work and conductor tickets), and its instructions tell it to follow only what it will act on and to post only when you must act or decide, or the work it dispatched is finished. A ticket reaching done is always reported and ends the watch.
+
 ## [app-20261026.1226](https://github.com/markhuot/harness/releases/tag/app-20261026.1226) - 2026-10-26
 
 ### Added

@@ -1165,12 +1165,12 @@ a ticket that is done or deleted is closed `ignored` with the reason.
 
 ### Ticket subscriptions
 
-A work, conductor or chief of staff run subscribes to another ticket with `subscribe_ticket` { key, mode, events }
+A work, conductor or chief of staff run subscribes to another ticket with `subscribe_ticket` { key, mode, events, reason }
 to be woken when it changes, instead of waiting with a shell `sleep` (no prompt recommends that).
 `mode` is `once` (the row is deleted at the first delivery, the default) or `forever`; `events` are
 `status` (moves, review approvals; the default), `note` and `spec`. Rows live in
 `ticket_subscriptions` (subscriber, target, mode, events); `unsubscribe_ticket` and
-`list_subscriptions` complete the set. A parent is an implicit subscriber to its children's status
+`list_subscriptions` complete the set. `reason` says why the subscriber follows the ticket (`ticket_subscriptions.reason`); it is required of a chief of staff and optional for anyone else. A parent is an implicit subscriber to its children's status
 changes (no row, so it can't drift); subscribing to your own child's status is refused.
 
 Delivery is the parent's path above, with rows of `source_kind` `subscription` (`target_id` the subscriber). Guard rails:
@@ -1187,15 +1187,27 @@ its runs are cancelled (an event must not restart an agent someone stopped). A t
 subscription on a ticket that isn't done, or with a subscription row still waiting, isn't auto-submitted, since it is
 waiting for events: it calls `submit_for_review` when it is done.
 
-A chief of staff subscribes the same way, to follow the tickets it dispatches (its prompt says to, and to summarize them when
-they are done). Its ticket never leaves in progress, so its subscriptions are never cleaned up by a move: instead
-`notifySubscribers` checks at every change that the chief is switched on (a switched-off chief gets no row and nothing
-is kept for when it is switched on again; switching it off also closes its waiting rows) and that the ticket is still
-inside its scope (read fresh, so a group change takes effect at once; a ticket out of scope drops the subscription).
-The row is delivered by the ticket feed like any other, held while the chief is off. The chief's own activity feed
-skips an event its subscription already delivered (`TicketEventRepo.hasTicketRow`, recorded as ignored with the reason
-"follows this ticket through a subscription"), so one change wakes it once. A done ticket can't be subscribed to, and its
-subscribers' rows are dropped once they have heard it is done, so no ticket waits on something that can't change.
+A chief of staff subscribes the same way, to follow the tickets it dispatches, but only when it will act on the result or the user must
+hear it (its prompt says so, and to post only when the user must act or decide, or a dispatched set of work finishes). Its ticket never leaves in progress, so
+its subscriptions are never cleaned up by a move: instead `notifySubscribers` checks at every change that the chief is switched on
+(a switched-off chief gets the change as an ignored row, so the human can read it, and nothing is kept for when it is switched on again)
+and that the ticket is still inside its scope (read fresh, so a group change takes effect at once; a ticket out of scope drops the subscription).
+
+**A chief's subscription rows are triaged.** Unlike a work or conductor ticket's, a chief's row is pinned to the chief (`cos_id`
+set, so it belongs to the chief's scope, not the ticket feed's), starts `pending` and goes through the same batch window and triage as its
+activity events; the subscription's `reason` and `mode` are copied into the row's payload. Triage is told the reason as "the chief's
+stated intent", outside the untrusted fence, and asks whether the condition the chief stated has been met or the change would alter
+what it does. An ignore writes nothing to the chat (the row shows as ignored with its reason in the Inbox). An escalation reaches the chief through its
+usual `[Harness: N events for you]` wake with triage's brief, and the chief replies to the user only if the user must act. The "Updates from tickets
+you subscribed to" message is therefore never in a chief's chat, and the wake lists each row's id, so `record_event_outcomes` can name it.
+The engine treats these rows differently from activity: they skip the column filter (`cosStatuses`, which only reads the feed), `rehome()` leaves them with
+their chief, and `collapseMoves` leaves each its own row and reason. The chief's activity feed skips an event whose subscription row exists
+(`TicketEventRepo.hasTicketRow`, recorded as ignored with the reason "follows this ticket through a subscription"), so one change is triaged once.
+
+A chief's `once` subscription is spent only when its row escalates: `settleSubscriptionRow` marks the row and deletes the subscription in one SQLite
+transaction (the engine runs one triage pass per chief), from the triage verdict, the fail-open path (an error or timeout escalates) and the Inbox's
+"Escalate anyway". An ignore leaves it armed. A target reaching done always escalates, whatever triage said, and ends the subscription (`once` or
+`forever`). A `forever` subscription cancelled while its row waits records the row as ignored. A done ticket can't be subscribed to.
 
 **Events tab.** `Ticket.hasEvents` (a boolean, so a busy feed doesn't push the ticket on every event) is true while a
 row that isn't `filtered` has the ticket as its `target_id`. The service pushes the ticket again when a change to the rows (an insert, a row re-pointed or filtered, a prune) leaves its
@@ -1208,8 +1220,8 @@ and, since no chief judges a ticket's own rows, delivery wording (waiting to be 
 in place of the Inbox's verdicts. "Escalate anyway" and the **+** exist only in a chief's Inbox. How long rows are kept is
 Settings → General → "Keep event history for" on both apps (`eventRetentionDays`, 1 to 365, default 7).
 
-Explicit subscription and child rows skip the chief's triage and rehoming: the chief's engine and its Inbox only read
-`activity`, `watcher` and `schedule` rows (the store's scope), and the ticket feed only the other two. The rows show in
+Child rows, and the subscription rows of work and conductor tickets, skip the chief's triage and rehoming: the ticket feed reads only
+those (the store's scope), while the chief's engine and its Inbox read `activity`, `watcher` and `schedule` rows and the subscription rows pinned to a chief. The rows show in
 the target's own `list_inbox`. Wakes of the two feeds are told apart in the wake log by event class (`child`,
 `subscription`; the chief's is empty), so a chief that is also a parent or subscriber keeps its chat cards to its own events.
 

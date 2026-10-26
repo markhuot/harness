@@ -6,7 +6,7 @@ import { COS_TRIAGE_BATCH_MS, EVENT_WAKE_CAP } from "../../../shared/src/cos";
 import { WAKE_MAX_ATTEMPTS, WAKE_MAX_EVENTS } from "../../../service/src/events/delivery";
 import { isSilentReply, WAKE_PROMPT_PREFIX } from "../../../service/src/cos/chat";
 import type { CosEngine } from "../../../service/src/cos/engine";
-import { LlmTriage, type CosTriage, type TriageInput, type TriageResult, type TriageVerdict } from "../../../service/src/cos/triage";
+import { buildTriagePrompt, LlmTriage, type CosTriage, type TriageInput, type TriageResult, type TriageVerdict } from "../../../service/src/cos/triage";
 import type { StoredTicketEvent } from "../../../service/src/store/ticket-events";
 import { handleMcpRequest } from "../../../service/src/api/mcp";
 import { COS_UNASSIGNED_MAX, COS_UNASSIGNED_RETENTION_MS, TRIAGE_CHUNK, WAKE_BODY_MAX } from "../../../service/src/cos/engine";
@@ -1208,4 +1208,125 @@ test("deleting a project makes one event, not one per ticket", async () => {
   // The owner survives the project: a rehome keeps it with a live chief.
   s.engine.rehome();
   expect(s.events().find((e) => e.kind === "deleted")!.cosId).toBe(s.chief.ticketId);
+});
+
+// ---------------------------------------------------------------------------
+// A chief's ticket subscriptions go through triage
+// ---------------------------------------------------------------------------
+
+/** A chief following a ticket with a stated reason; the subscription's own row is what the tests read. */
+async function following(mode: "once" | "forever" = "once", reason = "waiting for review so I can hand it off") {
+  const s = await quiet();
+  s.h.store.subscriptions.upsert(s.chief.ticketId, s.t.id, mode, ["status"], reason);
+  const rows = () => s.events().filter((e) => e.sourceKind === "subscription");
+  const subscription = () => s.h.store.subscriptions.get(s.chief.ticketId, s.t.id);
+  const wakes = () => s.h.driver.requests.filter((r) => r.prompt.startsWith(WAKE_PROMPT_PREFIX));
+  return { ...s, rows, subscription, wakes };
+}
+
+test("a followed change triage ignores writes nothing to the chat, is kept in the Inbox with its reason, and leaves a once subscription armed", async () => {
+  const s = await following("once");
+  s.scripted!.answers.push((i) => i.events.map((e) => verdict(e.id, "ignore", { reason: "routine progress" })));
+  await s.h.orch.updateTicket(s.t.key, { status: "review" });
+  await s.after(6 * MIN);
+  expect(s.rows()).toHaveLength(1);
+  expect(s.rows()[0]).toMatchObject({ cosId: s.chief.ticketId, status: "ignored", reason: "routine progress" });
+  expect(s.subscription()).not.toBeNull(); // the chief's watch isn't spent by a change that didn't matter
+  expect(s.h.driver.requests).toHaveLength(0);
+  expect(chatOf(s).filter((e) => e.kind !== "message" || /Updates from tickets/.test(e.text ?? ""))).toHaveLength(0);
+});
+
+test("an escalated followed change wakes the chief with triage's brief and its own reason, spends a once subscription, and never shows as a subscription bubble", async () => {
+  const s = await following("once", "waiting for review so I can hand it off");
+  s.scripted!.answers.push(escalating("review", "it reached review"));
+  await s.h.orch.updateTicket(s.t.key, { status: "review" });
+  await s.after(6 * MIN);
+  expect(s.rows()[0]).toMatchObject({ status: expect.stringMatching(/escalated|handling|handled/) });
+  expect(s.subscription()).toBeNull();
+  const wake = s.wakes();
+  expect(wake).toHaveLength(1);
+  expect(wake[0]!.prompt).toContain("Triage brief: it reached review");
+  expect(wake[0]!.prompt).toContain("Your reason for following");
+  expect(wake[0]!.prompt).toContain(s.rows()[0]!.id); // its id is listed, so record_event_outcomes can name it
+  expect(s.h.driver.requests.some((r) => r.prompt.includes("Updates from tickets you subscribed to"))).toBe(false);
+  expect(chatOf(s).some((e) => /Updates from tickets/.test(e.text ?? ""))).toBe(false);
+});
+
+test("triage is told the chief's reason, outside the untrusted fence, and a forever subscription survives an escalation", async () => {
+  const s = await following("forever", "only tell me if it ends up blocked");
+  s.scripted!.answers.push(escalating("blocked"));
+  await s.h.orch.updateTicket(s.t.key, { status: "blocked" });
+  await s.after(6 * MIN);
+  expect(s.scripted!.calls[0]!.events.find((e) => e.source === "subscription")?.intent).toBe("only tell me if it ends up blocked");
+  expect(s.subscription()).not.toBeNull();
+  const { user } = buildTriagePrompt(s.scripted!.calls[0]!);
+  const before = user.slice(0, user.indexOf("<untrusted-event"));
+  expect(before).toContain("the chief's stated intent: only tell me if it ends up blocked");
+});
+
+test("a target reaching done always escalates and ends the subscription, even when triage would ignore it", async () => {
+  const s = await following("forever");
+  s.scripted!.answers.push(ignoreAll);
+  await s.h.orch.updateTicket(s.t.key, { status: "done" });
+  await s.after(6 * MIN);
+  expect(s.rows()[0]).toMatchObject({ verdict: "escalate" });
+  expect(s.rows()[0]!.status).not.toBe("ignored");
+  expect(s.subscription()).toBeNull();
+  expect(s.wakes()).toHaveLength(1);
+});
+
+test("a followed change on a column the chief doesn't handle is still triaged", async () => {
+  const s = await following("forever");
+  s.h.orch.updateSettings({ cosStatuses: ["planning"] }); // review isn't a column the chief handles
+  s.scripted!.answers.push(escalating("review"));
+  await s.h.orch.updateTicket(s.t.key, { status: "review" });
+  await s.after(6 * MIN);
+  expect(s.scripted!.calls.flatMap((c) => c.events).filter((e) => e.source === "subscription")).toHaveLength(1);
+  expect(s.wakes()).toHaveLength(1);
+});
+
+test("a forever subscription cancelled while its change waits records the change as ignored, even if triage would escalate", async () => {
+  const s = await following("forever");
+  s.scripted!.answers.push(escalating("review"));
+  await s.h.orch.updateTicket(s.t.key, { status: "review" });
+  s.h.store.subscriptions.delete(s.chief.ticketId, s.t.id);
+  await s.after(6 * MIN);
+  expect(s.rows()[0]).toMatchObject({ status: "ignored", reason: "the chief of staff stopped following this ticket" });
+  expect(s.wakes()).toHaveLength(0);
+});
+
+test("a followed change stays with the chief that subscribed when a group chief takes over the project", async () => {
+  const s = await setup();
+  const all = s.h.orch.openCos("all");
+  const w1 = s.project("WORK1", "Work");
+  s.project("WORK2", "Work");
+  const t = await s.ticket(w1.id, "work item");
+  await s.after(6 * MIN);
+  s.h.store.subscriptions.upsert(all.ticketId, t.id, "once", ["status"], "r");
+  s.scripted!.answers.push(ignoreAll);
+  await s.h.orch.updateTicket(t.key, { status: "review" });
+  const row = () => s.events().find((e) => e.sourceKind === "subscription")!;
+  s.h.orch.openCos({ group: s.h.store.groups.findByName("Work")!.id });
+  s.engine.rehome();
+  expect(row().cosId).toBe(all.ticketId);
+});
+
+test("Escalate anyway on an ignored followed change spends a once subscription, and keeps the row with its chief", async () => {
+  const s = await following("once");
+  s.scripted!.answers.push(ignoreAll);
+  await s.h.orch.updateTicket(s.t.key, { status: "review" });
+  await s.after(6 * MIN);
+  expect(s.subscription()).not.toBeNull();
+  const res = s.engine.escalate(s.rows()[0]!.id);
+  expect("event" in res && res.event.cosId).toBe(s.chief.ticketId);
+  expect(s.subscription()).toBeNull();
+});
+
+test("triage failing open escalates a followed change and spends the subscription", async () => {
+  const s = await following("once");
+  s.scripted!.answers.push(() => Promise.reject(new Error("503")));
+  await s.h.orch.updateTicket(s.t.key, { status: "review" });
+  await s.after(6 * MIN);
+  expect(s.rows()[0]).toMatchObject({ verdict: "escalate" });
+  expect(s.subscription()).toBeNull();
 });

@@ -48,9 +48,13 @@ interface Row {
 /** The kinds of row that wake an ordinary ticket (a parent hearing its children, a subscriber): delivered by the ticket instance of EventDelivery, never seen by a chief's triage or Inbox. */
 export const TICKET_SOURCE_KINDS = ["subscription", "child"] as const;
 export type EventScope = "chief" | "ticket";
-const TICKET_KINDS_SQL = TICKET_SOURCE_KINDS.map((k) => `'${k}'`).join(", ");
-/** The rows a scope reads: the chief of staff's pipeline (activity, watcher, schedule) or the ticket feed (subscription, child). */
-const scopeSql = (scope: EventScope) => (scope === "ticket" ? `e.source_kind IN (${TICKET_KINDS_SQL})` : `e.source_kind NOT IN (${TICKET_KINDS_SQL})`);
+/**
+ * A ticket-feed row: a child's, or a subscription's with no chief pinned to it. A chief of staff's subscription row
+ * has its `cos_id` set and goes through its triage like the rest of its pipeline, so it belongs to the chief scope.
+ */
+const TICKET_ROW_SQL = "(source_kind = 'child' OR (source_kind = 'subscription' AND cos_id IS NULL))";
+/** The rows a scope reads: the chief of staff's pipeline (activity, watcher, schedule, a chief's subscription) or the ticket feed (child, any other subscription). */
+const scopeSql = (scope: EventScope) => (scope === "ticket" ? TICKET_ROW_SQL : `NOT ${TICKET_ROW_SQL}`).replaceAll("source_kind", "e.source_kind").replaceAll("cos_id", "e.cos_id");
 
 const SELECT = `SELECT e.*, p.key AS project_key, t.key AS ticket_key FROM ticket_events e
   LEFT JOIN projects p ON p.id = e.project_id LEFT JOIN tickets t ON t.id = e.ticket_id`;
@@ -194,7 +198,7 @@ export class TicketEventRepo {
     // repeat dedupes against any owner (the unique indexes only see equal targets).
     if (input.targetId === undefined && this.db.query("SELECT 1 FROM ticket_events WHERE source_kind = $k AND source_ref = $r").get({ k: input.sourceKind, r: input.sourceRef })) return null;
     // One change reaches a ticket once, whether it came as the parent or as a subscriber.
-    if (input.targetId && (TICKET_SOURCE_KINDS as readonly string[]).includes(input.sourceKind) && this.db.query(`SELECT 1 FROM ticket_events e WHERE e.target_id = $t AND e.source_ref = $r AND ${scopeSql("ticket")}`).get({ t: input.targetId, r: input.sourceRef })) return null;
+    if (input.targetId && (TICKET_SOURCE_KINDS as readonly string[]).includes(input.sourceKind) && this.db.query(`SELECT 1 FROM ticket_events e WHERE e.target_id = $t AND e.source_ref = $r AND e.source_kind IN ('child', 'subscription')`).get({ t: input.targetId, r: input.sourceRef })) return null;
     const target = input.targetId === undefined ? input.cosId : input.targetId;
     this.touch(target);
     const res = this.db
@@ -224,9 +228,9 @@ export class TicketEventRepo {
     return res.changes ? this.get(id) : null;
   }
 
-  /** Whether a ticket already has a row (child or subscription) for this source event: the chief's subscription heard it. */
+  /** Whether a ticket already has a row (child or subscription, a chief's included) for this source event: the chief's subscription heard it. */
   hasTicketRow(targetId: string, sourceRef: string): boolean {
-    return !!this.db.query(`SELECT 1 FROM ticket_events e WHERE e.target_id = $t AND e.source_ref = $r AND ${scopeSql("ticket")}`).get({ t: targetId, r: sourceRef });
+    return !!this.db.query(`SELECT 1 FROM ticket_events e WHERE e.target_id = $t AND e.source_ref = $r AND e.source_kind IN ('child', 'subscription')`).get({ t: targetId, r: sourceRef });
   }
 
   get(id: string): StoredTicketEvent | null {
@@ -346,7 +350,7 @@ export class TicketEventRepo {
   badge(): CosBadge {
     const marks = COS_OPEN_STATUSES.map((_, i) => `$s${i}`).join(", ");
     const args = Object.fromEntries(COS_OPEN_STATUSES.map((s, i) => [`s${i}`, s]));
-    const rows = this.db.query(`SELECT cos_id, COUNT(*) AS n FROM ticket_events WHERE status IN (${marks}) AND source_kind NOT IN (${TICKET_KINDS_SQL}) GROUP BY cos_id`).all(args) as { cos_id: string | null; n: number }[];
+    const rows = this.db.query(`SELECT cos_id, COUNT(*) AS n FROM ticket_events WHERE status IN (${marks}) AND NOT ${TICKET_ROW_SQL} GROUP BY cos_id`).all(args) as { cos_id: string | null; n: number }[];
     const byCos: Record<string, number> = {};
     let total = 0;
     for (const r of rows) {
@@ -384,7 +388,7 @@ export class TicketEventRepo {
   /** Delete unowned events still waiting (pending, escalated) that are older than `before`, and all but the newest `keep` of the rest. */
   pruneUnassigned(before: number, keep: number): number {
     // Open items converted from the old Inbox (migration 49) wait for the All chief; they are never pruned.
-    const open = `cos_id IS NULL AND status IN ('pending', 'escalated') AND source_ref NOT LIKE 'triage:%' AND source_kind NOT IN (${TICKET_KINDS_SQL})`;
+    const open = `cos_id IS NULL AND status IN ('pending', 'escalated') AND source_ref NOT LIKE 'triage:%' AND NOT ${TICKET_ROW_SQL}`;
     const old = this.deleteWhere(`${open} AND created_at < $before`, { before });
     const over = this.deleteWhere(`${open} AND id IN (SELECT id FROM ticket_events WHERE ${open} ORDER BY created_at DESC, rowid DESC LIMIT -1 OFFSET $keep)`, { keep });
     return old + over;
