@@ -9,6 +9,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Changed
+
+- The plan usage gauges in the sidebar keep showing the last reading, dated by when it was taken, when Claude's login has expired or the usage endpoint can't be reached, instead of replacing the bars with a message. The last reading is also saved, so it survives a restart.
+
 ## [app-20261024.0004](https://github.com/markhuot/harness/releases/tag/app-20261024.0004) - 2026-10-24
 
 ### Added

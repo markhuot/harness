@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { assertNoTimerLeaks, trackTimers } from "../leaks";
-import type { PlanWindow } from "@harness/shared";
+import type { DriverPlanUsage, PlanWindow } from "@harness/shared";
 import { PlanUsageError, type Driver } from "../../../service/src/drivers/types";
 import { EventBus } from "../../../service/src/events";
 import { BACKOFF_MS, MAX_BACKOFF_MS, PlanUsageTracker, POLL_MS } from "../../../service/src/orchestrator/plan-usage";
@@ -45,6 +45,25 @@ test("a driver with no plan has no row, and one that stops having a plan loses i
   await r.tracker.refresh();
   expect(r.tracker.report().drivers).toEqual([]);
   expect(r.updates).toEqual([1, 0]);
+});
+
+test("a failed read after a good one keeps the last windows, dated by when they were read", async () => {
+  const r = rig([win(42)], new Error("Claude Code's login token has expired."));
+  await r.tracker.refresh();
+  r.clock.advance(24 * 3600_000);
+  await r.tracker.refresh();
+  expect(r.tracker.report().drivers[0]).toMatchObject({ error: "Claude Code's login token has expired.", windows: [win(42)], fetchedAt: 1_000_000 });
+});
+
+test("readings are saved and come back after a restart", async () => {
+  let saved: DriverPlanUsage[] = [];
+  const cache = { load: () => saved, save: (v: DriverPlanUsage[]) => (saved = v) };
+  const driver = new FakeDriver({ id: "claude-code" });
+  (driver as Driver).planUsage = async () => [win(42)];
+  await new PlanUsageTracker(() => [driver], new EventBus(), fakeClock(1_000_000), cache).refresh();
+  expect(saved).toHaveLength(1);
+  const restarted = new PlanUsageTracker(() => [driver], new EventBus(), fakeClock(9_000_000), cache);
+  expect(restarted.report().drivers[0]).toMatchObject({ windows: [win(42)], fetchedAt: 1_000_000 });
 });
 
 test("a failed read keeps the row with the error and backs off, so a second refresh inside the window reads nothing", async () => {

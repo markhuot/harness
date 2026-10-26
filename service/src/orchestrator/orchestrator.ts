@@ -694,7 +694,13 @@ export class Orchestrator {
     this.liveDebounceMs = opts.liveDebounceMs ?? LIVE_PUSH_DEBOUNCE_MS;
     this.now = opts.now ?? Date.now;
     this.fetchTitle = opts.fetchPullRequestTitle ?? fetchPullRequestTitle;
-    this.planUsage = new PlanUsageTracker(() => this.driverList(), this.bus, () => this.now());
+    this.planUsage = new PlanUsageTracker(() => this.driverList(), this.bus, () => this.now(), {
+      load: () => {
+        const v = this.store.settings.all().planUsageCache;
+        return Array.isArray(v) ? v : [];
+      },
+      save: (readings) => this.store.settings.set({ planUsageCache: readings }),
+    });
     const handlers = {
       onOutput: async (w: Watcher, output: WatcherOutput) => {
         // Read the owner now: a CoS that was deleted since the supervisor started has already handed its watchers to All.

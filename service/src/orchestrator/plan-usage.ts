@@ -25,6 +25,11 @@ interface Entry extends DriverPlanUsage {
   transient?: boolean;
 }
 
+export interface PlanUsageCache {
+  load(): DriverPlanUsage[];
+  save(readings: DriverPlanUsage[]): void;
+}
+
 export class PlanUsageTracker {
   private entries = new Map<string, Entry>();
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -36,7 +41,11 @@ export class PlanUsageTracker {
     private readonly drivers: () => Driver[],
     private readonly bus: EventBus,
     private readonly now: () => number = Date.now,
-  ) {}
+    /** Where the last readings survive a restart */
+    private readonly cache?: PlanUsageCache,
+  ) {
+    for (const d of cache?.load() ?? []) this.entries.set(d.driver, { ...d, failures: 0, notBefore: 0 });
+  }
 
   /** One entry per driver that has a plan and has been read (or failed) at least once. */
   report(): PlanUsageReport {
@@ -109,14 +118,16 @@ export class PlanUsageTracker {
       const backoff = Math.min(MAX_BACKOFF_MS, BACKOFF_MS * 2 ** (transient ? failures - 1 : 0));
       // When the server said how long to wait, wait at least that (within the cap).
       const asked = err instanceof PlanUsageError && err.retryAfterMs ? Math.min(MAX_BACKOFF_MS, err.retryAfterMs) : 0;
-      // Keep what the CLI's own rate-limit reports said, so a limit still shows; never a stale bar.
+      // Keep the last reading (dated by when it was taken) so an idle login or a flaky endpoint
+      // doesn't blank the gauges; the windows' reset times let clients roll an old one over.
+      const kept = prev?.windows.length ? prev : undefined;
       next = {
         driver: driver.id,
         name: driver.name,
-        windows: prev?.fromEvents ? prev.windows : [],
+        windows: kept?.windows ?? [],
         status: prev?.status ?? null,
         error: message,
-        fetchedAt: at,
+        fetchedAt: kept?.fetchedAt ?? at,
         failures,
         notBefore: at + Math.max(backoff, asked),
         ...(transient ? { transient: true } : {}),
@@ -162,6 +173,7 @@ export class PlanUsageTracker {
   }
 
   private emit() {
+    this.cache?.save(this.report().drivers.filter((d) => d.windows.length));
     this.bus.emit({ kind: "usage.updated", usage: this.report() });
   }
 }
