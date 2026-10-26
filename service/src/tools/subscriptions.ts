@@ -4,20 +4,21 @@
 import { SUBSCRIPTION_EVENTS } from "../store/subscriptions";
 import { defineTool, json, schema } from "./util";
 
-export const subscribeTicket = defineTool<{ key: string; mode?: "once" | "forever"; events?: ("status" | "note" | "spec")[] }>({
+export const subscribeTicket = defineTool<{ key: string; mode?: "once" | "forever"; events?: ("status" | "note" | "spec")[]; reason?: string }>({
   name: "subscribe_ticket",
   description:
-    "Get woken when another ticket changes, instead of waiting or polling. After subscribing, finish what you can and end your turn (or keep working): Harness delivers a message to you when the ticket changes, into your run if it is still going, otherwise as a new run. Never wait with a shell sleep. mode \"once\" (default) wakes you for the first change and then drops the subscription; \"forever\" keeps waking you until you unsubscribe or your ticket leaves in progress. events picks what counts: \"status\" (moves between columns, review approvals; the default), \"note\" (progress notes) and \"spec\" (spec revisions). Your children's status changes already wake you without a subscription. Changes you cause yourself don't wake you, and a ticket subscribed to others isn't auto-submitted when you end your turn: call submit_for_review when you are done. Subscribing again to the same ticket replaces the earlier subscription.",
+    "Get woken when another ticket changes, instead of waiting or polling. After subscribing, finish what you can and end your turn (or keep working): Harness delivers a message to you when the ticket changes, into your run if it is still going, otherwise as a new run. Never wait with a shell sleep. mode \"once\" (default) wakes you for the first change and then drops the subscription; \"forever\" keeps waking you until you unsubscribe or your ticket leaves in progress. events picks what counts: \"status\" (moves between columns, review approvals; the default), \"note\" (progress notes) and \"spec\" (spec revisions). Your children's status changes already wake you without a subscription. Changes you cause yourself don't wake you, and a ticket subscribed to others isn't auto-submitted when you end your turn: call submit_for_review when you are done. Subscribing again to the same ticket replaces the earlier subscription. A chief of staff must give a reason: its stated intent (what it is waiting for, or when it wants to hear), which the triage layer judges every change against before the chief is woken. Subscribe only when you will act on the result or the user must hear it.",
   inputSchema: schema(
     {
       key: { type: "string", minLength: 1, description: 'Key of the ticket to follow, e.g. "NYTIMES-12". Never your own ticket.' },
       mode: { type: "string", enum: ["once", "forever"], description: 'Default "once".' },
+      reason: { type: "string", description: 'Why you follow it, as a condition, e.g. "waiting for planning to finish so I can create dependent tickets" or "only tell me if it ends up blocked". Required for a chief of staff; optional otherwise.' },
       events: { type: "array", items: { type: "string", enum: [...SUBSCRIPTION_EVENTS] }, description: 'Default ["status"].' },
     },
     ["key"],
   ),
-  async run({ key, mode, events }, ctx) {
-    const sub = ctx.ops.subscribeTicket(ctx, key, mode ?? "once", events);
+  async run({ key, mode, events, reason }, ctx) {
+    const sub = ctx.ops.subscribeTicket(ctx, key, mode ?? "once", events, reason);
     return `Subscribed to ${sub.key} (${sub.mode}, events: ${sub.events.join(", ")}). You'll be woken when it changes; don't wait with sleep.`;
   },
 });

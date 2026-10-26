@@ -984,6 +984,10 @@ export const MIGRATIONS: string[] = [
   `
   CREATE INDEX ticket_events_target ON ticket_events(target_id, created_at, verdict);
   `,
+  // 58: why a subscriber follows its target. The chief of staff states it so triage can judge each change against it.
+  `
+  ALTER TABLE ticket_subscriptions ADD COLUMN reason TEXT;
+  `,
 ];
 
 /** Where the files migrations look at live (HarnessPaths); by default next to the database file. */
