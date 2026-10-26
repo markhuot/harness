@@ -3,10 +3,10 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import type { PhaseChoice, Project, PublicSettings, Settings, TicketStatus, TriagePermissionMode } from "@harness/shared";
-import { DEFAULT_BASE_BRANCH, DEFAULT_BROWSER_IDLE_TAB_MINUTES, DEFAULT_CONTEXT_GAUGE_LIMIT, DEFAULT_EVENT_RETENTION_DAYS, MAX_BROWSER_IDLE_TAB_MINUTES, parseEventRetentionDays, resolveCosChoice, resolveCosStatuses, resolveTriagePermissionMode, TICKET_STATUSES, TRIAGE_PERMISSION_MODE_LABELS, TRIAGE_PERMISSION_MODES, triageDefaultModel, triageDriver } from "@harness/shared";
+import { DEFAULT_BASE_BRANCH, DEFAULT_BROWSER_IDLE_TAB_MINUTES, DEFAULT_CONTEXT_GAUGE_LIMIT, DEFAULT_EVENT_RETENTION_DAYS, MAX_BROWSER_IDLE_TAB_MINUTES, resolveCosChoice, resolveCosStatuses, resolveTriagePermissionMode, TICKET_STATUSES, TRIAGE_PERMISSION_MODE_LABELS, TRIAGE_PERMISSION_MODES, triageDefaultModel, triageDriver } from "@harness/shared";
 import { limitError, parseLimit } from "../state/contextGauge";
 import { useAction, useStore } from "../state/store";
-import { modelName, sortedProjects } from "@harness/shared/state";
+import { modelName, parseEventRetentionDays, sortedProjects } from "@harness/shared/state";
 import { useDriverModels } from "../state/models";
 import { DriverModelSelect, ModelSelect } from "../components/ModelSelect";
 import { Icon } from "../components/Icon";

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseEventRetentionDays } from "../../../shared/src/protocol";
+import { parseEventRetentionDays } from "../../../shared/src/state/eventRetention";
 
 describe("parseEventRetentionDays", () => {
   test("whole days pass, fractions round, and the ends clamp to a day and a year", () => {
