@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from "bun:test";
 import { bigReplyScript, FakeDriver, gate, replyScript } from "../fake-driver";
+import { SESSION_EXPIRY_MIN_TOKENS } from "../../../service/src/orchestrator/session-expiry";
 import { makeOrchestrator, stopAll } from "../orchestrator-harness";
 
 afterEach(stopAll);
@@ -52,7 +53,7 @@ test("inside the TTL, or below 100k tokens, the run resumes with no handoff", as
   await later(warm.h, warm.t.key, "soon", HOUR);
   expect(warm.h.driver.requests.at(-1)!.state).not.toBeNull();
   expect(warm.h.driver.requests.at(-1)!.runContext ?? "").not.toContain(HANDOFF);
-  const small = await bigSession(rig(), 99_999);
+  const small = await bigSession(rig(), SESSION_EXPIRY_MIN_TOKENS - 1);
   await later(small.h, small.t.key, "much later", 10 * HOUR);
   expect(small.h.driver.requests.at(-1)!.state).not.toBeNull();
 });
