@@ -22,8 +22,6 @@ struct TicketDetailSpecTab: View {
     @State private var failed: String?
     /// Why the revision Show changes compares with couldn't load
     @State private var previousFailed: String?
-    /// Runs the callout's Unblock (its notes sheet): the same runner type the header uses
-    @State private var runner = TicketActionRunner()
 
     var body: some View {
         let state = store.state
@@ -38,12 +36,12 @@ struct TicketDetailSpecTab: View {
         VStack(spacing: 0) {
             SpecHistoryBar(ticket: ticket, scrubber: $scrubber, showChanges: $showChanges, rendered: $rendered, menu: menu, latest: latest)
             if source, let body {
-                TicketBlockedCallout(ticket: ticket, runner: runner).padding([.horizontal, .top], 14)
+                TicketBlockedCallout(ticket: ticket).padding([.horizontal, .top], 14)
                 SpecSourceView(text: body)
             } else {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
-                    TicketBlockedCallout(ticket: ticket, runner: runner)
+                    TicketBlockedCallout(ticket: ticket)
                     if !deps.isEmpty {
                         FlowLayout(spacing: 6) {
                             SectionTitle("Depends on")
@@ -94,7 +92,6 @@ struct TicketDetailSpecTab: View {
             .ticketHeroScroll()
             }
         }
-        .modifier(TicketActionHost(runner: runner))
         // The revision list: once, and again when a revision it doesn't have shows up.
         .task(id: "\(ticket.id)#\(latest)#\(store.epoch)") {
             guard SpecHistory.needsRevisions(store.state, ticketId: ticket.id, latest: latest), let api = store.api else { return }
@@ -369,11 +366,11 @@ private struct TicketPromptAttachments: View {
 /// tab's own runner and its notes sheet.
 struct TicketBlockedCallout: View {
     let ticket: Ticket
-    let runner: TicketActionRunner
 
     @Environment(BoardStore.self) private var store
     @Environment(Actions.self) private var actions
     @State private var expanded = false
+    @State private var runner = TicketActionRunner()
 
     /// A question longer than this many characters (or lines) is clamped until Show all.
     private static let clampChars = 600
@@ -407,6 +404,7 @@ struct TicketBlockedCallout: View {
                 }
             }
             .accessibilityIdentifier("blocked-callout")
+            .modifier(TicketActionHost(runner: runner))
         }
     }
 
