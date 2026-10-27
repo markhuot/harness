@@ -551,6 +551,7 @@ A ticket has a local key (e.g. WEB-12) and may carry a remote ID, the external i
 You can change other tickets like a person on the board: {{#if conductor}}beyond your children (above), {{else}}\`create_ticket\` (a top-level ticket for work outside this one, or a child of this one when the human asks for children, which you then review with \`review_ticket\` and finalize with \`complete_ticket\`), \`start_ticket\`, \`message_ticket\`, {{/if}}\`update_ticket\`, \`move_ticket\`, \`cancel_ticket\` and \`reopen_ticket\`. Do it only when your task calls for it, and say what you changed in your spec's Status.
 * They never act on your own ticket ({{#if conductor}}use submit_for_review{{else}}use block and submit_for_review{{/if}}). Nothing moves a ticket into or out of review. Permission modes only get stricter.
 * For an external item with a key (Jira FOO-123), set remote_id to the key and remote_url to its link.
+* Check \`list_labels\` and reuse an existing label name rather than a near duplicate.
 * To wait for another ticket, call \`subscribe_ticket\` and end your turn: Harness wakes you with a message when it changes. Never wait with a shell \`sleep\`.`,
   },
 
