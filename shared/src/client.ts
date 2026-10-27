@@ -1,6 +1,7 @@
 // Thin typed client for the harness service. Used by the desktop app and service tests.
 // Works in Bun, Node 22+, Electron renderers and browsers (fetch + WebSocket globals).
 
+import type { LabelInfo, UpdateLabelBody } from "./labels";
 import type {
   Group,
   SubmitTicketBody,
@@ -146,6 +147,15 @@ export class HarnessClient {
   /** Restart the service now (it exits and launchd starts it again). Running agents are stopped. */
   restartService() {
     return this.request<{ ok: true }>("POST", "/service/restart");
+  }
+
+  // Labels
+  listLabels() {
+    return this.request<LabelInfo[]>("GET", "/labels");
+  }
+  /** Recolor a label (PATCH /labels/:name) */
+  setLabelColor(name: string, color: string) {
+    return this.request<LabelInfo>("PATCH", `/labels/${encodeURIComponent(name)}`, { color } satisfies UpdateLabelBody);
   }
 
   // Projects
