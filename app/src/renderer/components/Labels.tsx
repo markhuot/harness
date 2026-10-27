@@ -99,7 +99,7 @@ export function LabelsEditor({ labels, editable, onSave }: { labels: readonly st
               value={text}
               onChange={(e) => (setText(e.target.value), setError(null))}
               onFocus={() => setFocused(true)}
-              onBlur={() => setTimeout(() => setFocused(false), 120)}
+              onBlur={() => setFocused(false)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") (e.preventDefault(), add(text));
                 else if (e.key === "Escape") (setText(""), setError(null));
