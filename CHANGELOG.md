@@ -16,6 +16,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
+- A finished ticket's Labels on iPhone and iPad were an empty white box you couldn't edit. They now show the chips (with ×) and the Add a label field, and the Mac's Details and both command palettes let you add and remove labels on a done ticket too.
 - A label put on a ticket that is still planning now shows in the sidebar's Labels section straight away. Its count had left out planning tickets, so the label stayed hidden until the ticket started.
 
 ## [app-20261027.1542](https://github.com/markhuot/harness/releases/tag/app-20261027.1542) - 2026-10-27

@@ -202,7 +202,7 @@ export function TicketSettings({
         </dd>
       )}
       <DependsOn ticket={ticket} editable={editable} onPatch={onPatch} />
-      <LabelsEditor labels={ticket.labels ?? []} editable={editable} onSave={(labels) => onPatch({ labels })} />
+      <LabelsEditor labels={ticket.labels ?? []} editable onSave={(labels) => onPatch({ labels })} />
       {onRemoteId && <RemoteId ticket={ticket} onSave={onRemoteId} />}
       {onPullRequests && onRefreshPullRequests && <PullRequests ticket={ticket} onSave={onPullRequests} onRefresh={onRefreshPullRequests} />}
       {children}

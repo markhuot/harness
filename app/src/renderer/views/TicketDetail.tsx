@@ -712,8 +712,8 @@ export function useTicketActions(owner: string, ticket: Ticket, onDeleted: () =>
     return e && { label: e.label, run: () => (e.choice ? choose(e.choice) : run(e.action)) };
   };
   const [labelPicker, setLabelPicker] = useState<"add" | "remove" | null>(null);
-  // The Details tab's rule: a done ticket's labels are read-only; a draft isn't launched.
-  const labelsEditable = ticket.status !== "done" && !ticket.draft;
+  // A done ticket's labels stay editable, as in its Details; a draft isn't launched.
+  const labelsEditable = !ticket.draft;
   const copyKey = () => void navigator.clipboard.writeText(k);
   const external = ticket.externalRef?.url;
   useCommands(owner, {

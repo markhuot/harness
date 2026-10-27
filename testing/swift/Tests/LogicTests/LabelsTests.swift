@@ -125,7 +125,7 @@ import HarnessKit
         func ids(_ t: Ticket) -> [String] { PaletteCommands.ticketCommands(t, BoardState()).map(\.id).filter { $0.hasSuffix("Label") } }
         #expect(ids(ticket(.inProgress, labels: nil)) == ["ticket.addLabel"])
         #expect(ids(ticket(.review, labels: ["Docs"])) == ["ticket.addLabel", "ticket.removeLabel"])
-        #expect(ids(ticket(.done, labels: ["Docs"])).isEmpty)
+        #expect(ids(ticket(.done, labels: ["Docs"])) == ["ticket.addLabel", "ticket.removeLabel"])
         #expect(ids(ticket(.planning, labels: ["Docs"], draft: true)).isEmpty)
     }
 }

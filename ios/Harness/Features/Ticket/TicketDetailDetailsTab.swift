@@ -34,7 +34,8 @@ struct TicketDetailDetailsTab: View {
             }
             .listRowBackground(c.bgElev)
             Section("Labels") {
-                TicketLabelsEditor(ticket: ticket, disabled: !editable) { patch($0) }
+                // Labels are tags, not work: a done ticket's stay editable.
+                TicketLabelsEditor(ticket: ticket) { patch($0) }
             }
             .listRowBackground(c.bgElev)
             Section("Spec") {

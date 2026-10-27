@@ -242,6 +242,11 @@ final class ScreenTests: ScreenTestCase {
         try await screen("ticket-details", router: ticket("HARNESS-5", .details)) { RootView() }
     }
 
+    /// HARNESS-7 is done: its Labels row still has the × on each chip and the Add a label field.
+    func testTicketDetailsDoneLabels() async throws {
+        try await screen("ticket-details-done-labels", router: ticket("HARNESS-7", .details)) { RootView() }
+    }
+
     /// HARNESS-5's finished run: a message, the agent's text, a tool call and its result.
     func testTicketTranscript() async throws {
         try await screen("ticket-transcript", router: ticket("HARNESS-5", .transcript)) { RootView() }

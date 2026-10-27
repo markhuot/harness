@@ -218,6 +218,14 @@ describe("editing a ticket's labels", () => {
     expect(editorChips(m)).toEqual(["Design", "Settings"]);
   });
 
+  test("a done ticket's labels stay editable", async () => {
+    const m = await load("HARNESS-7");
+    expect(editorChips(m)).toEqual(["Bugfix"]);
+    await type(m, input(m, "label-add"), "Docs");
+    await enter(m);
+    expect(patches(m)).toEqual([{ labels: ["Bugfix", "Docs"] }]);
+  });
+
   test("the add field suggests existing labels case-insensitively, leaving out the ones it has", async () => {
     const m = await load("HARNESS-1");
     const add = input(m, "label-add");

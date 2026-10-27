@@ -108,8 +108,8 @@ public enum PaletteCommands {
             case .delete: out.append(row("ticket.delete", "Delete ticket…", a))
             }
         }
-        // A done ticket's labels are read-only, as in its Details; a draft isn't launched.
-        if t.status != .done, t.draft != true {
+        // A done ticket's labels stay editable, as in its Details; a draft isn't launched.
+        if t.draft != true {
             out.append(PaletteCommand(id: "ticket.addLabel", label: "Add label…", group: "Ticket", keywords: ["Set label", "Tag ticket"], symbol: "tag", action: .addLabel))
             if !(t.labels ?? []).isEmpty {
                 out.append(PaletteCommand(id: "ticket.removeLabel", label: "Remove label…", group: "Ticket", keywords: ["Unset label", "Untag ticket"], symbol: "tag.slash", action: .removeLabel))
