@@ -7,6 +7,7 @@ import type { ActivityEntry, Run, Ticket, TicketDetail, TranscriptEntry } from "
 import { activityLog, finishedTranscript, runs, sessions, transcript as liveTranscript } from "./conversations";
 import { chiefs, cosBadge, cosChat, ticketEvents, cosMemory } from "./cos";
 import { changes, files } from "./files";
+import { labels } from "./labels";
 import { projects } from "./projects";
 import { drivers, settings } from "./settings";
 import { LOCALE, NOW, TIME_ZONE } from "./time";
@@ -43,6 +44,7 @@ export const world = {
   locale: LOCALE,
   projects,
   tickets,
+  labels,
   sessions,
   runs,
   transcript,

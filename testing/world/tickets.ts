@@ -7,9 +7,9 @@ const N = "project-NOTES";
 
 /** At least one ticket in every status, plus a conductor with children, a dependency, a pending approval and a remote ID. */
 export const tickets = [
-  ticket({ key: "HARNESS-1", projectId: H, status: "planning", title: "Draft the release notes", position: 1, createdAt: hoursAgo(3), updatedAt: minutesAgo(50) }),
+  ticket({ key: "HARNESS-1", labels: ["Docs"], projectId: H, status: "planning", title: "Draft the release notes", position: 1, createdAt: hoursAgo(3), updatedAt: minutesAgo(50) }),
   ticket({
-    key: "HARNESS-2",
+    key: "HARNESS-2", labels: ["Bugfix"],
     projectId: H,
     status: "in_progress",
     title: "Fix socket reconnect after sleep",
@@ -21,7 +21,7 @@ export const tickets = [
     updatedAt: minutesAgo(2),
   }),
   ticket({
-    key: "HARNESS-3",
+    key: "HARNESS-3", labels: ["Design", "Settings"],
     projectId: H,
     status: "in_progress",
     title: "Add a dark theme to Settings",
@@ -32,7 +32,7 @@ export const tickets = [
     updatedAt: minutesAgo(40),
   }),
   ticket({
-    key: "HARNESS-4",
+    key: "HARNESS-4", labels: ["Release 1.2.3"],
     projectId: H,
     status: "blocked",
     title: "Choose a storage backend",
@@ -41,7 +41,7 @@ export const tickets = [
     updatedAt: minutesAgo(25),
   }),
   ticket({
-    key: "HARNESS-5",
+    key: "HARNESS-5", labels: ["Performance", "Release 1.2.3"],
     projectId: H,
     status: "review",
     title: "Speed up the board's first load",
@@ -64,7 +64,7 @@ export const tickets = [
     updatedAt: minutesAgo(70),
   }),
   ticket({
-    key: "HARNESS-7",
+    key: "HARNESS-7", labels: ["Bugfix"],
     projectId: H,
     status: "done",
     title: "Rename project keys without losing links",
@@ -88,7 +88,7 @@ export const tickets = [
     updatedAt: minutesAgo(8),
   }),
   ticket({
-    key: "WEB-2",
+    key: "WEB-2", labels: ["Performance", "Bugfix"],
     projectId: W,
     status: "in_progress",
     title: "Compress hero images",
@@ -120,6 +120,6 @@ export const tickets = [
     completedAt: hoursAgo(26),
     updatedAt: hoursAgo(26),
   }),
-  ticket({ key: "NOTES-1", projectId: N, status: "blocked", title: "Sort the reading list", blockedReason: "Which tags should I keep?", position: 1, updatedAt: hoursAgo(2) }),
+  ticket({ key: "NOTES-1", labels: ["Reference"], projectId: N, status: "blocked", title: "Sort the reading list", blockedReason: "Which tags should I keep?", position: 1, updatedAt: hoursAgo(2) }),
   ticket({ key: "NOTES-2", projectId: N, status: "done", title: "Merge duplicate notes", agentReview: "skipped", humanReview: "approved", skipAgentReview: true, position: 1, completedAt: hoursAgo(30), updatedAt: hoursAgo(30) }),
 ];

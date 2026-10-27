@@ -112,6 +112,9 @@
       "createdAt": 1773489600000,
       "updatedAt": 1773497400000,
       "key": "HARNESS-1",
+      "labels": [
+        "Docs"
+      ],
       "projectId": "project-HARNESS",
       "status": "planning",
       "title": "Draft the release notes"
@@ -146,6 +149,9 @@
       "createdAt": 1773327600000,
       "updatedAt": 1773500280000,
       "key": "HARNESS-2",
+      "labels": [
+        "Bugfix"
+      ],
       "projectId": "project-HARNESS",
       "status": "in_progress",
       "title": "Fix socket reconnect after sleep",
@@ -193,6 +199,10 @@
       "createdAt": 1773327600000,
       "updatedAt": 1773498000000,
       "key": "HARNESS-3",
+      "labels": [
+        "Design",
+        "Settings"
+      ],
       "projectId": "project-HARNESS",
       "status": "in_progress",
       "title": "Add a dark theme to Settings"
@@ -227,6 +237,9 @@
       "createdAt": 1773327600000,
       "updatedAt": 1773498900000,
       "key": "HARNESS-4",
+      "labels": [
+        "Release 1.2.3"
+      ],
       "projectId": "project-HARNESS",
       "status": "blocked",
       "title": "Choose a storage backend"
@@ -261,6 +274,10 @@
       "createdAt": 1773327600000,
       "updatedAt": 1773499500000,
       "key": "HARNESS-5",
+      "labels": [
+        "Performance",
+        "Release 1.2.3"
+      ],
       "projectId": "project-HARNESS",
       "status": "review",
       "title": "Speed up the board's first load",
@@ -330,6 +347,9 @@
       "createdAt": 1773327600000,
       "updatedAt": 1773482400000,
       "key": "HARNESS-7",
+      "labels": [
+        "Bugfix"
+      ],
       "projectId": "project-HARNESS",
       "status": "done",
       "title": "Rename project keys without losing links"
@@ -514,6 +534,10 @@
       "createdAt": 1773327600000,
       "updatedAt": 1773500340000,
       "key": "WEB-2",
+      "labels": [
+        "Performance",
+        "Bugfix"
+      ],
       "projectId": "project-WEB",
       "status": "in_progress",
       "title": "Compress hero images"
@@ -592,6 +616,9 @@
       "createdAt": 1773327600000,
       "updatedAt": 1773493200000,
       "key": "NOTES-1",
+      "labels": [
+        "Reference"
+      ],
       "projectId": "project-NOTES",
       "status": "blocked",
       "title": "Sort the reading list"
@@ -630,6 +657,57 @@
       "status": "done",
       "title": "Merge duplicate notes",
       "skipAgentReview": true
+    }
+  ],
+  "labels": [
+    {
+      "name": "Bugfix",
+      "color": "red",
+      "lastUsedAt": 1773500100000,
+      "createdAt": 1773500040000,
+      "count": 2
+    },
+    {
+      "name": "Performance",
+      "color": "orange",
+      "lastUsedAt": 1773499200000,
+      "createdAt": 1773499140000,
+      "count": 2
+    },
+    {
+      "name": "Release 1.2.3",
+      "color": "indigo",
+      "lastUsedAt": 1773497700000,
+      "createdAt": 1773497640000,
+      "count": 2
+    },
+    {
+      "name": "Design",
+      "color": "purple",
+      "lastUsedAt": 1773493200000,
+      "createdAt": 1773493140000,
+      "count": 1
+    },
+    {
+      "name": "Settings",
+      "color": "teal",
+      "lastUsedAt": 1773489600000,
+      "createdAt": 1773489540000,
+      "count": 1
+    },
+    {
+      "name": "Reference",
+      "color": "green",
+      "lastUsedAt": 1773482400000,
+      "createdAt": 1773482340000,
+      "count": 1
+    },
+    {
+      "name": "Docs",
+      "color": "blue",
+      "lastUsedAt": 1773478800000,
+      "createdAt": 1773478740000,
+      "count": 0
     }
   ],
   "sessions": [
@@ -1800,6 +1878,9 @@
         "createdAt": 1773489600000,
         "updatedAt": 1773497400000,
         "key": "HARNESS-1",
+        "labels": [
+          "Docs"
+        ],
         "projectId": "project-HARNESS",
         "status": "planning",
         "title": "Draft the release notes"
@@ -1858,6 +1939,9 @@
         "createdAt": 1773327600000,
         "updatedAt": 1773500280000,
         "key": "HARNESS-2",
+        "labels": [
+          "Bugfix"
+        ],
         "projectId": "project-HARNESS",
         "status": "in_progress",
         "title": "Fix socket reconnect after sleep",
@@ -1975,6 +2059,10 @@
         "createdAt": 1773327600000,
         "updatedAt": 1773498000000,
         "key": "HARNESS-3",
+        "labels": [
+          "Design",
+          "Settings"
+        ],
         "projectId": "project-HARNESS",
         "status": "in_progress",
         "title": "Add a dark theme to Settings"
@@ -2033,6 +2121,9 @@
         "createdAt": 1773327600000,
         "updatedAt": 1773498900000,
         "key": "HARNESS-4",
+        "labels": [
+          "Release 1.2.3"
+        ],
         "projectId": "project-HARNESS",
         "status": "blocked",
         "title": "Choose a storage backend"
@@ -2104,6 +2195,10 @@
         "createdAt": 1773327600000,
         "updatedAt": 1773499500000,
         "key": "HARNESS-5",
+        "labels": [
+          "Performance",
+          "Release 1.2.3"
+        ],
         "projectId": "project-HARNESS",
         "status": "review",
         "title": "Speed up the board's first load",
@@ -2306,6 +2401,9 @@
         "createdAt": 1773327600000,
         "updatedAt": 1773482400000,
         "key": "HARNESS-7",
+        "labels": [
+          "Bugfix"
+        ],
         "projectId": "project-HARNESS",
         "status": "done",
         "title": "Rename project keys without losing links"
@@ -2762,6 +2860,10 @@
         "createdAt": 1773327600000,
         "updatedAt": 1773500340000,
         "key": "WEB-2",
+        "labels": [
+          "Performance",
+          "Bugfix"
+        ],
         "projectId": "project-WEB",
         "status": "in_progress",
         "title": "Compress hero images"
@@ -2905,6 +3007,9 @@
         "createdAt": 1773327600000,
         "updatedAt": 1773493200000,
         "key": "NOTES-1",
+        "labels": [
+          "Reference"
+        ],
         "projectId": "project-NOTES",
         "status": "blocked",
         "title": "Sort the reading list"
