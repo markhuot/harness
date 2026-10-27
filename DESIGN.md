@@ -185,6 +185,49 @@ place of the key.
   shared Markdown parser reads a link whose target is a ticket key as a ticket token with that
   label, so the apps open MH-124 from it and show MH-62.
 
+## Labels
+
+A ticket carries zero or more labels. A label is a plain-text name and a color, shared by every
+project (a label is never per project), so one label can group tickets from any of them.
+
+- **Storage.** Migration 59: `labels` (display `name`, `key` the folded form that makes it unique,
+  `color`, `created_at`, `last_used_at`) and `ticket_labels` (ticket, label; the rowid keeps the
+  order a ticket got them). A label is created the first time a ticket uses it and stays when its
+  last ticket loses it, so its color survives. `last_used_at` is when it was last added to a ticket.
+  Deleting a ticket drops its `ticket_labels` rows by trigger, not by `PRAGMA foreign_keys`.
+- **Names.** `normalizeLabelName` (`shared/src/labels.ts`, ported in `HarnessKit/Logic`) trims and
+  collapses whitespace; a name is 1 to 40 characters with no `"` (which would break the quoted
+  search form). Names compare by `labelKey`: case and diacritics ignored, so `Bugfix` and `bugfix`
+  are the same label and the first spelling is kept. There's no rename or merge; recoloring is the
+  only edit.
+- **Colors.** A color is one of the project color preset ids (`red` … `pink`), never raw hex, so
+  every theme draws it readably. A new label starts with `defaultLabelColor(name)`, a stable hash of
+  its folded name; `PATCH /labels/:name { color }` changes it.
+- **Wire.** `Ticket.labels` is the names in the order added (absent from older services). The
+  collection is `LabelInfo { name, color, createdAt, lastUsedAt, count }`: `GET /labels` returns it
+  most recently used first, and the `labels.changed` event carries the whole list whenever it
+  changes (a label is added to a ticket for the first time or moves up, is recolored, or a count
+  moves because a ticket changed column or was deleted). `count` is the number of tickets carrying
+  the label that are in progress, blocked or in review, the same rule as the sidebar's project
+  counts; done tickets and drafts don't count, so clicking a label can show more tickets than its badge.
+- **Setting them.** `POST /tickets` and `PATCH /tickets/:key` take `labels` (the whole list; names
+  not seen before create labels). Agents use `create_ticket` `labels` and `update_ticket`
+  `add_labels` / `remove_labels` (a work or chat run may use them on its own ticket), `list_labels`
+  shows what exists so they reuse a name instead of making `Bugfix` / `Bug fix`.
+- **Search.** The label names are part of a ticket's search text, so plain words match them. The
+  qualifiers `label:` and `project:` (`parseSearchQuery`) narrow a search or a board column:
+  `label:"Release 1.2.3" label:Bugfix` needs both labels, repeated `project:KEY` matches any of those
+  projects (by key, any case), and they combine with text: `project:ACAMS label:Reference crash`. A
+  qualifier-only query has nothing to rank, so `/tickets/search` lists by `updated_at` newest first
+  (cursor tag `u`). A bare `label:` (still typing), an unclosed quote and any other `foo:bar`
+  never reach FTS5 as syntax. The Mac and iPhone/iPad filters (`matchesQuery`) and the palettes
+  use the same parser, and `shared/src/labels.fixtures.json` holds the vectors both the TypeScript
+  and the Swift port run.
+- **Clients.** Cards show the labels at the bottom; the sidebar's Labels section lists the 10 most
+  recently used labels that have a count above zero with a "More" row that reveals 10 more at a
+  time; typing `label:` or `project:` in the board search or a command palette switches to a picker
+  of labels or projects, and choosing one inserts the finished qualifier.
+
 ## Runtime paths
 
 - `$HARNESS_HOME` (default `~/.harness`): `harness.db`, `token` (random, 0600), `logs/`,
@@ -1333,8 +1376,9 @@ stubs whose full description `tool_search` returns, see "Stubs and tool_search" 
 | `list_tickets` | all | `{ scope?: "children"\|"project"\|"all", project_key?, status?: TicketStatus[], limit?, include_drafts? (default true) }`, each ticket flagged `draft`. Default scope: a ticket with children (or a conductor) → children, other ticket runs → the ticket's project (or `project_key`), a chief of staff → its own scope. Board order (done newest-completed first), capped at `limit` (default 50, max 200) with a "Showing n of total" note |
 | `get_ticket` | all | `{ key, include_transcript?: 1..50, include_agents? }`: any project, drafts included (`draft: true`), old keys resolve (`resolvedFrom`), remote IDs never do: a key only tickets carry as their remote ID returns `{ ticket: null, requested, relatedTickets }`, and a found ticket carries `externalKey`, `externalUrl` and `relatedTickets` ("Remote IDs"). Spec, `specRevision`, `specBaselineRevision`, `agentNotes` (see "Agent notes"; `list_tickets` and `search_tickets` leave them out), status, reviews, blocked reason, parent/children keys, dependsOn, driver/model, branches (`branch`, `requestedBranch`, `baseBranch`, `effectiveBaseBranch` + `baseBranchSource`), `activity` (kind, author, body, meta, createdAt), `attachments` (id, name, kind and stored file `path`), `promptAttachments` (name, path, `missing`); with include_transcript the last N text/status/error transcript entries, each clipped to 2000 chars; with include_agents `agents`, its sub-agents and background tasks oldest first (id, kind, description, agentType, model, status, parentId, command, result clipped to 500 chars, startedAt, endedAt) |
 | `get_ticket_agent` | all | `{ key, id, include_transcript?: 1..50 }` → one sub-agent or task of that ticket's session (`Orchestrator.getTicketAgent_`): its `agent` fields plus `prompt`, prompt and result clipped to 8000 chars; a sub-agent's own last N (default 20) text/status/error `transcript` entries, or a task's `output` (its last 8000 chars, `truncated`, `done`, `available`; a task with no output file reads as unavailable). An unknown id fails pointing at `get_ticket`'s include_agents |
-| `search_tickets` | all | `{ query, project_key?, limit?, cursor?, include_drafts? (default true) }` → `{ total, hits: [{ key, title, status, draft, project, snippet }], nextCursor }`. Same matching, ranking and cursors as `GET /tickets/search` ("Paging and search"); default limit 20 |
+| `search_tickets` | all | `{ query, project_key?, limit?, cursor?, include_drafts? (default true) }` → `{ total, hits: [{ key, title, status, draft, project, snippet }], nextCursor }`. Same matching, ranking and cursors as `GET /tickets/search` ("Paging and search"), including the `label:` / `project:` terms ("Labels"); default limit 20 |
 | `subscribe_ticket` | work, conductor, chat, cos | `{ key, mode?, events? }`: get woken when another ticket changes (see "Ticket subscriptions"); `unsubscribe_ticket` `{ key }` and `list_subscriptions` `{}` complete the set |
+| `list_labels` | all | `{}` → each label's `name`, `color` and `tickets` (its count of in-progress, blocked and review tickets), most recently used first ("Labels") |
 | `list_projects` | all | `{}` → each project's key, name, path and settings, with `completionAction`, the offered `completionActions` and `pullRequestHost` |
 | `list_inbox` | all | `{ status?: TicketEventStatus[], source?, key?, limit? }` (`source` is an event source kind; `key` an event id or a ticket key) → the events addressed to the calling ticket (`target_id`), newest first: id, title, summary, source, status, verdict, reason, the ticket it is about, created_at. A chief (and the triage run working for it) reads its Inbox instead: its own events plus the unassigned ones, the same rows `GET /tickets/:key/events` returns for the chief. Status, source and key are filtered in the query and the total is a `COUNT`, so it is exact however many events there are. Default limit 20, max 100, with a "Showing n of total events" note. `get_ticket` on a `TRIAGE-n` key says Inbox items are events now |
 | `start_ticket` | work, conductor | `{ key }` → `startTicket` (any ticket, not only children). While the ticket's planning run is going it approves the plan instead and the work starts when the run ends |
@@ -2250,6 +2294,7 @@ GET    /projects/:id/file?path=   GET /tickets/:key/file?path=   → FileView (s
 PUT    /projects/:id/file   PUT /tickets/:key/file   {path, contents}   → FileWriteResult (see "File viewer"; last write wins)
 GET    /projects/:id/file/diff?path=   GET /tickets/:key/file/diff?path=   → FileDiff (409 outside a git repo)
 GET    /projects/:id/branches?q=&limit=50   → BranchInfo[] (branch picker; see "Branches")
+GET    /labels                   → LabelInfo[] (see "Labels")   PATCH /labels/:name {color} → LabelInfo
 GET    /tickets?projectId=&status=planning,review   POST /tickets {spec, …}   (no status = every ticket)
 GET    /tickets/page?status=done&projectId=&groupId=&q=&limit=50&cursor= → TicketPage
 GET    /tickets/search?q=&projectId=&groupId=&limit=100&cursor=       → TicketPage

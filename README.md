@@ -216,7 +216,8 @@ instead of showing a stale bar.
 
 You can drive the whole Mac app from the keyboard. Press **?** (or **⌘/**) for the full list,
 and **⌘K** for the command palette, which finds tickets, commands and every action a ticket
-offers. Start the query with `>` for commands only, `#` for tickets only, or `@` for files. **⌘P**
+offers. Type `label:` to pick from the labels (`label:"Release 1.2.3" label:Bugfix` needs both) and
+`project:` to pick a project key (`project:ACAMS label:Reference`). Start the query with `>` for commands only, `#` for tickets only, or `@` for files. **⌘P**
 (Open File…) opens the palette on `@`. It searches the focused ticket's folder, or else the board's
 project, including git-ignored files, and `path:12` or `path#L12-L20` opens the file at those
 lines. The ones you'll use most:
