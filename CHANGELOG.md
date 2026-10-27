@@ -9,11 +9,17 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261027.1542](https://github.com/markhuot/harness/releases/tag/app-20261027.1542) - 2026-10-27
+
 ### Added
 
 - Tickets can carry labels: a plain name and a color, shared by every project. Labels show at the bottom of a card on the Mac and on iPhone and iPad, and the sidebar has a Labels section under Projects with the 10 most recently used labels and a count of each one's in-progress, blocked and review tickets. "More" shows 10 more at a time, and clicking a label filters the board to it. Add, remove and recolor a label from the ticket.
 - Search understands `label:` and `project:`. Typing `label:` in the board search or either command palette lists the labels to pick from, `label:"Release 1.2.3" label:Bugfix` needs both labels, and `project:ACAMS label:Reference` combines a project with a label. Plain words in a search also match label names.
 - Agents can label tickets: `create_ticket` takes `labels`, `update_ticket` takes `add_labels` and `remove_labels` (an agent can label its own ticket too), `list_labels` shows what exists, and `search_tickets` understands `label:` and `project:`.
+
+### Changed
+
+- Internal: the walkthrough (`bun run testing walk`) now labels a ticket and finds it by label, and the shared test world starts with labels, so the real-app check covers labels on the Mac, iPhone and iPad.
 
 ## [app-20261027.1135](https://github.com/markhuot/harness/releases/tag/app-20261027.1135) - 2026-10-27
 
