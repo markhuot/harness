@@ -388,8 +388,8 @@ export function steps(start: Start, built: { app: string }): Step[] {
         await shot(ctx, "10-mac-label-palette");
         await main.press("Enter", "Enter");
         await ctx.ws.event("the new label to reach the collection", (e) => e.kind === "labels.changed" && e.labels.some((l) => l.name === "Walk palette"));
-        const labeled = await d.call<Ticket>("GET", `/tickets/${first.key}`);
-        if (!labeled.labels?.includes("Walk palette")) throw new Error(`the palette's Add label… left ${JSON.stringify(labeled.labels)} on ${first.key}`);
+        const labeled = (await d.call<Ticket[]>("GET", `/tickets?projectId=${ctx.projectId}&status=review`)).find((t) => t.key === first.key);
+        if (!labeled?.labels?.includes("Walk palette")) throw new Error(`the palette's Add label… left ${JSON.stringify(labeled?.labels)} on ${first.key}`);
       },
     },
   ];
