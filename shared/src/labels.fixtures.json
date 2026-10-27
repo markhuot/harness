@@ -1,0 +1,45 @@
+{
+  "parse": [
+    { "q": "", "labels": [], "projects": [], "text": "", "qualifiers": 0, "completion": null },
+    { "q": "login bug", "labels": [], "projects": [], "text": "login bug", "qualifiers": 0, "completion": null },
+    { "q": "label:Bugfix", "labels": ["Bugfix"], "projects": [], "text": "", "qualifiers": 1, "completion": { "field": "label", "partial": "Bugfix", "start": 0 } },
+    { "q": "label:Bugfix ", "labels": ["Bugfix"], "projects": [], "text": "", "qualifiers": 1, "completion": null },
+    { "q": "LABEL:\"Release 1.2.3\" label:Bugfix", "labels": ["Release 1.2.3", "Bugfix"], "projects": [], "text": "", "qualifiers": 2, "completion": { "field": "label", "partial": "Bugfix", "start": 22 } },
+    { "q": "label:\"Release 1.2.3\" label:Bugfix extra", "labels": ["Release 1.2.3", "Bugfix"], "projects": [], "text": "extra", "qualifiers": 2, "completion": null },
+    { "q": "project:ACAMS label:Reference", "labels": ["Reference"], "projects": ["ACAMS"], "text": "", "qualifiers": 2, "completion": { "field": "label", "partial": "Reference", "start": 14 } },
+    { "q": "project:ACAMS project:NYT crash", "labels": [], "projects": ["ACAMS", "NYT"], "text": "crash", "qualifiers": 2, "completion": null },
+    { "q": "label:", "labels": [], "projects": [], "text": "", "qualifiers": 1, "completion": { "field": "label", "partial": "", "start": 0 } },
+    { "q": "crash label:", "labels": [], "projects": [], "text": "crash", "qualifiers": 1, "completion": { "field": "label", "partial": "", "start": 6 } },
+    { "q": "label:\"Rel", "labels": ["Rel"], "projects": [], "text": "", "qualifiers": 1, "completion": { "field": "label", "partial": "Rel", "start": 0 } },
+    { "q": "label:\"\"", "labels": [], "projects": [], "text": "", "qualifiers": 1, "completion": null },
+    { "q": "label:\"  Two   words \"", "labels": ["Two words"], "projects": [], "text": "", "qualifiers": 1, "completion": null },
+    { "q": "foo:bar baz", "labels": [], "projects": [], "text": "foo:bar baz", "qualifiers": 0, "completion": null },
+    { "q": "xlabel:Bugfix", "labels": [], "projects": [], "text": "xlabel:Bugfix", "qualifiers": 0, "completion": null }
+  ],
+  "quote": [
+    ["Bugfix", "Bugfix"],
+    ["Release 1.2.3", "\"Release 1.2.3\""],
+    ["v1.2", "v1.2"]
+  ],
+  "complete": [
+    ["", "label", "Bugfix", "label:Bugfix "],
+    ["crash", "label", "Release 1", "crash label:\"Release 1\" "],
+    ["crash label:Bu", "label", "Bugfix", "crash label:Bugfix "],
+    ["label:\"Release 1.2.3\" project:AC", "project", "ACAMS", "label:\"Release 1.2.3\" project:ACAMS "],
+    ["label:Bugfix ", "label", "Docs", "label:Bugfix label:Docs "]
+  ],
+  "names": [
+    ["Bugfix", "Bugfix"],
+    ["  Release   1.2.3 ", "Release 1.2.3"],
+    ["", null],
+    ["   ", null],
+    ["say \"hi\"", null],
+    ["Ünïcode", "Ünïcode"]
+  ],
+  "keys": [
+    ["Bugfix", "bugfix"],
+    ["BUGFIX", "bugfix"],
+    ["Café", "cafe"],
+    ["Ünïcode", "unicode"]
+  ]
+}

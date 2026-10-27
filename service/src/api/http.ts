@@ -276,6 +276,10 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
   add("GET", "/projects/:id/file/diff", ({ params, url }) => o.projectFileDiff(params.id!, url.searchParams.get("path") ?? ""));
   add("GET", "/projects/:id/branches", ({ params, url }) => o.projectBranches(params.id!, url.searchParams.get("q") ?? "", url.searchParams.get("limit")));
 
+  // Labels
+  add("GET", "/labels", () => o.listLabels());
+  add("PATCH", "/labels/:name", async ({ params, body }) => o.setLabelColor(params.name!, await body()));
+
   // Tickets
   add("GET", "/tickets", ({ url }) => o.listTickets(url.searchParams.get("projectId") || undefined, statusList(url.searchParams.get("status"))));
   add("POST", "/tickets", async ({ body }) => o.createTicket(await body()));

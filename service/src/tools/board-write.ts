@@ -41,6 +41,12 @@ const remoteIdProp = {
 };
 const remoteUrlProp = { type: "string", description: "Link to the external item, e.g. https://example.atlassian.net/browse/FOO-123." };
 
+const labelNamesProp = (what: string) => ({
+  type: "array",
+  items: { type: "string", minLength: 1 },
+  description: `${what} Label names are plain text (up to 40 characters, no double quote) shared by every project and matched without regard to case; a name nobody used yet creates the label. Call list_labels first and reuse an existing label rather than making a near duplicate (Bugfix / Bug fix).`,
+});
+
 const modelInput = (m: string | undefined) => (m === undefined ? undefined : m.trim() || null);
 /** "" → null (unlink / no link); undefined → unchanged. */
 const remoteInput = (s: string | undefined) => (s === undefined ? undefined : s.trim() || null);
@@ -68,6 +74,7 @@ export const createTicket = defineTool<{
   remote_id?: string;
   remote_url?: string;
   attachments?: string[];
+  labels?: string[];
 }>({
   name: "create_ticket",
   description:
@@ -106,6 +113,7 @@ export const createTicket = defineTool<{
         description:
           "Files to attach to the new ticket's first message, such as screenshots it should look at: paths (absolute, or relative to your working directory) that exist now. They're referenced where they are, not copied, so don't attach files you're about to delete. Images also go to its agent inline.",
       },
+      labels: labelNamesProp("The new ticket's labels."),
     },
     ["title", "spec"],
   ),
@@ -130,6 +138,7 @@ export const createTicket = defineTool<{
       remoteId: remoteInput(input.remote_id) ?? undefined,
       remoteUrl: remoteInput(input.remote_url),
       attachments: input.attachments,
+      labels: input.labels,
     });
     return `Created ${ticket.key}.\n${json(ticketView(ticket))}`;
   },
@@ -152,13 +161,15 @@ export const updateTicket = defineTool<{
   remote_id?: string;
   remote_url?: string;
   pull_request_urls?: string[];
+  add_labels?: string[];
+  remove_labels?: string[];
 }>({
   name: "update_ticket",
   description:
-    "Edit another ticket's card, like a person editing it in the app (in a planning run, your own ticket instead, and only yours: apply the settings the human asked for in the spec, with full access to every field): title, spec (a new revision of it; pass base_revision, the specRevision get_ticket showed, and a spec that changed since is refused so nobody's edit is overwritten), driver, model, permission mode, dependencies, base branch, branch, remote ID and its link, pull request URLs, or whether it skips the agent or human review. Only the fields you pass change; depends_on replaces the whole list. key is always the ticket's local key, even when it carries a remote ID. remote_id links the ticket to an external item (\"\" unlinks it); remote_url alone changes the link of the remote ID it already carries (\"\" clears it). pull_request_urls replaces the ticket's whole pull request list ([] clears it); each link's title is fetched from GitHub, and titles can't be set. In a work or chat run, your own ticket takes pull_request_urls alone: add a pull request you open outside the completion run, so the card keeps up. branch can only change before the ticket has a worktree; after that, ask its agent (message_ticket), which moves it with update_branch. On another ticket, a permission mode can be made stricter (auto → ask → read_only) but never looser, and a ticket whose mode is looser than yours can't be edited, except by a call that only tightens its permission_mode. Use move_ticket to change its column.",
+    "Edit another ticket's card, like a person editing it in the app (in a planning run, your own ticket instead, and only yours: apply the settings the human asked for in the spec, with full access to every field): title, spec (a new revision of it; pass base_revision, the specRevision get_ticket showed, and a spec that changed since is refused so nobody's edit is overwritten), driver, model, permission mode, dependencies, base branch, branch, remote ID and its link, pull request URLs, or whether it skips the agent or human review; add_labels and remove_labels change its labels (others stay). Only the fields you pass change; depends_on replaces the whole list. key is always the ticket's local key, even when it carries a remote ID. remote_id links the ticket to an external item (\"\" unlinks it); remote_url alone changes the link of the remote ID it already carries (\"\" clears it). pull_request_urls replaces the ticket's whole pull request list ([] clears it); each link's title is fetched from GitHub, and titles can't be set. In a work or chat run, your own ticket takes pull_request_urls, add_labels and remove_labels only: add a pull request you open outside the completion run, so the card keeps up. branch can only change before the ticket has a worktree; after that, ask its agent (message_ticket), which moves it with update_branch. On another ticket, a permission mode can be made stricter (auto → ask → read_only) but never looser, and a ticket whose mode is looser than yours can't be edited, except by a call that only tightens its permission_mode. Use move_ticket to change its column.",
   inputSchema: schema(
     {
-      key: { ...keyProp, description: "Ticket key, e.g. \"NYTIMES-12\". Never your own ticket, except in a planning run (where it's only your own) or with pull_request_urls alone, in a work or chat run." },
+      key: { ...keyProp, description: "Ticket key, e.g. \"NYTIMES-12\". Never your own ticket, except in a planning run (where it's only your own) or with pull_request_urls, add_labels or remove_labels only, in a work or chat run." },
       title: { type: "string", minLength: 1, description: "New title." },
       spec: { type: "string", description: "The ticket's whole new spec (a new revision; its history keeps the old one). Needs base_revision." },
       base_revision: { type: "integer", minimum: 1, description: "Required with spec: the specRevision get_ticket showed. If the spec changed since, the call fails with the current revision." },
@@ -178,6 +189,8 @@ export const updateTicket = defineTool<{
         items: { type: "string", description: "A pull request's http(s) link" },
         description: "The ticket's pull request links, the whole list in order (duplicates dropped); [] clears it. Titles are fetched from GitHub, not passed.",
       },
+      add_labels: labelNamesProp("Labels to add to the ticket."),
+      remove_labels: labelNamesProp("Labels to take off the ticket (one it doesn't carry is ignored)."),
     },
     ["key"],
   ),
@@ -198,6 +211,8 @@ export const updateTicket = defineTool<{
       remoteId: remoteInput(input.remote_id),
       remoteUrl: remoteInput(input.remote_url),
       pullRequestUrls: input.pull_request_urls,
+      addLabels: input.add_labels,
+      removeLabels: input.remove_labels,
     });
     return `Updated ${ticket.key}.\n${json({ ...ticketView(ticket), driver: ticket.driver, model: ticket.model, phaseModels: ticket.phaseModels ?? {}, permissionMode: ticket.permissionMode })}`;
   },

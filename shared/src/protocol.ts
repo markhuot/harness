@@ -1,6 +1,7 @@
 // Shared wire protocol between the harness service and its clients (desktop app, future iOS app).
 // Everything here is plain JSON-serializable data. Timestamps are epoch milliseconds.
 
+import type { LabelInfo } from "./labels";
 import type { AppReply, AppRequest } from "./panes";
 import type { NotificationSettings, NotificationSettingsPatch, Presence } from "./notifications";
 
@@ -231,6 +232,11 @@ export interface Ticket {
    * every write is a revision. This is the current revision's body.
    */
   spec: string;
+  /**
+   * The ticket's label names (DESIGN.md "Labels"), in the order they were added. Colors and counts
+   * come from the labels collection (GET /labels). Optional so older fixtures and services type-check.
+   */
+  labels?: string[];
   /** The current spec revision (1 for a new ticket). Optional so older fixtures type-check. */
   specRevision?: number;
   /**
@@ -1263,6 +1269,8 @@ export type HarnessEvent =
   | { kind: "project.deleted"; id: string }
   | { kind: "ticket.upserted"; ticket: Ticket }
   | { kind: "ticket.deleted"; id: string }
+  /** A label was added to a ticket for the first time, recolored, or its count moved: the whole collection (GET /labels) */
+  | { kind: "labels.changed"; labels: LabelInfo[] }
   | { kind: "session.upserted"; session: Session }
   | { kind: "session.deleted"; id: string }
   | { kind: "run.upserted"; run: Run }
@@ -1769,6 +1777,8 @@ export interface CreateTicketBody {
   /** Skip the human review: the ticket lands once its agent review passes (Ticket.skipHumanReview). Default: the project's. */
   skipHumanReview?: boolean;
   dependsOn?: string[];
+  /** The ticket's labels by name; created on first use (see normalizeLabelName) */
+  labels?: string[];
   autoStart?: boolean;
   parentId?: string | null;
   /**
@@ -1792,6 +1802,8 @@ export interface CreateTicketBody {
 
 export interface UpdateTicketBody {
   title?: string;
+  /** Replace the ticket's labels with exactly these names (created on first use); [] clears them */
+  labels?: string[];
   /** A new spec revision, written by the human. Needs baseRevision unless the ticket is a draft. */
   spec?: string;
   /**

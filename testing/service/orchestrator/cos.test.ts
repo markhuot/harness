@@ -377,7 +377,7 @@ test("every operation that takes a key answers an out-of-scope key like a missin
   // Operations that take no reference to something with a scope of its own (or make something new, the subscriptions act on the caller's own ticket).
   const unkeyed = [
     "postNote", "updateNotes", "wroteNotes", "statusLine", "readSpec", "editSpec", "updateSpec", "block", "unblock", "resumeWork", "returnToPlanning", "submitForReview", "updateBranch", "reviewDecision", "subscribeTicket", "unsubscribeTicket", "listSubscriptions",
-    "listTickets", "searchTickets", "listProjects", "listInbox", "createTicket", "recordPullRequest", "requestApproval", "checkPermission", "fileOutputScope",
+    "listTickets", "searchTickets", "listLabels", "listProjects", "listInbox", "createTicket", "recordPullRequest", "requestApproval", "checkPermission", "fileOutputScope",
     "listWatchers", "getSettings", "listPrompts", "listDrivers", "createWatcher", "createProject", "updateSettings", "scheduleCreate", "scheduleList", "scheduleCancel", "queryActivity", "readMemory", "updateMemorySection", "recordEventOutcomes", "recordTriageVerdict", "listTerminals", "readTerminal", "writeTerminal", "arrangePanes",
   ];
   expect(Object.keys(ops).sort()).toEqual([...Object.keys(keyed), ...unkeyed].sort());

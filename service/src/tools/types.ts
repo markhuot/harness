@@ -2,6 +2,7 @@
 //  - natively, to drivers that run their own agent loop (dummy, anthropic-api)
 //  - over MCP (POST /mcp/:runToken) to drivers that wrap an external agent (claude-code)
 
+import type { LabelInfo } from "@harness/shared";
 import type {
   AttachmentKind,
   ActivityKind,
@@ -190,6 +191,8 @@ export interface CreateTicketInput {
   remoteUrl?: string | null;
   /** Files to attach to its first message (Ticket.promptAttachments); relative paths resolve against the caller's cwd. */
   attachments?: string[];
+  /** Label names for the new ticket (CreateTicketBody.labels) */
+  labels?: string[];
 }
 
 export interface UpdateTicketInput {
@@ -218,6 +221,10 @@ export interface UpdateTicketInput {
   remoteUrl?: string | null;
   /** The ticket's pull request URLs, the whole list ([] clears it); titles are fetched, never passed */
   pullRequestUrls?: string[];
+  /** Label names to add to the ticket; the rest stay */
+  addLabels?: string[];
+  /** Label names to take off the ticket; ones it doesn't carry are ignored */
+  removeLabels?: string[];
 }
 
 /**
@@ -355,6 +362,8 @@ export interface HarnessOps {
   ): Promise<{ hits: { ticket: BoardTicket; snippet: string }[]; nextCursor: string | null; total: number }>;
   /** Every project with its settings (null permissionMode → the settings default) */
   listProjects(ctx: ToolContext): Promise<ProjectView[]>;
+  /** Every label with its color and its count of in-progress, blocked and review tickets, most recently used first */
+  listLabels(ctx: ToolContext): Promise<LabelInfo[]>;
   /**
    * The events addressed to the calling ticket (what the Inbox shows a chief), newest first, capped at `limit`
    * (default 20, max 100); `total` counts every match. `source` is an event source kind; `key` one event id or the

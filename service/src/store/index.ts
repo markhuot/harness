@@ -4,6 +4,7 @@ import { CosRepo } from "./cos";
 import { TicketEventRepo } from "./ticket-events";
 import { ScheduleRepo } from "./schedules";
 import { TicketRepo } from "./tickets";
+import { LabelRepo } from "./labels";
 import { SessionRepo } from "./sessions";
 import { RunRepo } from "./runs";
 import { TranscriptRepo } from "./transcript";
@@ -26,6 +27,7 @@ export class Store {
   readonly ticketEvents: TicketEventRepo;
   readonly schedules: ScheduleRepo;
   readonly tickets: TicketRepo;
+  readonly labels: LabelRepo;
   readonly sessions: SessionRepo;
   readonly runs: RunRepo;
   readonly transcript: TranscriptRepo;
@@ -50,6 +52,7 @@ export class Store {
     this.settings = new SettingsRepo(db);
     // A ticket's legacy driver follows the settings' choices it inherits.
     this.tickets = new TicketRepo(db, () => resolveSettings(this.settings.all()).phaseModels ?? {}, now);
+    this.labels = new LabelRepo(db, now);
     this.sessions = new SessionRepo(db, now);
     this.runs = new RunRepo(db, now);
     this.transcript = new TranscriptRepo(db, now);
@@ -70,7 +73,7 @@ export class Store {
   }
 }
 
-export { ProjectRepo, GroupRepo, CosRepo, TicketEventRepo, ScheduleRepo, TicketRepo, SessionRepo, RunRepo, TranscriptRepo, ActivityRepo, AttachmentRepo, SpecRepo, SubagentRepo, WatcherRepo, SeenRepo, SettingsRepo, CounterRepo, BrowserTabRepo, DeviceRepo, SubscriptionRepo };
+export { ProjectRepo, GroupRepo, CosRepo, TicketEventRepo, ScheduleRepo, TicketRepo, LabelRepo, SessionRepo, RunRepo, TranscriptRepo, ActivityRepo, AttachmentRepo, SpecRepo, SubagentRepo, WatcherRepo, SeenRepo, SettingsRepo, CounterRepo, BrowserTabRepo, DeviceRepo, SubscriptionRepo };
 export { normalizeProjectKey } from "./projects";
 export { SpecConflictError } from "./spec";
 export { ScopedStore, type Scope } from "./scope";

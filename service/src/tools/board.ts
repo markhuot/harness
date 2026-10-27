@@ -107,7 +107,7 @@ export const getTicketAgent = defineTool<{ key: string; id: string; include_tran
 export const searchTickets = defineTool<{ query: string; project_key?: string; limit?: number; cursor?: string; include_drafts?: boolean }>({
   name: "search_tickets",
   description:
-    "Full-text search over every ticket in every status, drafts included (draft: true; pass include_drafts: false to leave them out): key (exact or prefix, including old keys), remote ID (the external item's key a ticket is linked to), title, spec and latest Activity note. Every word must match, as a prefix. Best matches come first (exact key, key prefix, exact remote ID, remote ID prefix, title hits, then the rest; newest first within each). Returns key, externalKey (its remote ID, when it has one), title, status, project and a snippet per hit; when there are more, pass the returned nextCursor back as cursor.",
+    "Full-text search over every ticket in every status, drafts included (draft: true; pass include_drafts: false to leave them out): key (exact or prefix, including old keys), remote ID (the external item's key a ticket is linked to), title, spec and latest Activity note. Every word must match, as a prefix. Words only match as prefixes, label names included (typing Bugfix finds tickets labeled Bugfix). label:Name (quote a name with spaces: label:\"Release 1.2.3\") keeps only tickets carrying that label, repeated label: terms must all match, and project:KEY keeps only that project's tickets (repeat it for several); with only such terms the hits are the most recently changed. Best matches come first (exact key, key prefix, exact remote ID, remote ID prefix, title hits, then the rest; newest first within each). Returns key, externalKey (its remote ID, when it has one), title, status, project and a snippet per hit; when there are more, pass the returned nextCursor back as cursor.",
   inputSchema: schema(
     {
       query: { type: "string", minLength: 1, description: "Words or a ticket key to search for." },
@@ -134,6 +134,18 @@ export const searchTickets = defineTool<{ query: string; project_key?: string; l
       })),
       nextCursor: page.nextCursor,
     });
+  },
+});
+
+export const listLabels = defineTool<Record<string, never>>({
+  name: "list_labels",
+  description:
+    "List the labels any ticket can carry: name, color and how many in-progress, blocked or review tickets carry it, most recently used first. Labels are shared by every project. Check it before labeling so you reuse a name instead of making a near duplicate.",
+  inputSchema: schema({}),
+  async run(_input, ctx) {
+    const labels = await ctx.ops.listLabels(ctx);
+    if (labels.length === 0) return "No labels yet: naming one in create_ticket's labels or update_ticket's add_labels creates it.";
+    return json(labels.map(({ name, color, count }) => ({ name, color, tickets: count })));
   },
 });
 

@@ -2,7 +2,9 @@ import type { Database } from "bun:sqlite";
 import type { CompletionAction, ExternalRef, MessageDraft, PendingApproval, PermissionMode, PhaseModels, Attachment, PullRequestLink, ReviewState, Ticket, TicketKind, TicketPage, TicketStatus } from "@harness/shared";
 import { isCompletionAction, resolvePhaseChoice } from "@harness/shared";
 import { hasSearchIndex } from "../db";
+import { type ParsedSearch, labelKey, parseSearchQuery } from "@harness/shared";
 import { clampLimit, decodeCursor, DEFAULT_PAGE_LIMIT, DEFAULT_SEARCH_LIMIT, encodeCursor, ftsQuery, keyCandidate, likePattern, searchTerms } from "./search";
+import { LabelRepo } from "./labels";
 import { bool, fromJson, int, newId, toJson } from "./util";
 import { type Clock, systemClock } from "../clock";
 import { toContextUsage, type StoredContext } from "../orchestrator/context-usage";
@@ -225,6 +227,21 @@ export interface StoredPullRequest extends PullRequestLink {
 }
 
 /**
+ * The `label:` and `project:` qualifiers of a search as filters: every label must be on the ticket,
+ * and the ticket's project must be one of the projects named (by key, any case).
+ */
+function qualifierFilter(parsed: ParsedSearch, where: string[], params: SqlParams) {
+  parsed.labels.forEach((name, i) => {
+    where.push(`EXISTS (SELECT 1 FROM ticket_labels tl JOIN labels l ON l.id = tl.label_id WHERE tl.ticket_id = t.id AND l.key = $label${i})`);
+    params[`label${i}`] = labelKey(name);
+  });
+  if (parsed.projects.length) {
+    where.push(`t.project_id IN (SELECT id FROM projects WHERE upper(key) IN (${parsed.projects.map((_, i) => `$project${i}`).join(", ")}))`);
+    parsed.projects.forEach((key, i) => (params[`project${i}`] = key.toUpperCase()));
+  }
+}
+
+/**
  * Narrow a page or search to one project, or to the projects in a group (a group's board). A chief
  * of staff's ticket (kind "cos") is in no project's list: only `includeCos` returns it.
  */
@@ -246,7 +263,11 @@ export class TicketRepo {
     private db: Database,
     private settingsPhaseModels: () => PhaseModels = () => ({}),
     private now: Clock = systemClock,
-  ) {}
+  ) {
+    this.labelRepo = new LabelRepo(db, now);
+  }
+
+  private labelRepo: LabelRepo;
 
   /**
    * The legacy driver + model of each row: the Work driver it resolves to (ticket → project →
@@ -287,6 +308,7 @@ export class TicketRepo {
   private map(rows: TicketRow[]): Ticket[] {
     const deps = this.deps(rows.map((r) => r.id));
     const choices = this.legacyChoices(rows);
+    const labels = this.labelRepo.namesFor(rows.map((r) => r.id));
     return rows.map((r) => {
       const stored = fromJson<StoredPullRequest[]>(r.pull_requests ?? null, []);
       return {
@@ -296,6 +318,7 @@ export class TicketRepo {
       kind: r.kind as TicketKind,
       title: r.title,
       spec: r.spec,
+      labels: labels.get(r.id) ?? [],
       specRevision: r.spec_revision ?? 1,
       specBaselineRevision: r.spec_baseline_revision ?? null,
       status: r.status as TicketStatus,
@@ -399,7 +422,7 @@ export class TicketRepo {
     } else {
       const terms = searchTerms(q);
       if (terms.length) {
-        const cols = ["key", "aliases", "title", "spec", "latest_note", "external_key"];
+        const cols = ["key", "aliases", "title", "spec", "latest_note", "external_key", "labels"];
         terms.forEach((term, i) => (params[`like${i}`] = `%${likePattern(term, false)}%`));
         const anyCol = terms.map((_, i) => `(${cols.map((c) => `s.${c} LIKE $like${i} ESCAPE '\\'`).join(" OR ")})`).join(" AND ");
         const inTitle = terms.map((_, i) => `s.title LIKE $like${i} ESCAPE '\\'`).join(" AND ");
@@ -443,8 +466,13 @@ export class TicketRepo {
     projectFilter(opts, where, params);
     let cte = "";
     if (opts.q !== undefined) {
-      cte = this.hitsCte(opts.q, params);
-      where.push("t.id IN (SELECT id FROM hits)");
+      const parsed = parseSearchQuery(opts.q);
+      qualifierFilter(parsed, where, params);
+      // Qualifiers alone are a filter, not a text search
+      if (parsed.text || !parsed.qualifiers) {
+        cte = this.hitsCte(parsed.text, params);
+        where.push("t.id IN (SELECT id FROM hits)");
+      }
     }
     const total = (this.db.query(`${cte} SELECT COUNT(*) AS n FROM tickets t WHERE ${where.join(" AND ")}`).get(params) as { n: number }).n;
 
@@ -483,27 +511,38 @@ export class TicketRepo {
   search(opts: { q: string; projectId?: string; groupId?: string; limit?: number; cursor?: string | null; drafts?: boolean }): TicketPage {
     const limit = clampLimit(opts.limit, DEFAULT_SEARCH_LIMIT);
     const params: SqlParams = {};
-    const cte = this.hitsCte(opts.q, params);
+    const parsed = parseSearchQuery(opts.q);
+    // Qualifiers alone have nothing to rank, so they list by last change.
+    const filterOnly = parsed.qualifiers > 0 && !parsed.text;
+    const cte = filterOnly ? "" : this.hitsCte(parsed.text, params);
     const where = ["1"];
     if (opts.drafts === false) where.push("t.draft = 0");
     projectFilter(opts, where, params);
-    const from = "FROM tickets t JOIN hits h ON h.id = t.id";
+    qualifierFilter(parsed, where, params);
+    const from = filterOnly ? "FROM tickets t" : "FROM tickets t JOIN hits h ON h.id = t.id";
     const total = (this.db.query(`${cte} SELECT COUNT(*) AS n ${from} WHERE ${where.join(" AND ")}`).get(params) as { n: number }).n;
     const pageParams: SqlParams = { ...params, limit: limit + 1 };
     if (opts.cursor) {
-      const [rank, created, id] = decodeCursor(opts.cursor, "s", ["n", "n", "s"]);
-      where.push("(h.rank > $cR OR (h.rank = $cR AND (t.created_at < $cT OR (t.created_at = $cT AND t.id < $cId))))");
-      Object.assign(pageParams, { cR: rank!, cT: created!, cId: id! });
+      if (filterOnly) {
+        const [updated, id] = decodeCursor(opts.cursor, "u", ["n", "s"]);
+        where.push("(t.updated_at < $cU OR (t.updated_at = $cU AND t.id < $cId))");
+        Object.assign(pageParams, { cU: updated!, cId: id! });
+      } else {
+        const [rank, created, id] = decodeCursor(opts.cursor, "s", ["n", "n", "s"]);
+        where.push("(h.rank > $cR OR (h.rank = $cR AND (t.created_at < $cT OR (t.created_at = $cT AND t.id < $cId))))");
+        Object.assign(pageParams, { cR: rank!, cT: created!, cId: id! });
+      }
     }
+    const order = filterOnly ? "t.updated_at DESC, t.id DESC" : "h.rank, t.created_at DESC, t.id DESC";
     const rows = this.db
-      .query(`${cte} SELECT t.*, ${DERIVED}, h.rank AS rank ${from} WHERE ${where.join(" AND ")} ORDER BY h.rank, t.created_at DESC, t.id DESC LIMIT $limit`)
+      .query(`${cte} SELECT t.*, ${DERIVED}, ${filterOnly ? "5" : "h.rank"} AS rank ${from} WHERE ${where.join(" AND ")} ORDER BY ${order} LIMIT $limit`)
       .all(pageParams) as (TicketRow & { rank: number })[];
     const more = rows.length > limit;
     const pageRows = rows.slice(0, limit);
     const last = pageRows[pageRows.length - 1];
     return {
       tickets: this.map(pageRows),
-      nextCursor: more && last ? encodeCursor("s", [last.rank, last.created_at, last.id]) : null,
+      nextCursor: more && last ? (filterOnly ? encodeCursor("u", [last.updated_at, last.id]) : encodeCursor("s", [last.rank, last.created_at, last.id])) : null,
       total,
     };
   }

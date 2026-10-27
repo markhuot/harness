@@ -249,3 +249,47 @@ test("the board's pages and search refuse an empty query and a cursor from anoth
   expect(h.orch.ticketPage({ status: "planning", limit: 2, cursor: first.nextCursor }).tickets).toHaveLength(1);
   expect(h.orch.searchTickets({ q: "item" }).total).toBe(3);
 });
+
+test("labels on a ticket: created with it, replaced by PATCH, announced as labels.changed with counts, recolored over HTTP's method", async () => {
+  const h = makeOrchestrator();
+  const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x", start: false, labels: ["Bugfix", " release  1 "] });
+  expect(t.labels).toEqual(["Bugfix", "release 1"]);
+  expect(h.orch.listLabels().map((l) => l.name).sort()).toEqual(["Bugfix", "release 1"]);
+
+  h.events.length = 0;
+  h.clock.advance(10);
+  const updated = await h.orch.updateTicket(t.key, { labels: ["Bugfix", "Docs"] });
+  expect(updated.labels).toEqual(["Bugfix", "Docs"]);
+  expect(h.events.map((e) => e.kind)).toContain("ticket.upserted");
+  const changed = h.events.filter((e) => e.kind === "labels.changed");
+  expect(changed).toHaveLength(1);
+  expect(changed[0]).toMatchObject({ labels: [{ name: "Docs" }, { name: "Bugfix" }, { name: "release 1" }] });
+
+  // No change, no announcement
+  h.events.length = 0;
+  await h.orch.updateTicket(t.key, { labels: ["bugfix", "docs"] });
+  expect(h.events.filter((e) => e.kind === "labels.changed")).toHaveLength(0);
+
+  h.events.length = 0;
+  const color = h.orch.listLabels().find((l) => l.name === "Docs")!.color === "teal" ? "pink" : "teal";
+  expect(h.orch.setLabelColor("docs", { color })).toMatchObject({ name: "Docs", color });
+  expect(h.events.filter((e) => e.kind === "labels.changed")).toHaveLength(1);
+  await status(() => h.orch.setLabelColor("Nope", { color: "teal" }), 404, /Unknown label/);
+  await status(() => h.orch.setLabelColor("Docs", { color: "#ff0000" }), 400, /color must be one of/);
+  await status(() => h.orch.updateTicket(t.key, { labels: ['a"b'] }), 400, /Invalid label/);
+  await status(() => h.orch.updateTicket(t.key, { labels: "Bugfix" as never }), 400, /list of label names/);
+});
+
+test("a ticket's status moving changes its label's count, which is announced once", async () => {
+  const h = makeOrchestrator();
+  const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x", start: false, labels: ["Count"] });
+  expect(h.orch.listLabels()[0]!.count).toBe(0);
+  h.events.length = 0;
+  await h.orch.updateTicket(t.key, { status: "blocked" });
+  const changed = h.events.filter((e) => e.kind === "labels.changed");
+  expect(changed).toHaveLength(1);
+  expect(changed[0]).toMatchObject({ labels: [{ name: "Count", count: 1 }] });
+  h.events.length = 0;
+  await h.orch.deleteTicket(t.key);
+  expect(h.events.filter((e) => e.kind === "labels.changed")).toMatchObject([{ labels: [{ name: "Count", count: 0 }] }]);
+});

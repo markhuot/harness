@@ -290,6 +290,7 @@ export function ticketView(t: Ticket) {
     title: t.title,
     kind: t.kind,
     status: t.status,
+    labels: t.labels ?? [],
     agentReview: t.agentReview,
     humanReview: t.humanReview,
     skipAgentReview: !!t.skipAgentReview,

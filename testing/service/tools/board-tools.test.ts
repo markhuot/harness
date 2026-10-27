@@ -195,3 +195,44 @@ test("review_ticket refuses a ticket that isn't one of the agent's children", as
   const { results } = await agent([["review_ticket", { key: "ACME-1", decision: "approve", notes: "n" }]]);
   expect(results[0]!.isError).toBe(true);
 });
+
+test("create_ticket takes labels, update_ticket add_labels / remove_labels change only those, and list_labels shows the registry", async () => {
+  const { results, h, other } = await agent([
+    ["create_ticket", { title: "Labeled", spec: "s", labels: ["Bugfix", "bugfix", "Release 1"] }],
+    ["update_ticket", { key: "ACME-1", add_labels: ["Docs", "release 1"], remove_labels: ["BUGFIX", "never had it"] }],
+    ["list_labels", {}],
+    ["update_ticket", { key: "ACME-1", add_labels: ['say "hi"'] }],
+  ]);
+  expect(results[0]!.text).toMatch(/Created ACME-3/);
+  expect(h.store.tickets.getByKey("ACME-3")!.labels).toEqual(["Bugfix", "Release 1"]);
+  expect(h.store.tickets.getByKey(other.key)!.labels).toEqual(["Docs", "Release 1"]);
+  expect((json(results[2]!.text) as { name: string }[]).map((l) => l.name).sort()).toEqual(["Bugfix", "Docs", "Release 1"]);
+  expect(results[3]!.isError).toBe(true);
+  expect(results[3]!.text).toMatch(/Invalid label/);
+});
+
+test("a work run labels its own ticket with add_labels, but can't edit anything else on it", async () => {
+  const h = makeOrchestrator({ tools: undefined });
+  const { steps, results } = callTools([
+    ["update_ticket", { key: "ACME-1", add_labels: ["Mine"] }],
+    ["update_ticket", { key: "ACME-1", add_labels: ["Mine"], title: "Renamed" }],
+  ]);
+  h.driver.script(steps);
+  const me = await h.orch.createTicket({ projectId: h.project.id, spec: "My ticket", skipAgentReview: true });
+  await h.settle();
+  expect(results[0]!.isError).toBeFalsy();
+  expect(results[1]!.isError).toBe(true);
+  expect(h.store.tickets.getByKey(me.key)!.labels).toEqual(["Mine"]);
+});
+
+test("search_tickets understands label: and project: terms", async () => {
+  const h = makeOrchestrator({ tools: undefined });
+  const other = await h.orch.createTicket({ projectId: h.project.id, spec: "Other ticket spec", start: false, labels: ["Reference"] });
+  await h.settle();
+  const { steps, results } = callTools([["search_tickets", { query: "label:Reference project:acme" }], ["search_tickets", { query: "label:Nope" }]]);
+  h.driver.script(steps);
+  await h.orch.createTicket({ projectId: h.project.id, spec: "My ticket", skipAgentReview: true });
+  await h.settle();
+  expect((json(results[0]!.text) as { hits: { key: string }[] }).hits.map((x) => x.key)).toEqual([other.key]);
+  expect(results[1]!.text).toBe('No tickets match "label:Nope".');
+});

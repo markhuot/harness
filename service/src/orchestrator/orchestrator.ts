@@ -64,6 +64,7 @@ import type {
   Group,
 } from "@harness/shared";
 import { mapPaneRefs, type PaneArrangeResult, type PaneOp, type TerminalInfo } from "@harness/shared";
+import { LABEL_COLORS, MAX_LABEL_NAME_LENGTH, isLabelColor, labelKey, normalizeLabelName, normalizeLabelNames, type LabelInfo, type UpdateLabelBody } from "@harness/shared";
 import type { MacRequests } from "../api/mac-requests";
 import type { BaseBranchSource, BranchInfo, CompletionAction, PhaseChoice, MessageDraft, MessageDraftBody, PlanUsageReport, PromptEntry, SessionActionBody } from "@harness/shared";
 import {
@@ -568,6 +569,9 @@ export function draftTitle(prompt: string): string {
 
 const UNTITLED_DRAFT = "Untitled draft";
 
+/** The fields a work or chat run may change on its own ticket with update_ticket */
+const OWN_CARD_FIELDS = ["pullRequestUrls", "addLabels", "removeLabels"];
+
 export class Orchestrator {
   readonly store: Store;
   readonly bus: EventBus;
@@ -618,6 +622,8 @@ export class Orchestrator {
   private titleSlotWaiters: (() => void)[] = [];
   /** Tickets with a refresh of their titles still running, so a repeated refresh starts nothing new */
   private titleRefreshesInFlight = new Set<string>();
+  /** The labels collection as the apps were last told it (JSON), so a change is announced once */
+  private lastLabels = "[]";
   /** Fire-and-forget async work (scheduling, worktree setup) that idle() must wait for */
   private background = new Set<Promise<unknown>>();
   private modelCatalog: ModelCatalog;
@@ -669,6 +675,10 @@ export class Orchestrator {
     this.gate = new PermissionGate({ classifier: () => this.classifier(), timeoutMs: opts.classifierTimeoutMs });
     this.store = opts.store;
     this.bus = opts.bus;
+    // A ticket's status moves the counts and a new label moves the order: say so when the collection changed.
+    this.lastLabels = JSON.stringify(this.store.labels.list());
+    this.bus.onKind("ticket.upserted", () => this.publishLabels());
+    this.bus.onKind("ticket.deleted", () => this.publishLabels());
     this.browser = opts.browser;
     this.paths = opts.paths;
     this.terminalAccess = opts.terminals;
@@ -2126,6 +2136,7 @@ export class Orchestrator {
     if (requestedBranch && project.isGit === false) throw badRequest(`branch ${requestedBranch} needs a git repository; ${project.path} isn't one`);
     const dependsOn = this.validateDeps(body.dependsOn ?? []);
     const promptAttachments = body.promptAttachments === undefined ? [] : this.resolveAttachments(body.promptAttachments);
+    const labels = body.labels === undefined ? [] : this.validLabels(body.labels);
     let parentId: string | null = null;
     if (body.parentId) {
       const parent = this.store.tickets.get(body.parentId) ?? this.store.tickets.getByKey(body.parentId);
@@ -2173,6 +2184,7 @@ export class Orchestrator {
         promptAttachments,
       });
       this.store.sessions.update(session.id, { ticketId: t.id });
+      if (labels.length) this.store.labels.setForTicket(t.id, labels);
       return permissionMode ? this.store.tickets.update(t.id, { permissionMode })! : t;
     });
     const p2 = this.store.projects.get(project.id);
@@ -2221,6 +2233,40 @@ export class Orchestrator {
     this.appendStatus(launched.sessionId, null, "Ticket created");
     await this.launch(launched, start, prompt, "human");
     return this.store.tickets.get(ticket.id)!;
+  }
+
+  /** A request's label names: a list of usable names (see normalizeLabelName), normalized and de-duplicated. */
+  private validLabels(value: unknown): string[] {
+    if (!Array.isArray(value) || value.some((v) => typeof v !== "string")) throw badRequest("labels must be a list of label names");
+    for (const raw of value as string[]) {
+      if (normalizeLabelName(raw) === null) throw badRequest(`Invalid label ${JSON.stringify(raw)}: a name is 1 to ${MAX_LABEL_NAME_LENGTH} characters with no double quote`);
+    }
+    return normalizeLabelNames(value as string[]);
+  }
+
+  /** Tell the apps when the labels collection (colors, order, counts) is not what they last heard. */
+  private publishLabels() {
+    const labels = this.store.labels.list();
+    const json = JSON.stringify(labels);
+    if (json === this.lastLabels) return;
+    this.lastLabels = json;
+    this.bus.emit({ kind: "labels.changed", labels });
+  }
+
+  /** PATCH /labels/:name */
+  setLabelColor(name: string, body: UpdateLabelBody): LabelInfo {
+    if (!body || typeof body !== "object" || !isLabelColor(body.color)) {
+      throw badRequest(`color must be one of ${LABEL_COLORS.map((c) => c.id).join(", ")}`);
+    }
+    const label = this.store.labels.setColor(String(name), body.color);
+    if (!label) throw notFound(`Unknown label: ${name}`);
+    this.publishLabels();
+    return label;
+  }
+
+  /** GET /labels */
+  listLabels(): LabelInfo[] {
+    return this.store.labels.list();
   }
 
   private validateDeps(keys: string[]): string[] {
@@ -2333,6 +2379,7 @@ export class Orchestrator {
     }
     const externalRef = body.externalRef !== undefined ? this.manualExternalRef(ticket.externalRef, body.externalRef) : undefined;
     const pullRequestUrls = body.pullRequestUrls !== undefined ? this.validPullRequestUrls(body.pullRequestUrls) : undefined;
+    const labels = body.labels !== undefined ? this.validLabels(body.labels) : undefined;
     // The spec first: a conflict refuses the whole PATCH before anything else changed.
     if (spec !== undefined) {
       if (ticket.draft) {
@@ -2366,6 +2413,16 @@ export class Orchestrator {
         this.touchSession(ticket.sessionId);
       }
       this.fetchPullRequestTitles(ticket.id, change.added);
+    }
+    if (labels !== undefined) {
+      const change = this.store.labels.setForTicket(ticket.id, labels);
+      if (change.changed) {
+        ticket = this.store.tickets.get(ticket.id)!;
+        this.touchTicket(ticket.id);
+        const parts = [change.added.length ? `Added ${change.added.join(", ")}` : "", change.removed.length ? `Removed ${change.removed.join(", ")}` : ""].filter(Boolean);
+        this.appendStatus(ticket.sessionId, null, `Labels: ${parts.join("; ")}`);
+        this.touchSession(ticket.sessionId);
+      }
     }
     if (Object.keys(patch).length) {
       ticket = this.store.tickets.update(ticket.id, patch)!;
@@ -4229,6 +4286,7 @@ ${numberLines(r.body)}`;
           skipHumanReview: input.skipHumanReview,
           externalRef,
           promptAttachments,
+          labels: input.labels,
         }, "agent"),
       );
     }
@@ -4252,6 +4310,7 @@ ${numberLines(r.body)}`;
         skipHumanReview: input.skipHumanReview,
         externalRef,
         promptAttachments,
+        labels: input.labels,
       }, "agent"),
     );
     this.cosNote(own, created, "created it");
@@ -4259,13 +4318,13 @@ ${numberLines(r.body)}`;
   }
 
   /**
-   * A work or chat run's own ticket, when its only field is pullRequestUrls: the one edit these runs
+   * A work or chat run's own ticket, when its fields are only OWN_CARD_FIELDS: the edits these runs
    * make to their own card (they add the pull requests they opened outside the completion run, and a
-   * chat on a ticket in review opens one when the human asks for it). Anything else on its own ticket
-   * is refused by boardTarget.
+   * chat on a ticket in review opens one when the human asks for it; they label their own work).
+   * Anything else on its own ticket is refused by boardTarget.
    */
-  private ownWorkPullRequests(ctx: ToolContext, key: string, fields: string[]): Ticket | null {
-    if ((ctx.runKind !== "work" && ctx.runKind !== "chat") || fields.length !== 1 || fields[0] !== "pullRequestUrls") return null;
+  private ownWorkCardEdits(ctx: ToolContext, key: string, fields: string[]): Ticket | null {
+    if ((ctx.runKind !== "work" && ctx.runKind !== "chat") || !fields.length || !fields.every((f) => OWN_CARD_FIELDS.includes(f))) return null;
     const own = this.ctxTicket(ctx);
     // Resolved like ownPlanTarget does, so an earlier key (alias) of this ticket counts too. A remote ID never identifies a ticket.
     const target = this.agentTarget(this.scopeOf(ctx), String(key ?? "").trim());
@@ -4277,7 +4336,7 @@ ${numberLines(r.body)}`;
     // before the human presses Start, which approves the plan and those settings together. It edits
     // nothing else, and has full access to its own card.
     const fields = Object.keys(input).filter((k) => input[k as keyof UpdateTicketInput] !== undefined);
-    const own = ctx.runKind === "plan" ? this.ownPlanTarget(ctx, key) : this.ownWorkPullRequests(ctx, key, fields);
+    const own = ctx.runKind === "plan" ? this.ownPlanTarget(ctx, key) : this.ownWorkCardEdits(ctx, key, fields);
     const { actor, target } = own ? { actor: own, target: own } : this.boardTarget(ctx, key, "update_ticket");
     // Editing a looser ticket (its spec, dependencies, driver...) would get it to act for the caller
     // under looser permissions. The one edit allowed on it is tightening its mode, alone.
@@ -4307,6 +4366,10 @@ ${numberLines(r.body)}`;
       body.dependsOn = input.dependsOn;
     }
     if (input.pullRequestUrls !== undefined) body.pullRequestUrls = input.pullRequestUrls;
+    if (input.addLabels !== undefined || input.removeLabels !== undefined) {
+      const drop = new Set((input.removeLabels ?? []).map((n) => labelKey(String(n))));
+      body.labels = [...(target.labels ?? []).filter((n) => !drop.has(labelKey(n))), ...(input.addLabels ?? [])];
+    }
     if (input.baseBranch !== undefined) body.baseBranch = input.baseBranch;
     if (input.branch !== undefined) body.branch = input.branch;
     if (input.remoteId !== undefined || input.remoteUrl !== undefined) body.externalRef = this.toolExternalRef(target, input.remoteId, input.remoteUrl);
@@ -6437,6 +6500,7 @@ ${numberLines(r.body)}`;
       getTicket: (c, k, o) => this.getTicket_(c, k, o),
       getTicketAgent: (c, k, id, o) => this.getTicketAgent_(c, k, id, o),
       searchTickets: (c, i) => this.searchTickets_(c, i),
+      listLabels: () => Promise.resolve(this.listLabels()),
       listProjects: (c) => this.listProjects_(c),
       listInbox: (c, f) => this.listInbox_(c, f),
       // --- memory and activity (chief of staff) ---

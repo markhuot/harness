@@ -988,6 +988,47 @@ export const MIGRATIONS: string[] = [
   `
   ALTER TABLE ticket_subscriptions ADD COLUMN reason TEXT;
   `,
+  // 59: labels (DESIGN.md "Labels"). A label is a name (key: its folded form, unique) and a color token, shared by
+  //     every project; ticket_labels joins them in the order a ticket got them (rowid). last_used_at is when it was
+  //     last added to a ticket (the sidebar's order). ticket_search gains the names so plain text finds them, kept
+  //     current by triggers on ticket_labels; the FTS index is dropped for ensureSearchIndex to rebuild with the
+  //     new column. A deleted ticket's rows go by trigger, so deleting never depends on PRAGMA foreign_keys.
+  `
+  CREATE TABLE labels (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    key TEXT NOT NULL UNIQUE,
+    color TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    last_used_at INTEGER NOT NULL
+  );
+  CREATE TABLE ticket_labels (
+    ticket_id TEXT NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+    label_id TEXT NOT NULL REFERENCES labels(id) ON DELETE CASCADE,
+    PRIMARY KEY (ticket_id, label_id)
+  );
+  CREATE INDEX ticket_labels_label ON ticket_labels(label_id);
+
+  DROP TRIGGER IF EXISTS ticket_fts_insert;
+  DROP TRIGGER IF EXISTS ticket_fts_delete;
+  DROP TRIGGER IF EXISTS ticket_fts_update;
+  DROP TABLE IF EXISTS ticket_fts;
+  ALTER TABLE ticket_search ADD COLUMN labels TEXT NOT NULL DEFAULT '';
+
+  CREATE TRIGGER ticket_search_label_insert AFTER INSERT ON ticket_labels BEGIN
+    UPDATE ticket_search SET labels = COALESCE((SELECT group_concat(name, ' ') FROM
+      (SELECT l.name AS name FROM ticket_labels tl JOIN labels l ON l.id = tl.label_id WHERE tl.ticket_id = NEW.ticket_id ORDER BY tl.rowid)), '')
+    WHERE ticket_id = NEW.ticket_id;
+  END;
+  CREATE TRIGGER ticket_search_label_delete AFTER DELETE ON ticket_labels BEGIN
+    UPDATE ticket_search SET labels = COALESCE((SELECT group_concat(name, ' ') FROM
+      (SELECT l.name AS name FROM ticket_labels tl JOIN labels l ON l.id = tl.label_id WHERE tl.ticket_id = OLD.ticket_id ORDER BY tl.rowid)), '')
+    WHERE ticket_id = OLD.ticket_id;
+  END;
+  CREATE TRIGGER ticket_labels_ticket_delete AFTER DELETE ON tickets BEGIN
+    DELETE FROM ticket_labels WHERE ticket_id = OLD.id;
+  END;
+  `,
 ];
 
 /** Where the files migrations look at live (HarnessPaths); by default next to the database file. */
@@ -1273,22 +1314,22 @@ export function ensureSearchIndex(db: Database): boolean {
     db.transaction(() => {
       db.exec(`
         CREATE VIRTUAL TABLE ticket_fts USING fts5(
-          key, aliases, title, spec, latest_note, external_key,
+          key, aliases, title, spec, latest_note, external_key, labels,
           content = 'ticket_search', content_rowid = 'rowid', tokenize = 'unicode61 remove_diacritics 2'
         );
         CREATE TRIGGER ticket_fts_insert AFTER INSERT ON ticket_search BEGIN
-          INSERT INTO ticket_fts (rowid, key, aliases, title, spec, latest_note, external_key)
-          VALUES (NEW.rowid, NEW.key, NEW.aliases, NEW.title, NEW.spec, NEW.latest_note, NEW.external_key);
+          INSERT INTO ticket_fts (rowid, key, aliases, title, spec, latest_note, external_key, labels)
+          VALUES (NEW.rowid, NEW.key, NEW.aliases, NEW.title, NEW.spec, NEW.latest_note, NEW.external_key, NEW.labels);
         END;
         CREATE TRIGGER ticket_fts_delete AFTER DELETE ON ticket_search BEGIN
-          INSERT INTO ticket_fts (ticket_fts, rowid, key, aliases, title, spec, latest_note, external_key)
-          VALUES ('delete', OLD.rowid, OLD.key, OLD.aliases, OLD.title, OLD.spec, OLD.latest_note, OLD.external_key);
+          INSERT INTO ticket_fts (ticket_fts, rowid, key, aliases, title, spec, latest_note, external_key, labels)
+          VALUES ('delete', OLD.rowid, OLD.key, OLD.aliases, OLD.title, OLD.spec, OLD.latest_note, OLD.external_key, OLD.labels);
         END;
         CREATE TRIGGER ticket_fts_update AFTER UPDATE ON ticket_search BEGIN
-          INSERT INTO ticket_fts (ticket_fts, rowid, key, aliases, title, spec, latest_note, external_key)
-          VALUES ('delete', OLD.rowid, OLD.key, OLD.aliases, OLD.title, OLD.spec, OLD.latest_note, OLD.external_key);
-          INSERT INTO ticket_fts (rowid, key, aliases, title, spec, latest_note, external_key)
-          VALUES (NEW.rowid, NEW.key, NEW.aliases, NEW.title, NEW.spec, NEW.latest_note, NEW.external_key);
+          INSERT INTO ticket_fts (ticket_fts, rowid, key, aliases, title, spec, latest_note, external_key, labels)
+          VALUES ('delete', OLD.rowid, OLD.key, OLD.aliases, OLD.title, OLD.spec, OLD.latest_note, OLD.external_key, OLD.labels);
+          INSERT INTO ticket_fts (rowid, key, aliases, title, spec, latest_note, external_key, labels)
+          VALUES (NEW.rowid, NEW.key, NEW.aliases, NEW.title, NEW.spec, NEW.latest_note, NEW.external_key, NEW.labels);
         END;
         INSERT INTO ticket_fts (ticket_fts) VALUES ('rebuild');
       `);
