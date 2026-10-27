@@ -6,6 +6,7 @@
 
 import type { ITheme, Terminal } from "ghostty-web";
 import { hardenInput } from "./input";
+import { wordSkipSequence } from "./keys";
 import { viewportFor, type CellSize } from "./layout";
 import { TerminalFeed, type TerminalMessage, type TerminalSink } from "./session";
 
@@ -74,7 +75,14 @@ export function createTerminalView(ghostty: GhosttyModule, o: ViewOptions): Term
   term.open(stage);
   hardenInput(term.element);
   hardenInput(term.textarea);
-  if (o.keyHandler) term.attachCustomKeyEventHandler(o.keyHandler);
+  term.attachCustomKeyEventHandler((e) => {
+    const skip = wordSkipSequence(e);
+    if (skip) {
+      o.onData(skip);
+      return true;
+    }
+    return o.keyHandler?.(e) ?? false;
+  });
   term.onData((d) => o.onData(d));
   term.onTitleChange((t) => o.onTitle?.(t));
   term.onBell(() => o.onBell?.());
