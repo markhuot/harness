@@ -2,7 +2,7 @@
 // operations (docking, closing, resizing, parsing) live in paneModel.ts and are re-exported here.
 
 import { useMemo, useSyncExternalStore } from "react";
-import { parsePaneStore, isPopoutScope, defaultPanes, bareBoardId, serializePaneStore, withScope, popoutPanes, popOut, dropInStore, popOutContent, returnTab, tornOffTabs, popIn, retainPopouts, mapScopes, rekeyScopes, retainScopes, forgetProject, popoutScope, type DragSource, type DropZone, type PaneContent, type PaneState, type PaneStore, type TornOff } from "./paneModel";
+import { parsePaneStore, isPopoutScope, defaultPanes, bareBoardId, serializePaneStore, withScope, popoutPanes, popOut, dropInStore, popOutContent, returnTab, tornOffTabs, popIn, retainPopouts, mapScopes, rekeyScopes, retainScopes, forgetProject, popoutScope, type DragSource, type DropTarget, type PaneContent, type PaneState, type PaneStore, type TornOff } from "./paneModel";
 
 export * from "./paneModel";
 
@@ -69,7 +69,7 @@ export function popOutPane(scope: string, leafId: string, id: string): boolean {
 }
 
 /** A drop on board `scope` (see dropInStore). */
-export function dropOnBoard(scope: string, source: DragSource, targetLeafId: string, zone: DropZone) {
+export function dropOnBoard(scope: string, source: DragSource, targetLeafId: string, zone: DropTarget) {
   commit(dropInStore(getStore(), scope, source, targetLeafId, zone));
 }
 

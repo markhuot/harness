@@ -99,6 +99,8 @@ export interface PaneSplit {
 export type PaneNode = PaneLeaf | PaneSplit;
 /** Which half of a pane something is dropped on. */
 export type DropZone = "left" | "right" | "top" | "bottom";
+/** What a drop on a pane does: split toward an edge, or take the pane's place ("replace", the middle third). */
+export type DropTarget = DropZone | "replace";
 
 export interface PaneState {
   root: PaneNode;
@@ -795,17 +797,41 @@ function reorderSibling(root: PaneNode, moving: PaneLeaf, targetId: string, zone
 }
 
 /**
+ * Replace the pane `targetId` with `content`: an existing pane (`moving`: the dragged pane, or the
+ * one already showing the content) takes the target's place and keeps its id, so it doesn't remount,
+ * and its old place closes; otherwise the target shows `content` in place. The board is never
+ * replaced nor moved this way, and a pane dropped on itself does nothing. Focus follows the content;
+ * a zoomed target stays zoomed.
+ */
+function replaceWith(state: PaneState, moving: PaneLeaf | null, targetId: string, content: PaneContent): PaneState {
+  const target = findLeaf(state.root, targetId);
+  if (!target || target.content.kind === "board" || content.kind === "board" || moving?.id === targetId) return state;
+  let root = state.root;
+  let id = targetId;
+  if (moving) {
+    root = removeLeaf(root, moving.id).root!; // the target survives, so the tree isn't empty
+    root = replaceNode(root, targetId, () => ({ ...moving, content }));
+    id = moving.id;
+  } else {
+    root = setLeafContent(root, targetId, content);
+  }
+  return normalize({ root, focusedId: id, zoomedId: state.zoomedId === targetId ? id : null });
+}
+
+/**
  * Drop a card (or the board) on the `zone` half of a pane. Content that's already open (the board,
  * a ticket or a terminal session in another pane) moves there rather than opening twice.
  */
-export function dropContent(state: PaneState, targetLeafId: string, zone: DropZone, content: PaneContent): PaneState {
-  return dock(state, leafShowing(state.root, content), targetLeafId, zone, content);
+export function dropContent(state: PaneState, targetLeafId: string, zone: DropTarget, content: PaneContent): PaneState {
+  const open = leafShowing(state.root, content);
+  return zone === "replace" ? replaceWith(state, open, targetLeafId, content) : dock(state, open, targetLeafId, zone, content);
 }
 
 /** Re-dock an existing pane on the `zone` half of another (dragging a pane by its header). */
-export function movePane(state: PaneState, leafId: string, targetLeafId: string, zone: DropZone): PaneState {
+export function movePane(state: PaneState, leafId: string, targetLeafId: string, zone: DropTarget): PaneState {
   const leaf = findLeaf(state.root, leafId);
-  return leaf ? dock(state, leaf, targetLeafId, zone, leaf.content) : state;
+  if (!leaf) return state;
+  return zone === "replace" ? replaceWith(state, leaf, targetLeafId, leaf.content) : dock(state, leaf, targetLeafId, zone, leaf.content);
 }
 
 /**
@@ -1114,16 +1140,18 @@ export function sourceContent(state: PaneState, source: DragSource): PaneContent
 const ZONE_ORDER: readonly DropZone[] = ["right", "left", "bottom", "top"];
 
 /**
- * Which half of `rect` the point (x, y) points at: the rect's diagonals cut it into four triangles,
- * one per edge, so this is the nearest edge measured in the rect's own proportions. Points on a
- * diagonal go to left/right, the centre to "right". Null outside the rect (edges count as inside)
- * or for an empty rect.
+ * What the point (x, y) points at in `rect`: the middle third on both axes is "replace"; outside it
+ * the rect's diagonals cut it into four triangles, one per edge, so this is the nearest edge
+ * measured in the rect's own proportions. Points on a diagonal go to left/right. Null outside the
+ * rect (edges count as inside) or for an empty rect.
  */
-export function zoneAt(rect: Rect, x: number, y: number): DropZone | null {
+export function zoneAt(rect: Rect, x: number, y: number): DropTarget | null {
   if (!(rect.w > 0 && rect.h > 0)) return null;
   const dx = (x - rect.x) / rect.w;
   const dy = (y - rect.y) / rect.h;
   if (!(dx >= 0 && dx <= 1 && dy >= 0 && dy <= 1)) return null;
+  const mid = (v: number) => v >= 1 / 3 && v <= 2 / 3;
+  if (mid(dx) && mid(dy)) return "replace";
   const dist: Record<DropZone, number> = { right: 1 - dx, left: dx, bottom: 1 - dy, top: dy };
   let best = ZONE_ORDER[0]!;
   for (const z of ZONE_ORDER) if (dist[z] < dist[best]) best = z;
@@ -1131,7 +1159,7 @@ export function zoneAt(rect: Rect, x: number, y: number): DropZone | null {
 }
 
 /** The visible pane under the point (fractions of the workspace, as in `layoutPanes`) and the zone pointed at. */
-export function dropTargetAt(layout: PaneLayout, x: number, y: number): { leafId: string; zone: DropZone; rect: Rect } | null {
+export function dropTargetAt(layout: PaneLayout, x: number, y: number): { leafId: string; zone: DropTarget; rect: Rect } | null {
   for (const { leaf, rect, hidden } of layout.leaves) {
     if (hidden) continue;
     const zone = zoneAt(rect, x, y);
@@ -1141,13 +1169,13 @@ export function dropTargetAt(layout: PaneLayout, x: number, y: number): { leafId
 }
 
 /**
- * Drop `source` on the `zone` half of the pane `targetLeafId`. A ticket that's already open moves
+ * Drop `source` on the `zone` half of the pane `targetLeafId`, or on its middle ("replace", see replaceWith). A ticket that's already open moves
  * with its pane (keeping its tab) instead of opening twice; a new one opens on the Spec. A tab
  * makes a torn-off pane, or moves the one it already has. Returns `state` itself when the drop
  * would do nothing (a pane dropped on itself, a missing pane), which is also how the drag preview
  * knows not to show.
  */
-export function applyDrop(state: PaneState, source: DragSource, targetLeafId: string, zone: DropZone): PaneState {
+export function applyDrop(state: PaneState, source: DragSource, targetLeafId: string, zone: DropTarget): PaneState {
   if (source.kind === "pane") return movePane(state, source.leafId, targetLeafId, zone);
   return dropContent(state, targetLeafId, zone, sourceContent(state, source)!);
 }
@@ -1160,13 +1188,14 @@ export function applyDrop(state: PaneState, source: DragSource, targetLeafId: st
  * the dragged pane's current extent along that axis, anchored at the target's edge and clamped to
  * the row or column. The reflow only happens on drop. Null when the drop would do nothing.
  */
-export function dropPreview(state: PaneState, source: DragSource, targetLeafId: string, zone: DropZone, area?: PaneArea): Rect | null {
+export function dropPreview(state: PaneState, source: DragSource, targetLeafId: string, zone: DropTarget, area?: PaneArea): Rect | null {
   if (applyDrop(state, source, targetLeafId, zone) === state) return null;
   const layout = layoutPanes(state, area);
   const rectOf = (id: string) => layout.leaves.find((b) => b.leaf.id === id)?.rect;
   const target = findLeaf(state.root, targetLeafId);
   const t = rectOf(targetLeafId);
   if (!target || !t) return null;
+  if (zone === "replace") return t; // the whole pane changes hands
   const horizontal = DIR_OF[zone] === "row";
   const extent = (r: Rect) => (horizontal ? r.w : r.h);
   let size = (target.content.kind === "board" ? 1 - BOARD_SHARE : 0.5) * extent(t);
@@ -1704,7 +1733,7 @@ function leaveTornTab(store: PaneStore, boardScope: string, torn: TicketTabConte
  * rather than open twice; a tab torn off moves its ticket pane off it (leaveTornTab). The same
  * store when the drop does nothing.
  */
-export function dropInStore(store: PaneStore, scope: string, source: DragSource, targetLeafId: string, zone: DropZone): PaneStore {
+export function dropInStore(store: PaneStore, scope: string, source: DragSource, targetLeafId: string, zone: DropTarget): PaneStore {
   if (isPopoutScope(scope)) return store;
   const s = store.scopes[scope] ?? defaultPanes(bareBoardId(scope));
   const here = sourceContent(s, source);

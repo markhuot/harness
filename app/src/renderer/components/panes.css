@@ -253,6 +253,12 @@ html[data-input="keyboard"] .app:not(:has(#app-sidebar:focus-within)) .pane.acti
   transition: left 0.14s cubic-bezier(0.2, 0, 0, 1), top 0.14s cubic-bezier(0.2, 0, 0, 1), width 0.14s cubic-bezier(0.2, 0, 0, 1), height 0.14s cubic-bezier(0.2, 0, 0, 1);
   animation: pane-drop-in 0.14s ease-out;
 }
+/* Replacing the pane: the whole pane, dashed and heavier, so it reads differently from a half. */
+.pane-drop-preview[data-zone="replace"] {
+  border-style: dashed;
+  border-width: 3px;
+  background: color-mix(in srgb, var(--accent) 26%, transparent);
+}
 @keyframes pane-drop-in {
   from {
     opacity: 0;

@@ -3632,8 +3632,16 @@ collapses and resizes (`state/layout.ts`); the rest of the window (`<main>`) sho
   chip (plus the tab's name) as the drag image. While one is being dragged, `PaneWorkspace` shows a drop
   layer over every pane, above plugin iframes and the browser canvas (which would otherwise
   swallow the drag). The layer is `no-drag` so the titlebar's window-drag regions don't take the
-  drop. `zoneAt` picks the half of the pane under the pointer: the pane's diagonals cut it into
-  four triangles, ties go to left/right, and the centre goes to the right. The preview (`dropPreview`) is
+  drop. `zoneAt` picks what the pointer is over: the middle third of the pane on both axes is
+  "replace" (`DropTarget`, a fifth target beside the four `DropZone` edges, which the agent
+  `arrange_panes` ops and the Move menu keep using); outside it the pane's diagonals cut it into
+  four triangles, one per edge, and ties go to left/right. A replace drop (`replaceWith`) puts the
+  dragged content in the target's slot: a card or tab shows in the target's pane, and a pane
+  already open (the dragged one, or the one showing the card's ticket) takes the slot with its
+  own id, so it doesn't remount, and its old slot closes. The board is never replaced nor moved,
+  a pane dropped on itself does nothing, focus follows the content, and a zoomed target stays
+  zoomed. A New session pane is never replaced (no preview), and a pane with unsaved edits asks
+  through its leave guard first (`confirmLeave`). The preview (`dropPreview`) is
   drawn on the pane under the pointer as it is on screen, with the dragged pane still in place:
   the zone's side of the target, at the size the pane will have (half, 40% of the board, or the
   dragged pane's own width or height in a reorder, clamped to its row or column). The layout only

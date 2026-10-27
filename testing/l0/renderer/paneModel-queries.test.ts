@@ -222,8 +222,17 @@ describe("zoneAt", () => {
     expect(zoneAt(r, 0.5, 0.05)).toBe("top");
     expect(zoneAt(r, 0.5, 0.95)).toBe("bottom");
   });
-  test("ties (centre, diagonals) go left/right, centre to right", () => {
-    expect(zoneAt(r, 0.5, 0.5)).toBe("right");
+  test("the middle third on both axes replaces", () => {
+    expect(zoneAt(r, 0.5, 0.5)).toBe("replace");
+    expect(zoneAt(r, 1 / 3, 2 / 3)).toBe("replace"); // the boundaries belong to the middle
+    expect(zoneAt(r, 0.34, 0.66)).toBe("replace");
+    expect(zoneAt(r, 0.32, 0.5)).toBe("left"); // just outside on one axis
+    expect(zoneAt(r, 0.5, 0.32)).toBe("top");
+    expect(zoneAt(r, 0.68, 0.5)).toBe("right");
+    expect(zoneAt(r, 0.5, 0.68)).toBe("bottom");
+    expect(zoneAt({ x: 0.5, y: 0, w: 0.3, h: 1 }, 0.65, 0.5)).toBe("replace"); // the rect's own thirds
+  });
+  test("ties on a diagonal outside the middle go left/right", () => {
     expect(zoneAt(r, 0.25, 0.25)).toBe("left"); // top-left diagonal
     expect(zoneAt(r, 0.75, 0.75)).toBe("right"); // bottom-right diagonal
     expect(zoneAt(r, 0.75, 0.25)).toBe("right"); // top-right diagonal

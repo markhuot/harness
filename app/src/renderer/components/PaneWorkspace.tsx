@@ -31,7 +31,7 @@ import {
   usePanes,
   type DividerBox,
   type PaneArea,
-  type DropZone,
+  type DropTarget,
   type PaneLayout,
   type PaneLeaf,
   type PaneState,
@@ -48,6 +48,7 @@ import { DraftEditor } from "../views/DraftEditor";
 import { FilePane } from "../views/FilePane";
 import { TicketTabPane } from "../views/TicketTabPane";
 import { useDragOverlay } from "./ResizeHandle";
+import { confirmLeave, hasDraftCloser } from "./draftClose";
 import { PaneContext, PaneScopeContext, usePaneScope } from "./paneContext";
 import { dragSourceOf, endDrag, isHarnessDrag, useActiveDrag } from "./paneDrag";
 import { focusPaneDom, rememberPaneFocus, takePaneFocusRequest } from "./paneFocus";
@@ -317,12 +318,13 @@ function Divider({ box, panes, area, workspace }: { box: DividerBox; panes: Pane
   );
 }
 
-type DropHit = { leafId: string; zone: DropZone; landing: Rect };
+type DropHit = { leafId: string; zone: DropTarget; landing: Rect };
 
 /**
  * Covers the workspace while a harness drag is in progress. dragover finds the pane and half under
- * the pointer and previews where the dropped pane would land, unless the drop would change nothing
- * (a pane over itself); drop applies it. Drags that aren't ours (files, text) pass through untouched.
+ * the pointer and previews where the dropped pane would land (the whole pane, for the middle third that
+ * replaces it), unless the drop would change nothing (a pane over itself) or would discard a draft
+ * (a New session pane is never replaced); drop applies it, once a pane with unsaved edits agrees to go. Drags that aren't ours (files, text) pass through untouched.
  */
 function DropLayer({ layout, panes, area, workspace }: { layout: PaneLayout; panes: PaneState; area: PaneArea | null; workspace: RefObject<HTMLDivElement | null> }) {
   const source = useActiveDrag();
@@ -338,6 +340,7 @@ function DropLayer({ layout, panes, area, workspace }: { layout: PaneLayout; pan
     const ws = workspace.current?.getBoundingClientRect();
     if (!ws || !ws.width || !ws.height) return null;
     const t = dropTargetAt(layout, (e.clientX - ws.left) / ws.width, (e.clientY - ws.top) / ws.height);
+    if (t?.zone === "replace" && hasDraftCloser(t.leafId)) return null;
     const landing = t && dropPreview(panes, source, t.leafId, t.zone, area ?? undefined);
     return t && landing ? { leafId: t.leafId, zone: t.zone, landing } : null;
   };
@@ -365,7 +368,7 @@ function DropLayer({ layout, panes, area, workspace }: { layout: PaneLayout; pan
         setHit(null);
         endDrag();
         // Across the window: a ticket or tab in a pop-out comes back from it (dropInStore).
-        if (t && src) dropOnBoard(scope, src, t.leafId, t.zone);
+        if (t && src && (t.zone !== "replace" || confirmLeave([t.leafId]))) dropOnBoard(scope, src, t.leafId, t.zone);
       }}
     >
       {hit && <div className="pane-drop-preview" data-testid="pane-drop-preview" data-zone={hit.zone} data-target={hit.leafId} style={leafStyle(hit.landing)} />}

@@ -9,6 +9,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- On the Mac, dragging a card, tab or pane over the middle third of a pane now replaces that pane instead of splitting it: the preview fills the whole pane with a dashed outline. The outer thirds still split toward the nearest edge. A pane you drag in keeps its state, the board and a New session draft are never replaced, and a file with unsaved edits asks before it goes.
+
 ## [app-20261027.0239](https://github.com/markhuot/harness/releases/tag/app-20261027.0239) - 2026-10-27
 
 ### Changed
