@@ -41,7 +41,8 @@ public enum SheetRoute: Hashable, Sendable, Identifiable {
     /// harness://pair?url=…&token=… (the raw, already-decoded params; PairScreen validates them).
     case pair(url: String?, token: String?)
     /// The command palette (the board's bottom-bar field, ⌘K); `files` opens it in file mode (⌘P).
-    case palette(files: Bool)
+    /// `text` is what the field starts with (the sidebar's label rows open it on `label:<name>`).
+    case palette(files: Bool, text: String = "")
     /// Settings at compact width: a sheet that swipes away (regular width keeps it a section).
     case settings
 

@@ -121,6 +121,8 @@ public struct BoardState: Codable, Sendable, Equatable {
     public var watchers: [String: Watcher]
     @Nullable public var settings: PublicSettings?
     public var drivers: [DriverInfo]
+    /// The labels collection, most recently used first (GET /labels, replaced by labels.changed)
+    public var labels: [LabelInfo] = []
     /// Done paging per board scope (project id or `Paging.allScope`); see Paging.swift
     public var donePaging: [String: DonePaging]
     /// The board's server-side search, when the filter box has a query
@@ -193,12 +195,14 @@ public struct BoardSnapshot: Codable, Sendable, Equatable {
     public var watchers: [Watcher]
     @Nullable public var settings: PublicSettings?
     public var drivers: [DriverInfo]
+    /// nil from a service without labels: the state keeps what it has
+    public var labels: [LabelInfo]?
     /// The first done page for the board's current scope (tickets holds every non-done ticket)
     public var donePage: DonePage?
 
     public init(
         projects: [Project] = [], tickets: [Ticket] = [], sessions: [Session] = [], watchers: [Watcher] = [],
-        settings: PublicSettings? = nil, drivers: [DriverInfo] = [], donePage: DonePage? = nil
+        settings: PublicSettings? = nil, drivers: [DriverInfo] = [], labels: [LabelInfo]? = nil, donePage: DonePage? = nil
     ) {
         self.projects = projects
         self.tickets = tickets
@@ -206,6 +210,7 @@ public struct BoardSnapshot: Codable, Sendable, Equatable {
         self.watchers = watchers
         self.settings = settings
         self.drivers = drivers
+        self.labels = labels
         self.donePage = donePage
     }
 }

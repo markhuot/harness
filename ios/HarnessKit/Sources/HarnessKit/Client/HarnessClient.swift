@@ -487,6 +487,14 @@ public final class HarnessClient: Sendable {
         let _: OkResponse = try await request("DELETE", "/terminals/\(id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id)")
     }
 
+    public func listLabels() async throws -> [LabelInfo] {
+        try await request("GET", "/labels")
+    }
+
+    public func updateLabel(_ name: String, color: String) async throws -> LabelInfo {
+        try await request("PATCH", "/labels/\(URIComponent.encode(name))", body: UpdateLabelBody(color: color))
+    }
+
     public func listDrivers() async throws -> [DriverInfo] {
         try await request("GET", "/drivers")
     }

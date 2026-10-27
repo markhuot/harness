@@ -540,10 +540,12 @@ public final class BoardStore {
         async let watchers = (try? await client.listWatchers()) ?? []
         async let settings = try? await client.getSettings()
         async let drivers = (try? await client.listDrivers()) ?? []
+        // A service from before labels answers 404: the board just has none.
+        async let labels = try? await client.listLabels()
         let page = try await donePage
         return BoardSnapshot(
             projects: try await projects, tickets: try await tickets, sessions: try await sessions,
-            watchers: await watchers, settings: await settings, drivers: await drivers,
+            watchers: await watchers, settings: await settings, drivers: await drivers, labels: await labels,
             donePage: page.map { .init(scope: scope, page: $0) })
     }
 
