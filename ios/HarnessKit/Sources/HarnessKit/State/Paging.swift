@@ -235,13 +235,25 @@ public enum Paging {
         state.ready && state.donePaging[scopeOf(board)] == nil
     }
 
-    /// Instant local match while the server search is in flight: key (current or old), remote ID or title.
-    public static func matchesQuery(_ t: Ticket, _ q: String, aliases: [String: String] = [:]) -> Bool {
-        let needle = JSString.lower(JSCompat.trim(q))
+    /// Instant local match while the server search is in flight: key (current or old), remote ID,
+    /// title, or a label name (a prefix of any word). `label:` qualifiers must all be on the ticket,
+    /// `project:` qualifiers match any project key (folded, like the service); a qualifier with no
+    /// value filters nothing. The rest of the query is the text match above.
+    public static func matchesQuery(_ t: Ticket, _ q: String, aliases: [String: String] = [:], projects: [String: Project] = [:]) -> Bool {
+        let parsed = SearchQuery.parse(q)
+        let have = Set((t.labels ?? []).map(LabelName.key))
+        if !parsed.labels.allSatisfy({ have.contains(LabelName.key($0)) }) { return false }
+        if !parsed.projects.isEmpty {
+            let key = projects[t.projectId]?.key ?? String(t.key.split(separator: "-").dropLast().joined(separator: "-"))
+            if !parsed.projects.contains(where: { LabelName.key($0) == LabelName.key(key) }) { return false }
+        }
+        let needle = JSString.lower(JSCompat.trim(parsed.text))
         if needle.isEmpty { return true }
         if JSString.includes(JSString.lower(t.key), needle) || JSString.includes(JSString.lower(t.title), needle) { return true }
         if let ext = t.externalRef, JSString.includes(JSString.lower(ext.key), needle) { return true }
         for (alias, id) in aliases where id == t.id && JSString.includes(JSString.lower(alias), needle) { return true }
+        let wanted = LabelName.key(needle)
+        for label in t.labels ?? [] where LabelName.key(label).split(separator: " ").contains(where: { $0.hasPrefix(wanted) }) { return true }
         return false
     }
 
@@ -267,7 +279,7 @@ public enum Paging {
         guard let s = state.search else { return (cols, false) }
         guard let ids = s.ids else {
             let scope = scopeOf(board)
-            for t in state.tickets.values where inScope(state.projects, t, scope) && matchesQuery(t, s.q, aliases: state.keyAliases) {
+            for t in state.tickets.values where inScope(state.projects, t, scope) && matchesQuery(t, s.q, aliases: state.keyAliases, projects: state.projects) {
                 cols[t.status].append(t)
             }
             sortColumns(&cols, tieById: true)

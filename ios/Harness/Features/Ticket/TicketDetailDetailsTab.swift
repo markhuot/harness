@@ -33,6 +33,10 @@ struct TicketDetailDetailsTab: View {
                     .accessibilityLabel("Title")
             }
             .listRowBackground(c.bgElev)
+            Section("Labels") {
+                TicketLabelsEditor(ticket: ticket, disabled: !editable) { patch($0) }
+            }
+            .listRowBackground(c.bgElev)
             Section("Spec") {
                 TextField("", text: Binding(get: { draft?.text ?? ticket.spec }, set: { draft?.text = $0 }),
                           prompt: Text("What should the agent do?").foregroundStyle(c.text3), axis: .vertical)

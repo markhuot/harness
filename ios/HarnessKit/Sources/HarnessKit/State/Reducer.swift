@@ -219,7 +219,9 @@ extension BoardState {
         case .browserFrame, .browserState:
             // High-frequency, view-local; the Browser tab consumes these directly.
             break
-        case .sessionDeleted, .labelsChanged, .serviceStatus, .usageUpdated, .devicesChanged, .terminalCreated, .terminalUpdated, .terminalRemoved, .unknown:
+        case let .labelsChanged(labels):
+            self.labels = labels
+        case .sessionDeleted, .serviceStatus, .usageUpdated, .devicesChanged, .terminalCreated, .terminalUpdated, .terminalRemoved, .unknown:
             break
         }
     }
@@ -261,6 +263,7 @@ extension BoardState {
             watchers = Self.byId(s.watchers)
             settings = s.settings
             drivers = s.drivers
+            if let labels = s.labels { self.labels = labels }
         case let .detail(d, requestedKey):
             // The parent rides along so a child's "Part of …" breadcrumb works when the conductor isn't loaded.
             tickets = Paging.mergeTickets(tickets, [d.ticket] + d.children + (d.parent.optional.map { [$0] } ?? []))

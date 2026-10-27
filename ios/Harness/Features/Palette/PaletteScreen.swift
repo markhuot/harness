@@ -227,6 +227,23 @@ struct PaletteScreen: View {
             }
             .accessibilityElement(children: .combine)
             .accessibilityIdentifier("palette-terminal-\(t.id)")
+        case let .qualifier(q):
+            HStack(spacing: 12) {
+                if q.field == .label {
+                    LabelDot(color: q.color).frame(width: 22)
+                } else {
+                    ProjectKeyBadge(q.value, color: q.color, size: .sm).frame(width: 22)
+                }
+                Text(q.title)
+                    .font(.scaled(size: 16))
+                    .foregroundStyle(c.text)
+                    .lineLimit(1)
+                Spacer(minLength: 8)
+                if let n = q.count, n > 0 { Text("\(n)").font(.scaled(size: 12)).foregroundStyle(c.text3) }
+                Text(q.field == .label ? "Label" : "Project").font(.scaled(size: 12)).foregroundStyle(c.text3).lineLimit(1)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("palette-qualifier-\(q.field.rawValue)-\(q.value)")
         case let .ticket(t):
             HStack(spacing: 10) {
                 StatusDot(status: t.status)
@@ -281,6 +298,11 @@ struct PaletteScreen: View {
 
     private func run(_ row: PaletteRow) {
         switch row.content {
+        case let .qualifier(q):
+            // Finish the qualifier in the field and keep typing; a "#" or ">" prefix stays.
+            let prefix = String(raw.drop { $0.isWhitespace }.prefix(1))
+            raw = (query.mode == .tickets ? prefix : "") + SearchQuery.complete(query.text, field: q.field, value: q.value)
+            focused = autofocus
         case let .ticket(t):
             router.openTicket(key: t.key, tab: nil)
         case let .terminal(t):

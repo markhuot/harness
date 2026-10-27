@@ -34,6 +34,8 @@ struct ProjectsSidebar: View {
 
     @State private var adding = false
     @State private var newPath = ""
+    /// Taps on the Labels section's "More" row so far
+    @State private var labelPages = 0
 
     var body: some View {
         let state = store.state
@@ -89,6 +91,7 @@ struct ProjectsSidebar: View {
                         }
                     }
                 }
+                labelsSection(state.labels)
             }
             .padding(16)
         }
@@ -129,6 +132,56 @@ struct ProjectsSidebar: View {
         } message: {
             Text("The folder's absolute path on the Mac, e.g. /Users/you/Sites/app")
         }
+    }
+
+    /// The Labels section under Projects: the first ten with tickets in flight, then More.
+    @ViewBuilder private func labelsSection(_ labels: [LabelInfo]) -> some View {
+        let section = LabelList.section(labels, pages: labelPages)
+        if !section.rows.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                SectionTitle("Labels").padding(.horizontal, 4)
+                Card {
+                    ForEach(Array(section.rows.enumerated()), id: \.element.id) { i, l in
+                        if i > 0 { Divider().overlay(c.border) }
+                        Button { filter(by: l.name) } label: {
+                            HStack(spacing: 10) {
+                                LabelDot(color: l.color, size: 10).frame(width: 24)
+                                Text(l.name).font(.scaled(size: 16)).foregroundStyle(c.text).lineLimit(1)
+                                Spacer(minLength: 0)
+                                Text("\(l.count)").font(.scaled(size: 14)).monospacedDigit().foregroundStyle(c.text3)
+                            }
+                            .padding(.horizontal, 14)
+                            .frame(minHeight: 44)
+                            .contentShape(.rect)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("\(l.name), \(l.count)")
+                        .accessibilityIdentifier("sidebar-label-\(l.name)")
+                    }
+                    if section.hidden > 0 {
+                        Divider().overlay(c.border)
+                        Button { labelPages += 1 } label: {
+                            HStack {
+                                Text("More").font(.scaled(size: 16)).foregroundStyle(c.accent)
+                                Spacer()
+                                Text("\(min(section.hidden, LabelList.pageSize)) more").font(.scaled(size: 13)).foregroundStyle(c.text3)
+                            }
+                            .padding(.horizontal, 14)
+                            .frame(minHeight: 44)
+                            .contentShape(.rect)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("sidebar-labels-more")
+                    }
+                }
+            }
+        }
+    }
+
+    /// The board has no filter box of its own: its search is the palette, so a label row opens it on `label:<name>`.
+    private func filter(by label: String) {
+        haptic(.select)
+        router.present(.palette(files: false, text: SearchQuery.labelFilter(label) + " "))
     }
 
     private func projectRow(_ p: Project, count: Int, active: Bool) -> some View {

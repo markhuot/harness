@@ -150,6 +150,8 @@ struct BoardTicketCard: View {
                 }
             }
 
+            if let labels = t.labels, !labels.isEmpty { LabelChips(names: labels) }
+
             if customDriver || state.hasCustomModel(t) {
                 FlowLayout(spacing: 5) {
                     if customDriver { DriverBadge(driver: t.driver, drivers: state.drivers) }

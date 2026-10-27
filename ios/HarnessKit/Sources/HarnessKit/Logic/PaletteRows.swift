@@ -146,6 +146,19 @@ public struct PaletteTicket: PaletteRankable, Identifiable, Equatable, Sendable 
     }
 }
 
+/// A `label:` or `project:` value the picker offers while that qualifier is being typed.
+public struct PaletteQualifier: Equatable, Sendable {
+    public var field: ParsedSearch.Field
+    /// What the finished qualifier holds: the label's name, or the project's key
+    public var value: String
+    /// What the row reads: the label's name, or the project's name
+    public var title: String
+    /// The color id the dot or badge takes
+    public var color: String?
+    /// Tickets in progress, blocked or in review (labels only)
+    public var count: Int?
+}
+
 /// One row the palette shows, whichever list it came from.
 public struct PaletteRow: Identifiable, Equatable, Sendable {
     public enum Content: Equatable, Sendable {
@@ -153,6 +166,8 @@ public struct PaletteRow: Identifiable, Equatable, Sendable {
         case ticket(Ticket)
         /// A terminal the service hosts (this phone's and the Mac's).
         case terminal(TerminalInfo)
+        /// A label or project to finish the qualifier being typed with.
+        case qualifier(PaletteQualifier)
     }
     public var id: String
     public var content: Content
@@ -169,31 +184,60 @@ struct PaletteTerminal: PaletteRankable {
 public enum PaletteRows {
     public static let maxRows = 60
 
+    /// The picker rows for a trailing `label:` or `project:` (what's typed after the colon filters
+    /// them: a prefix of any word of a label name, or of a project's key or name).
+    public static func qualifierRows(_ c: ParsedSearch.Completion, state: BoardState) -> [PaletteQualifier] {
+        switch c.field {
+        case .label:
+            return LabelList.suggestions(c.partial, labels: state.labels, excluding: []).map {
+                PaletteQualifier(field: .label, value: $0.name, title: $0.name, color: $0.color, count: $0.count)
+            }
+        case .project:
+            let typed = LabelName.key(c.partial.trimmingCharacters(in: .whitespaces))
+            return state.sortedProjects().filter { p in
+                typed.isEmpty || LabelName.key(p.key).hasPrefix(typed)
+                    || LabelName.key(p.name).split(separator: " ").contains { $0.hasPrefix(typed) }
+                    || LabelName.key(p.name).hasPrefix(typed)
+            }.map { PaletteQualifier(field: .project, value: $0.key, title: $0.name, color: $0.color, count: nil) }
+        }
+    }
+
     /// The command and ticket rows for `query`, best first, as the Mac lists them: commands, then
     /// tickets (the loaded ones ranked, then the server's other matches). A ">" query lists
     /// commands only and "#" tickets only, so a command search never shows a ticket or a file.
     /// `searchIDs` is `BoardState.search`'s result for this same query (no second request).
     public static func rows(_ query: PaletteQuery, commands: [PaletteCommand], state: BoardState, searchIDs: [String]?, recents: [String: Int] = [:], terminals: [TerminalInfo] = []) -> [PaletteRow] {
         var out: [PaletteRow] = []
-        if query.wantsCommands {
+        let parsed = SearchQuery.parse(query.text)
+        if query.mode != .commands, query.mode != .files, let completion = parsed.completion {
+            for q in qualifierRows(completion, state: state) {
+                out.append(PaletteRow(id: "qualifier:\(q.field.rawValue):\(q.value)", content: .qualifier(q), ranges: []))
+            }
+        }
+        if query.wantsCommands && parsed.qualifiers == 0 {
             var cs = commands
             for i in cs.indices { cs[i].recentRank = recents[cs[i].id] }
             for m in PaletteRanker.rank(query.text, cs) {
                 out.append(PaletteRow(id: "cmd:\(cs[m.index].id)", content: .command(cs[m.index]), ranges: m.ranges))
             }
         }
-        if query.wantsCommands && !terminals.isEmpty {
+        if query.wantsCommands && parsed.qualifiers == 0 && !terminals.isEmpty {
             // Newest first, so an empty query lists the terminal just made on top.
             let items = terminals.sorted { $0.createdAt > $1.createdAt }.map(PaletteTerminal.init)
             for m in PaletteRanker.rank(query.text, items) {
                 out.append(PaletteRow(id: "terminal:\(items[m.index].terminal.id)", content: .terminal(items[m.index].terminal), ranges: m.ranges))
             }
         }
-        if query.wantsTickets && (query.mode == .tickets || !query.text.isEmpty) {
-            // A draft has no title worth finding; it's on the board, not in the palette.
-            let all = state.tickets.values.filter { $0.draft != true }.sorted { $0.updatedAt > $1.updatedAt }.map(PaletteTicket.init)
+        // A bare `label:` is the picker's business, not a ticket search.
+        let picking = parsed.completion.map { $0.partial.isEmpty } ?? false
+        if query.wantsTickets && (query.mode == .tickets || !query.text.isEmpty) && !(picking && parsed.text.isEmpty) {
+            // A draft has no title worth finding; it's on the board, not in the palette. Qualifiers
+            // narrow the list first (all labels, any project), then the rest of the query ranks it.
+            let all = state.tickets.values
+                .filter { $0.draft != true && (parsed.qualifiers == 0 || Paging.matchesQuery($0, qualifiersOnly(parsed), projects: state.projects)) }
+                .sorted { $0.updatedAt > $1.updatedAt }.map(PaletteTicket.init)
             var shown = Set<String>()
-            for m in PaletteRanker.rank(query.text, all) {
+            for m in PaletteRanker.rank(parsed.text, all) {
                 shown.insert(all[m.index].ticket.key)
                 out.append(PaletteRow(id: "ticket:\(all[m.index].ticket.key)", content: .ticket(all[m.index].ticket), ranges: m.ranges))
             }
@@ -204,5 +248,12 @@ public enum PaletteRows {
             }
         }
         return Array(out.prefix(maxRows))
+    }
+}
+
+extension PaletteRows {
+    /// `parsed` as a query holding only its qualifiers (what `Paging.matchesQuery` filters by).
+    static func qualifiersOnly(_ p: ParsedSearch) -> String {
+        (p.labels.map(SearchQuery.labelFilter) + p.projects.map { "project:\(SearchQuery.quote($0))" }).joined(separator: " ")
     }
 }

@@ -41,6 +41,7 @@ final class WorldTransport: HTTPTransport, @unchecked Sendable {
         switch path {
         case "/health": return ["ok": true]
         case "/projects": return w.list("projects")
+        case "/labels": return w.list("labels")
         case "/sessions": return w.list("sessions").filter { q["kind"] == nil || $0["kind"] as? String == q["kind"] }
         case "/watchers": return w.list("watchers")
         case "/settings": return w.root["settings"]

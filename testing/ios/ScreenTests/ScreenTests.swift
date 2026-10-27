@@ -175,6 +175,27 @@ final class ScreenTests: ScreenTestCase {
         try await screen("palette") { NavigationStack { PaletteScreen(startInFiles: false, autofocus: false) } }
     }
 
+    /// A bare `label:`: the picker lists the labels (colored dot, name, count), the tickets stay out of it.
+    func testPaletteLabelPicker() async throws {
+        try await screen("palette-label-picker") { NavigationStack { PaletteScreen(startInFiles: false, initialText: "label:", autofocus: false) } }
+    }
+
+    /// Two qualifiers AND (`label:"Release 1.2.3" label:Performance`) and list the tickets carrying both.
+    func testPaletteLabelQualifiers() async throws {
+        try await screen("palette-label-qualifiers") {
+            NavigationStack { PaletteScreen(startInFiles: false, initialText: "label:\"Release 1.2.3\" label:Performance ", autofocus: false) }
+        }
+    }
+
+    /// More than ten labels with tickets in flight: the Labels section stops at ten and offers More.
+    func testProjectsSheetLabelsMore() async throws {
+        let extra = (0..<8).map { LabelInfo(name: "Extra \($0)", color: "blue", createdAt: 1, lastUsedAt: 1, count: $0 + 1) }
+        world.store.dispatch(.event(.labelsChanged(labels: world.store.state.labels + extra)))
+        let router = Router()
+        router.present(.projects)
+        try await screen("projects-labels-more", router: router) { RootView() }
+    }
+
     private func ticket(_ key: String, _ tab: TicketTab) -> Router {
         let router = Router()
         router.openTicket(key: key, tab: tab)

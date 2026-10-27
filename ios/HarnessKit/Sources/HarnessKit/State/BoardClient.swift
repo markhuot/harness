@@ -23,6 +23,7 @@ public protocol BoardClient: LoaderClient, DetailClient {
     func listWatchers() async throws -> [Watcher]
     func getSettings() async throws -> PublicSettings
     func listDrivers() async throws -> [DriverInfo]
+    func listLabels() async throws -> [LabelInfo]
     func listActivity(_ key: String) async throws -> [ActivityEntry]
     /// The plan-usage gauges' readings; a client without them throws and the store keeps no report.
     func getUsage() async throws -> PlanUsageReport
