@@ -8,6 +8,7 @@ import { ProjectSettingsView } from "../../app/src/renderer/views/ProjectSetting
 import { SettingsView } from "../../app/src/renderer/views/Settings";
 import { all, click, edited, mount, text, type } from "./render";
 import { FakeClient } from "./fakeClient";
+import { ALL_SCOPE } from "@harness/shared/state";
 import { world } from "../world";
 import { minutesAgo } from "../world/time";
 import { watcher } from "../world/build";
@@ -183,6 +184,14 @@ describe("Chat", () => {
     await m.settle(() => m.client.push({ kind: "ticket.upserted", ticket: { id: client.cos.chiefs[0]!.ticketId, key: "COS-1", kind: "cos", pendingApproval: null } as never }));
     expect(text(m.container).includes("The agent wants to use update_watcher")).toBe(false);
     expect(byId(m, "cos-attach")).not.toBeNull();
+  });
+
+  test("a notification for a chief's key opens that chief's chat in the board's panes, not a ticket pane", async () => {
+    updatePanes(ALL_SCOPE, () => defaultPanes("B"));
+    await mount(<div />, { hash: "#/board/all/ticket/COS-2" });
+    const content = leaves(getPanes(ALL_SCOPE).root).map((l) => l.content);
+    expect(content.some((c) => c.kind === "cos")).toBe(true);
+    expect(content.some((c) => c.kind === "ticket")).toBe(false);
   });
 
   test("a switched-off chief can't be written to", async () => {

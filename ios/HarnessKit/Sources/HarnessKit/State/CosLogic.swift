@@ -249,6 +249,13 @@ public enum CosSettings {
 }
 
 public enum CosLogic {
+    /// A key a chief of staff's ticket carries ("COS-1"): notifications about it open its chat.
+    public static func isChiefKey(_ key: String) -> Bool {
+        let k = key.uppercased()
+        guard k.hasPrefix("COS-") else { return false }
+        return !k.dropFirst(4).isEmpty && k.dropFirst(4).allSatisfy(\.isNumber)
+    }
+
     /// "all" or "group:<id>"
     public static func scopeKey(groupId: String?) -> String {
         guard let groupId, !groupId.isEmpty else { return "all" }

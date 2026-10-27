@@ -1,7 +1,7 @@
 // React wiring for the store: connection → HarnessClient + HarnessSocket → reducer.
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from "react";
-import { HarnessClient, projectGroups, type AppReply, type AppRequest, resolveGroupKey, type ClientEvent, type FileLink, type HarnessSocket, type ServerMessage, type TerminalInfo } from "@harness/shared";
+import { HarnessClient, isChiefKey, projectGroups, type AppReply, type AppRequest, resolveGroupKey, type ClientEvent, type FileLink, type HarnessSocket, type ServerMessage, type TerminalInfo } from "@harness/shared";
 import {
   canLoadMoreDone,
   canLoadMoreSearch,
@@ -39,6 +39,7 @@ import {
   openCompose as openComposePane,
   openFile as openFilePane,
   openTerminal as openTerminalPane,
+  openCos,
   openTicket,
   pruneTickets,
   rekeyPaneScopes,
@@ -151,20 +152,26 @@ export function useStore(): Store {
 export const useOptionalStore = (): Store | null => useContext(Ctx);
 
 /** Arriving at a board link to a ticket opens it in a pane of that board (or focuses the pane it's already in). */
-function openFromRoute(r: Route) {
-  if (r.view === "board" && r.ticketKey) updatePanes(paneScopeOf(r)!, (s) => openTicket(s, r.ticketKey!, r.tab));
+function openFromRoute(r: Route, chiefScope: (key: string) => string | null) {
+  if (r.view !== "board" || !r.ticketKey) return;
+  // A chief of staff's notification (its permission request) names its ticket, which clients never hold: open its chat.
+  const chief = isChiefKey(r.ticketKey) ? (chiefScope(r.ticketKey) ?? "all") : null;
+  if (chief) updatePanes(paneScopeOf(r)!, (s) => openCos(s, chief));
+  else updatePanes(paneScopeOf(r)!, (s) => openTicket(s, r.ticketKey!, r.tab));
 }
 
-export function useRoute() {
+export function useRoute(chiefScope: (key: string) => string | null = () => null) {
+  const scopeRef = useRef(chiefScope);
+  scopeRef.current = chiefScope;
   const [route, setRoute] = useState(() => parseRoute(location.hash));
   // The route the app launched with opens its ticket once mounted (not during render: that would
   // update the pane store mid-render). Later hash changes open theirs as they arrive.
   const initial = useRef(route);
-  useEffect(() => openFromRoute(initial.current), []);
+  useEffect(() => openFromRoute(initial.current, (k) => scopeRef.current(k)), []);
   useEffect(() => {
     const on = () => {
       const r = parseRoute(location.hash);
-      openFromRoute(r);
+      openFromRoute(r, (k) => scopeRef.current(k));
       setRoute(r);
     };
     addEventListener("hashchange", on);
@@ -250,11 +257,11 @@ export function StoreProvider({
   const [state, dispatch] = useReducer(reducer, initialState);
   const [epoch, setEpoch] = useState(0);
   const [serviceCode, setServiceCode] = useState<ServiceCode>(null);
-  const [route, navigate] = useRoute();
   const listeners = useRef(new Set<EventListener>());
   const client = useMemo(() => injected ?? new HarnessClient({ baseUrl, token }), [injected, baseUrl, token]);
   const stateRef = useRef(state);
   stateRef.current = state;
+  const [route, navigate] = useRoute((key) => Object.values(stateRef.current.chiefs).find((c) => c.key.toUpperCase() === key.toUpperCase())?.scope ?? null);
   const boardProjectId = boardProjectOf(state, route);
   const boardScope = boardScopeOf(state, route);
   const boardRef = useRef(boardScope);

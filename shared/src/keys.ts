@@ -17,6 +17,11 @@ export function parseTicketKey(key: string): { prefix: string; number: number } 
   return m ? { prefix: m[1]!, number: Number(m[2]) } : null;
 }
 
+/** A key a chief of staff's ticket carries ("COS-1"): notifications about it open its chat. */
+export function isChiefKey(key: string): boolean {
+  return /^COS-\d+$/i.test(key);
+}
+
 export function isTicketKey(key: string): boolean {
   return parseTicketKey(key) !== null;
 }

@@ -24,6 +24,11 @@ struct RootView: View {
     @AppStorage("debugScreen") private var debugScreen = ""
     #endif
 
+    /// Lets a notification for a chief's key find its chat (Router.openFromOutside).
+    private func bindChiefs() {
+        router.chiefScope = { key in app.store?.cos.chiefs.values.first { $0.key.uppercased() == key.uppercased() }?.scope }
+    }
+
     var body: some View {
         content
             .sceneChrome(router)
@@ -36,12 +41,14 @@ struct RootView: View {
             .handlesExternalEvents(preferring: ["\(DeepLink.scheme)://"], allowing: ["\(DeepLink.scheme)://"])
             .background(SceneReader { s in
                 scene = s
+                bindChiefs()
                 WindowDirectory.shared.mainActive(router, scene: s)
                 syncDockWindow()
             })
             .onChange(of: sizeClass, initial: true) { syncDockWindow() }
             .onDisappear { dockWindow.tearDown() }
             .onAppear {
+                bindChiefs()
                 WindowDirectory.shared.mainActive(router, scene: scene)
                 syncDockWindow()
             }

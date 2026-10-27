@@ -65,6 +65,8 @@ public final class Router {
     public var selectedTab: AppTab
     public private(set) var paths: [AppTab: [Route]] = [:]
     public var sheet: SheetRoute?
+    /// The scope of the chief of staff whose key this is (set by the window, which holds the chiefs); nil for any other key.
+    public var chiefScope: (String) -> String? = { _ in nil }
     public var cover: CoverRoute?
 
     /// The ticket sheets, most recently used first: the first is presented or docked, the rest
@@ -201,6 +203,12 @@ public final class Router {
     @discardableResult
     public func openFromOutside(_ link: DeepLink) -> ThemePicker.ThemePrefsPatch? {
         guard scope == .main, case let .push(.ticket(key, tab)) = link else { return open(link) }
+        // A chief of staff's notification (its permission request) opens its chat; its ticket is never a sheet.
+        if let chief = CosLogic.isChiefKey(key) ? (chiefScope(key) ?? "all") : nil {
+            dismissModals()
+            openCos(scope: chief)
+            return nil
+        }
         dismissModals()
         openTicket(key: key, tab: tab)
         return nil
