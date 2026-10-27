@@ -219,7 +219,7 @@ extension BoardState {
         case .browserFrame, .browserState:
             // High-frequency, view-local; the Browser tab consumes these directly.
             break
-        case .sessionDeleted, .serviceStatus, .usageUpdated, .devicesChanged, .terminalCreated, .terminalUpdated, .terminalRemoved, .unknown:
+        case .sessionDeleted, .labelsChanged, .serviceStatus, .usageUpdated, .devicesChanged, .terminalCreated, .terminalUpdated, .terminalRemoved, .unknown:
             break
         }
     }

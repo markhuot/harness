@@ -4,13 +4,15 @@ import Foundation
 // Events (service → client over WebSocket)
 // ---------------------------------------------------------------------------
 
-/// A change the service broadcasts, discriminated by `kind` (23 kinds). An unknown `kind`
+/// A change the service broadcasts, discriminated by `kind` (24 kinds). An unknown `kind`
 /// decodes to `.unknown(kind:raw:)` and re-encodes `raw` unchanged.
 public enum HarnessEvent: Codable, Sendable, Equatable {
     case projectUpserted(project: Project)
     case projectDeleted(id: String)
     case ticketUpserted(ticket: Ticket)
     case ticketDeleted(id: String)
+    /// A label was added to a ticket for the first time, recolored, or its count moved: the whole collection (GET /labels)
+    case labelsChanged(labels: [LabelInfo])
     case sessionUpserted(session: Session)
     case sessionDeleted(id: String)
     case runUpserted(run: Run)
@@ -44,7 +46,7 @@ public enum HarnessEvent: Codable, Sendable, Equatable {
 
     /// Every `kind` this build knows, in protocol.ts order.
     public static let knownKinds = [
-        "project.upserted", "project.deleted", "ticket.upserted", "ticket.deleted", "session.upserted",
+        "project.upserted", "project.deleted", "ticket.upserted", "ticket.deleted", "labels.changed", "session.upserted",
         "session.deleted", "run.upserted", "transcript.appended", "subagent.upserted", "transcript.delta",
         "activity.added", "spec.revised", "watcher.upserted", "watcher.deleted", "settings.updated", "devices.changed",
         "browser.frame", "browser.state", "service.status", "usage.updated",
@@ -58,6 +60,7 @@ public enum HarnessEvent: Codable, Sendable, Equatable {
         case .projectDeleted: "project.deleted"
         case .ticketUpserted: "ticket.upserted"
         case .ticketDeleted: "ticket.deleted"
+        case .labelsChanged: "labels.changed"
         case .sessionUpserted: "session.upserted"
         case .sessionDeleted: "session.deleted"
         case .runUpserted: "run.upserted"
@@ -92,6 +95,7 @@ public enum HarnessEvent: Codable, Sendable, Equatable {
         case "project.deleted": self = .projectDeleted(id: try field("id"))
         case "ticket.upserted": self = .ticketUpserted(ticket: try field("ticket"))
         case "ticket.deleted": self = .ticketDeleted(id: try field("id"))
+        case "labels.changed": self = .labelsChanged(labels: try field("labels"))
         case "session.upserted": self = .sessionUpserted(session: try field("session"))
         case "session.deleted": self = .sessionDeleted(id: try field("id"))
         case "run.upserted": self = .runUpserted(run: try field("run"))
@@ -134,6 +138,7 @@ public enum HarnessEvent: Codable, Sendable, Equatable {
         case let .projectDeleted(id), let .ticketDeleted(id), let .sessionDeleted(id), let .watcherDeleted(id), let .terminalRemoved(id):
             try c.encode(id, forKey: "id")
         case let .ticketUpserted(ticket): try c.encode(ticket, forKey: "ticket")
+        case let .labelsChanged(labels): try c.encode(labels, forKey: "labels")
         case let .sessionUpserted(session): try c.encode(session, forKey: "session")
         case let .runUpserted(run): try c.encode(run, forKey: "run")
         case let .transcriptAppended(entry): try c.encode(entry, forKey: "entry")

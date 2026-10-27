@@ -174,6 +174,8 @@ public struct CreateTicketBody: Codable, Sendable, Equatable {
     /// Skip the human review: the ticket lands once its agent review passes (Ticket.skipHumanReview). Default: the project's.
     public var skipHumanReview: Bool?
     public var dependsOn: [String]?
+    /// The ticket's labels by name; created on first use (see `LabelName.normalize`)
+    public var labels: [String]?
     public var autoStart: Bool?
     public var parentId: Patch<String>
     /// Use this key instead of the next native key. Only for imports and tests: watcher tickets get
@@ -192,7 +194,7 @@ public struct CreateTicketBody: Codable, Sendable, Equatable {
         projectId: String, spec: String, title: String? = nil, kind: TicketKind? = nil, driver: String? = nil,
         model: Patch<String> = .absent, phaseModels: PhaseModelsPatch? = nil, permissionMode: Patch<PermissionMode> = .absent, start: Bool? = nil,
         useWorktree: Patch<Bool> = .absent, branch: Patch<String> = .absent, baseBranch: Patch<String> = .absent,
-        skipAgentReview: Bool? = nil, skipHumanReview: Bool? = nil, dependsOn: [String]? = nil, autoStart: Bool? = nil,
+        skipAgentReview: Bool? = nil, skipHumanReview: Bool? = nil, dependsOn: [String]? = nil, labels: [String]? = nil, autoStart: Bool? = nil,
         parentId: Patch<String> = .absent, key: String? = nil, externalRef: Patch<ExternalRef> = .absent,
         draft: Bool? = nil, promptAttachments: [AttachmentInput]? = nil
     ) {
@@ -211,6 +213,7 @@ public struct CreateTicketBody: Codable, Sendable, Equatable {
         self.skipAgentReview = skipAgentReview
         self.skipHumanReview = skipHumanReview
         self.dependsOn = dependsOn
+        self.labels = labels
         self.autoStart = autoStart
         self.parentId = parentId
         self.key = key
@@ -222,6 +225,8 @@ public struct CreateTicketBody: Codable, Sendable, Equatable {
 
 public struct UpdateTicketBody: Codable, Sendable, Equatable {
     public var title: String?
+    /// Replace the ticket's labels with exactly these names (created on first use); [] clears them
+    public var labels: [String]?
     /// A new spec revision, written by the human. Needs baseRevision unless the ticket is a draft.
     public var spec: String?
     /// The spec revision the edit started from (Ticket.specRevision when the editor opened). A spec
@@ -271,7 +276,7 @@ public struct UpdateTicketBody: Codable, Sendable, Equatable {
     public var promptAttachments: [AttachmentInput]?
 
     public init(
-        title: String? = nil, spec: String? = nil, baseRevision: Int? = nil, specNote: String? = nil, status: TicketStatus? = nil, driver: String? = nil,
+        title: String? = nil, labels: [String]? = nil, spec: String? = nil, baseRevision: Int? = nil, specNote: String? = nil, status: TicketStatus? = nil, driver: String? = nil,
         model: Patch<String> = .absent, phaseModels: PhaseModelsPatch? = nil, permissionMode: Patch<PermissionMode> = .absent,
         baseBranch: Patch<String> = .absent, branch: Patch<String> = .absent, skipAgentReview: Bool? = nil,
         skipHumanReview: Bool? = nil, dependsOn: [String]? = nil, position: Double? = nil, externalRef: Patch<ExternalRefInput> = .absent,
@@ -280,6 +285,7 @@ public struct UpdateTicketBody: Codable, Sendable, Equatable {
         promptAttachments: [AttachmentInput]? = nil
     ) {
         self.title = title
+        self.labels = labels
         self.spec = spec
         self.baseRevision = baseRevision
         self.specNote = specNote

@@ -11,6 +11,9 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
     /// goal, plan, status and open questions. Agents keep it current with edit_spec / update_spec;
     /// every write is a revision. This is the current revision's body.
     public var spec: String
+    /// The ticket's label names (DESIGN.md "Labels"), in the order they were added. Colors and counts
+    /// come from the labels collection (`LabelInfo`). Optional so older services decode.
+    public var labels: [String]?
     /// The current spec revision (1 for a new ticket). Optional so older fixtures decode.
     public var specRevision: Int?
     /// The revision that was current when the human pressed Start (planning → work): the approved
@@ -147,7 +150,7 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
     public var updatedAt: Timestamp
 
     public init(
-        id: String, key: String, projectId: String, kind: TicketKind = .task, title: String, spec: String, specRevision: Int? = nil,
+        id: String, key: String, projectId: String, kind: TicketKind = .task, title: String, spec: String, labels: [String]? = nil, specRevision: Int? = nil,
         specBaselineRevision: Patch<Int> = .absent, agentNotes: Patch<String> = .absent,
         status: TicketStatus, sessionId: String, driver: String, phaseModels: PhaseModels? = nil, parentId: String? = nil, childCount: Int? = nil, hasEvents: Bool? = nil,
         dependsOn: [String] = [], autoStart: Bool = false, startAfterPlan: Bool? = nil, agentReview: ReviewState = .pending,
@@ -167,6 +170,7 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
         self.kind = kind
         self.title = title
         self.spec = spec
+        self.labels = labels
         self.specRevision = specRevision
         self.specBaselineRevision = specBaselineRevision
         self.agentNotes = agentNotes
