@@ -191,9 +191,8 @@ final class ScreenTests: ScreenTestCase {
     func testProjectsSheetLabelsMore() async throws {
         let extra = (0..<8).map { LabelInfo(name: "Extra \($0)", color: "blue", createdAt: 1, lastUsedAt: 1, count: $0 + 1) }
         world.store.dispatch(.event(.labelsChanged(labels: world.store.state.labels + extra)))
-        let router = Router()
-        router.present(.projects)
-        try await screen("projects-labels-more", router: router) { RootView() }
+        // The sheet's detent cuts the list short; the sidebar itself shows the whole section.
+        try await screen("projects-labels-more") { NavigationStack { ProjectsSidebar() } }
     }
 
     private func ticket(_ key: String, _ tab: TicketTab) -> Router {
