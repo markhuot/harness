@@ -27,9 +27,9 @@ struct BoardStatusStrip: View {
                     HStack(spacing: 0) {
                         ForEach(TicketStatus.allKnown, id: \.self) { s in chip(s).id(s) }
                     }
+                    .coordinateSpace(name: Self.space)
                     .background(alignment: .topLeading) { pill }
                     .padding(4)
-                    .coordinateSpace(name: Self.space)
                 }
             }
             .scrollIndicators(.hidden)
@@ -51,8 +51,8 @@ struct BoardStatusStrip: View {
         if let a = frames[all[lo]], let b = frames[all[hi]] {
             let t = at - Double(lo)
             Capsule()
-                .fill(.clear)
-                .glassEffect(.regular.tint(c.accent.opacity(0.18)), in: .capsule)
+                .fill(c.accent.opacity(0.16))
+                .overlay(Capsule().strokeBorder(c.accent.opacity(0.28), lineWidth: 1))
                 .frame(width: a.width + (b.width - a.width) * t, height: a.height)
                 .offset(x: a.minX + (b.minX - a.minX) * t, y: a.minY)
         }
@@ -70,7 +70,7 @@ struct BoardStatusStrip: View {
                 Text("\(n)")
                     .font(.scaled(size: 13))
                     .monospacedDigit()
-                    .foregroundStyle(c.text3)
+                    .foregroundStyle(on ? c.text2 : c.text3)
             }
             .padding(.horizontal, 12)
             .frame(height: 34)

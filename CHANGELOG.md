@@ -11,7 +11,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
-- On iPhone, the board's column picker is now a glass control floating over the board, with each column's icon, title and count. Cards scroll visibly under it, and its highlight slides along as you swipe between columns. The iPad and iPhone Duo are unchanged.
+- On iPhone, the board's column picker is now a glass control floating over the board, with each column's icon, title and count. Cards scroll visibly under it, and its highlight slides along as you swipe between columns and stays centered and readable on the selected column. The iPad and iPhone Duo are unchanged.
 
 ## [app-20261027.0043](https://github.com/markhuot/harness/releases/tag/app-20261027.0043) - 2026-10-27
 
