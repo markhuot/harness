@@ -204,7 +204,7 @@ export function useRoute(chiefScope: (key: string) => string | null = () => null
  * paging (404 on /tickets/page) gets the old full list and no paging state.
  */
 async function loadSnapshot(client: HarnessClient, scope: string): Promise<Snapshot> {
-  const [projects, board, sessions, watchers, settings, drivers, chiefs, cosBadge] = await Promise.all([
+  const [projects, board, sessions, watchers, settings, drivers, chiefs, cosBadge, labels] = await Promise.all([
     client.listProjects(),
     Promise.all([
       client.listTickets(undefined, { status: LIVE_STATUSES }),
@@ -219,8 +219,9 @@ async function loadSnapshot(client: HarnessClient, scope: string): Promise<Snaps
     client.listDrivers().catch(() => []),
     client.listCos().catch(() => undefined),
     client.cosBadge().catch(() => null),
+    client.listLabels().catch(() => undefined),
   ]);
-  return { projects, ...board, sessions, watchers, settings, drivers, chiefs, cosBadge };
+  return { projects, ...board, sessions, watchers, settings, drivers, chiefs, cosBadge, labels };
 }
 
 export { boardProjectOf, boardScopeOf };

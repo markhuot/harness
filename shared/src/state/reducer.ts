@@ -20,6 +20,7 @@ import type {
   Watcher,
 } from "../index";
 import { isConductor, reviewPassed } from "../protocol";
+import type { LabelInfo } from "../labels";
 import type { DepState } from "./conductor";
 import { mergeChat } from "./cos";
 import type { ClientEvent, Cos, CosBadge, CosChatEntry, TicketEvent } from "../cos";
@@ -85,6 +86,8 @@ export interface State {
   cosChat: Record<string, CosChatEntry[]>;
   /** Events awaiting a verdict or being handled, per chief (null before the first answer) */
   cosBadge: CosBadge | null;
+  /** The label collection, most recently used first (GET /labels, replaced by labels.changed) */
+  labels: LabelInfo[];
 }
 
 export const initialState: State = {
@@ -115,6 +118,7 @@ export const initialState: State = {
   ticketEvents: {},
   cosChat: {},
   cosBadge: null,
+  labels: [],
 };
 
 export interface Snapshot {
@@ -127,6 +131,8 @@ export interface Snapshot {
   /** The chiefs of staff (absent from a service that has none to list) */
   chiefs?: Cos[];
   cosBadge?: CosBadge | null;
+  /** The label collection (absent from a service without labels) */
+  labels?: LabelInfo[];
   /** The first done page for the board's current scope (tickets holds every non-done ticket) */
   donePage?: { scope: string; page: TicketPage };
 }
@@ -428,6 +434,8 @@ export function applyEvent(state: State, event: ClientEvent): State {
       return { ...state, watchers: without(state.watchers, event.id) };
     case "settings.updated":
       return { ...state, settings: event.settings };
+    case "labels.changed":
+      return { ...state, labels: event.labels };
     case "browser.frame":
     case "browser.state":
       // High-frequency, view-local; the Browser tab consumes these directly.
@@ -472,6 +480,7 @@ export function reducer(state: State, action: Action): State {
         drivers: s.drivers,
         chiefs: s.chiefs ? byTicketId(s.chiefs) : state.chiefs,
         cosBadge: s.cosBadge ?? state.cosBadge,
+        labels: s.labels ?? state.labels,
       };
     }
     case "detail": {

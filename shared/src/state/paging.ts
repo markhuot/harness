@@ -17,6 +17,7 @@
 //   reducer drops the paging of both groups and the board pages them afresh.
 
 import type { Ticket, TicketPage, TicketStatus } from "../index";
+import { labelKey, parseSearchQuery } from "../labels";
 import { resolveGroupKey, type ProjectGroup } from "../projectGroups";
 import type { State } from "./reducer";
 
@@ -284,12 +285,28 @@ export function needsFirstDonePage(state: State, board: string | null): boolean 
   return state.ready && !state.donePaging[scopeOf(board)];
 }
 
-/** Instant local match while the server search is in flight: key (current or old), remote ID or title. */
+/**
+ * Instant local match while the server search is in flight: key (current or old), remote ID, title
+ * or a label name (a prefix of any of its words). `label:` and `project:` qualifiers narrow it the
+ * way the service does: every label must be on the ticket, any project key may match; a qualifier
+ * with no value yet (`label:` being typed) filters nothing.
+ */
 export function matchesQuery(t: Ticket, q: string, aliases: Record<string, string> = {}): boolean {
-  const needle = q.trim().toLowerCase();
+  const parsed = parseSearchQuery(q);
+  if (parsed.labels.length) {
+    const have = new Set((t.labels ?? []).map(labelKey));
+    if (!parsed.labels.every((l) => have.has(labelKey(l)))) return false;
+  }
+  if (parsed.projects.length) {
+    const key = t.key.replace(/-\d+$/, "").toUpperCase();
+    if (!parsed.projects.some((p) => p.toUpperCase() === key)) return false;
+  }
+  const needle = parsed.text.trim().toLowerCase();
   if (!needle) return true;
   if (t.key.toLowerCase().includes(needle) || t.title.toLowerCase().includes(needle)) return true;
   if (t.externalRef?.key.toLowerCase().includes(needle)) return true;
+  const labelNeedle = labelKey(needle);
+  if ((t.labels ?? []).some((l) => labelKey(l).split(/[\s\-_.]+/).some((w) => w.startsWith(labelNeedle)) || labelKey(l).startsWith(labelNeedle))) return true;
   for (const [alias, id] of Object.entries(aliases)) if (id === t.id && alias.toLowerCase().includes(needle)) return true;
   return false;
 }
