@@ -350,6 +350,23 @@ export function steps(start: Start, built: { app: string }): Step[] {
         await shot(ctx, "09-mac-settings-retention");
       },
     },
+    {
+      name: "10. a label added through the API shows in the Mac sidebar and finds its ticket by label: search",
+      async run(ctx) {
+        const d = ctx.daemon;
+        const label = "Walk label";
+        const [first] = await d.call<Ticket[]>("GET", `/tickets?projectId=${ctx.projectId}&status=review`);
+        if (!first) throw new Error("no ticket in Review to label");
+        await d.call("PATCH", `/tickets/${first.key}`, { labels: [label] });
+        await ctx.ws.event("the labels collection to list the label", (e) => e.kind === "labels.changed" && e.labels.some((l) => l.name === label));
+        // In Review it counts toward the label, so the sidebar lists it; a search by label finds the ticket and no other.
+        const found = await d.call<{ tickets: Ticket[] }>("GET", `/tickets/search?q=${encodeURIComponent(`label:"${label}"`)}`);
+        if (found.tickets.length !== 1 || found.tickets[0]!.key !== first.key) throw new Error(`label: search found ${JSON.stringify(found.tickets.map((t) => t.key))}, expected only ${first.key}`);
+        await ctx.mac.main.evaluate(`location.hash = '#/'`);
+        await ctx.mac.main.waitFor("the label in the sidebar", `document.body.innerText.includes(${JSON.stringify(label)})`);
+        await shot(ctx, "10-mac-labels");
+      },
+    },
   ];
 }
 
