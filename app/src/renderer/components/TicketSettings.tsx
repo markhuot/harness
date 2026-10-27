@@ -28,6 +28,7 @@ import { PermissionModeSelect } from "./PermissionModeSelect";
 import { BranchSelect } from "./BranchSelect";
 import { StatusDot, Switch, TicketKey } from "./bits";
 import { Icon } from "./Icon";
+import { LabelsEditor } from "./Labels";
 import { useOpenTicket, usePaneScope } from "./paneContext";
 import { openTicket as openTicketPane, updatePanes } from "../state/panes";
 import { remoteIdCheck } from "../state/remoteIds";
@@ -201,6 +202,7 @@ export function TicketSettings({
         </dd>
       )}
       <DependsOn ticket={ticket} editable={editable} onPatch={onPatch} />
+      <LabelsEditor labels={ticket.labels ?? []} editable={editable} onSave={(labels) => onPatch({ labels })} />
       {onRemoteId && <RemoteId ticket={ticket} onSave={onRemoteId} />}
       {onPullRequests && onRefreshPullRequests && <PullRequests ticket={ticket} onSave={onPullRequests} onRefresh={onRefreshPullRequests} />}
       {children}

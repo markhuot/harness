@@ -39,6 +39,7 @@ import { ModelBadge } from "../components/ModelSelect";
 import { ConductorRollup, useHideChildren } from "../components/Conductor";
 import { boardCosScope, CosCallout } from "./Cos";
 import { ProjectKey } from "../components/ProjectKey";
+import { LabelChip, labelColorOf } from "../components/Labels";
 import { focusedTicket, leaves, openTicket, openTicketAtRightEdge, openTicketInNewSplit, updatePanes, usePanes } from "../state/panes";
 import { dragProps, ticketContextMenu } from "../components/paneDrag";
 import { useTicketActionRunner } from "../components/TicketActionHost";
@@ -48,6 +49,7 @@ import { keysArea, runCommand, useCommands } from "../components/commands";
 import { focusPaneBy } from "../components/paneFocus";
 import { modality } from "../state/inputModality";
 import { cursorPos, firstCard, moveCursor, resolveCursor, type CursorDir, type CursorPos } from "../state/boardNav";
+import { reportBoardFilter, useBoardFilterRequests } from "../state/boardFilter";
 import "./board.css";
 
 /** The board: pane content in the workspace (components/PaneWorkspace.tsx). */
@@ -72,6 +74,10 @@ export function BoardPane() {
   // The filter box searches the service (debounced in the store); a scope change re-runs it.
   useEffect(() => setSearch(filter), [filter, boardScope, setSearch]);
   useEffect(() => () => setSearch(""), [setSearch]);
+  // The sidebar's Labels section sets the box (state/boardFilter.ts); the box tells it what it holds.
+  useBoardFilterRequests(setFilter);
+  useEffect(() => reportBoardFilter(filter), [filter]);
+  useEffect(() => () => reportBoardFilter(""), []);
   // Hovering a conductor highlights its children.
   const [hoverConductor, setHoverConductor] = useState<string | null>(null);
   const scope = usePaneScope();
@@ -499,6 +505,14 @@ const TicketCard = memo(function TicketCard({
               {d.state === "done" ? <Icon name="check" size={9} strokeWidth={3} /> : d.state === "pending" ? <Icon name="clock" size={9} /> : null}
               {d.ticket ? <TicketKey ticket={d.ticket} /> : d.key}
             </span>
+          ))}
+        </div>
+      )}
+
+      {!!t.labels?.length && (
+        <div className="card-labels" data-testid="card-labels">
+          {t.labels.map((name) => (
+            <LabelChip key={name} name={name} color={labelColorOf(state.labels, name)} />
           ))}
         </div>
       )}
