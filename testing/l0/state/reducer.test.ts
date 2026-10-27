@@ -412,6 +412,20 @@ describe("reducer: connected", () => {
   });
 });
 
+describe("labels collection", () => {
+  const info = (name: string, count = 1) => ({ name, color: "red", createdAt: 0, lastUsedAt: 0, count });
+  test("a snapshot loads it and labels.changed replaces the whole collection", () => {
+    const loaded = reducer(initialState, { type: "snapshot", snapshot: snapshot({ labels: [info("A"), info("B")] }) });
+    expect(loaded.labels.map((l) => l.name)).toEqual(["A", "B"]);
+    const changed = reducer(loaded, { type: "event", event: { kind: "labels.changed", labels: [info("B", 0)] } });
+    expect(changed.labels).toEqual([info("B", 0)]);
+  });
+  test("a snapshot from a service without labels keeps what was loaded", () => {
+    const loaded = reducer(initialState, { type: "snapshot", snapshot: snapshot({ labels: [info("A")] }) });
+    expect(reducer(loaded, { type: "snapshot", snapshot: snapshot() }).labels).toHaveLength(1);
+  });
+});
+
 describe("reducer: snapshot", () => {
   test("replaces the entity lists, marks ready, and records the newest createdAt", () => {
     const old = ticket("A-1", { createdAt: 5 });

@@ -7,6 +7,8 @@
 // initials ("ns"), then it's a run inside a word, then scattered letters. Ties go to the more
 // recently run item, then to the order the items came in.
 
+import { parseSearchQuery } from "@harness/shared";
+
 export interface PaletteItem {
   id: string;
   label: string;
@@ -118,18 +120,26 @@ export function parsePaletteQuery(raw: string): { kind: PaletteKind; q: string }
   return { kind: "all", q: s.trim() };
 }
 
+/** The prefix that picked a kind (">", "#", "@", or "") and the query after it, untrimmed so a finished qualifier's trailing space counts. */
+export function paletteBody(raw: string): { prefix: string; body: string } {
+  const s = raw.trimStart();
+  return /^[>#@]/.test(s) ? { prefix: s[0]!, body: s.slice(1) } : { prefix: "", body: s };
+}
+
 /**
  * Which results a palette query asks for. A leading ">" is commands only: no ticket search and no
  * files, however the rest reads ("> src/app.ts" doesn't go looking for the file).
  */
 export function paletteSources(raw: string): { kind: PaletteKind; q: string; commands: boolean; tickets: boolean; files: boolean } {
   const { kind, q } = parsePaletteQuery(raw);
+  // A `label:` / `project:` qualifier makes the query a ticket search: no commands, no files.
+  const qualified = kind === "all" && parseSearchQuery(q).qualifiers > 0;
   return {
     kind,
     q,
-    commands: kind === "all" || kind === "commands",
+    commands: (kind === "all" && !qualified) || kind === "commands",
     tickets: kind === "tickets" || (kind === "all" && !!q),
-    files: kind === "files" || (kind === "all" && looksLikePath(parseFileQuery(q).search)),
+    files: kind === "files" || (kind === "all" && !qualified && looksLikePath(parseFileQuery(q).search)),
   };
 }
 

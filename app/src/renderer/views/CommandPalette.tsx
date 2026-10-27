@@ -12,8 +12,9 @@
 
 import "./palette.css";
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
-import { displayKey, keyLabel, projectGroups, secondaryKey, type FileMatch, type Ticket } from "@harness/shared";
-import { sortedProjects, ticketByKey } from "@harness/shared/state";
+import { completeQualifier, displayKey, keyLabel, projectGroups, secondaryKey, type FileMatch, type Ticket } from "@harness/shared";
+import { matchesQuery, sortedProjects, ticketByKey } from "@harness/shared/state";
+import { parseSearchQuery } from "@harness/shared";
 import { useStore } from "../state/store";
 import { commandKeys } from "../state/keys";
 import { availableCommands, runCommand } from "../components/commands";
@@ -23,6 +24,7 @@ import { paneScopeOf } from "../state/route";
 import {
   fileItemId,
   matchLabel,
+  paletteBody,
   paletteFileRoot,
   parseFileQuery,
   paletteSources,
@@ -39,6 +41,8 @@ import {
   type Ranked,
 } from "../state/palette";
 import { terminalRow } from "../state/terminal";
+import { qualifierOptions, type QualifierOption } from "../state/qualifierPicker";
+import { LabelDot } from "../components/Labels";
 import { StatusDot, STATUS_LABEL } from "../components/bits";
 import { SETTINGS_SECTIONS } from "./Settings";
 
@@ -51,7 +55,7 @@ const FILE_LIMIT_ALL = 5;
 const MAX_ROWS = 60;
 
 interface Entry extends PaletteItem {
-  kind: "command" | "nav" | "ticket" | "file" | "terminal";
+  kind: "command" | "nav" | "ticket" | "file" | "terminal" | "qualifier";
   group: string;
   /** Shortcut hint ("⇧⌘]"). */
   keys?: string;
@@ -60,6 +64,8 @@ interface Entry extends PaletteItem {
   path?: string;
   /** A file git ignores (or in node_modules), per the search. */
   ignored?: boolean;
+  /** A `label:` / `project:` choice: it finishes the qualifier in the input rather than closing the palette. */
+  qualifier?: QualifierOption;
   run: () => void;
 }
 
@@ -273,8 +279,39 @@ export function CommandPalette({ origin, initial = "", onClose, onShortcuts }: {
     // openPath reads the query's lines, which change with `q`.
   }, [wantFiles, root, search, kind, fileRecents, remoteFiles, filesKey, q]);
 
+  // While the last word is `label:` / `project:`, the rows are what could finish it.
+  const { prefix, body } = paletteBody(raw);
+  const picker = useMemo(() => (kind === "files" || kind === "commands" ? null : qualifierOptions(body, Object.values(state.labels), Object.values(state.projects))), [kind, body, state.labels, state.projects]);
+  const pickRows = useMemo(
+    (): Ranked<Entry>[] =>
+      (picker?.options ?? []).map((o) => ({
+        item: {
+          id: `qualifier:${o.field}:${o.value}`,
+          kind: "qualifier",
+          label: o.label,
+          group: o.field === "label" ? "Label" : "Project",
+          qualifier: o,
+          run: () => setRaw(prefix + completeQualifier(body, o.field, o.value)),
+        },
+        ranges: [],
+        score: 0,
+      })),
+    [picker, prefix, body],
+  );
+  const qualified = kind !== "files" && parseSearchQuery(q).qualifiers > 0;
+
   const rows = useMemo(() => {
     if (kind === "files") return fileRows;
+    if (pickRows.length) return pickRows;
+    if (qualified) {
+      // Tickets the qualifiers match: the loaded ones now, the service's hits as they arrive.
+      const out: Ranked<Entry>[] = [];
+      const shown = new Set<string>();
+      const add = (e: Entry | undefined) => e && !shown.has(e.id) && (shown.add(e.id), out.push({ item: e, ranges: [], score: 0 }));
+      for (const e of entries) if (e.ticket && matchesQuery(e.ticket, q, state.keyAliases)) add(e);
+      if (remote?.q === q) for (const t of remote.tickets) add(entries.find((x) => x.id === `ticket:${t.key}`));
+      return out.slice(0, MAX_ROWS);
+    }
     const ranked = rankCommands(q, entries);
     // The server matched these on more than the label (their description): keep them, after the rest.
     if (remote?.q === q) {
@@ -285,7 +322,7 @@ export function CommandPalette({ origin, initial = "", onClose, onShortcuts }: {
       }
     }
     return [...ranked.slice(0, MAX_ROWS - fileRows.length), ...fileRows];
-  }, [kind, q, entries, remote, fileRows]);
+  }, [kind, q, entries, remote, fileRows, pickRows, qualified, state.keyAliases]);
 
   useEffect(() => setActive(0), [raw]);
   const current = Math.min(active, rows.length - 1);
@@ -295,6 +332,8 @@ export function CommandPalette({ origin, initial = "", onClose, onShortcuts }: {
   }, [current, rows]);
 
   const finish = (entry?: Entry) => {
+    // A qualifier choice fills in the input and keeps the palette (and the focus) where it is.
+    if (entry?.kind === "qualifier") return entry.run();
     onClose();
     if (origin.isConnected) (origin as HTMLElement).focus?.();
     if (!entry) return;
@@ -393,7 +432,14 @@ export function CommandPalette({ origin, initial = "", onClose, onShortcuts }: {
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => finish(item)}
               >
-                {t ? (
+                {item.qualifier ? (
+                  <>
+                    <LabelDot color={item.qualifier.color} />
+                    <span className="palette-label">{item.qualifier.label}</span>
+                    {item.qualifier.detail && <span className="palette-subtitle truncate">{item.qualifier.detail}</span>}
+                    <span className="palette-group">{item.group}</span>
+                  </>
+                ) : t ? (
                   <>
                     <TicketKeyHighlighted ticket={t} ranges={ranges} />
                     <span className="palette-label">

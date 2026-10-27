@@ -326,6 +326,34 @@ describe("matchesQuery", () => {
   });
 });
 
+describe("matchesQuery qualifiers and labels", () => {
+  const t = live("1", { key: "ABC-12", title: "Fix the Widget", labels: ["Release 1.2.3", "Bugfix"] } as never);
+  test("every label: must be on the ticket, compared without case or accents", () => {
+    expect(matchesQuery(t, "label:bugfix")).toBe(true);
+    expect(matchesQuery(t, 'label:"release 1.2.3" label:BUGFIX')).toBe(true);
+    expect(matchesQuery(t, "label:bugfix label:docs")).toBe(false);
+  });
+  test("any project: key matches the ticket's key prefix", () => {
+    expect(matchesQuery(t, "project:abc")).toBe(true);
+    expect(matchesQuery(t, "project:zzz project:ABC")).toBe(true);
+    expect(matchesQuery(t, "project:zzz")).toBe(false);
+  });
+  test("qualifiers combine with plain text", () => {
+    expect(matchesQuery(t, "label:bugfix widget")).toBe(true);
+    expect(matchesQuery(t, "label:bugfix nothing")).toBe(false);
+  });
+  test("a qualifier still being typed filters nothing", () => {
+    expect(matchesQuery(t, "label:")).toBe(true);
+    expect(matchesQuery(t, 'project: widget')).toBe(true);
+  });
+  test("plain text matches a label name by word prefix", () => {
+    expect(matchesQuery(t, "bug")).toBe(true);
+    expect(matchesQuery(t, "rel")).toBe(true);
+    expect(matchesQuery(t, "1.2")).toBe(true);
+    expect(matchesQuery(t, "ugfix")).toBe(false);
+  });
+});
+
 describe("searchColumns", () => {
   const search = (over: Partial<SearchState>): State => ({ ...initialState, search: { q: "widget", scope: "*", ids: null, nextCursor: null, total: 0, loading: false, error: null, ...over } });
   test("no search gives empty columns", () => {

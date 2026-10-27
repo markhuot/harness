@@ -3,7 +3,7 @@
 // method and path to world data. So a renamed endpoint or a changed method breaks here, and the
 // fake can't drift from the client's API surface. The event socket is controlled by the test.
 
-import { HarnessApiError, HarnessClient } from "@harness/shared";
+import { HarnessApiError, HarnessClient, defaultLabelColor, labelKey, normalizeLabelNames, parseSearchQuery } from "@harness/shared";
 import { COS_OPEN_STATUSES, type ClientEvent, type Cos, type CosBadge, type CosChatEntry, type CosChatPage, type TicketEventPage, type MemoryConflict, type PutCosMemoryBody } from "@harness/shared";
 import { chiefs, cosChat, ticketEvents } from "../world/cos";
 import type { Attachment, MessageDraftBody, CreateTicketBody, DriverModels, FileWriteResult, SubmitTicketBody, UpdateTicketBody, HarnessSocket, WriteFileRequest, NetworkStatus, NotificationStatus, PairingInfo, SpecRevisionInfo, Ticket, TicketStatus } from "@harness/shared";
@@ -107,10 +107,32 @@ export class FakeClient extends HarnessClient {
     m = p.match(/^\/tickets\/([^/]+)(\/submit)?$/);
     const draft = m && w.tickets.find((t) => t.key === m![1] && t.draft);
     if (draft && method === "PATCH" && !m![2]) return Object.assign(draft, body as UpdateTicketBody);
+    // A label set replaces the ticket's: a name not seen before creates the label (a recolor changes the collection).
+    const live = m && !m[2] && w.tickets.find((t) => t.key === m![1]);
+    if (live && method === "PATCH") {
+      const patch = body as UpdateTicketBody;
+      if (patch.labels) {
+        const names = normalizeLabelNames(patch.labels);
+        for (const name of names) if (!w.labels.some((l) => labelKey(l.name) === labelKey(name))) w.labels.unshift({ name, color: defaultLabelColor(name), createdAt: Date.now(), lastUsedAt: Date.now(), count: 0 });
+        live.labels = names.map((n) => w.labels.find((l) => labelKey(l.name) === labelKey(n))!.name);
+        // The service announces the ticket and the collection after the write.
+        queueMicrotask(() => (this.push({ kind: "ticket.upserted", ticket: structuredClone(live) }), this.push({ kind: "labels.changed", labels: structuredClone(w.labels) })));
+      }
+      return live;
+    }
+    const recolor = method === "PATCH" ? p.match(/^\/labels\/([^/]+)$/) : null;
+    if (recolor) {
+      const label = w.labels.find((l) => labelKey(l.name) === labelKey(decodeURIComponent(recolor[1]!)));
+      if (!label) return NO_ROUTE;
+      label.color = (body as { color: string }).color;
+      queueMicrotask(() => this.push({ kind: "labels.changed", labels: structuredClone(w.labels) }));
+      return label;
+    }
     if (draft && method === "POST" && m![2]) return Object.assign(draft, { draft: false, status: (body as SubmitTicketBody).start ? "in_progress" : "planning" });
     if (method !== "GET") return NO_ROUTE;
     if (p === "/health") return ok({ ok: true });
     if (p === "/projects") return w.projects;
+    if (p === "/labels") return w.labels;
     if (p === "/tickets") {
       const statuses = q.get("status")?.split(",");
       return w.tickets.filter((t) => (!statuses || statuses.includes(t.status)) && (!q.get("projectId") || t.projectId === q.get("projectId")));
@@ -121,8 +143,15 @@ export class FakeClient extends HarnessClient {
       return { tickets: all, nextCursor: null, total: all.length };
     }
     if (p === "/tickets/search") {
-      const needle = (q.get("q") ?? "").toLowerCase();
-      const hits = w.tickets.filter((t) => t.key.toLowerCase().includes(needle) || t.title.toLowerCase().includes(needle));
+      const parsed = parseSearchQuery(q.get("q") ?? "");
+      const needle = parsed.text.toLowerCase();
+      const projectKeyOf = (key: string) => key.replace(/-\d+$/, "").toUpperCase();
+      const hits = w.tickets.filter(
+        (t) =>
+          parsed.labels.every((l) => (t.labels ?? []).some((have) => labelKey(have) === labelKey(l))) &&
+          (!parsed.projects.length || parsed.projects.some((k) => k.toUpperCase() === projectKeyOf(t.key))) &&
+          (t.key.toLowerCase().includes(needle) || t.title.toLowerCase().includes(needle) || (!!needle && (t.labels ?? []).some((l) => l.toLowerCase().includes(needle)))),
+      );
       return { tickets: hits, nextCursor: null, total: hits.length };
     }
     if (p === "/sessions") return w.sessions.filter((s) => !q.get("kind") || s.kind === q.get("kind"));

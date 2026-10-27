@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, type Ref } from "react";
+import { useCallback, useMemo, useRef, useState, useSyncExternalStore, type Ref } from "react";
 import { projectGroups, type Project } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import { sortedProjects } from "@harness/shared/state";
@@ -10,6 +10,9 @@ import { routeGroupId } from "../state/boardScope";
 import { keysArea, runCommand, useCommands } from "../components/commands";
 import { useRovingList } from "../components/useRovingList";
 import { PlanUsage } from "./PlanUsage";
+import { LabelDot } from "../components/Labels";
+import { boardFilter, requestBoardFilter, subscribeBoardFilter } from "../state/boardFilter";
+import { LABELS_PAGE, labelSearchActive, labelSearchToggle, sidebarLabels } from "../state/sidebarLabels";
 import { countSegments, sidebarCounts, type StatusCounts } from "../state/sidebarCounts";
 
 export function Sidebar({
@@ -189,6 +192,8 @@ export function Sidebar({
               </button>
             )}
           </nav>
+
+          <LabelsSection />
         </div>
 
         <div className="sidebar-foot">
@@ -202,6 +207,43 @@ export function Sidebar({
         </div>
       </div>
     </aside>
+  );
+}
+
+/** The labels in use, most recently used first: a click searches the board for one, another click clears it. */
+function LabelsSection() {
+  const { state } = useStore();
+  // How many to show; "More" adds a page, and a reload starts over.
+  const [limit, setLimit] = useState(LABELS_PAGE);
+  const filter = useSyncExternalStore(subscribeBoardFilter, boardFilter);
+  const { shown, more } = sidebarLabels(state.labels, limit);
+  if (!shown.length) return null;
+  return (
+    <>
+      <div className="nav-section">
+        <span className="section-title">Labels</span>
+      </div>
+      <nav className="nav" data-testid="sidebar-labels">
+        {shown.map((l) => (
+          <NavItem
+            key={l.name}
+            label={l.name}
+            title={`${l.name}: ${l.count} active`}
+            testId="nav-label"
+            prefix={<LabelDot color={l.color} />}
+            active={labelSearchActive(filter, l.name)}
+            onClick={() => requestBoardFilter(labelSearchToggle(boardFilter(), l.name))}
+            badge={<span className="label-count">{l.count}</span>}
+          />
+        ))}
+        {more > 0 && (
+          <button className="nav-item nav-add" data-roving-item data-testid="labels-more" onClick={() => setLimit(limit + LABELS_PAGE)}>
+            <Icon name="chevronDown" />
+            More
+          </button>
+        )}
+      </nav>
+    </>
   );
 }
 

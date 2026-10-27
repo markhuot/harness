@@ -12,6 +12,7 @@ export function cardPropsEqual(a: CardProps, b: CardProps) {
   const s2 = b.state;
   if (s1.activity[a.ticket.sessionId] !== s2.activity[b.ticket.sessionId]) return false;
   if (s1.projects !== s2.projects || s1.settings !== s2.settings) return false;
+  if (s1.labels !== s2.labels && a.ticket.labels?.length) return false;
   if (s1.keyAliases !== s2.keyAliases || s1.missingKeys !== s2.missingKeys) return false;
   // Deps, children and the parent live in the tickets map.
   if (s1.tickets !== s2.tickets && (a.ticket.dependsOn.length || isConductor(a.ticket) || a.ticket.parentId)) return false;

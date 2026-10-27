@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
-  fileItemId, looksLikePath, matchLabel, paletteFileRoot, paletteSources, parseFileQuery, parsePaletteQuery, pushRecent, rankCommands, readRecents, recentFilePaths, recentRanks, RECENT_MAX,
+  fileItemId, looksLikePath, matchLabel, paletteFileRoot, paletteBody, paletteSources, parseFileQuery, parsePaletteQuery, pushRecent, rankCommands, readRecents, recentFilePaths, recentRanks, RECENT_MAX,
   type PaletteItem,
 } from "../../../app/src/renderer/state/palette";
 
@@ -227,5 +227,19 @@ describe("readRecents / pushRecent / recentRanks", () => {
   });
   test("recentRanks maps id to position", () => {
     expect([...recentRanks(["x", "y"])]).toEqual([["x", 0], ["y", 1]]);
+  });
+});
+
+describe("qualifier queries", () => {
+  test("a label: or project: query is a ticket search only: no commands, no files", () => {
+    expect(paletteSources('label:"Release 1.2.3" src/app.ts')).toMatchObject({ commands: false, tickets: true, files: false });
+    expect(paletteSources("project:HAR")).toMatchObject({ commands: false, tickets: true });
+  });
+  test("other words with a colon stay a plain query", () => {
+    expect(paletteSources("foo:bar")).toMatchObject({ commands: true, tickets: true });
+  });
+  test("paletteBody keeps the trailing space a finished qualifier ends with", () => {
+    expect(paletteBody("  #label:Bugfix ")).toEqual({ prefix: "#", body: "label:Bugfix " });
+    expect(paletteBody("label:")).toEqual({ prefix: "", body: "label:" });
   });
 });
