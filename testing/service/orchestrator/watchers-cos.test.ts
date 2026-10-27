@@ -154,6 +154,45 @@ test("creating a watcher needs a human's approval, and the approved retry makes 
   expect(h.store.watchers.list().find((w) => w.name === "all-new")!.cosId).toBeNull();
 });
 
+test("a chief's pending approval rides on the chief for the app, clears when answered", async () => {
+  const { h, mine, work } = await board();
+  const input = { watcher: mine.name, enabled: true };
+  const first = callTools([["update_watcher", input]]);
+  const retry = callTools([["update_watcher", input]]);
+  h.driver.script(first.steps, retry.steps);
+  const chiefOf = () => h.orch.listCos().find((c) => c.key === work.key)!;
+  expect(chiefOf().pendingApproval).toBeNull();
+  await h.orch.sendMessage(work.key, "enable it");
+  await h.settle();
+  const waiting = chiefOf().pendingApproval!;
+  expect(waiting).toMatchObject({ toolName: "update_watcher", onceOnly: true });
+  expect(h.ticket(work.key).status).toBe("in_progress");
+
+  await h.orch.answerApproval(work.key, { decision: "allow_once" });
+  await h.settle();
+  expect(chiefOf().pendingApproval).toBeNull();
+  expect(retry.results[0]!.isError).toBe(false);
+  // Answering resumes the chief in place: no board move is recorded for it.
+  expect(h.store.activity.listBySession(h.ticket(work.key).sessionId).filter((a) => a.kind === "moved")).toEqual([]);
+});
+
+test("denying a chief's approval tells it so with the human's note, and the call never runs", async () => {
+  const { h, mine, work } = await board();
+  const first = callTools([["update_watcher", { watcher: mine.name, command: "evil" }]]);
+  h.driver.script(first.steps);
+  await h.orch.sendMessage(work.key, "change it");
+  await h.settle();
+  const before = h.driver.requests.length;
+  await h.orch.answerApproval(work.key, { decision: "deny", message: "Leave that one alone." });
+  await h.settle();
+  const prompt = h.driver.requests[before]!.prompt;
+  expect(h.driver.requests[before]!.kind).toBe("cos");
+  expect(prompt).toContain("The human denied update_watcher");
+  expect(prompt).toContain("Leave that one alone.");
+  expect(h.store.watchers.get(mine.id)!.command).toBe("feed-work");
+  expect(h.orch.listCos().find((c) => c.key === work.key)!.pendingApproval).toBeNull();
+});
+
 test("a chief can't hand its watcher to another chief: cosId in an update is ignored", async () => {
   const { h, work, home, mine } = await board();
   const input = { watcher: mine.name, enabled: false, cosId: home.ticketId };

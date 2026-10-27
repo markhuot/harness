@@ -92,7 +92,7 @@ struct TicketDetailHero: View {
             }
         }
         if let approval = ticket.pendingApproval {
-            TicketDetailApprovalCard(ticket: ticket, approval: approval).id(approval.id)
+            TicketDetailApprovalCard(ticketKey: ticket.key, approval: approval).id(approval.id)
         }
         // Always there when expanded: the More menu's Delete always applies.
         if !compact {

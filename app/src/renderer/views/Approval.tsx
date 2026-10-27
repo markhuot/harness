@@ -2,7 +2,7 @@
 // human allows once, allows the tool for the whole ticket, or denies.
 
 import { useState } from "react";
-import { keyLabel, type PendingApproval, type Ticket } from "@harness/shared";
+import { keyLabel, type PendingApproval } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import { Icon } from "../components/Icon";
 import { relativeTime, useNow } from "../components/bits";
@@ -13,7 +13,8 @@ type Shown = ShownInput;
 
 export { describeApprovalInput } from "@harness/shared/state";
 
-export function ApprovalCard({ ticket, approval }: { ticket: Ticket; approval: PendingApproval }) {
+/** `ticket` is only used for its key and label, so a chief of staff (whose ticket the app never holds) can pass its key. */
+export function ApprovalCard({ ticket, approval }: { ticket: { key: string; externalRef?: { key: string } | null }; approval: PendingApproval }) {
   const { client } = useStore();
   const act = useAction();
   const now = useNow(10_000);

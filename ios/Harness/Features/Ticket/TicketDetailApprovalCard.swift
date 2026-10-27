@@ -5,7 +5,8 @@ import SwiftUI
 /// ticket, or deny with an optional note for the agent.
 /// VoiceOver announces each new request and reads the card as one container.
 struct TicketDetailApprovalCard: View {
-    let ticket: Ticket
+    /// The key the answer goes to: a ticket's, or a chief of staff's (whose ticket the app never holds)
+    let ticketKey: String
     let approval: PendingApproval
 
     @Environment(BoardStore.self) private var store
@@ -121,7 +122,7 @@ struct TicketDetailApprovalCard: View {
     }
 
     private func answer(_ decision: ApprovalDecision) {
-        let key = ticket.key
+        let key = ticketKey
         let text = TicketDetailLogic.trim(message)
         let body = ApprovalBody(decision: decision, message: text.isEmpty ? nil : text)
         busy = decision

@@ -168,6 +168,23 @@ describe("Chat", () => {
     await m.until("the save", () => m.client.cos.chiefs[0]!.messageDraft?.text === "half a thought");
   });
 
+  test("a pending permission request is a card under the chat that answers through the chief's key; typing stays open, attaching doesn't", async () => {
+    const client = new FakeClient();
+    client.cos.chiefs[0]!.pendingApproval = { id: "pa-1", runId: "r1", toolName: "update_watcher", input: { watcher: "work-feed" }, requestedAt: Date.now(), onceOnly: true, summary: "Update watcher work-feed" };
+    const m = await open("#/cos/all", client);
+    await m.until("the card", () => text(m.container).includes("The agent wants to use update_watcher"));
+    const labels = all(m.container, ".approval-actions button").map((b) => text(b));
+    expect(labels).toEqual(["Allow once", "Deny…"]);
+    expect(byId(m, "cos-attach")).toBeNull();
+    expect((byId(m, "cos-composer-input") as HTMLTextAreaElement).placeholder).toContain("permission request");
+    await click(m, all(m.container, ".approval-actions button")[0]!);
+    expect(client.bodies.find((b) => b.request === "POST /tickets/COS-1/approval")?.body).toEqual({ decision: "allow_once" });
+    // The upsert of the chief's ticket clears it from the screen.
+    await m.settle(() => m.client.push({ kind: "ticket.upserted", ticket: { id: client.cos.chiefs[0]!.ticketId, key: "COS-1", kind: "cos", pendingApproval: null } as never }));
+    expect(text(m.container).includes("The agent wants to use update_watcher")).toBe(false);
+    expect(byId(m, "cos-attach")).not.toBeNull();
+  });
+
   test("a switched-off chief can't be written to", async () => {
     const client = new FakeClient();
     client.cos.chiefs[0]!.enabled = false;

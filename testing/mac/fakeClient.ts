@@ -234,6 +234,13 @@ export class FakeClient extends HarnessClient {
       chief.messageDraft = b.text || attachments.length ? { text: b.text, attachments, origin: b.origin ?? null, updatedAt: this.world.now } : null;
       return { id: chief.ticketId, key: chief.key, kind: "cos", messageDraft: chief.messageDraft } as unknown as Ticket;
     }
+    // Answering the chief's permission request: it clears from the chief, as the ticket's upsert would.
+    m = p.match(/^\/tickets\/([^/]+)\/approval$/);
+    if (method === "POST" && m && c.chiefs.some((x) => x.key === m![1])) {
+      const chief = c.chiefs.find((x) => x.key === m![1])!;
+      chief.pendingApproval = null;
+      return { id: chief.ticketId, key: chief.key, kind: "cos", messageDraft: chief.messageDraft } as unknown as Ticket;
+    }
     m = p.match(/^\/tickets\/([^/]+)\/commands$/);
     if (method === "GET" && m && c.chiefs.some((x) => x.key === m![1])) return [{ name: "review", description: "Review the work" }];
     m = p.match(/^\/tickets\/([^/]+)\/memory$/);

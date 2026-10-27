@@ -323,6 +323,19 @@ private func project(_ id: String, group: String?) -> Project {
         #expect(state.chiefs["t1"]?.messageDraft.optional == nil)
     }
 
+    @Test func theChiefsTicketUpsertingCarriesAndClearsItsPendingApproval() throws {
+        var state = CosState(chiefs: ["t1": Cos(ticketId: "t1", key: "COS-1", scope: "all", createdAt: 1)])
+        let approval = PendingApproval(id: "pa1", runId: "r1", toolName: "update_watcher", input: .object([:]), requestedAt: 5, onceOnly: true)
+        var t = Ticket(id: "t1", key: "COS-1", projectId: "p", title: "chief", spec: "", status: .inProgress, sessionId: "s", driver: "d", workdir: nil, draft: nil, createdAt: 0, updatedAt: 0)
+        t.kind = .cos
+        t.pendingApproval = approval
+        state.applyChiefTicket(t)
+        #expect(state.chiefs["t1"]?.pendingApproval == approval)
+        t.pendingApproval = nil
+        state.applyChiefTicket(t)
+        #expect(state.chiefs["t1"]?.pendingApproval == nil)
+    }
+
     @Test func theBusEventsComeOutOfAnUnknownHarnessEvent() throws {
         let badge: HarnessEvent = try decode(#"{"kind":"cos.badge","total":4,"byCos":{"c1":4}}"#)
         #expect(CosBusEvent(event: badge) == .badge(CosBadge(total: 4, byCos: ["c1": 4])))

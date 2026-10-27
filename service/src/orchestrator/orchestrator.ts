@@ -1285,7 +1285,7 @@ export class Orchestrator {
 
   listCos(): Cos[] {
     const triageUnavailable = this.cosEngine.triageUnavailable;
-    return this.store.cos.list().map((c) => ({ ...c, triageUnavailable, messageDraft: this.store.tickets.get(c.ticketId)?.messageDraft ?? null }));
+    return this.store.cos.list().map((c) => ({ ...c, triageUnavailable, messageDraft: this.store.tickets.get(c.ticketId)?.messageDraft ?? null, pendingApproval: this.store.tickets.get(c.ticketId)?.pendingApproval ?? null }));
   }
 
   /** Events changed owner (a chief on or off, a project's setting or group): pending ones find their owner again, and anything due is handled. */

@@ -36,8 +36,9 @@ public struct CosState: Equatable, Sendable {
     public mutating func applyChiefTicket(_ t: Ticket) {
         guard t.kind == .cos, var chief = chiefs[t.id] else { return }
         let draft: Patch<MessageDraft> = Patch(t.messageDraft.optional)
-        guard chief.messageDraft.optional != draft.optional else { return }
+        guard chief.messageDraft.optional != draft.optional || chief.pendingApproval != t.pendingApproval else { return }
         chief.messageDraft = draft
+        chief.pendingApproval = t.pendingApproval
         chiefs[t.id] = chief
     }
 

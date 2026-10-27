@@ -1,6 +1,6 @@
 // Chief of staff (CoS) shapes shared by the service and its clients (DESIGN.md "Chief of staff").
 
-import type { Attachment, HarnessEvent, MessageDraft, PhaseChoice, Project, Settings, TicketStatus, TriagePermissionMode } from "./protocol";
+import type { Attachment, HarnessEvent, MessageDraft, PendingApproval, PhaseChoice, Project, Settings, TicketStatus, TriagePermissionMode } from "./protocol";
 import { HAIKU_MODELS, settingsPhaseChoice } from "./phases";
 
 /** The driver whose models triage runs on: the API's when the classifier uses the API, else Claude Code's. */
@@ -100,6 +100,8 @@ export interface Cos {
   triageUnavailable?: string | null;
   /** The message being written to it (the chief's ticket draft), so another device can finish it; null or absent when none */
   messageDraft?: MessageDraft | null;
+  /** The tool call waiting for the human (the chief's ticket pendingApproval): answered through POST /tickets/:key/approval with this key; null or absent when none */
+  pendingApproval?: PendingApproval | null;
 }
 
 // ---------------------------------------------------------------------------

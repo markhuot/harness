@@ -145,6 +145,18 @@ describe("store", () => {
     expect(s.ticketEvents.e1!.status).toBe("escalated");
     expect(cosBadgeCount(s.cosBadge, "c1")).toBe(1);
   });
+  test("a chief's pending approval appears from its ticket upsert, stays the same object while it waits, and clears when answered", () => {
+    const c: Cos = { ticketId: "t1", key: "COS-1", scope: "all", groupId: null, enabled: true, createdAt: 1 };
+    const approval = { id: "pa1", runId: "r1", toolName: "update_watcher", input: {}, requestedAt: 5, onceOnly: true };
+    let s = reducer(initialState, { type: "chiefs", chiefs: [c] });
+    s = applyEvent(s, { kind: "ticket.upserted", ticket: { id: "t1", key: "COS-1", kind: "cos", pendingApproval: approval } as never });
+    expect(s.chiefs.t1!.pendingApproval).toEqual(approval);
+    // The same request upserted again (a draft saved meanwhile) changes nothing.
+    const again = applyEvent(s, { kind: "ticket.upserted", ticket: { id: "t1", key: "COS-1", kind: "cos", pendingApproval: { ...approval } } as never });
+    expect(again).toBe(s);
+    s = applyEvent(s, { kind: "ticket.upserted", ticket: { id: "t1", key: "COS-1", kind: "cos", pendingApproval: null } as never });
+    expect(s.chiefs.t1!.pendingApproval).toBeNull();
+  });
   test("the chief's own ticket upserting keeps it off the board but moves its message draft onto the chief", () => {
     const c: Cos = { ticketId: "t1", key: "COS-1", scope: "all", groupId: null, enabled: true, createdAt: 1 };
     const draft = { text: "hi", attachments: [], origin: "phone", updatedAt: 5 };

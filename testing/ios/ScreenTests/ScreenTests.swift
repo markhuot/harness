@@ -88,6 +88,17 @@ final class ScreenTests: ScreenTestCase {
         try await screen("cos-chat-draft", router: router) { RootView() }
     }
 
+    /// The chief waiting on a permission request: the approval card under the chat, Allow once and
+    /// Deny only (a watcher call is never allowed for good), and the composer without its (+).
+    func testCosChatApproval() async throws {
+        let approval = PendingApproval(id: "pa-cos", runId: "run-cos", toolName: "update_watcher", input: .object(["watcher": .string("work-feed"), "enabled": .bool(true)]),
+                                       requestedAt: 0, summary: "Update watcher work-feed", onceOnly: true)
+        world.store.updateCos { $0.chiefs["cos-all"]?.pendingApproval = approval }
+        let router = Router()
+        router.openCos(scope: "all")
+        try await screen("cos-chat-approval", router: router) { RootView() }
+    }
+
     /// The Inbox in every state: waiting, handling, ignored with its reason and Escalate anyway,
     /// escalated, handled, and a watcher item and a schedule.
     func testCosInbox() async throws {

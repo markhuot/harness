@@ -171,7 +171,7 @@ struct CosChatView: View {
     var body: some View {
         let entries = store.cos.chat[chief.ticketId] ?? []
         let rows = CosLogic.rows(entries)
-        let attachTarget: (any PromptAttachmentTarget)? = chief.enabled ? store.messageDraft(forChief: chief).attachments : nil
+        let attachTarget: (any PromptAttachmentTarget)? = chief.enabled && chief.pendingApproval == nil ? store.messageDraft(forChief: chief).attachments : nil
         VStack(spacing: 0) {
             ScrollViewReader { proxy in
                 ScrollView {
@@ -187,6 +187,9 @@ struct CosChatView: View {
                         ForEach(rows) { row in
                             rowView(row).id(row.id)
                         }
+                        if let approval = chief.pendingApproval {
+                            TicketDetailApprovalCard(ticketKey: chief.key, approval: approval).id(approval.id)
+                        }
                         Color.clear.frame(height: 1).id(Self.bottom)
                     }
                     .padding(16)
@@ -194,6 +197,9 @@ struct CosChatView: View {
                 .defaultScrollAnchor(.bottom)
                 .scrollDismissesKeyboard(.interactively)
                 .onChange(of: rows.last?.id) { _, _ in
+                    withAnimation(.snappy) { proxy.scrollTo(Self.bottom, anchor: .bottom) }
+                }
+                .onChange(of: chief.pendingApproval?.id) { _, _ in
                     withAnimation(.snappy) { proxy.scrollTo(Self.bottom, anchor: .bottom) }
                 }
             }
@@ -257,17 +263,17 @@ struct CosChatView: View {
         let outgoing = draft.attachments
         let empty = TicketDetailLogic.trim(draft.text).isEmpty
         let canSend = chief.enabled && TicketDetailLogic.canSendMessage(text: draft.text, attachments: outgoing.count, uploading: uploader.pending.count,
-                                                                        sending: sending, approvalPending: false)
+                                                                        sending: sending, approvalPending: chief.pendingApproval != nil)
         return VStack(spacing: 4) {
             if !outgoing.isEmpty || !uploader.pending.isEmpty {
                 ComposerAttachmentTray(uploader: uploader, outgoing: outgoing, sending: sending)
             }
             HStack(alignment: .bottom, spacing: 8) {
-                if chief.enabled {
+                if chief.enabled && chief.pendingApproval == nil {
                     ComposerAttachButton(uploader: uploader, outgoing: outgoing, sending: sending)
                 }
                 MentionTextEditor(text: Binding(get: { draft.text }, set: { draft.setText($0) }),
-                                  placeholder: chief.enabled ? "Message the chief of staff" : "Switched off",
+                                  placeholder: !chief.enabled ? "Switched off" : chief.pendingApproval != nil ? "Answer the request above, or send a message to deny it" : "Message the chief of staff",
                                   ticketKey: chief.key,
                                   minLines: 1,
                                   maxLines: 6,
@@ -306,7 +312,7 @@ struct CosChatView: View {
         let draft = store.messageDraft(forChief: chief)
         let outgoing = draft.attachments
         guard chief.enabled, TicketDetailLogic.canSendMessage(text: draft.text, attachments: outgoing.count, uploading: uploader.pending.count,
-                                                              sending: sending, approvalPending: false) else { return }
+                                                              sending: sending, approvalPending: chief.pendingApproval != nil) else { return }
         let text = TicketDetailLogic.trim(draft.text)
         let files = outgoing.list
         let attachments = outgoing.inputs

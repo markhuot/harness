@@ -351,8 +351,9 @@ export function applyEvent(state: State, event: ClientEvent): State {
         const chief = state.chiefs[event.ticket.id];
         if (!chief) return state;
         const messageDraft = event.ticket.messageDraft ?? null;
-        if ((chief.messageDraft ?? null) === messageDraft) return state;
-        return { ...state, chiefs: { ...state.chiefs, [chief.ticketId]: { ...chief, messageDraft } } };
+        const pendingApproval = event.ticket.pendingApproval ?? null;
+        if ((chief.messageDraft ?? null) === messageDraft && (chief.pendingApproval?.id ?? null) === (pendingApproval?.id ?? null)) return state;
+        return { ...state, chiefs: { ...state.chiefs, [chief.ticketId]: { ...chief, messageDraft, pendingApproval } } };
       }
       const list = state.specRevisions[event.ticket.id];
       const marked = list ? withBaseline(list, event.ticket.specBaselineRevision) : list;

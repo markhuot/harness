@@ -95,11 +95,14 @@ public struct Cos: Codable, Sendable, Equatable, Identifiable {
     public var triageUnavailable: Patch<String>
     /// The message being written to it (the chief's ticket draft), so another device can finish it
     public var messageDraft: Patch<MessageDraft>
+    /// The tool call waiting for the human (the chief's ticket pendingApproval); nil when none
+    @Nullable public var pendingApproval: PendingApproval?
 
     public var id: String { ticketId }
 
-    public init(ticketId: String, key: String, scope: String, groupId: String? = nil, enabled: Bool = true, createdAt: Timestamp, triageUnavailable: Patch<String> = .absent, messageDraft: Patch<MessageDraft> = .absent) {
+    public init(ticketId: String, key: String, scope: String, groupId: String? = nil, enabled: Bool = true, createdAt: Timestamp, triageUnavailable: Patch<String> = .absent, messageDraft: Patch<MessageDraft> = .absent, pendingApproval: PendingApproval? = nil) {
         self.messageDraft = messageDraft
+        self.pendingApproval = pendingApproval
         self.ticketId = ticketId
         self.key = key
         self.scope = scope

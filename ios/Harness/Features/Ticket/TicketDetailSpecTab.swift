@@ -381,7 +381,7 @@ struct TicketBlockedCallout: View {
         case .none:
             EmptyView()
         case .approval(let approval):
-            TicketDetailApprovalCard(ticket: ticket, approval: approval).id(approval.id)
+            TicketDetailApprovalCard(ticketKey: ticket.key, approval: approval).id(approval.id)
         case .restart(let at, let reason):
             let time = Date(timeIntervalSince1970: at / 1000).formatted(date: .omitted, time: .shortened)
             Callout(tone: .amber, icon: "clock", title: "Blocked · restarts at \(time)") {

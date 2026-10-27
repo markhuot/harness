@@ -5,6 +5,7 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { Attachment, Cos, CosChatEntry } from "@harness/shared";
 import { anchoredScrollTop, attachmentInputs, nearTop, ticketByKey } from "@harness/shared/state";
+import { ApprovalCard } from "./Approval";
 import { Icon } from "../components/Icon";
 import { Markdown } from "../components/Markdown";
 import { MenuButton, MOD, relativeTime, STATUS_LABEL, StatusDot } from "../components/bits";
@@ -90,6 +91,7 @@ export function CosChat({ chief }: { chief: Cos }) {
         {entries.map((e) => (
           <ChatEntry key={e.id} entry={e} />
         ))}
+        {chief.pendingApproval && <ApprovalCard key={chief.pendingApproval.id} ticket={{ key: chief.key }} approval={chief.pendingApproval} />}
       </div>
       <Composer chief={chief} onSent={() => void load(null)} />
     </div>
@@ -197,8 +199,9 @@ function Composer({ chief, onSent }: { chief: Cos; onSent: () => void }) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const searchFiles = useCallback(async () => [], []);
   const searchCommands = useCallback((q: string) => client.ticketCommands(chief.key, q), [client, chief.key]);
-  const attach = usePromptAttachmentInput({ target: { get: () => listRef.current, set: setList }, enabled: chief.enabled, what: "a message" });
-  const canSend = chief.enabled && composerCanSend({ text, attachments: attachments.length, pending: attach.pending.length, sending, approvalPending: false });
+  const approvalPending = !!chief.pendingApproval;
+  const attach = usePromptAttachmentInput({ target: { get: () => listRef.current, set: setList }, enabled: chief.enabled && !approvalPending, what: "a message" });
+  const canSend = chief.enabled && composerCanSend({ text, attachments: attachments.length, pending: attach.pending.length, sending, approvalPending });
 
   useEffect(() => {
     const el = ref.current;
@@ -224,6 +227,7 @@ function Composer({ chief, onSent }: { chief: Cos; onSent: () => void }) {
     <div className={`composer ${attach.dropping ? "dropping" : ""}`} data-testid="cos-composer" {...attach.dropProps}>
       <PromptAttachmentList items={attachments} onRemove={attach.remove} pending={attach.pending} />
       <div className="composer-row">
+        {!approvalPending && (
         <MenuButton
           align="left"
           trigger={(toggle, open) => (
@@ -252,6 +256,7 @@ function Composer({ chief, onSent }: { chief: Cos; onSent: () => void }) {
             </>
           )}
         </MenuButton>
+        )}
         <input ref={attach.fileInput} type="file" multiple hidden data-testid="cos-attach-input" onChange={attach.onFilesPicked} />
         <MentionTextarea
           ref={ref}
@@ -259,7 +264,7 @@ function Composer({ chief, onSent }: { chief: Cos; onSent: () => void }) {
           className="composer-input"
           data-testid="cos-composer-input"
           aria-label="Message the chief of staff"
-          placeholder={chief.enabled ? "Message the chief of staff" : "Turn the chief of staff on to talk to it"}
+          placeholder={!chief.enabled ? "Turn the chief of staff on to talk to it" : approvalPending ? "Answer the permission request above, or send a message to deny it with a note" : "Message the chief of staff"}
           disabled={!chief.enabled}
           value={text}
           onValueChange={(t) => draft.edit({ text: t })}
