@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261027.1135](https://github.com/markhuot/harness/releases/tag/app-20261027.1135) - 2026-10-27
+
 ### Fixed
 
 - In a terminal on the Mac, or on iPhone and iPad with a hardware keyboard, holding Option and pressing ← or → now moves the cursor a word at a time in a shell prompt and in Claude Code's input, and Option+Backspace deletes a word. Shift, Control and ⌘ chords and typing symbols with Option are unchanged.
