@@ -1,28 +1,60 @@
 import HarnessKit
 import SwiftUI
 
-/// The status chips over the board: dot, label and count for each column. Tapping one pages to
-/// that column, and the strip keeps the current chip in view.
+/// The status control floating over the phone's board: dot, label and count for each column in
+/// one glass capsule, the cards scrolling on under it. The focused column sits on a glass pill that
+/// slides with the pager as you swipe; tapping a chip pages to that column, and the strip keeps the
+/// pill in view.
 struct BoardStatusStrip: View {
     let page: TicketStatus
+    /// The pager's scroll position in columns (1.5 is halfway from the second to the third).
+    let progress: Double
     let count: (TicketStatus) -> Int
     let onTap: (TicketStatus) -> Void
 
+    /// How much room the strip takes at the top of the board, for the cards to start below it.
+    static let height: CGFloat = 34 + 8 + 16
+
     @Environment(\.palette) private var c
+    @State private var frames: [TicketStatus: CGRect] = [:]
+
+    private static let space = "status-strip"
 
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView(.horizontal) {
-                HStack(spacing: 4) {
-                    ForEach(TicketStatus.allKnown, id: \.self) { s in chip(s).id(s) }
+                GlassEffectContainer {
+                    HStack(spacing: 0) {
+                        ForEach(TicketStatus.allKnown, id: \.self) { s in chip(s).id(s) }
+                    }
+                    .background(alignment: .topLeading) { pill }
+                    .padding(4)
+                    .coordinateSpace(name: Self.space)
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
             }
             .scrollIndicators(.hidden)
+            .glassEffect(.regular, in: .capsule)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
             .onChange(of: page, initial: true) { _, p in
                 withAnimation(.snappy) { proxy.scrollTo(p, anchor: .center) }
             }
+        }
+    }
+
+    /// The focused column's pill, between two chips while the pager is between two columns.
+    @ViewBuilder private var pill: some View {
+        let all = TicketStatus.allKnown
+        let at = min(max(progress, 0), Double(all.count - 1))
+        let lo = Int(at.rounded(.down))
+        let hi = min(lo + 1, all.count - 1)
+        if let a = frames[all[lo]], let b = frames[all[hi]] {
+            let t = at - Double(lo)
+            Capsule()
+                .fill(.clear)
+                .glassEffect(.regular.tint(c.accent.opacity(0.18)), in: .capsule)
+                .frame(width: a.width + (b.width - a.width) * t, height: a.height)
+                .offset(x: a.minX + (b.minX - a.minX) * t, y: a.minY)
         }
     }
 
@@ -42,11 +74,10 @@ struct BoardStatusStrip: View {
             }
             .padding(.horizontal, 12)
             .frame(height: 34)
-            .background(on ? c.bgElev : .clear, in: .capsule)
-            .overlay(Capsule().strokeBorder(on ? c.border : .clear, lineWidth: 1 / 3))
             .contentShape(.capsule)
         }
         .buttonStyle(.plain)
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.space)) } action: { frames[s] = $0 }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(statusLabel(s)), \(n)")
         .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)

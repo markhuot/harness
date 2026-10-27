@@ -25,6 +25,8 @@ struct BoardScreen: View {
 
     /// The column on screen (the pager's scroll position).
     @State private var page: TicketStatus? = .planning
+    /// The pager's scroll position in columns, so the status strip's pill follows a swipe.
+    @State private var progress: Double = 0
     @State private var landed = false
     /// Set while the pager scrolls because of a chip tap or a jump, so only swipes play the haptic.
     @State private var jumping = false
@@ -61,13 +63,15 @@ struct BoardScreen: View {
         let ctx = BoardContext(store.state, app.prefs)
         let layout = layout
         VStack(spacing: 0) {
-            if tabs == .topStrip {
-                BoardStatusStrip(
-                    page: page ?? .planning, count: { ctx.count($0) }, onTap: goTo)
-            }
             if layout == .pager { pager(ctx) } else { columns(ctx) }
         }
         .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.trailing } action: { trailingMargin = $0 }
+        // The phone's status strip floats over the pager, which scrolls its cards on under the glass.
+        .overlay(alignment: .top) {
+            if tabs == .topStrip {
+                BoardStatusStrip(page: page ?? .planning, progress: progress, count: { ctx.count($0) }, onTap: goTo)
+            }
+        }
         // The rail sits in the margin the system leaves at the trailing edge, so the cards never go under it.
         .overlay(alignment: .trailing) {
             if tabs == .rail {
@@ -157,7 +161,7 @@ struct BoardScreen: View {
             ScrollView(.horizontal) {
                 HStack(spacing: 0) {
                     ForEach(TicketStatus.allKnown, id: \.self) { status in
-                        BoardColumnView(status: status, ctx: ctx, onDiscard: discard, inset: EdgeInsets(top: 14, leading: 14, bottom: 14 + belowBar, trailing: 14))
+                        BoardColumnView(status: status, ctx: ctx, onDiscard: discard, inset: EdgeInsets(top: 14 + (tabs == .topStrip ? BoardStatusStrip.height : 0), leading: 14, bottom: 14 + belowBar, trailing: 14))
                             .containerRelativeFrame(.horizontal)
                             .id(status)
                     }
@@ -167,6 +171,7 @@ struct BoardScreen: View {
             .scrollTargetBehavior(.paging)
             .scrollPosition(id: $page)
             .scrollIndicators(.hidden)
+            .onScrollGeometryChange(for: Double.self) { $0.contentOffset.x / max($0.containerSize.width, 1) } action: { progress = $1 }
             // A new width (the iPad's sidebar hidden or shown, a rotation) keeps the old offset,
             // which strands the pager between two columns: snap back to the one on screen.
             .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { _, _ in
