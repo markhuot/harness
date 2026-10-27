@@ -616,7 +616,9 @@ html[data-input="keyboard"] .card.cursor:not(:focus) {
   top: calc(100% + 4px);
   left: 0;
   z-index: 20;
-  padding: 6px;
+  width: 224px;
+  justify-content: flex-start;
+  padding: 8px;
   background: var(--bg-elev);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -2600,4 +2602,10 @@ button.prompt-attachment-row-main:disabled {
 }
 .qualifier-picker li[aria-selected="true"] {
   background: var(--accent-soft);
+}
+/* The search box sits at the window's right edge: open the list leftward from it. */
+.search .qualifier-picker {
+  left: auto;
+  right: 0;
+  width: 220px;
 }

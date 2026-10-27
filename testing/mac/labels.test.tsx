@@ -4,9 +4,9 @@ import { CommandPalette } from "../../app/src/renderer/views/CommandPalette";
 import { Sidebar } from "../../app/src/renderer/views/Sidebar";
 import { TicketDetail } from "../../app/src/renderer/views/TicketDetail";
 import { world } from "../world";
-import { advance, all, click, edited, mount, text, type } from "./render";
+import { advance, all, click, edited, mount, text, type, type Mounted } from "./render";
 
-type M = { container: HTMLElement };
+type M = Mounted;
 const cardKeys = (m: M) => all(m.container, ".card").map((c) => c.dataset.key);
 const chips = (m: M, key: string) => all(m.container, `.card[data-key="${key}"] .label-chip`).map((c) => c.dataset.label);
 const sidebarRows = (m: M) => all(m.container, '[data-testid="nav-label"]');
