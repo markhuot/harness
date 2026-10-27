@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261027.0043](https://github.com/markhuot/harness/releases/tag/app-20261027.0043) - 2026-10-27
+
 ### Fixed
 
 - When the chief of staff needs your approval for a tool call (changing or running a watcher, writing to a terminal), the request now shows as a card at the bottom of its chat on the Mac and on iPhone and iPad, with Allow once, Deny and a note, and it clears when you answer. Before, the call waited with nowhere to answer it. While one is open the message box says so, and files can't be attached until it's answered. Tapping its notification opens the chief's chat instead of a ticket that isn't on the board, and on the Mac no notification is sent while that chat is open. A chief you've switched off refuses an answer to its old approval until you turn it back on.
