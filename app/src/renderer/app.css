@@ -368,6 +368,7 @@
   max-width: 280px;
 }
 .search {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -2572,4 +2573,31 @@ button.prompt-attachment-row-main:disabled {
 .composer-compacting {
   align-self: center;
   margin: 0 6px;
+}
+.qualifier-picker {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  min-width: 200px;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+}
+.qualifier-picker li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.qualifier-picker li[aria-selected="true"] {
+  background: var(--accent-soft);
 }

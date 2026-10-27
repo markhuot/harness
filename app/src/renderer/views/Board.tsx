@@ -49,6 +49,9 @@ import { keysArea, runCommand, useCommands } from "../components/commands";
 import { focusPaneBy } from "../components/paneFocus";
 import { modality } from "../state/inputModality";
 import { cursorPos, firstCard, moveCursor, resolveCursor, type CursorDir, type CursorPos } from "../state/boardNav";
+import { completeQualifier } from "@harness/shared";
+import { QualifierPickerList } from "../components/QualifierPicker";
+import { qualifierOptions, type QualifierOption } from "../state/qualifierPicker";
 import { reportBoardFilter, useBoardFilterRequests } from "../state/boardFilter";
 import "./board.css";
 
@@ -161,8 +164,30 @@ export function BoardPane() {
     "board.search": () => searchRef.current?.focus(),
     "board.children": { run: toggleHideChildren, label: hideChildren ? "Show child tickets" : "Hide child tickets" },
   });
+  // While the last word is `label:` / `project:`, a picker offers what exists; choosing finishes the qualifier.
+  const picker = qualifierOptions(filter, state.labels, Object.values(state.projects));
+  const [pickerAt, setPickerAt] = useState(0);
+  const pickerActive = picker ? Math.min(pickerAt, picker.options.length - 1) : 0;
+  useEffect(() => setPickerAt(0), [filter]);
+  const pickQualifier = (o: QualifierOption) => {
+    setFilter(completeQualifier(filter, o.field, o.value));
+    searchRef.current?.focus();
+  };
   /** Escape in the search box clears it, then (empty) goes back to the cards; never on to close the pane. */
   const searchKeys = (e: KeyboardEvent) => {
+    if (picker && picker.options.length) {
+      const n = picker.options.length;
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        setPickerAt((pickerActive + (e.key === "ArrowDown" ? 1 : n - 1)) % n);
+        return;
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        pickQualifier(picker.options[pickerActive]!);
+        return;
+      }
+    }
     if (e.key !== "Escape") return;
     e.stopPropagation();
     if (filter) setFilter("");
@@ -222,6 +247,7 @@ export function BoardPane() {
             onChange={(e) => setFilter(e.target.value)}
             onKeyDown={searchKeys}
           />
+          {picker && picker.options.length > 0 && <QualifierPickerList options={picker.options} active={pickerActive} onPick={pickQualifier} onHover={setPickerAt} />}
           {filter && (
             <button className="search-clear" aria-label="Clear search" title="Clear search" onClick={() => setFilter("")}>
               <Icon name="x" size={11} />

@@ -238,7 +238,7 @@ function LabelsSection() {
         ))}
         {more > 0 && (
           <button className="nav-item nav-add" data-roving-item data-testid="labels-more" onClick={() => setLimit(limit + LABELS_PAGE)}>
-            <Icon name="chevron-down" />
+            <Icon name="chevronDown" />
             More
           </button>
         )}
