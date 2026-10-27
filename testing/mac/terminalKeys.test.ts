@@ -45,6 +45,12 @@ test("Shift+Opt+← and Ctrl+Opt+← are not remapped", async () => {
   expect(sent).toEqual(["\x1b[1;4D", "\x1b[1;7D"]);
 });
 
+test("Opt+← while composing is not remapped", async () => {
+  const { sent, press } = await setup();
+  press({ key: "ArrowLeft", code: "ArrowLeft", altKey: true, isComposing: true });
+  expect(sent).not.toContain("\x1bb");
+});
+
 test("plain ← is untouched and Opt+letter types the character it produced", async () => {
   const { sent, press } = await setup();
   press({ key: "ArrowLeft", code: "ArrowLeft" });
