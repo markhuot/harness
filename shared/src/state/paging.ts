@@ -306,7 +306,7 @@ export function matchesQuery(t: Ticket, q: string, aliases: Record<string, strin
   if (t.key.toLowerCase().includes(needle) || t.title.toLowerCase().includes(needle)) return true;
   if (t.externalRef?.key.toLowerCase().includes(needle)) return true;
   const labelNeedle = labelKey(needle);
-  if ((t.labels ?? []).some((l) => labelKey(l).split(/[\s\-_.]+/).some((w) => w.startsWith(labelNeedle)) || labelKey(l).startsWith(labelNeedle))) return true;
+  if ((t.labels ?? []).some((l) => labelKey(l).split(/[\s\-_]+/).some((w) => w.startsWith(labelNeedle)))) return true;
   for (const [alias, id] of Object.entries(aliases)) if (id === t.id && alias.toLowerCase().includes(needle)) return true;
   return false;
 }
