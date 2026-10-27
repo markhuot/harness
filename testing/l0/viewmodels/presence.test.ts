@@ -63,6 +63,12 @@ describe("presenceTickets", () => {
     const p = panes([{ kind: "ticket", ticketKey: "A-1", tab: "spec" }, { kind: "ticket", ticketKey: "B-1", tab: "spec" }], "l1");
     expect(presenceTickets(input(p))).toEqual(["B-1"]);
   });
+  test("a chief's chat pane lists the chief's key, so its approval card suppresses the push; its Inbox tab and an unopened chief don't", () => {
+    const state = stateWith([], { chiefs: { c1: { key: "COS-1", scope: "all" } as never, c2: { key: "COS-2", scope: "group:g" } as never } });
+    expect(presenceTickets(input(panes([{ kind: "cos", scope: "all", tab: "chat" }]), { state }))).toEqual(["COS-1"]);
+    expect(presenceTickets(input(panes([{ kind: "cos", scope: "all", tab: "inbox" }]), { state }))).toEqual([]);
+    expect(presenceTickets(input(panes([{ kind: "cos", scope: "group:x", tab: "chat" }]), { state }))).toEqual([]);
+  });
   test("a showing board pane adds its cards; a zoomed-over board doesn't", () => {
     const s = stateWith([makeTicket({ key: "A-1", status: "review" })]);
     const p = panes([{ kind: "board" }, { kind: "ticket", ticketKey: "Z-9", tab: "spec" }]);

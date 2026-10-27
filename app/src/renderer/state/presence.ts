@@ -46,6 +46,12 @@ export function presenceTickets({ route, state, boardScope, panes, hideChildren 
     if (hidden) continue;
     const key = paneTicket(leaf.content);
     if (key) keys.add(key);
+    // A chief's chat shows its pending approval, so the chief's key is on screen with it open.
+    if (leaf.content.kind === "cos" && leaf.content.tab === "chat") {
+      const scope = leaf.content.scope;
+      const chief = Object.values(state.chiefs).find((c) => c.scope === scope);
+      if (chief) keys.add(chief.key);
+    }
     if (leaf.content.kind === "board" && route.view === "board") for (const k of boardCardKeys(state, boardScope, hideChildren)) keys.add(k);
   }
   return [...keys].sort();

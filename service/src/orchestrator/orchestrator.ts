@@ -3002,6 +3002,9 @@ export class Orchestrator {
     this.notDraft(ticket, "approved");
     const pa = ticket.pendingApproval;
     if (!pa) throw conflict(`${ticket.key} has no pending approval`);
+    if (ticket.kind === "cos" && this.store.cos.get(ticket.id)?.enabled === false) {
+      throw conflict(`${ticket.key} is switched off: turn it on to answer its approval`);
+    }
     const decision = body?.decision;
     if (decision !== "allow_once" && decision !== "allow_tool" && decision !== "deny") {
       throw badRequest("decision must be allow_once, allow_tool or deny");

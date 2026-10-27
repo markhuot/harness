@@ -193,6 +193,20 @@ test("denying a chief's approval tells it so with the human's note, and the call
   expect(h.orch.listCos().find((c) => c.key === work.key)!.pendingApproval).toBeNull();
 });
 
+test("a switched-off chief's approval can't be answered: nothing resumes it, and the approval stays", async () => {
+  const { h, mine, work } = await board();
+  const first = callTools([["update_watcher", { watcher: mine.name, enabled: true }]]);
+  h.driver.script(first.steps);
+  await h.orch.sendMessage(work.key, "enable it");
+  await h.settle();
+  h.orch.setCosEnabled(work.ticketId, false);
+  const before = h.driver.requests.length;
+  await expect(h.orch.answerApproval(work.key, { decision: "allow_once" })).rejects.toThrow("switched off");
+  await h.settle();
+  expect(h.driver.requests.length).toBe(before);
+  expect(h.orch.listCos().find((c) => c.key === work.key)!.pendingApproval).not.toBeNull();
+});
+
 test("a chief can't hand its watcher to another chief: cosId in an update is ignored", async () => {
   const { h, work, home, mine } = await board();
   const input = { watcher: mine.name, enabled: false, cosId: home.ticketId };
