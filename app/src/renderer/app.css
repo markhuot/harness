@@ -2609,3 +2609,10 @@ button.prompt-attachment-row-main:disabled {
   right: 0;
   width: 220px;
 }
+.label-suggestions li.active {
+  background: var(--hover, rgba(127, 127, 127, 0.15));
+}
+.label-picker .label-suggestions {
+  position: static;
+  margin-top: 6px;
+}

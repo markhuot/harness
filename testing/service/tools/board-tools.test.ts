@@ -209,6 +209,9 @@ test("create_ticket takes labels, update_ticket add_labels / remove_labels chang
   expect((json(results[2]!.text) as { name: string }[]).map((l) => l.name).sort()).toEqual(["Bugfix", "Docs", "Release 1"]);
   expect(results[3]!.isError).toBe(true);
   expect(results[3]!.text).toMatch(/Invalid label/);
+  const announced = h.events.filter((e) => e.kind === "labels.changed");
+  expect(announced.length).toBeGreaterThan(0);
+  expect(announced.at(-1)).toMatchObject({ labels: expect.arrayContaining([expect.objectContaining({ name: "Docs", count: 1 })]) });
 });
 
 test("a work run labels its own ticket with add_labels, but can't edit anything else on it", async () => {

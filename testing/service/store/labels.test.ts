@@ -48,18 +48,19 @@ test("the collection is sorted by last use: adding a label to a ticket moves it 
   expect(store.labels.list().map((l) => l.name)).toEqual(["Old", "Newer"]);
 });
 
-test("a label's count is its in-progress, blocked and review tickets across projects, like the project counts", () => {
-  expect(COUNTED_STATUSES).toEqual(["in_progress", "blocked", "review"]);
+test("a label's count is its open tickets (planning, in progress, blocked, review) across projects, never drafts or done", () => {
+  expect(COUNTED_STATUSES).toEqual(["planning", "in_progress", "blocked", "review"]);
   const { store, project, other } = setup();
   const planning = addTicketWith(store, project);
   const working = addTicketWith(store, project, { status: "in_progress" });
   const blocked = addTicketWith(store, other, { status: "blocked" });
   const review = addTicketWith(store, other, { status: "review" });
   const done = addTicketWith(store, other, { status: "done" });
-  for (const t of [planning, working, blocked, review, done]) store.labels.setForTicket(t.id, ["Shared"]);
-  expect(store.labels.list()).toMatchObject([{ name: "Shared", count: 3 }]);
-  store.tickets.update(planning.id, { status: "review" });
-  expect(store.labels.list()[0]!.count).toBe(4);
+  const draft = addTicketWith(store, project, { draft: true });
+  for (const t of [planning, working, blocked, review, done, draft]) store.labels.setForTicket(t.id, ["Shared"]);
+  expect(store.labels.list()).toMatchObject([{ name: "Shared", count: 4 }]);
+  store.tickets.update(planning.id, { status: "done" });
+  expect(store.labels.list()[0]!.count).toBe(3);
 });
 
 test("a label with no tickets stays, so its color survives, and recoloring changes only that label", () => {

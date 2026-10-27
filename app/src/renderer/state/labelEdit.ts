@@ -26,3 +26,29 @@ export function addLabel(known: readonly LabelInfo[], current: readonly string[]
 }
 
 export const removeLabel = (current: readonly string[], name: string): string[] => current.filter((c) => labelKey(c) !== labelKey(name));
+
+/** One row of a label picker: a label that exists, or the new name the typed text would create. */
+export type LabelOption = { kind: "existing"; name: string; color: string | null } | { kind: "create"; name: string };
+
+/**
+ * The rows of a label picker for a ticket carrying `current`. Adding lists the labels it doesn't
+ * carry that match the typed text (all of them while nothing's typed), then "create" for text that
+ * is a valid name no label has yet. Removing lists the ticket's own labels that match.
+ */
+export function labelOptions(known: readonly LabelInfo[], current: readonly string[], typed: string, mode: "add" | "remove", limit = 8): LabelOption[] {
+  const needle = labelKey(typed.trim());
+  if (mode === "remove") {
+    return current
+      .filter((name) => labelKey(name).includes(needle))
+      .slice(0, limit)
+      .map((name) => ({ kind: "existing", name, color: known.find((l) => l.name === name)?.color ?? null }));
+  }
+  // An exact match (any case) leads, so Enter on a fully typed name picks it.
+  const rows: LabelOption[] = labelSuggestions(known, current, typed, limit)
+    .sort((a, b) => Number(labelKey(b.name) === needle) - Number(labelKey(a.name) === needle))
+    .map((l) => ({ kind: "existing", name: l.name, color: l.color }));
+  const name = normalizeLabelName(typed);
+  const exists = name !== null && (known.some((l) => labelKey(l.name) === labelKey(name)) || current.some((c) => labelKey(c) === labelKey(name)));
+  if (name !== null && !exists) rows.push({ kind: "create", name });
+  return rows;
+}

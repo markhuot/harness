@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { LabelInfo } from "@harness/shared";
-import { addLabel, labelSuggestions, removeLabel } from "../../../app/src/renderer/state/labelEdit";
+import { addLabel, labelOptions, labelSuggestions, removeLabel } from "../../../app/src/renderer/state/labelEdit";
 
 const info = (name: string): LabelInfo => ({ name, color: "red", createdAt: 0, lastUsedAt: 0, count: 1 });
 const known = [info("Bugfix"), info("Réferences"), info("Release 1.2.3"), info("Docs")];
@@ -36,4 +36,23 @@ describe("addLabel", () => {
 
 test("removeLabel drops by key", () => {
   expect(removeLabel(["A", "B"], "a")).toEqual(["B"]);
+});
+
+describe("labelOptions", () => {
+  test("adding offers the labels the ticket lacks, an exact match first, and Create for a new valid name", () => {
+    expect(labelOptions(known, ["Docs"], "", "add").map((o) => o.name)).toEqual(["Bugfix", "Réferences", "Release 1.2.3"]);
+    expect(labelOptions(known, [], "release 1.2.3", "add")).toMatchObject([{ kind: "existing", name: "Release 1.2.3" }]);
+    expect(labelOptions(known, [], "re", "add").map((o) => o.name)).toEqual(["Réferences", "Release 1.2.3", "re"]);
+    expect(labelOptions(known, [], "re", "add").at(-1)).toEqual({ kind: "create", name: "re" });
+  });
+  test("no Create for a name a label or the ticket already has, an empty entry or a refused name", () => {
+    expect(labelOptions(known, ["Docs"], "docs", "add")).toEqual([]);
+    expect(labelOptions(known, [], "bugfix", "add").some((o) => o.kind === "create")).toBe(false);
+    expect(labelOptions(known, [], "  ", "add").some((o) => o.kind === "create")).toBe(false);
+    expect(labelOptions(known, [], 'a"b', "add")).toEqual([]);
+  });
+  test("removing lists only the ticket's labels that match, with their colors", () => {
+    expect(labelOptions(known, ["Docs", "Bugfix"], "bu", "remove")).toEqual([{ kind: "existing", name: "Bugfix", color: "red" }]);
+    expect(labelOptions(known, ["Docs"], "zzz", "remove")).toEqual([]);
+  });
 });

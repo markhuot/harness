@@ -2,12 +2,13 @@
 // project key badge's rule), a color dot, and the picker that recolors a label.
 
 import { useState } from "react";
-import { PROJECT_COLORS, projectColorHex, type LabelInfo } from "@harness/shared";
+import { PROJECT_COLORS, keyLabel, projectColorHex, type LabelInfo, type Ticket } from "@harness/shared";
 import { projectKeyColors } from "@harness/shared/themes";
 import { activeTheme } from "../../main/theme";
 import { useTheme } from "../state/theme";
 import { useAction, useStore } from "../state/store";
-import { addLabel, labelSuggestions, removeLabel } from "../state/labelEdit";
+import { addLabel, labelOptions, removeLabel, type LabelOption } from "../state/labelEdit";
+import { Modal } from "./bits";
 import { Icon } from "./Icon";
 
 /** The colors of a label by name, from the collection (a label the collection doesn't have yet gets the accent). */
@@ -58,12 +59,14 @@ export function LabelsEditor({ labels, editable, onSave }: { labels: readonly st
   const [error, setError] = useState<string | null>(null);
   const [recoloring, setRecoloring] = useState<string | null>(null);
   const [focused, setFocused] = useState(false);
-  const suggestions = labelSuggestions(state.labels, labels, text);
+  const [hi, setHi] = useState(0);
+  const options = labelOptions(state.labels, labels, text, "add");
   const add = (typed: string) => {
     const r = addLabel(state.labels, labels, typed);
     if ("error" in r) return setError(r.error);
     setError(null);
     setText("");
+    setHi(0);
     if (r.labels.length !== labels.length) onSave(r.labels);
   };
   return (
@@ -97,24 +100,17 @@ export function LabelsEditor({ labels, editable, onSave }: { labels: readonly st
               data-testid="label-add"
               placeholder="Add label…"
               value={text}
-              onChange={(e) => (setText(e.target.value), setError(null))}
+              onChange={(e) => (setText(e.target.value), setError(null), setHi(0))}
               onFocus={() => setFocused(true)}
               onBlur={() => setFocused(false)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") (e.preventDefault(), add(text));
+                if (e.key === "Enter") (e.preventDefault(), add(text.trim() && options[hi] ? options[hi]!.name : text));
+                else if (e.key === "ArrowDown" && options.length) (e.preventDefault(), setHi((hi + 1) % options.length));
+                else if (e.key === "ArrowUp" && options.length) (e.preventDefault(), setHi((hi + options.length - 1) % options.length));
                 else if (e.key === "Escape") (setText(""), setError(null));
               }}
             />
-            {focused && text.trim() && suggestions.length > 0 && (
-              <ul className="label-suggestions" role="listbox" aria-label="Labels" data-testid="label-suggestions">
-                {suggestions.map((l) => (
-                  <li key={l.name} role="option" aria-selected={false} data-label={l.name} onMouseDown={(e) => (e.preventDefault(), add(l.name))}>
-                    <LabelDot color={l.color} />
-                    <span className="truncate">{l.name}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
+            {focused && options.length > 0 && <LabelOptionList options={options} active={hi} onPick={(o) => add(o.name)} />}
           </div>
         )}
         {error && (
@@ -143,5 +139,62 @@ function EditableChip({ name, color, editable, onColor, onRemove }: { name: stri
         </button>
       )}
     </span>
+  );
+}
+
+/** The picker's rows: a label's dot and name, or "Create “name”" for a new one. */
+function LabelOptionList({ options, active, onPick }: { options: LabelOption[]; active: number; onPick: (o: LabelOption) => void }) {
+  return (
+    <ul className="label-suggestions" role="listbox" aria-label="Labels" data-testid="label-suggestions">
+      {options.map((o, i) => (
+        <li key={`${o.kind}:${o.name}`} role="option" aria-selected={i === active} data-label={o.name} data-create={o.kind === "create" || undefined} className={i === active ? "active" : undefined} onMouseDown={(e) => (e.preventDefault(), onPick(o))}>
+          {o.kind === "create" ? <Icon name="plus" size={11} /> : <LabelDot color={o.color} />}
+          <span className="truncate">{o.kind === "create" ? `Create “${o.name}”` : o.name}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/**
+ * The palette's "Add label…" and "Remove label…" for the ticket in view: a typeahead over the
+ * labels the ticket doesn't have (add, with "Create" for a new name) or does have (remove).
+ */
+export function LabelPickerModal({ ticket, mode, onClose }: { ticket: Ticket; mode: "add" | "remove"; onClose: () => void }) {
+  const { state, client } = useStore();
+  const act = useAction();
+  const [text, setText] = useState("");
+  const [hi, setHi] = useState(0);
+  const current = ticket.labels ?? [];
+  const options = labelOptions(state.labels, current, text, mode);
+  const pick = async (o: LabelOption | undefined) => {
+    if (!o) return;
+    const labels = mode === "add" ? [...current, o.name] : removeLabel(current, o.name);
+    if (await act(() => client.updateTicket(ticket.key, { labels }), mode === "add" ? `Added ${o.name}` : `Removed ${o.name}`)) onClose();
+  };
+  return (
+    <Modal onClose={onClose}>
+      <div className="modal-head">
+        <strong>{mode === "add" ? "Add label" : "Remove label"}</strong>
+        <span className="muted mono">{keyLabel(ticket)}</span>
+      </div>
+      <div className="modal-body label-picker" data-testid="label-picker">
+        <input
+          autoFocus
+          className="input"
+          aria-label={mode === "add" ? "Label to add" : "Label to remove"}
+          data-testid="label-picker-input"
+          placeholder={mode === "add" ? "Find or create a label…" : "Find a label…"}
+          value={text}
+          onChange={(e) => (setText(e.target.value), setHi(0))}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") (e.preventDefault(), void pick(options[hi]));
+            else if (e.key === "ArrowDown" && options.length) (e.preventDefault(), setHi((hi + 1) % options.length));
+            else if (e.key === "ArrowUp" && options.length) (e.preventDefault(), setHi((hi + options.length - 1) % options.length));
+          }}
+        />
+        {options.length > 0 ? <LabelOptionList options={options} active={hi} onPick={(o) => void pick(o)} /> : <div className="field-hint">{mode === "add" ? "Type a name to create a label." : "This ticket has no matching labels."}</div>}
+      </div>
+    </Modal>
   );
 }

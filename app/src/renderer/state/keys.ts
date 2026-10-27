@@ -127,6 +127,8 @@ export const COMMANDS: CommandSpec[] = [
       ["ticket.withdrawApproval", "Withdraw approval", ["Require human review", "Rescind approval"]],
       ["ticket.unblock", "Unblock…", ["Resume ticket", "Answer block"]],
       ["ticket.reopen", "Re-open…", ["Reopen ticket", "Re-open ticket"]],
+      ["ticket.addLabel", "Add label…", ["Set label", "Tag ticket"]],
+      ["ticket.removeLabel", "Remove label…", ["Unset label", "Untag ticket"]],
       ["ticket.copyKey", "Copy ticket key"],
       ["ticket.openExternal", "Open in source tracker"],
       ["ticket.delete", "Delete ticket…", ["Remove ticket"]],

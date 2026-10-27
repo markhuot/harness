@@ -1,4 +1,5 @@
 import { describe, expect, jest, test } from "bun:test";
+import { useEffect, useRef, useState } from "react";
 import { BoardPane } from "../../app/src/renderer/views/Board";
 import { CommandPalette } from "../../app/src/renderer/views/CommandPalette";
 import { Sidebar } from "../../app/src/renderer/views/Sidebar";
@@ -222,9 +223,10 @@ describe("editing a ticket's labels", () => {
     const add = input(m, "label-add");
     await m.settle(() => add.focus());
     await type(m, add, "DO");
-    expect(all(m.container, '[data-testid="label-suggestions"] li')).toHaveLength(0); // Docs is already on it
+    // Docs is already on it, so only the new name is offered.
+    expect(all(m.container, '[data-testid="label-suggestions"] li').map((l) => text(l))).toEqual(["Create “DO”"]);
     await type(m, add, "bug");
-    expect(all(m.container, '[data-testid="label-suggestions"] li').map((l) => l.dataset.label)).toEqual(["Bugfix"]);
+    expect(all(m.container, '[data-testid="label-suggestions"] li').map((l) => l.dataset.label)).toEqual(["Bugfix", "bug"]);
   });
 
   test("Enter adds an existing label under its own spelling, sending the whole list", async () => {
@@ -269,5 +271,93 @@ describe("editing a ticket's labels", () => {
     expect(m.client.requests).toContain("PATCH /labels/Design");
     expect(m.client.bodies.find((b) => b.request === "PATCH /labels/Design")!.body).toEqual({ color: "lime" });
     await m.until("the picker closes", () => all(editor(m), '[role="radio"]').length === 0);
+  });
+});
+
+describe("the Details field offers every label and a create row", () => {
+  const detail = (key: string) => <TicketDetail paneId="p1" ticketKey={key} tab="details" zoomed={false} />;
+  const rows = (m: M) => all(m.container, '[data-testid="label-suggestions"] li').map((l) => text(l));
+
+  test("focusing the empty field lists the labels the ticket lacks, and a new name offers Create", async () => {
+    const m = await mount(detail("HARNESS-1"));
+    await m.until("the editor", () => !!m.container.querySelector('[data-testid="labels-editor"]'));
+    const add = input(m, "label-add");
+    await m.settle(() => add.focus());
+    expect(rows(m).length).toBeGreaterThan(0);
+    expect(rows(m).some((r) => r.includes("Docs"))).toBe(false);
+    await type(m, add, "Brand new");
+    expect(rows(m)).toEqual(["Create “Brand new”"]);
+  });
+
+  test("the arrow keys move the highlight and Enter adds the highlighted label", async () => {
+    const m = await mount(detail("HARNESS-1"));
+    await m.until("the editor", () => !!m.container.querySelector('[data-testid="labels-editor"]'));
+    const add = input(m, "label-add");
+    await m.settle(() => add.focus());
+    await type(m, add, "e");
+    const names = all(m.container, '[data-testid="label-suggestions"] li').map((l) => l.dataset.label);
+    expect(names.length).toBeGreaterThan(1);
+    await m.settle(() => void add.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true })));
+    await m.settle(() => void add.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })));
+    expect(m.client.bodies.filter((b) => b.request.startsWith("PATCH /tickets/")).map((b) => b.body)).toEqual([{ labels: ["Docs", names[1]] }]);
+  });
+});
+
+describe("the palette's Add label… and Remove label…", () => {
+  // The palette's origin is the ticket pane, as when it opens from the focused pane.
+  // Each test gets its own pane id: a mounted pane keeps its command area for the whole file.
+  let panes = 0;
+  function Scene({ pane }: { pane: string }) {
+    const [origin, setOrigin] = useState<Element | null>(null);
+    const wrap = useRef<HTMLDivElement>(null);
+    useEffect(() => void (!origin && setOrigin(wrap.current!.querySelector(".detail"))));
+    return (
+      <>
+        <div ref={wrap}>
+          <TicketDetail paneId={pane} ticketKey="HARNESS-3" tab="details" zoomed={false} />
+        </div>
+        {origin && <CommandPalette origin={origin} onClose={() => {}} onShortcuts={() => {}} />}
+      </>
+    );
+  }
+  const scene = () => <Scene pane={`label-palette-${(panes += 1)}`} />;
+  const patches = (m: M) => m.client.bodies.filter((b) => b.request.startsWith("PATCH /tickets/")).map((b) => b.body);
+  const run = async (m: M, query: string) => {
+    await m.until("the palette", () => !!m.container.querySelector('[data-testid="palette-input"]'));
+    await type(m, input(m, "palette-input"), `>${query}`);
+    await m.settle(() => void input(m, "palette-input").dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })));
+  };
+  const pickerInput = (m: M) => input(m, "label-picker-input");
+
+  test("Add label… opens a picker of the labels the ticket lacks and adds the chosen one", async () => {
+    const m = await mount(scene());
+    await run(m, "Add label");
+    await m.until("the picker", () => !!m.container.querySelector('[data-testid="label-picker"]'));
+    const names = all(m.container, '[data-testid="label-picker"] li').map((l) => l.dataset.label);
+    expect(names).not.toContain("Design");
+    expect(names).not.toContain("Settings");
+    await type(m, pickerInput(m), "bugf");
+    await m.settle(() => void pickerInput(m).dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })));
+    expect(patches(m)).toEqual([{ labels: ["Design", "Settings", "Bugfix"] }]);
+  });
+
+  test("Add label… creates the typed name when no label has it", async () => {
+    const m = await mount(scene());
+    await run(m, "Add label");
+    await m.until("the picker", () => !!m.container.querySelector('[data-testid="label-picker"]'));
+    await type(m, pickerInput(m), "Fresh one");
+    expect(all(m.container, '[data-testid="label-picker"] li').map((l) => text(l))).toEqual(["Create “Fresh one”"]);
+    await m.settle(() => void pickerInput(m).dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })));
+    expect(patches(m)).toEqual([{ labels: ["Design", "Settings", "Fresh one"] }]);
+  });
+
+  test("Remove label… lists only the ticket's own labels and removes the chosen one", async () => {
+    const m = await mount(scene());
+    await run(m, "Remove label");
+    await m.until("the picker", () => !!m.container.querySelector('[data-testid="label-picker"]'));
+    expect(all(m.container, '[data-testid="label-picker"] li').map((l) => l.dataset.label)).toEqual(["Design", "Settings"]);
+    await type(m, pickerInput(m), "sett");
+    await m.settle(() => void pickerInput(m).dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })));
+    expect(patches(m)).toEqual([{ labels: ["Design"] }]);
   });
 });

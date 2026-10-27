@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type MouseEvent } from "react";
+import { LabelPickerModal } from "../components/Labels";
 import { conductorManagedReason, isConductor, keyLabel, managingConductor, MAX_PROMPT_ATTACHMENTS, resolveBaseBranch, type Attachment, type RelatedTicket, type RemoteKeyMatches, type Ticket } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import { messageDraftSession, unloadMessageDrafts } from "../state/messageDraftSession";
@@ -710,6 +711,9 @@ export function useTicketActions(owner: string, ticket: Ticket, onDeleted: () =>
     const e = palette[id];
     return e && { label: e.label, run: () => (e.choice ? choose(e.choice) : run(e.action)) };
   };
+  const [labelPicker, setLabelPicker] = useState<"add" | "remove" | null>(null);
+  // The Details tab's rule: a done ticket's labels are read-only; a draft isn't launched.
+  const labelsEditable = ticket.status !== "done" && !ticket.draft;
   const copyKey = () => void navigator.clipboard.writeText(k);
   const external = ticket.externalRef?.url;
   useCommands(owner, {
@@ -728,12 +732,20 @@ export function useTicketActions(owner: string, ticket: Ticket, onDeleted: () =>
     "ticket.markDone": fromPalette("ticket.markDone"),
     "ticket.unblock": fromPalette("ticket.unblock"),
     "ticket.reopen": fromPalette("ticket.reopen"),
+    "ticket.addLabel": labelsEditable && (() => setLabelPicker("add")),
+    "ticket.removeLabel": labelsEditable && !!ticket.labels?.length && (() => setLabelPicker("remove")),
     "ticket.copyKey": copyKey,
     "ticket.openExternal": !!external && (() => void window.harness?.openExternal(external!)),
     "ticket.delete": fromPalette("ticket.delete"),
   });
 
-  return { k, label, parent, project, set, land, conductor, managedReason, startMode, waitingToStart, choose, run, modals: runner.modals };
+  return { k, label, parent, project, set, land, conductor, managedReason, startMode, waitingToStart, choose, run, modals: (
+      <>
+        {runner.modals}
+        {labelPicker && <LabelPickerModal ticket={ticket} mode={labelPicker} onClose={() => setLabelPicker(null)} />}
+      </>
+    ),
+  };
 }
 
 /**
