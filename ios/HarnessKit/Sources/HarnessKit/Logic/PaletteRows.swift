@@ -20,6 +20,8 @@ public struct PaletteCommand: PaletteRankable, Identifiable, Equatable, Sendable
         case ticket(TicketAction)
         /// One of Approve's other ways ("Approve and open PR", "Approve and…").
         case approve(Approve.Choice)
+        /// Opens the label picker over the focused ticket: labels it lacks (and Create), or its own.
+        case addLabel, removeLabel
         case copyKey
         case openTracker(URL)
     }
@@ -104,6 +106,13 @@ public enum PaletteCommands {
             case let .withdrawApproval(title): out.append(row("ticket.withdrawApproval", title, a, keywords: ["Require human review", "Rescind approval"]))
             case .cancelRun: out.append(row("ticket.cancelRun", "Cancel run", a, keywords: ["Stop run"]))
             case .delete: out.append(row("ticket.delete", "Delete ticket…", a))
+            }
+        }
+        // A done ticket's labels are read-only, as in its Details; a draft isn't launched.
+        if t.status != .done, t.draft != true {
+            out.append(PaletteCommand(id: "ticket.addLabel", label: "Add label…", group: "Ticket", keywords: ["Set label", "Tag ticket"], symbol: "tag", action: .addLabel))
+            if !(t.labels ?? []).isEmpty {
+                out.append(PaletteCommand(id: "ticket.removeLabel", label: "Remove label…", group: "Ticket", keywords: ["Unset label", "Untag ticket"], symbol: "tag.slash", action: .removeLabel))
             }
         }
         out.append(PaletteCommand(id: "ticket.copyKey", label: "Copy ticket key", group: "Ticket", symbol: "doc.on.doc", action: .copyKey))

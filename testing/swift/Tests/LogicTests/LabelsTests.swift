@@ -97,4 +97,35 @@ import HarnessKit
         #expect(c == LabelList.defaultColor("BUGFIX"))
         #expect(ProjectColors.isProjectColorId(c))
     }
+
+    @Test func optionsOfferTheLabelsATicketLacksAndCreateForANewName() {
+        let labels = [label("Docs", count: 1), label("Release 1.2.3", count: 1), label("Reference", count: 1)]
+        #expect(LabelList.options("", labels: labels, current: ["docs"], removing: false).map(\.name) == ["Release 1.2.3", "Reference"])
+        // An exact match leads; a name nobody has is offered to create, trimmed and collapsed.
+        #expect(LabelList.options("reference", labels: labels, current: [], removing: false) == [.existing(labels[2])])
+        #expect(LabelList.options(" re  x ", labels: labels, current: [], removing: false) == [.create("re x")])
+        #expect(LabelList.options("re", labels: labels, current: [], removing: false).last == .create("re"))
+        #expect(LabelList.options("say \"hi\"", labels: labels, current: [], removing: false).isEmpty)
+        #expect(LabelList.options("DOCS", labels: labels, current: ["Docs"], removing: false).isEmpty)
+    }
+
+    @Test func removeOptionsAreTheTicketsOwnLabelsThatMatch() {
+        let labels = [label("Docs", count: 1)]
+        #expect(LabelList.options("", labels: labels, current: ["Docs", "Gone"], removing: true).map(\.name) == ["Docs", "Gone"])
+        #expect(LabelList.options("go", labels: labels, current: ["Docs", "Gone"], removing: true).map(\.name) == ["Gone"])
+        #expect(LabelList.options("zz", labels: labels, current: ["Docs"], removing: true).isEmpty)
+    }
+
+    private func ticket(_ status: TicketStatus, labels: [String]?, draft: Bool? = nil) -> Ticket {
+        Ticket(id: "t", key: "A-1", projectId: "p", title: "t", spec: "", labels: labels, status: status, sessionId: "s", driver: "d", agentReview: .pending, humanReview: .pending,
+               draft: draft, createdAt: 0, updatedAt: 0)
+    }
+
+    @Test func theTicketPaletteOffersAddAndRemoveLabelOnlyWhereTheyApply() {
+        func ids(_ t: Ticket) -> [String] { PaletteCommands.ticketCommands(t, BoardState()).map(\.id).filter { $0.hasSuffix("Label") } }
+        #expect(ids(ticket(.inProgress, labels: nil)) == ["ticket.addLabel"])
+        #expect(ids(ticket(.review, labels: ["Docs"])) == ["ticket.addLabel", "ticket.removeLabel"])
+        #expect(ids(ticket(.done, labels: ["Docs"])).isEmpty)
+        #expect(ids(ticket(.planning, labels: ["Docs"], draft: true)).isEmpty)
+    }
 }

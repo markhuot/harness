@@ -365,6 +365,31 @@ export function steps(start: Start, built: { app: string }): Step[] {
         await ctx.mac.main.evaluate(`location.hash = '#/'`);
         await ctx.mac.main.waitFor("the label in the sidebar", `document.body.innerText.includes(${JSON.stringify(label)})`);
         await shot(ctx, "10-mac-labels");
+
+        // The Details tab's field lists what the ticket lacks and offers to create a new name; the palette's
+        // "Add label…" opens a picker for the same ticket and Enter on the create row labels it for real.
+        const main = ctx.mac.main;
+        await main.click(`.card[data-key="${first.key}"]`);
+        await main.waitFor("the ticket's tabs", `document.querySelector('[data-testid="pane-ticket"] [role=tab][data-tab="details"]')`);
+        await main.click("[role=tab][data-tab=details]");
+        await main.waitFor("the labels field", `document.querySelector('[data-testid="label-add"]')`);
+        await main.focus("[data-testid=label-add]");
+        await main.type("Walk typeahead");
+        await main.waitFor("the Create row", `document.querySelector('[data-testid="label-suggestions"] li[data-create]')`);
+        await shot(ctx, "10-mac-label-typeahead");
+        await main.evaluate(`(() => { const i = document.querySelector('[data-testid="label-add"]'); i.blur(); })()`);
+        await main.press("k", "KeyK", MOD.meta);
+        await main.focus("[data-testid=palette-input]");
+        await main.type(">Add label");
+        await main.press("Enter", "Enter");
+        await main.waitFor("the label picker", `document.querySelector('[data-testid="label-picker-input"]')`);
+        await main.type("Walk palette");
+        await main.waitFor("the Create row", `document.querySelector('[data-testid="label-picker"] li[data-create]')`);
+        await shot(ctx, "10-mac-label-palette");
+        await main.press("Enter", "Enter");
+        await ctx.ws.event("the new label to reach the collection", (e) => e.kind === "labels.changed" && e.labels.some((l) => l.name === "Walk palette"));
+        const labeled = await d.call<Ticket>("GET", `/tickets/${first.key}`);
+        if (!labeled.labels?.includes("Walk palette")) throw new Error(`the palette's Add label… left ${JSON.stringify(labeled.labels)} on ${first.key}`);
       },
     },
   ];

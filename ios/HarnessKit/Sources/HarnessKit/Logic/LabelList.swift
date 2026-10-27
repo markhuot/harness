@@ -54,4 +54,45 @@ public enum LabelList {
             return key.hasPrefix(typedKey) || key.split(separator: " ").contains { $0.hasPrefix(typedKey) }
         }
     }
+
+    /// One row of a label picker: a label that exists, or the new name the typed text would create.
+    public enum Option: Equatable, Sendable, Identifiable {
+        case existing(LabelInfo)
+        case create(String)
+
+        public var id: String {
+            switch self {
+            case let .existing(info): "existing:\(info.name)"
+            case let .create(name): "create:\(name)"
+            }
+        }
+
+        public var name: String {
+            switch self {
+            case let .existing(info): info.name
+            case let .create(name): name
+            }
+        }
+    }
+
+    /// The rows of a label picker for a ticket carrying `current`. Adding lists the labels it lacks
+    /// that match the typed text (every one while nothing's typed; an exact match first), then
+    /// Create for a valid name no label has yet. Removing lists the ticket's own labels that match.
+    public static func options(_ typed: String, labels: [LabelInfo], current: [String], removing: Bool) -> [Option] {
+        let trimmed = typed.trimmingCharacters(in: .whitespaces)
+        let typedKey = LabelName.key(trimmed)
+        if removing {
+            return current.filter { typedKey.isEmpty || LabelName.key($0).contains(typedKey) }
+                .map { name in .existing(info(name, in: labels) ?? LabelInfo(name: name, color: defaultColor(name), createdAt: 0, lastUsedAt: 0, count: 0)) }
+        }
+        let found = suggestions(typed, labels: labels, excluding: current)
+        var rows: [Option] = (found.filter { LabelName.key($0.name) == typedKey } + found.filter { LabelName.key($0.name) != typedKey }).map { .existing($0) }
+        if let name = LabelName.normalize(trimmed) {
+            let key = LabelName.key(name)
+            if !labels.contains(where: { LabelName.key($0.name) == key }) && !current.contains(where: { LabelName.key($0) == key }) {
+                rows.append(.create(name))
+            }
+        }
+        return rows
+    }
 }

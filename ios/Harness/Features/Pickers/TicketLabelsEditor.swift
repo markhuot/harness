@@ -1,9 +1,9 @@
 import HarnessKit
 import SwiftUI
 
-/// A ticket's labels: chips (tap one to recolor it, × removes it), a field that completes over the
-/// labels that exist and creates a new one on return, and the color presets for the chip being
-/// recolored. A change goes out as the whole new list in one UpdateTicketBody (`onPatch`); a name
+/// A ticket's labels: chips (tap one to recolor it, × removes it), a field that lists the labels
+/// that exist (every one the ticket lacks while it's focused) with a Create row for a new name and
+/// adds the first on return, and the color presets for the chip being recolored. A change goes out as the whole new list in one UpdateTicketBody (`onPatch`); a name
 /// the service would refuse (empty, over 40 characters, holding a quote) is refused here with the reason.
 struct TicketLabelsEditor: View {
     let ticket: Ticket
@@ -16,11 +16,12 @@ struct TicketLabelsEditor: View {
     @State private var typed = ""
     @State private var error: String?
     @State private var recoloring: String?
+    @FocusState private var fieldFocused: Bool
 
     var body: some View {
         let labels = ticket.labels ?? []
         let known = store.state.labels
-        let suggestions = typed.isEmpty ? [] : Array(LabelList.suggestions(typed, labels: known, excluding: labels).prefix(5))
+        let options = fieldFocused || !typed.isEmpty ? Array(LabelList.options(typed, labels: known, current: labels, removing: false).prefix(6)) : []
         VStack(alignment: .leading, spacing: 10) {
             if !labels.isEmpty {
                 FlowLayout(spacing: 6) {
@@ -56,20 +57,28 @@ struct TicketLabelsEditor: View {
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .submitLabel(.done)
-                    .onSubmit { add(typed) }
+                    .focused($fieldFocused)
+                    .onSubmit { add(typed.isEmpty ? "" : (options.first?.name ?? typed)) }
                     .onChange(of: typed) { error = nil }
                     .accessibilityLabel("Add a label")
                 if let error { Text(error).font(.scaled(size: 13)).foregroundStyle(c.red) }
-                ForEach(suggestions) { s in
-                    Button { add(s.name) } label: {
+                ForEach(options) { o in
+                    Button { add(o.name) } label: {
                         HStack(spacing: 8) {
-                            LabelDot(color: s.color)
-                            Text(s.name).font(.scaled(size: 15)).foregroundStyle(c.text)
+                            switch o {
+                            case let .existing(info):
+                                LabelDot(color: info.color)
+                                Text(info.name).font(.scaled(size: 15)).foregroundStyle(c.text)
+                            case let .create(name):
+                                Image(systemName: "plus").font(.system(size: 12, weight: .medium)).foregroundStyle(c.accent)
+                                Text("Create “\(name)”").font(.scaled(size: 15)).foregroundStyle(c.text)
+                            }
                             Spacer(minLength: 0)
                         }
                         .contentShape(.rect)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityIdentifier("label-option-\(o.name)")
                 }
             }
         }

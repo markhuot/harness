@@ -15,6 +15,8 @@ struct PaletteScreen: View {
     var initialText = ""
     /// Snapshots turn it off: a blinking caret and the keyboard would differ from run to run.
     var autofocus = true
+    /// Snapshots open straight into the label picker of a ticket (key, removing).
+    var initialLabelPick: (ticketKey: String, removing: Bool)?
 
     @Environment(BoardStore.self) private var store
     @Environment(AppModel.self) private var app
@@ -35,7 +37,14 @@ struct PaletteScreen: View {
     @State private var root: PaletteFileRoot?
     @State private var rootLabel = ""
     @State private var opened = false
+    /// Set while the palette picks a label for the ticket it opened over (Add label…, Remove label…).
+    @State private var labelPick: LabelPick?
     @FocusState private var focused: Bool
+
+    struct LabelPick: Equatable {
+        var ticketKey: String
+        var removing: Bool
+    }
 
     struct FileResults: Equatable {
         var key: String
@@ -102,6 +111,7 @@ struct PaletteScreen: View {
             guard !opened else { return }
             opened = true
             raw = startInFiles ? "@" : initialText
+            if let p = initialLabelPick { labelPick = LabelPick(ticketKey: p.ticketKey, removing: p.removing) }
             root = PaletteFileRoot.pick(focusedTicket: focusedTicket?.key, project: WindowShortcuts.boardProject(store.state, app.prefs))
             rootLabel = describe(root)
             focused = autofocus
@@ -128,7 +138,7 @@ struct PaletteScreen: View {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 17, weight: .medium))
                 .foregroundStyle(c.text2)
-            TextField("", text: $raw, prompt: Text("Search tickets, run a command").foregroundStyle(c.text3))
+            TextField("", text: $raw, prompt: Text(labelPick.map { $0.removing ? "Find a label to remove" : "Find or create a label" } ?? "Search tickets, run a command").foregroundStyle(c.text3))
                 .font(.scaled(size: 17))
                 .foregroundStyle(c.text)
                 .textInputAutocapitalization(.never)
@@ -151,10 +161,20 @@ struct PaletteScreen: View {
     // MARK: List
 
     @ViewBuilder private var list: some View {
-        let rows = rows
-        let fileRows = fileRows
+        let rows = labelPick == nil ? rows : []
+        let fileRows = labelPick == nil ? fileRows : []
         List {
-            if query.wantsFiles {
+            if labelPick != nil {
+                ForEach(labelOptions) { o in
+                    Button { choose(o) } label: { optionLabel(o) }
+                        .listRowBackground(c.bg)
+                        .accessibilityIdentifier("palette-label-\(o.name)")
+                }
+                if labelOptions.isEmpty {
+                    Text(labelPick?.removing == true ? "This ticket has no matching labels" : "Type a name to create a label")
+                        .font(.scaled(size: 15)).foregroundStyle(c.text3).listRowBackground(c.bg)
+                }
+            } else if query.wantsFiles {
                 if currentRoot != nil {
                     Section {
                         ForEach(fileRows) { f in
@@ -187,6 +207,21 @@ struct PaletteScreen: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .scrollDismissesKeyboard(.interactively)
+    }
+
+    @ViewBuilder private func optionLabel(_ o: LabelList.Option) -> some View {
+        HStack(spacing: 12) {
+            switch o {
+            case let .existing(info):
+                LabelDot(color: info.color).frame(width: 22)
+                Text(info.name).font(.scaled(size: 16)).foregroundStyle(c.text).lineLimit(1)
+            case let .create(name):
+                Image(systemName: "plus").font(.system(size: 15, weight: .medium)).frame(width: 22).foregroundStyle(c.accent)
+                Text("Create “\(name)”").font(.scaled(size: 16)).foregroundStyle(c.text).lineLimit(1)
+            }
+            Spacer(minLength: 8)
+        }
+        .accessibilityElement(children: .combine)
     }
 
     @ViewBuilder private func label(_ row: PaletteRow) -> some View {
@@ -288,8 +323,28 @@ struct PaletteScreen: View {
 
     // MARK: Running
 
+    /// The label picker's rows for what's typed, while it's open.
+    private var labelOptions: [LabelList.Option] {
+        guard let pick = labelPick, let ticket = store.state.ticketByKey(pick.ticketKey) else { return [] }
+        return LabelList.options(raw, labels: store.state.labels, current: ticket.labels ?? [], removing: pick.removing)
+    }
+
+    /// Sends the ticket's whole new label list, as the Details tab does, and closes the palette.
+    private func choose(_ option: LabelList.Option) {
+        guard let pick = labelPick, let ticket = store.state.ticketByKey(pick.ticketKey) else { return }
+        let current = ticket.labels ?? []
+        let next = pick.removing ? LabelName.removing(option.name, from: current) : (LabelName.adding(option.name, to: current) ?? current)
+        let key = pick.ticketKey
+        if next != current {
+            actions.perform { _ = try await store.connectedAPI().updateTicket(key, UpdateTicketBody(labels: next)) }
+        }
+        close()
+    }
+
     private func runFirst() {
-        if query.wantsFiles {
+        if labelPick != nil {
+            if let o = labelOptions.first { choose(o) }
+        } else if query.wantsFiles {
             if let f = fileRows.first { open(f) }
         } else if let r = rows.first {
             run(r)
@@ -318,6 +373,11 @@ struct PaletteScreen: View {
         switch cmd.action {
         case .openFile:
             raw = "@"
+        case .addLabel, .removeLabel:
+            guard let ticket else { return }
+            labelPick = LabelPick(ticketKey: ticket.key, removing: cmd.action == .removeLabel)
+            raw = ""
+            focused = autofocus
         case .newSession:
             router.present(.newSession(projectId: WindowShortcuts.boardProject(store.state, app.prefs), key: nil))
         case .newTerminal:

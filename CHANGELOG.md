@@ -9,6 +9,15 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- The command palette on the Mac and on iPhone and iPad has **Add label…** and **Remove label…** for the ticket in view: a picker of the labels it lacks (with Create for a new name you type) or the ones it has.
+- A ticket's Labels field on the Mac and on iPhone and iPad lists every label the ticket lacks when you focus it, filters as you type, takes arrow keys on the Mac, and offers **Create "name"** for a name no label has yet.
+
+### Fixed
+
+- A label put on a ticket that is still planning now shows in the sidebar's Labels section straight away. Its count had left out planning tickets, so the label stayed hidden until the ticket started.
+
 ## [app-20261027.1542](https://github.com/markhuot/harness/releases/tag/app-20261027.1542) - 2026-10-27
 
 ### Added

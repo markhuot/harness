@@ -208,8 +208,9 @@ project (a label is never per project), so one label can group tickets from any 
   most recently used first, and the `labels.changed` event carries the whole list whenever it
   changes (a label is added to a ticket for the first time or moves up, is recolored, or a count
   moves because a ticket changed column or was deleted). `count` is the number of tickets carrying
-  the label that are in progress, blocked or in review, the same rule as the sidebar's project
-  counts; done tickets and drafts don't count, so clicking a label can show more tickets than its badge.
+  the label that are open (planning, in progress, blocked or in review); done tickets, drafts and
+  chief-of-staff tickets don't count, so clicking a label can show more tickets than its badge. A
+  planning ticket counts so a label just put on one shows in the sidebar at once.
 - **Setting them.** `POST /tickets` and `PATCH /tickets/:key` take `labels` (the whole list; names
   not seen before create labels). Agents use `create_ticket` `labels` and `update_ticket`
   `add_labels` / `remove_labels` (a work or chat run may use them on its own ticket), `list_labels`

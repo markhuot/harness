@@ -180,6 +180,20 @@ final class ScreenTests: ScreenTestCase {
         try await screen("palette-label-picker") { NavigationStack { PaletteScreen(startInFiles: false, initialText: "label:", autofocus: false) } }
     }
 
+    /// "Add label…" on a ticket: the labels it lacks, and Create for a name nobody has.
+    func testPaletteAddLabel() async throws {
+        try await screen("palette-add-label") {
+            NavigationStack { PaletteScreen(startInFiles: false, initialText: "Needs copy", autofocus: false, initialLabelPick: ("HARNESS-3", false)) }
+        }
+    }
+
+    /// "Remove label…": only the ticket's own labels.
+    func testPaletteRemoveLabel() async throws {
+        try await screen("palette-remove-label") {
+            NavigationStack { PaletteScreen(startInFiles: false, autofocus: false, initialLabelPick: ("HARNESS-3", true)) }
+        }
+    }
+
     /// Two qualifiers AND (`label:"Release 1.2.3" label:Performance`) and list the tickets carrying both.
     func testPaletteLabelQualifiers() async throws {
         try await screen("palette-label-qualifiers") {
