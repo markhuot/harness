@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261028.1240](https://github.com/markhuot/harness/releases/tag/app-20261028.1240) - 2026-10-28
+
 ### Added
 
 - The command palette on the Mac and on iPhone and iPad has **Add label…** and **Remove label…** for the ticket in view: a picker of the labels it lacks (with Create for a new name you type) or the ones it has.
