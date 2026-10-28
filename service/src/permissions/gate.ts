@@ -5,7 +5,7 @@
 //      commands (allowlist) → allow; read_only mode → deny everything else
 //   2. human grants (ticket.allowedTools, one-time grants) → allow
 //   3. ask mode → a human; auto mode → the classifier (allow → run, soft_deny → denied to the
-//      agent so it can find another way, and a card only if the run ends stuck on it (env.defer),
+//      agent so it can find another way, or block and ask the human (env.agentDecides),
 //      hard_deny → deny with its reason). Classifier failure or timeout → a human, never allow.
 // Every decision on a gated call is logged (PermissionDecisionLog) so the human can audit it.
 
@@ -29,11 +29,11 @@ export interface GateEnv {
   /** Send the call to a human (HarnessOps.requestApproval) */
   requestApproval(tool: string, input: unknown, meta: { reason: string; source: "classifier" | "policy" }): Promise<ApprovalAnswer>;
   /**
-   * A classifier soft_deny the agent gets to work around first: the call is denied with the
-   * reason, and the run remembers it (it becomes an approval card only if the run ends stuck on
-   * it). Without it, a soft_deny goes to requestApproval right away.
+   * A classifier soft_deny is the agent's to handle: the call is denied with the reason, and the
+   * agent finds another way or blocks to ask the human (no approval card). Without it (runs with
+   * nobody to block to), a soft_deny goes to requestApproval.
    */
-  defer?(tool: string, input: unknown, reason: string): void;
+  agentDecides?: boolean;
   log(entry: PermissionDecisionLog): void;
   /** Context for the classifier (lazy: only built when the classifier is consulted) */
   context(): Pick<ClassifierRequest, "ticket" | "transcript">;
@@ -52,7 +52,7 @@ export const CLASSIFIER_TIMEOUT_MS = 60_000;
 /** A classifier reason ending in a full stop, so the instructions after it read as a new sentence. */
 const sentence = (reason: string) => reason.trim().replace(/[.!?]?$/, (end) => end || ".");
 
-/** A deferred soft_deny, as the model sees it: `${CLASSIFIER_DENIED}<reason>.${CLASSIFIER_DENIED_NEXT}` */
+/** A soft_deny the agent decides on, as the model sees it: `${CLASSIFIER_DENIED}<reason>.${CLASSIFIER_DENIED_NEXT}` */
 export const CLASSIFIER_DENIED = "Permission denied by the auto-mode classifier: ";
 export const CLASSIFIER_DENIED_NEXT =
   " Don't retry this call or rephrase it to get it through. Rethink the step: if a safer command or approach gets you to the same goal, take it and keep working. If there's no other way, ask the human as your instructions say; they can approve this call.";
@@ -187,7 +187,7 @@ export class PermissionGate {
 
   /**
    * Auto mode's classifier step for a call no policy or grant settled: allow → run; soft_deny →
-   * deferred to the agent (env.defer) or a human; hard_deny → deny. Failure, timeout or no
+   * the agent's to work around or block on (env.agentDecides), else a human; hard_deny → deny. Failure, timeout or no
    * classifier → a human, never allow. Also used for Claude Code calls that reach the prompt tool
    * while an auto-mode ticket's run is in ask mode (planGrants).
    */
@@ -221,9 +221,8 @@ export class PermissionGate {
         log("deny", verdict.reason, "classifier", meta);
         return deny(`${CLASSIFIER_DENIED}${sentence(verdict.reason)} This action is never allowed, so don't retry it or rephrase it to get it through. Find another way to do the task without it and keep working; if there is none, ask the human as your instructions say.`);
       }
-      if (env.defer) {
+      if (env.agentDecides) {
         log("deny", verdict.reason, "classifier", meta);
-        env.defer(tool, rawInput ?? {}, verdict.reason);
         return deny(`${CLASSIFIER_DENIED}${sentence(verdict.reason)}${CLASSIFIER_DENIED_NEXT}`);
       }
       env.log({ tool, summary, decision: "ask", reason: verdict.reason, source: "classifier", mode: env.mode, ...meta });

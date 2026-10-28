@@ -331,14 +331,12 @@ interface ActiveRun {
    */
   resumeCompletion: { note: string } | null;
   /**
-   * Calls a permission system inside the driver denied without asking (permission_denied) and
-   * the agent didn't then run successfully in the same run
+   * Calls the driver's permission policy denied without asking (permission_denied: Copilot's ask
+   * mode) and the agent didn't then run successfully in the same run
    */
   denials: { toolName: string; input: unknown; reason: string }[];
   /** callId → tool call of this run, to match a later successful call against the denials */
   calls: Map<string, { toolName: string; input: unknown }>;
-  /** grantKey()s of the one-time grants the driver pre-approved for this run (grant_applied) */
-  appliedGrants: Set<string>;
   /** ids of the one-time grants handed to this run (RunRequest.grants.once) */
   offeredGrants: number[];
   /** The agent recorded a pull request during this run (record_pull_request) */
@@ -414,8 +412,6 @@ export const STEER_FALLBACK_STATUS = "Couldn't reach the running agent; queued f
 /** A human message's transcript entry: its words, and the files sent with it when there are any. */
 const messageContent = (m: SentMessage): TranscriptContent => ({ type: "text", text: m.text, ...(m.attachments.length ? { attachments: [...m.attachments] } : {}) });
 export const MAX_AGENT_REJECTIONS = 3;
-/** Classifier denials of an already-allowed tool retried without a human, before asking one */
-export const MAX_AUTO_RETRIES = 3;
 /** get_ticket include_transcript: at most this many entries, each clipped to this many characters */
 export const BOARD_TRANSCRIPT_MAX = 50;
 export const BOARD_TRANSCRIPT_CHARS = 2000;
@@ -598,14 +594,6 @@ export class Orchestrator {
   readonly planUsage: PlanUsageTracker;
   private queue: RunQueue;
   private active = new Map<string, ActiveRun>(); // runId → active run
-  /**
-   * `${ticketId}\0${grantKey}` of calls whose exact CLI rule was passed and the call was still
-   * denied: their next one-time grant goes to the driver with viaPrompt (in memory: after a
-   * restart the rule is simply tried once more).
-   */
-  private ruleFailures = new Set<string>();
-  /** ticketId → classifier denials retried in a row without a human (MAX_AUTO_RETRIES) */
-  private autoRetries = new Map<string, number>();
   private mcpRuns = new Map<string, { tools: ToolDefinition[]; ctx: ToolContext }>();
   private liveDebounceMs: number;
   private starting = new Set<string>();
@@ -2807,7 +2795,6 @@ export class Orchestrator {
     // A message to a chief isn't about one project, so its run takes the app's model, not the project of the wake before it.
     if (ticket.kind === "cos") this.cosWakeProject.delete(ticket.id);
     this.notCompleting(ticket, "messaged");
-    this.autoRetries.delete(ticket.id);
     this.resetRejections(ticket);
     const sent = { text, attachments };
     switch (ticket.status) {
@@ -2970,7 +2957,6 @@ export class Orchestrator {
     if (ticket.pendingApproval) throw conflict(`${ticket.key} is waiting on a tool approval (${ticket.pendingApproval.toolName}); answer it instead`);
     if (ticket.busy) throw conflict(`${ticket.key} is running; unblock it once the run ends`);
     const notes = typeof body?.notes === "string" ? body.notes.trim() : "";
-    this.autoRetries.delete(ticket.id);
     this.recordAnswer(ticket, notes, "human");
     if (ticket.blockedRunKind === "complete") {
       if (!(await this.resumeCompletion(ticket, notes, "human"))) throw conflict(`${ticket.key} is already being unblocked`);
@@ -2999,7 +2985,6 @@ export class Orchestrator {
    * complete run removed it.
    */
   private async reopen(ticket: Ticket, prompt: string, note: string, attachments: readonly Attachment[] = [], by: ActivityAuthor = "system"): Promise<Ticket> {
-    this.autoRetries.delete(ticket.id);
     await this.begin(ticket, prompt, { agentReview: "pending", humanReview: "pending" }, note, attachments, by);
     return this.store.tickets.get(ticket.id)!;
   }
@@ -3073,7 +3058,6 @@ export class Orchestrator {
     const note = typeof body.message === "string" ? body.message.trim().replace(/[.\s]+$/, "") : "";
     let prompt: string;
     let allowedTools = ticket.allowedTools;
-    this.autoRetries.delete(ticket.id);
     if (decision === "allow_once") {
       this.store.tickets.addGrant(ticket.id, pa.toolName, pa.input);
       prompt = `The human approved your request to use ${what}. Retry it now and continue.`;
@@ -3849,7 +3833,6 @@ ${numberLines(r.body)}`;
     }
     const dir = await this.workdirFor(t);
     if (typeof dir === "string") throw new Error(`${t.key} couldn't be re-opened: ${dir}`);
-    this.autoRetries.delete(t.id);
     this.store.sessions.update(t.sessionId, { cwd: dir.workdir });
     this.addActivityLine(t, "reopened", "agent", why || "Re-opened to pick the work back up", this.moveMeta(t, "in_progress"));
     this.transition(t, "in_progress", { ...dir, agentReview: "pending", humanReview: "pending", blockedReason: null, reviewRejections: 0 }, `Re-opened by the agent${why ? `: ${why}` : ""}`, undefined, { keepSession: true });
@@ -3874,7 +3857,6 @@ ${numberLines(r.body)}`;
     if (!why) throw new Error("reason is empty: say what the human asked for and what's wrong with the current approach");
     if (t.status === "review") await this.cancelReviewRuns(t.sessionId);
     const from = t.status;
-    this.autoRetries.delete(t.id);
     this.transition(
       t,
       "planning",
@@ -4922,22 +4904,18 @@ ${numberLines(r.body)}`;
     active.offeredGrants = grants.map((g) => g.id);
     // Gated harness tools consume their grants in-process (requestApproval); the driver never
     // sees them (claude-code would downgrade an auto run to acceptEdits for a grant it can't express).
-    const once = grants.filter((g) => !GATED_TOOL_NAMES.has(g.toolName)).map((g) => {
-      const viaPrompt = this.ruleFailures.has(`${ticket.id}\u0000${grantKey(g.toolName, g.input)}`);
-      return viaPrompt ? { toolName: g.toolName, input: g.input, viaPrompt } : { toolName: g.toolName, input: g.input };
-    });
+    const once = grants.filter((g) => !GATED_TOOL_NAMES.has(g.toolName)).map((g) => ({ toolName: g.toolName, input: g.input }));
     return { tools: ticket.allowedTools.filter((name) => !GATED_TOOL_NAMES.has(name)), once };
   }
 
   /**
-   * After a succeeded work/complete/conductor run: the driver's own permission system denied a
-   * call without asking (Claude Code's auto-mode classifier, or a deferred soft_deny of the
-   * PermissionGate) and the call never went through. The agent is told to find another way
-   * first, so a run that submitted is reviewed as usual, with the denied calls noted in
-   * Activity. Otherwise the run's last denial becomes a pending approval: attached to the
-   * agent's block if it blocked, or blocking the ticket if the run just ended.
-   * A denial of a tool the human already allows on the ticket is retried with the exact call
-   * pre-approved instead (bounded by MAX_AUTO_RETRIES). Returns true when it handled the run.
+   * After a succeeded work/complete/conductor run: the driver's own permission policy denied a
+   * call without asking (Copilot's ask mode: permission_denied) and the call never went through.
+   * A run that submitted is reviewed as usual, with the denied calls noted in Activity. Otherwise
+   * the run's last denial becomes a pending approval, the only way a human can grant it: attached
+   * to the agent's block if it blocked, or blocking the ticket if the run just ended. Classifier
+   * denials never get here: the agent works around them or blocks. Returns true when it handled
+   * the run.
    */
   private surfaceDenial(ticket: Ticket, run: Run, active: ActiveRun): boolean {
     const denial = active.denials.at(-1);
@@ -4951,7 +4929,7 @@ ${numberLines(r.body)}`;
       // are on record for the reviewer and the human.
       const calls = [...new Map(active.denials.map((d) => [grantKey(d.toolName, d.input), d])).values()];
       const lines = calls.map((d) => `- ${d.toolName} (${summarizeToolInput(d.input)}): ${d.reason}`);
-      const summary = `The classifier denied ${calls.length === 1 ? "a call" : `${calls.length} calls`} during this run, and the agent submitted without ${calls.length === 1 ? "it" : "them"}`;
+      const summary = `The ticket's permission mode denied ${calls.length === 1 ? "a call" : `${calls.length} calls`} during this run, and the agent submitted without ${calls.length === 1 ? "it" : "them"}`;
       this.addActivity(t, "permission", "system", `${summary}.`, { detail: `${summary}:\n${lines.join("\n")}` });
       this.appendStatus(t.sessionId, run.id, `${summary}:\n${lines.join("\n")}`);
       return false;
@@ -4959,29 +4937,7 @@ ${numberLines(r.body)}`;
     // A chat's denial surfaces wherever the ticket is (its card leaves the column alone).
     if (run.kind !== "chat" && t.status !== "in_progress" && t.status !== "blocked" && !(t.status === "review" && run.kind === "complete")) return false;
     if (run.kind === "chat" && t.status === "done") return false;
-    const key = grantKey(denial.toolName, denial.input);
-    // The exact rule for this call was passed and it was still denied: next time, ask instead.
-    if (active.appliedGrants.has(key)) this.ruleFailures.add(`${t.id}\u0000${key}`);
-    const what = `${denial.toolName} (${summarizeToolInput(denial.input)})`;
-    const retries = this.autoRetries.get(t.id) ?? 0;
-    if (t.allowedTools.includes(denial.toolName) && retries < MAX_AUTO_RETRIES) {
-      this.autoRetries.set(t.id, retries + 1);
-      this.store.tickets.addGrant(t.id, denial.toolName, denial.input);
-      const kind = run.kind === "complete" || run.kind === "chat" ? run.kind : this.workKind(t);
-      this.appendStatus(t.sessionId, run.id, `Claude Code's classifier denied ${what}, but ${denial.toolName} is allowed on this ticket: retrying with that call pre-approved`);
-      // A chat retries where the ticket is; a work run retries in progress.
-      const u =
-        kind === "chat"
-          ? t
-          : this.transition(t, kind === "complete" ? "review" : "in_progress", { blockedReason: null }, t.status === "blocked" ? "Unblocked: the denied tool is allowed on this ticket" : undefined);
-      this.enqueueRun(
-        u.sessionId,
-        kind,
-        `${what} was denied by Claude Code's classifier, but the human allows ${denial.toolName} on this ticket. Retry it now and continue.`,
-      );
-      return true;
-    }
-    this.openApproval(t, run.id, denial.toolName, denial.input, { reason: denial.reason, source: "classifier" });
+    this.openApproval(t, run.id, denial.toolName, denial.input, { reason: denial.reason, source: "policy" });
     return true;
   }
 
@@ -5164,12 +5120,9 @@ ${numberLines(r.body)}`;
       signal: ctx.signal,
       isGranted: (tool, i) => !!ticket && (this.store.tickets.consumeGrant(ticket.id, tool, i) || ticket.allowedTools.includes(tool)),
       requestApproval: (tool, i, meta) => this.requestApproval(ctx, tool, i, meta),
-      // A soft denial is the agent's to work around first; surfaceDenial turns the run's last
-      // one into a card if the run ends stuck on it (runs that can hold a card only).
-      defer:
-        active && ticket && APPROVABLE_RUNS.includes(ctx.runKind)
-          ? (tool, i, reason) => active.denials.push({ toolName: tool, input: i, reason })
-          : undefined,
+      // A soft denial is the agent's to work around, or to block on and ask the human, whose
+      // answer the classifier then reads (runs that can block only). No approval card.
+      agentDecides: !!active && !!ticket && APPROVABLE_RUNS.includes(ctx.runKind),
       log: (entry) => this.logPermission(ctx.session.id, ctx.runId, entry),
       context: () => ({
         ticket: ticket ? { key: ticket.key, title: ticket.title, spec: ticket.spec } : null,
@@ -5927,7 +5880,6 @@ ${numberLines(r.body)}`;
       resumeCompletion: null,
       denials: [],
       calls: new Map(),
-      appliedGrants: new Set(),
       offeredGrants: [],
       // From the start, so a message sent while the run gets going is waiting when the driver starts.
       input: driver?.supportsSteering && STEERABLE_RUN_KINDS.has(run.kind) ? new RunInput() : null,
@@ -6300,7 +6252,6 @@ ${numberLines(r.body)}`;
       case "grant_applied": {
         const ticketId = this.store.sessions.get(run.sessionId)?.ticketId;
         if (ticketId) this.store.tickets.consumeGrant(ticketId, ev.toolName, ev.input);
-        active.appliedGrants.add(grantKey(ev.toolName, ev.input));
         return null;
       }
       case "error":

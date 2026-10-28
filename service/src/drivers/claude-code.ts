@@ -297,7 +297,7 @@ export function planGrants(
     if (rule && !plan.rules.includes(rule)) plan.rules.push(rule);
   }
   for (const g of req.grants.once) {
-    const rule = g.viaPrompt ? null : cliExactRule(g.toolName, g.input);
+    const rule = cliExactRule(g.toolName, g.input);
     if (rule) {
       if (!plan.rules.includes(rule)) plan.rules.push(rule);
       plan.applied.push(g);
@@ -879,7 +879,7 @@ export class StreamJsonParser {
                 },
                 ...from,
               });
-              if (!subagentId) events.push({ type: "permission_denied", callId, toolName: name, input: this.toolInputs.get(callId) ?? {}, reason });
+              // Only logged: the agent works around it or blocks to ask the human (no approval card).
             }
           }
         }

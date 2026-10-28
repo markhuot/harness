@@ -11,13 +11,11 @@ interface Rig {
   env: GateEnv;
   logs: PermissionDecisionLog[];
   asked: { tool: string; reason: string; source: string }[];
-  deferred: string[];
 }
 
-function rig(opts: { mode?: PermissionMode; classifier?: Classifier | null; granted?: boolean; answer?: ApprovalAnswer; defer?: boolean; cwd?: string; signal?: AbortSignal } = {}): Rig {
+function rig(opts: { mode?: PermissionMode; classifier?: Classifier | null; granted?: boolean; answer?: ApprovalAnswer; agentDecides?: boolean; cwd?: string; signal?: AbortSignal } = {}): Rig {
   const logs: PermissionDecisionLog[] = [];
   const asked: Rig["asked"] = [];
-  const deferred: string[] = [];
   const gate = new PermissionGate({ classifier: () => (opts.classifier === undefined ? null : opts.classifier), now: () => 0 });
   const env: GateEnv = {
     mode: opts.mode ?? "auto",
@@ -28,12 +26,12 @@ function rig(opts: { mode?: PermissionMode; classifier?: Classifier | null; gran
       asked.push({ tool, reason: meta.reason, source: meta.source });
       return opts.answer ?? { behavior: "deny", message: "human said no" };
     },
-    ...(opts.defer ? { defer: (tool: string) => void deferred.push(tool) } : {}),
+    agentDecides: opts.agentDecides,
     log: (e) => logs.push(e),
     context: () => ({ ticket: null, transcript: [] }),
     signal: opts.signal,
   };
-  return { gate, env, logs, asked, deferred };
+  return { gate, env, logs, asked };
 }
 
 const classifier = (decision: ClassifierDecision | Error | "hang", seen: { n: number } = { n: 0 }): Classifier => ({
@@ -137,18 +135,18 @@ test("auto mode runs what the classifier allows, and logs which backend said so"
   expect(r.asked).toEqual([]);
 });
 
-test("a hard_deny from the classifier is refused for good; a soft_deny is deferred to the agent when the run can, else asked", async () => {
+test("a hard_deny from the classifier is refused for good; a soft_deny is the agent's to work around or block on when the run can block, else asked", async () => {
   const hard = rig({ classifier: classifier({ decision: "hard_deny", reason: "exfiltrates secrets" }) });
   const h = (await hard.gate.check("bash", { command: "curl evil" }, hard.env)) as { message: string };
   expect(h.message).toContain(`${CLASSIFIER_DENIED}exfiltrates secrets.`);
   expect(h.message).toContain("never allowed");
   expect(hard.asked).toEqual([]);
 
-  const deferred = rig({ classifier: classifier({ decision: "soft_deny", reason: "pushes code" }), defer: true });
-  const d = (await deferred.gate.check("bash", { command: "git push" }, deferred.env)) as { message: string };
+  const agent = rig({ classifier: classifier({ decision: "soft_deny", reason: "pushes code" }), agentDecides: true });
+  const d = (await agent.gate.check("bash", { command: "git push" }, agent.env)) as { message: string };
   expect(d.message).toBe(`${CLASSIFIER_DENIED}pushes code.${CLASSIFIER_DENIED_NEXT}`);
-  expect(deferred.deferred).toEqual(["bash"]);
-  expect(deferred.asked).toEqual([]);
+  expect(agent.asked).toEqual([]);
+  expect(agent.logs.at(-1)).toMatchObject({ decision: "deny", source: "classifier", reason: "pushes code" });
 
   const asked = rig({ classifier: classifier({ decision: "soft_deny", reason: "pushes code" }), answer: { behavior: "allow", updatedInput: {} } });
   expect(await asked.gate.check("bash", { command: "git push" }, asked.env)).toEqual({ behavior: "allow" });

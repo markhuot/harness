@@ -9,6 +9,11 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Changed
+
+- When auto mode's classifier turns down one of an agent's commands, the ticket no longer gets an approval card for it at the end of the run. The agent finds another way, or blocks and asks you, quoting the command. Approve it in your answer and the agent retries it. A card used to appear after the run even when the agent had already worked around the command, and when the agent had blocked for something else, the card hid its question.
+- Allowing a tool on a ticket no longer makes Harness retry a command of that tool that auto mode's classifier turned down. The agent works around it or asks you in its block, as for any other turned-down command.
+
 ### Fixed
 
 - Markdown in a list item or a block quote can now hold any markdown on the Mac, iPhone and iPad: a table, heading, rule, image, list or quote under a list item, and a table, heading, list or nested quote inside a `>` quote, all render as they do on their own. A table in a list used to show as raw pipes.

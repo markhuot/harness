@@ -369,7 +369,7 @@ plan`; the `mcp__harness` allow rule keeps `update_spec`, `edit_spec`, `update_t
 | Work run fails | a `failed` entry; status `blocked`, `blockedReason` = error. A usage limit that names its reset time also sets `resumeAt`, and the ticket restarts on its own (see "Usage limits"). A ticket already `done` stays done (only the `failed` entry): a run queued before it completed can only fail on the removed worktree |
 | Review run fails | a `failed` entry ("Agent review failed: <error>. Re-run agent review to try again."); the ticket stays in review with the agent review `pending`, so the board says why nothing is running |
 | A run starts on a ticket whose worktree is gone (`workdir` missing: the complete run removed it, or an agent or a human did) | every run but a plan run starts in the project checkout instead of failing, with a status line "Worktree missing: running from <path>". The harness repairs nothing: the prompt ends with a harness note (`missingWorktreeNote`) naming the missing path, whether the branch still exists and whether its tip (or, with the branch gone, the last commit an agent review round recorded) is already in the base branch, and on a review that commit. Work, chat and review runs are told to recreate the worktree at the same path (`git worktree add <path> <branch>`, or `-b <branch> <path> <commit or base>`) before changing or testing anything and to leave the checkout alone; a reviewer may review landed work straight from git instead. A complete run is told it doesn't need the worktree back. A chat about a done ticket gets no note (its worktree was removed on purpose). claude-code resumes a conversation only from the directory it started in, so such a run may start a fresh one |
-| Work/complete/conductor run ends after a classifier denial | the agent submitted (it found another way): reviewed as usual, with a one-line system `permission` entry whose `meta.detail` (and a transcript status line) lists the denied calls. Otherwise status `blocked` with a classifier `pendingApproval` (see "Permissions") |
+| Work/complete/conductor run ends after a driver policy denial (Copilot ask mode) | the agent submitted (it found another way): reviewed as usual, with a one-line system `permission` entry whose `meta.detail` (and a transcript status line) lists the denied calls. Otherwise status `blocked` with a policy `pendingApproval` (see "Permissions"). Classifier denials change nothing: the agent works around them or blocks |
 | Agent `review_decision(approve)` | `agentReview=approved`; a `review_approved` entry with `meta { by, round, commit }` (see "Agent review") |
 | Agent / human `request_changes` | a `changes_requested` entry (the agent's with `meta { by, round, commit }`); status `in_progress`, both reviews reset to pending, enqueue work run with the notes (`run.changes_requested`) |
 | Human `POST /review {approve, action?, instructions?}` | the choice (`completionAction`, `completionInstructions`) is stored on the ticket first, 400 for an action the ticket doesn't offer (see "Completion"); `humanReview=approved`, an `approved` entry (`meta.by`) |
@@ -1861,9 +1861,8 @@ claude-code, verified against claude 2.1.283 from a clean `env -i` shell:
 - `auto` works headless. Its classifier's denials do **not** go through the permission prompt
   tool: the model gets an is_error tool_result "Permission for this action was denied by the
   Claude Code auto mode classifier. Reason: [Code from External]…". The driver logs each as a
-  permission entry (`backend: "claude-code"`) and emits `permission_denied` (callId, toolName,
-  input, reason); see "Classifier denials" below. Anything the CLI still asks about goes to the
-  prompt tool.
+  permission entry (`backend: "claude-code"`) and nothing else; see "Classifier denials" below.
+  Anything the CLI still asks about goes to the prompt tool.
 - `auto` isn't available for every model (haiku): the CLI silently runs in `default`. The
   driver compares the init event's `permissionMode` with what it asked for and posts
   "Auto mode isn't available for <model>; unapproved actions will ask you instead." Those
@@ -1881,28 +1880,29 @@ claude-code, verified against claude 2.1.283 from a clean `env -i` shell:
   available". With `0` the first turn waits for the connectors (about a second, capped at
   `MCP_CONNECT_TIMEOUT_MS`).
 
-**Classifier denials → approval cards.** A classifier denial doesn't stop the run. The
-system prompt ("Tool approvals") tells the agent to rethink the step and take a genuinely safer
-route to the same goal if there is one (not the same action reworded or moved to another tool),
-and to block (complete/conductor runs: stop) only when nothing else gets the task done. The
-orchestrator collects a work/complete/conductor/chat run's `permission_denied` events and the
-PermissionGate's deferred soft denials, dropping any whose exact call (`grantKey`) later
-succeeded in the same run. When the run succeeds and a denial is left:
-- the agent submitted (a work or conductor run): it got there another way, so the review goes
-  ahead; a system `permission` Activity entry lists the denied calls and their reasons for the
-  reviewer and human;
-- otherwise the last denial becomes a `pendingApproval` (`source: "classifier"`, `reason` = the
-  classifier's reason, tool + input of the denied tool_use). If the agent called `block`, the
-  approval is attached to that block and its question stays `blockedReason`; if not,
-  in_progress (or review, for a complete run) → blocked, as `requestApproval` does. A chat's
-  card leaves the ticket in its column.
-- The tool is already in `ticket.allowedTools` (auto mode ignores bare `Bash`, below): no
-  card; the call gets a one-time grant and the run is resumed ("…the human allows Bash on this
-  ticket. Retry it now"; a chat retries as a chat, where the ticket is), at most `MAX_AUTO_RETRIES` (3) times in a row before asking a human
-  (a human answer or message resets the count).
-Not in read_only, not for review/plan runs. allow_once / allow_tool / deny answer it like
-any card; allow_tool on a classifier card also adds a one-time grant for the denied call, so
-the retry passes as an exact rule.
+**Classifier denials are the agent's.** A classifier denial (Claude Code's auto mode, or a
+PermissionGate `soft_deny`) doesn't stop the run and never opens an approval card. The system
+prompt ("Tool approvals") tells the agent to rethink the step and take a genuinely safer route to
+the same goal if there is one (not the same action reworded or moved to another tool), and to
+block (complete/conductor runs: stop) only when nothing else gets the task done, quoting the
+denied call. The human answers that block like any other; both classifiers read the transcript,
+so the agent's retry after an approving answer goes through. Each denial is a transcript audit
+row only. A card at run end would be stale: the agent has usually moved on, and on a block it
+hid the agent's own question (ACAMD-106).
+
+**Driver policy denials → approval cards.** Copilot's ask mode denies calls itself
+(`permission_denied`) and has no classifier to read a human's answer, so a card is the only way
+to grant one. The orchestrator collects a work/complete/conductor/chat run's `permission_denied`
+events, dropping any whose exact call (`grantKey`) later succeeded in the same run. When the run
+succeeds and a denial is left:
+- the agent submitted: it got there another way, so the review goes ahead; a system
+  `permission` Activity entry lists the denied calls and their reasons for the reviewer and
+  human;
+- otherwise the last denial becomes a `pendingApproval` (`source: "policy"`, tool + input of
+  the denied call). If the agent called `block`, the approval is attached to that block and its
+  question stays `blockedReason`; if not, in_progress (or review, for a complete run) →
+  blocked, as `requestApproval` does. A chat's card leaves the ticket in its column.
+Not in read_only, not for review/plan runs.
 
 **Human grants → the CLI.** Work/complete/conductor/chat runs get `RunRequest.grants` = `{ tools:
 ticket.allowedTools, once: the ticket's one-time grants }`; review runs don't (reviewers are
@@ -1917,12 +1917,11 @@ independent and start fresh), nor plan runs or read_only tickets. claude-code
   one call; Bash commands the rule can't match exactly) stays with the prompt tool, which
   consumes the grant for exactly that call. In auto mode the prompt tool is never asked about a
   classifier denial, so such a run uses `acceptEdits` instead, with the notice "Claude Code
-  can't pre-approve … so this turn runs in ask mode". A call whose exact rule was passed and
-  still denied is remembered (in memory) and its next grant goes this way (`viaPrompt`).
+  can't pre-approve … so this turn runs in ask mode".
   The ticket is still in auto mode, so every other call the CLI then asks the prompt tool about
   (`ApprovalMeta.viaPromptTool`) goes through the harness classifier (`PermissionGate.judge`)
   before a human, the same way as for native-tool drivers: allow → runs, soft_deny → denied to
-  the agent and deferred, hard_deny → denied. Without this, one "Allow once" on a piped command
+  the agent (it's to work around or block on), hard_deny → denied. Without this, one "Allow once" on a piped command
   sent every later `cat` or `ls` in that run to a human (MEDL-1).
 
 Measured against claude 2.1.283 (`--permission-mode dontAsk` to isolate rule matching, then
@@ -1952,10 +1951,9 @@ read_file/list_files, per call:
 4. Human grants (`ticket.allowedTools`, one-time grants) → allow.
 5. `ask` → `requestApproval` (source `policy`). `auto` → the classifier (`judge`): `allow` →
    run; `soft_deny` → denied to the agent with the reason and a nudge to find a safer way
-   (`CLASSIFIER_DENIED…`), and recorded as a run denial (`GateEnv.defer`), so it becomes a card
-   only if the run ends stuck on it (see "Classifier denials"). Without `defer` (a context with
-   no active approvable run) it goes to `requestApproval` with the classifier's reason (source
-   `classifier`). `hard_deny` → deny with the reason. Timeout (60s), error or
+   (`CLASSIFIER_DENIED…`) when the run can block (`GateEnv.agentDecides`; see "Classifier
+   denials"). Otherwise (no active approvable run) it goes to `requestApproval` with the
+   classifier's reason (source `classifier`). `hard_deny` → deny with the reason. Timeout (60s), error or
    `classifier: "off"` → `requestApproval`, never allow.
 
 Every decision on a gated call is appended as a transcript status entry with

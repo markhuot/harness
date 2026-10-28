@@ -1,6 +1,8 @@
 import { afterEach, expect, test } from "bun:test";
 import { FakeDriver, replyScript, toolCall } from "../fake-driver";
 import { makeOrchestrator, stopAll } from "../orchestrator-harness";
+import type { Classifier } from "../../../service/src/permissions/classifier";
+import { CLASSIFIER_DENIED } from "../../../service/src/permissions/gate";
 
 afterEach(stopAll);
 
@@ -112,26 +114,28 @@ test("review runs get no approvals: the call is denied with guidance to carry on
   expect(h.ticket(t.key).pendingApproval).toBeNull();
 });
 
-test("a classifier denial on a run that ends becomes a pending approval carrying the reason", async () => {
+test("a denial by the driver's permission policy on a run that ends becomes a pending approval carrying the reason", async () => {
   const h = rig();
-  h.driver.script([{ type: "permission_denied", callId: "c1", toolName: "Bash", input: { command: "git push" }, reason: "pushes to a remote" }, ...replyScript("I couldn't push.")]);
+  h.driver.script([{ type: "permission_denied", callId: "c1", toolName: "Bash", input: { command: "git push" }, reason: "not allowed by the ticket's permission mode" }, ...replyScript("I couldn't push.")]);
   const t = await h.orch.createTicket({ projectId: h.project.id, spec: "Ship it", skipAgentReview: true });
   await h.settle();
-  expect(h.ticket(t.key)).toMatchObject({ status: "blocked", pendingApproval: { toolName: "Bash", source: "classifier", reason: "pushes to a remote" } });
+  expect(h.ticket(t.key)).toMatchObject({ status: "blocked", pendingApproval: { toolName: "Bash", source: "policy", reason: "not allowed by the ticket's permission mode" } });
 });
 
-test("a denial of a tool already allowed on the ticket is retried at once with that exact call pre-approved", async () => {
-  const h = rig();
-  // The ticket plans first (start: false); the human then allows Bash on it and starts the work.
-  h.driver.script(replyScript("plan"), [{ type: "permission_denied", callId: "c1", toolName: "Bash", input: { command: "git status" }, reason: "unsure" }, ...replyScript("blocked")], replyScript("ok"));
-  const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x", skipAgentReview: true, start: false, draft: false });
-  h.store.tickets.update(t.id, { allowedTools: ["Bash"] });
+test("a classifier soft denial goes back to the agent: when it then blocks for its own reason, its question stands and no approval opens", async () => {
+  const driver = new FakeDriver({ id: "claude-code", usesPermissionPromptTool: true });
+  const classifier: Classifier = { backend: "fake", classify: async () => ({ decision: "soft_deny", reason: "modifies shared data" }) };
+  const h = makeOrchestrator({ tools: undefined, driver, classifier });
+  h.store.settings.set({ permissionMode: "auto" });
+  let answer = "";
+  h.driver.script([
+    ...toolCall("permission_prompt", { tool_name: "Bash", input: { command: "drush php:script patch.php" }, tool_use_id: "t1" }, (r) => (answer = JSON.stringify(r))),
+    ...toolCall("block", { question: "Should I ship on unit tests alone?" }),
+  ]);
+  const t = await h.orch.createTicket({ projectId: h.project.id, spec: "Card page", skipAgentReview: true });
   await h.settle();
-  await h.orch.startTicket(t.key);
-  await h.settle();
-  expect(h.driver.requests.map((r) => r.kind)).toEqual(["plan", "work", "work"]);
-  expect(h.driver.requests[2]!.grants?.once).toEqual([{ toolName: "Bash", input: { command: "git status" } }]);
-  expect(h.ticket(t.key).pendingApproval).toBeNull();
+  expect(answer).toContain(CLASSIFIER_DENIED);
+  expect(h.ticket(t.key)).toMatchObject({ status: "blocked", pendingApproval: null, blockedReason: "Should I ship on unit tests alone?" });
 });
 
 test("only one approval is open at a time: a second request while one waits is denied and doesn't replace it", async () => {

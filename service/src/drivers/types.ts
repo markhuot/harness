@@ -71,9 +71,10 @@ export type DriverEvent =
   /** A permission decision made inside the driver (e.g. Claude Code's auto-mode classifier) */
   | ({ type: "permission"; log: PermissionDecisionLog } & FromSubagent)
   /**
-   * A tool call a permission system inside the driver denied without asking the harness
-   * (Claude Code's auto-mode classifier). The orchestrator turns the run's last one into a
-   * pending approval when the run ends without block/submit (DESIGN.md "Permissions").
+   * A tool call the driver's permission policy denied without asking the harness (Copilot's ask
+   * mode). The orchestrator turns the run's last one into a pending approval when the run ends
+   * without block/submit (DESIGN.md "Permissions"). Classifier denials aren't reported this way:
+   * the agent works around them or blocks.
    */
   | { type: "permission_denied"; callId: string; toolName: string; input: unknown; reason: string }
   /**
@@ -160,12 +161,8 @@ export function withRunContext(req: Pick<RunRequest, "prompt" | "runContext">): 
 export interface RunGrants {
   /** ticket.allowedTools: "Always allow <Tool> on this ticket" */
   tools: string[];
-  /**
-   * One-time grants (allow_once) for exact calls. `viaPrompt`: an exact CLI rule for this call
-   * was already tried and the call was still denied, so the driver must let its agent ask
-   * (claude-code: the permission prompt tool) instead of pre-approving it.
-   */
-  once: { toolName: string; input: unknown; viaPrompt?: boolean }[];
+  /** One-time grants (allow_once) for exact calls */
+  once: { toolName: string; input: unknown }[];
 }
 
 export interface Driver {
