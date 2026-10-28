@@ -9,8 +9,13 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- You can delete a label. On the Mac, right-click it in the sidebar and choose Delete label; on iPhone and iPad, use the ⋯ button on its row or press and hold it. The label disappears from every ticket that carried it, with no reassignment, and from the sidebar and cards on every open Mac, iPhone and iPad. A label on tickets asks first, naming how many lose it; an empty one goes without asking. If a Mac board is searching for the deleted label, only that `label:` term leaves the search.
+
 ### Changed
 
+- The sidebar's Labels section now lists every label, including ones no ticket carries, so you can delete them. Labels on tickets come first and empty ones follow.
 - When auto mode's classifier turns down one of an agent's commands, the ticket no longer gets an approval card for it at the end of the run. The agent finds another way, or blocks and asks you, quoting the command. Approve that command in your answer and the agent retries it once; if auto mode still turns it down, the agent says so, and switching the ticket to Ask mode gets you an approval card for it. A card used to appear after the run even when the agent had already worked around the command, and when the agent had blocked for something else, the card hid its question. Conductor and chief-of-staff runs, which can't block, still get an approval card for a turned-down command, so you're always told.
 - Allowing a tool on a ticket no longer makes Harness retry a command of that tool that auto mode's classifier turned down. The agent works around it or asks you in its block, as for any other turned-down command.
 

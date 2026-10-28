@@ -49,7 +49,7 @@ import { keysArea, runCommand, useCommands } from "../components/commands";
 import { focusPaneBy } from "../components/paneFocus";
 import { modality } from "../state/inputModality";
 import { cursorPos, firstCard, moveCursor, resolveCursor, type CursorDir, type CursorPos } from "../state/boardNav";
-import { completeQualifier } from "@harness/shared";
+import { completeQualifier, labelKey, removeLabelFromSearch } from "@harness/shared";
 import { QualifierPickerList } from "../components/QualifierPicker";
 import { qualifierOptions, type QualifierOption } from "../state/qualifierPicker";
 import { reportBoardFilter, useBoardFilterRequests } from "../state/boardFilter";
@@ -81,6 +81,13 @@ export function BoardPane() {
   useBoardFilterRequests(setFilter);
   useEffect(() => reportBoardFilter(filter), [filter]);
   useEffect(() => () => reportBoardFilter(""), []);
+  // A deleted label leaves the search too (another window or the sidebar may have deleted it): only its `label:` term goes.
+  const heardLabels = useRef(state.labels);
+  useEffect(() => {
+    const alive = new Set(state.labels.map((l) => labelKey(l.name)));
+    for (const l of heardLabels.current) if (!alive.has(labelKey(l.name))) setFilter((f) => removeLabelFromSearch(f, l.name));
+    heardLabels.current = state.labels;
+  }, [state.labels]);
   // Hovering a conductor highlights its children.
   const [hoverConductor, setHoverConductor] = useState<string | null>(null);
   const scope = usePaneScope();

@@ -128,6 +128,20 @@ export class FakeClient extends HarnessClient {
       queueMicrotask(() => this.push({ kind: "labels.changed", labels: structuredClone(w.labels) }));
       return label;
     }
+    // Deleting a label drops it from the collection and from every ticket that carries it; the service announces both.
+    const deleted = method === "DELETE" ? p.match(/^\/labels\/([^/]+)$/) : null;
+    if (deleted) {
+      const key = labelKey(decodeURIComponent(deleted[1]!));
+      if (!w.labels.some((l) => labelKey(l.name) === key)) return NO_ROUTE;
+      w.labels = w.labels.filter((l) => labelKey(l.name) !== key);
+      const touched = w.tickets.filter((t) => (t.labels ?? []).some((n) => labelKey(n) === key));
+      for (const t of touched) t.labels = t.labels!.filter((n) => labelKey(n) !== key);
+      queueMicrotask(() => {
+        for (const t of touched) this.push({ kind: "ticket.upserted", ticket: structuredClone(t) });
+        this.push({ kind: "labels.changed", labels: structuredClone(w.labels) });
+      });
+      return ok({ ok: true });
+    }
     if (draft && method === "POST" && m![2]) return Object.assign(draft, { draft: false, status: (body as SubmitTicketBody).start ? "in_progress" : "planning" });
     if (method !== "GET") return NO_ROUTE;
     if (p === "/health") return ok({ ok: true });

@@ -198,8 +198,15 @@ project (a label is never per project), so one label can group tickets from any 
 - **Names.** `normalizeLabelName` (`shared/src/labels.ts`, ported in `HarnessKit/Logic`) trims and
   collapses whitespace; a name is 1 to 40 characters with no `"` (which would break the quoted
   search form). Names compare by `labelKey`: case and diacritics ignored, so `Bugfix` and `bugfix`
-  are the same label and the first spelling is kept. There's no rename or merge; recoloring is the
-  only edit.
+  are the same label and the first spelling is kept. There's no rename or merge; recoloring and
+  deleting are the only edits.
+- **Deleting.** `DELETE /labels/:name` (Mac: right-click a label in the sidebar; iPhone/iPad: the
+  row's menu or long-press) removes the label and, by the `ticket_labels` cascade, takes it off every
+  ticket, with no reassignment. Each ticket that carried it goes out again as `ticket.upserted`
+  (cards carry their label names) and the collection as `labels.changed`; the Mac boards drop that
+  label's `label:` term from their search. A label in use asks for confirmation, naming how many
+  tickets lose it; one with no tickets doesn't. Agents have no delete tool, but assigning the name to
+  a ticket creates the label again. The sidebar lists every label, empty ones last.
 - **Colors.** A color is one of the project color preset ids (`red` … `pink`), never raw hex, so
   every theme draws it readably. A new label starts with `defaultLabelColor(name)`, a stable hash of
   its folded name; `PATCH /labels/:name { color }` changes it.
@@ -2301,7 +2308,7 @@ GET    /projects/:id/file?path=   GET /tickets/:key/file?path=   → FileView (s
 PUT    /projects/:id/file   PUT /tickets/:key/file   {path, contents}   → FileWriteResult (see "File viewer"; last write wins)
 GET    /projects/:id/file/diff?path=   GET /tickets/:key/file/diff?path=   → FileDiff (409 outside a git repo)
 GET    /projects/:id/branches?q=&limit=50   → BranchInfo[] (branch picker; see "Branches")
-GET    /labels                   → LabelInfo[] (see "Labels")   PATCH /labels/:name {color} → LabelInfo
+GET    /labels                   → LabelInfo[] (see "Labels")   PATCH /labels/:name {color} → LabelInfo   DELETE /labels/:name → {ok}
 GET    /tickets?projectId=&status=planning,review   POST /tickets {spec, …}   (no status = every ticket)
 GET    /tickets/page?status=done&projectId=&groupId=&q=&limit=50&cursor= → TicketPage
 GET    /tickets/search?q=&projectId=&groupId=&limit=100&cursor=       → TicketPage

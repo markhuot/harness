@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState, useSyncExternalStore, type Ref } from "react";
-import { projectGroups, type Project } from "@harness/shared";
+import { projectGroups, type LabelInfo, type Project } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import { sortedProjects } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
@@ -210,14 +210,28 @@ export function Sidebar({
   );
 }
 
-/** The labels in use, most recently used first: a click searches the board for one, another click clears it. */
+/** Every label, those on tickets first: a click searches the board for one, another click clears it; right-click offers Delete label. */
 function LabelsSection() {
-  const { state } = useStore();
+  const { state, client } = useStore();
+  const act = useAction();
   // How many to show; "More" adds a page, and a reload starts over.
   const [limit, setLimit] = useState(LABELS_PAGE);
   const filter = useSyncExternalStore(subscribeBoardFilter, boardFilter);
   const { shown, more } = sidebarLabels(state.labels, limit);
   if (!shown.length) return null;
+
+  const deleteLabel = async (l: LabelInfo) => {
+    // A label nothing carries has nothing to lose, so it goes without asking.
+    if (l.count > 0 && !confirm(`Delete the label "${l.name}"?\n\nIt will be removed from ${l.count} ticket${l.count === 1 ? "" : "s"}.`)) return;
+    await act(() => client.deleteLabel(l.name), "Label deleted");
+  };
+  const labelMenu = async (e: React.MouseEvent, l: LabelInfo) => {
+    e.preventDefault();
+    const bridge = window.harness;
+    if (!bridge?.showContextMenu) return;
+    const choice = await bridge.showContextMenu([{ id: "delete", label: "Delete label" }]);
+    if (choice === "delete") void deleteLabel(l);
+  };
   return (
     <>
       <div className="nav-section">
@@ -228,7 +242,8 @@ function LabelsSection() {
           <NavItem
             key={l.name}
             label={l.name}
-            title={`${l.name}: ${l.count} active`}
+            title={`${l.name}: ${l.count} ticket${l.count === 1 ? "" : "s"}`}
+            onContextMenu={(e) => void labelMenu(e, l)}
             testId="nav-label"
             prefix={<LabelDot color={l.color} />}
             active={labelSearchActive(filter, l.name)}
@@ -254,6 +269,7 @@ function NavItem(props: {
   title?: string;
   active?: boolean;
   onClick: () => void;
+  onContextMenu?: (e: React.MouseEvent) => void;
   counts?: StatusCounts;
   badge?: React.ReactNode;
   testId?: string;
@@ -265,6 +281,7 @@ function NavItem(props: {
       data-testid={props.testId}
       aria-current={props.active ? "page" : undefined}
       onClick={props.onClick}
+      onContextMenu={props.onContextMenu}
       title={props.title}
     >
       {props.icon && <Icon name={props.icon} />}

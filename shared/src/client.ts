@@ -158,6 +158,11 @@ export class HarnessClient {
     return this.request<LabelInfo>("PATCH", `/labels/${encodeURIComponent(name)}`, { color } satisfies UpdateLabelBody);
   }
 
+  /** Delete a label and drop it from every ticket (DELETE /labels/:name) */
+  deleteLabel(name: string) {
+    return this.request<{ ok: true }>("DELETE", `/labels/${encodeURIComponent(name)}`);
+  }
+
   // Projects
   listProjects() {
     return this.request<Project[]>("GET", "/projects");

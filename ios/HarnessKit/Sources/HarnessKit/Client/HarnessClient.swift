@@ -495,6 +495,11 @@ public final class HarnessClient: Sendable {
         try await request("PATCH", "/labels/\(URIComponent.encode(name))", body: UpdateLabelBody(color: color))
     }
 
+    /// Delete a label: it leaves the registry and every ticket that carries it.
+    public func deleteLabel(_ name: String) async throws {
+        let _: OkResponse = try await request("DELETE", "/labels/\(URIComponent.encode(name))")
+    }
+
     public func listDrivers() async throws -> [DriverInfo] {
         try await request("GET", "/drivers")
     }

@@ -2252,6 +2252,16 @@ export class Orchestrator {
     return label;
   }
 
+  /** DELETE /labels/:name: the label leaves the registry and every ticket that carries it. */
+  deleteLabel(name: string): { ok: true } {
+    const ticketIds = this.store.labels.remove(String(name));
+    if (!ticketIds) throw notFound(`Unknown label: ${name}`);
+    // Cards carry their label names, so each ticket that lost it is sent again.
+    for (const id of ticketIds) this.touchTicket(id);
+    this.publishLabels();
+    return { ok: true };
+  }
+
   /** GET /labels */
   listLabels(): LabelInfo[] {
     return this.store.labels.list();

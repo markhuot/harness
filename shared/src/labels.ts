@@ -157,6 +157,44 @@ export function parseSearchQuery(query: string): ParsedSearch {
   return { labels, projects, text: text.join(" "), qualifiers, completion };
 }
 
+/**
+ * The query without its `label:` terms that name this label (any case), everything else kept as typed.
+ * What a board's search becomes when that label is deleted.
+ */
+export function removeLabelFromSearch(query: string, name: string): string {
+  const key = labelKey(name);
+  const kept: string[] = [];
+  let i = 0;
+  const n = query.length;
+  while (i < n) {
+    if (/\s/.test(query[i]!)) {
+      i++;
+      continue;
+    }
+    const start = i;
+    const m = /^label:/i.exec(query.slice(i));
+    let value = "";
+    if (m) {
+      i += m[0].length;
+      if (query[i] === '"') {
+        const close = query.indexOf('"', i + 1);
+        value = query.slice(i + 1, close < 0 ? n : close);
+        i = close < 0 ? n : close + 1;
+      } else {
+        let j = i;
+        while (j < n && !/\s/.test(query[j]!)) j++;
+        value = query.slice(i, j);
+        i = j;
+      }
+    } else {
+      while (i < n && !/\s/.test(query[i]!)) i++;
+    }
+    if (m && labelKey(value.trim().replace(/\s+/g, " ")) === key) continue;
+    kept.push(query.slice(start, i));
+  }
+  return kept.join(" ");
+}
+
 /** A qualifier value as typed back into a query: bare when it can be, else in quotes. */
 export function quoteQualifierValue(value: string): string {
   return /^[^\s"]+$/.test(value) ? value : `"${value}"`;

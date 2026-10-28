@@ -279,6 +279,7 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
   // Labels
   add("GET", "/labels", () => o.listLabels());
   add("PATCH", "/labels/:name", async ({ params, body }) => o.setLabelColor(params.name!, await body()));
+  add("DELETE", "/labels/:name", ({ params }) => o.deleteLabel(params.name!));
 
   // Tickets
   add("GET", "/tickets", ({ url }) => o.listTickets(url.searchParams.get("projectId") || undefined, statusList(url.searchParams.get("status"))));

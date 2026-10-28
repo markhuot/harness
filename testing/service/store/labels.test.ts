@@ -163,3 +163,43 @@ test("page narrows a column by qualifiers too", () => {
   expect(page.tickets.map((t) => t.key)).toEqual([b.key]);
   expect(page.total).toBe(1);
 });
+
+test("remove deletes the label, drops it from every ticket, returns who carried it, and leaves search clean", () => {
+  const { store, project, other } = setup();
+  const a = addTicketWith(store, project);
+  const b = addTicketWith(store, other, { status: "done" });
+  const c = addTicketWith(store, project);
+  store.labels.setForTicket(a.id, ["Bugfix", "Docs"]);
+  store.labels.setForTicket(b.id, ["bugfix"]);
+  store.labels.setForTicket(c.id, ["Docs"]);
+  expect(keys(store.tickets.search({ q: "label:bugfix" }))).toEqual([a.key, b.key].sort());
+
+  const ids = store.labels.remove("BUGFIX");
+  expect(ids?.sort()).toEqual([a.id, b.id].sort());
+  expect(store.labels.list().map((l) => l.name)).toEqual(["Docs"]);
+  expect(store.tickets.get(a.id)!.labels).toEqual(["Docs"]);
+  expect(store.tickets.get(b.id)!.labels).toEqual([]);
+  expect(keys(store.tickets.search({ q: "label:bugfix" }))).toEqual([]);
+  expect(keys(store.tickets.search({ q: "bugfix" }))).toEqual([]);
+  expect(keys(store.tickets.search({ q: "label:docs" }))).toEqual([a.key, c.key].sort());
+});
+
+test("remove of an unused label returns no tickets, and of an unknown one returns null", () => {
+  const { store, project } = setup();
+  const t = addTicketWith(store, project);
+  store.labels.setForTicket(t.id, ["Idle"]);
+  store.labels.setForTicket(t.id, []);
+  expect(store.labels.remove("Idle")).toEqual([]);
+  expect(store.labels.list()).toEqual([]);
+  expect(store.labels.remove("Idle")).toBeNull();
+});
+
+test("a deleted label can be created again, as a fresh label", () => {
+  const { clock, store, project } = setup();
+  const t = addTicketWith(store, project);
+  store.labels.setForTicket(t.id, ["Bugfix"]);
+  store.labels.remove("Bugfix");
+  clock.advance(5);
+  store.labels.setForTicket(t.id, ["bugfix"]);
+  expect(store.labels.list()).toMatchObject([{ name: "bugfix", count: 1 }]);
+});

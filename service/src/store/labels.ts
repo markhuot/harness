@@ -100,4 +100,18 @@ export class LabelRepo {
     this.db.query("UPDATE labels SET color = $color WHERE id = $id").run({ id: found.id, color });
     return this.list().find((l) => labelKey(l.name) === labelKey(name)) ?? null;
   }
+
+  /**
+   * Delete a label. The tickets that carry it lose it (the `ticket_labels` cascade) and the FTS
+   * triggers rebuild their search text. Returns those ticket ids, or null when no label has this name.
+   */
+  remove(name: string): string[] | null {
+    const found = this.find(name);
+    if (!found) return null;
+    return this.db.transaction(() => {
+      const ids = (this.db.query("SELECT ticket_id FROM ticket_labels WHERE label_id = $id").all({ id: found.id }) as { ticket_id: string }[]).map((r) => r.ticket_id);
+      this.db.query("DELETE FROM labels WHERE id = $id").run({ id: found.id });
+      return ids;
+    })();
+  }
 }

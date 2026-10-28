@@ -1,4 +1,4 @@
-import { describe, expect, jest, test } from "bun:test";
+import { afterEach, describe, expect, jest, test } from "bun:test";
 import { useEffect, useRef, useState } from "react";
 import { BoardPane } from "../../app/src/renderer/views/Board";
 import { CommandPalette } from "../../app/src/renderer/views/CommandPalette";
@@ -52,14 +52,13 @@ describe("label chips on the board", () => {
 });
 
 describe("the sidebar's Labels section", () => {
-  test("lists labels most recently used first with their counts, hiding the ones with count 0", async () => {
+  test("lists every label with its count, the ones on tickets first and empty ones last", async () => {
     const m = await mount(<Sidebar onNewSession={() => {}} onNewTerminal={() => {}} />);
     await m.until("labels load", () => sidebarRows(m).length > 0);
-    const active = world.labels.filter((l) => l.count > 0);
-    expect(sidebarRows(m).map((r) => text(r))).toEqual(active.map((l) => `${l.name}${l.count}`));
-    expect(world.labels.some((l) => l.count === 0)).toBe(true);
-    expect(text(m.container)).not.toContain("Archive");
-    expect(sidebarRows(m).map((r) => text(r))).toContain("Docs1");
+    const used = world.labels.filter((l) => l.count > 0);
+    const empty = world.labels.filter((l) => l.count === 0);
+    expect(empty.length).toBeGreaterThan(0);
+    expect(sidebarRows(m).map((r) => text(r))).toEqual([...used, ...empty].map((l) => `${l.name}${l.count}`));
   });
 
   test("shows ten, and More reveals ten at a time until it's gone", async () => {
@@ -76,14 +75,14 @@ describe("the sidebar's Labels section", () => {
     expect(m.container.querySelector('[data-testid="labels-more"]')).toBeNull();
   });
 
-  test("a label whose count drops to 0 leaves, and returns when a ticket makes it active", async () => {
+  test("a label whose count drops to 0 stays in the section, after the ones with tickets", async () => {
     const m = await mount(<Sidebar onNewSession={() => {}} onNewTerminal={() => {}} />);
     await m.until("labels load", () => sidebarRows(m).length > 0);
-    const set = (docs: number) => world.labels.map((l) => (l.name === "Archive" ? { ...l, count: docs } : l.name === "Bugfix" ? { ...l, count: 0 } : l));
-    await m.settle(() => m.client.push({ kind: "labels.changed", labels: set(1) }));
+    const emptied = world.labels.map((l) => (l.name === "Bugfix" ? { ...l, count: 0 } : l));
+    await m.settle(() => m.client.push({ kind: "labels.changed", labels: emptied }));
     const names = sidebarRows(m).map((r) => text(r));
-    expect(names).toContain("Archive1");
-    expect(names.some((n) => n.startsWith("Bugfix"))).toBe(false);
+    expect(names).toContain("Bugfix0");
+    expect(names.indexOf("Bugfix0")).toBeGreaterThan(names.findIndex((n) => n.endsWith("1")));
   });
 
   test("clicking a label searches the board for it, and clicking it again clears the search", async () => {
@@ -368,5 +367,76 @@ describe("the palette's Add label… and Remove label…", () => {
     await type(m, pickerInput(m), "sett");
     await m.settle(() => void pickerInput(m).dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })));
     expect(patches(m)).toEqual([{ labels: ["Design"] }]);
+  });
+});
+
+describe("deleting a label", () => {
+  const withMenu = (choice: string | null) => {
+    window.harness = { showContextMenu: async () => choice } as unknown as typeof window.harness;
+  };
+  const rowOf = (m: M, name: string) => sidebarRows(m).find((r) => text(r).startsWith(name))!;
+  const rightClick = async (m: M, el: Element) => {
+    await m.settle(() => void el.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true })));
+  };
+  const deletes = (m: M) => m.client.requests.filter((r) => r.startsWith("DELETE /labels/"));
+  afterEach(() => {
+    window.harness = undefined;
+    jest.restoreAllMocks();
+  });
+
+  test("a label with tickets asks first, naming how many lose it, and nothing is sent on Cancel", async () => {
+    withMenu("delete");
+    const confirm = jest.spyOn(window, "confirm").mockReturnValue(false);
+    const m = await mount(<Sidebar onNewSession={() => {}} onNewTerminal={() => {}} />);
+    await m.until("labels load", () => sidebarRows(m).length > 0);
+    const bugfix = world.labels.find((l) => l.name === "Bugfix")!;
+    await rightClick(m, rowOf(m, "Bugfix"));
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(String(confirm.mock.calls[0]![0])).toContain(`${bugfix.count} tickets`);
+    expect(deletes(m)).toEqual([]);
+    expect(rowOf(m, "Bugfix")).toBeDefined();
+  });
+
+  test("confirming deletes it: the row leaves the sidebar and the chip leaves every card", async () => {
+    withMenu("delete");
+    jest.spyOn(window, "confirm").mockReturnValue(true);
+    const m = await mount(board());
+    await m.until("the board and labels load", () => cardKeys(m).includes("HARNESS-2") && sidebarRows(m).length > 0);
+    expect(chips(m, "HARNESS-2")).toContain("Bugfix");
+    await rightClick(m, rowOf(m, "Bugfix"));
+    await m.until("the label is gone", () => !sidebarRows(m).some((r) => text(r).startsWith("Bugfix")));
+    expect(deletes(m)).toEqual(["DELETE /labels/Bugfix"]);
+    expect(chips(m, "HARNESS-2")).not.toContain("Bugfix");
+  });
+
+  test("a label no ticket carries deletes without asking, and its name is URL-encoded", async () => {
+    withMenu("delete");
+    const confirm = jest.spyOn(window, "confirm");
+    const spaced = edited((w) => {
+      w.labels.push({ name: "Odd / name #1", color: "blue", createdAt: 0, lastUsedAt: 0, count: 0 });
+    });
+    const m = await mount(<Sidebar onNewSession={() => {}} onNewTerminal={() => {}} />, { world: spaced });
+    await m.until("labels load", () => sidebarRows(m).length > 0);
+    await rightClick(m, rowOf(m, "Odd / name #1"));
+    await m.until("the label is gone", () => !sidebarRows(m).some((r) => text(r).startsWith("Odd")));
+    expect(confirm).not.toHaveBeenCalled();
+    expect(deletes(m)).toEqual(["DELETE /labels/Odd%20%2F%20name%20%231"]);
+  });
+
+  test("dismissing the menu deletes nothing", async () => {
+    withMenu(null);
+    const m = await mount(<Sidebar onNewSession={() => {}} onNewTerminal={() => {}} />);
+    await m.until("labels load", () => sidebarRows(m).length > 0);
+    await rightClick(m, rowOf(m, "Bugfix"));
+    expect(deletes(m)).toEqual([]);
+  });
+
+  test("a deleted label's term leaves the board search, and other words and labels stay", async () => {
+    const m = await mount(board());
+    await m.until("the board and labels load", () => cardKeys(m).includes("HARNESS-3") && sidebarRows(m).length > 0);
+    await type(m, input(m, "board-search"), "label:Bugfix label:Docs fix");
+    const left = world.labels.filter((l) => l.name !== "Bugfix");
+    await m.settle(() => m.client.push({ kind: "labels.changed", labels: left }));
+    expect(input(m, "board-search").value).toBe("label:Docs fix");
   });
 });

@@ -72,17 +72,23 @@ import HarnessKit
         LabelInfo(name: name, color: "red", createdAt: 0, lastUsedAt: 0, count: count)
     }
 
-    @Test func sectionHidesZeroCountsAndPagesByTen() {
+    @Test func sectionListsEmptyLabelsAfterTheOnesInUseAndPagesByTen() {
         let labels = (0..<25).map { label("L\($0)", count: $0 % 5 == 0 ? 0 : 1) }
-        let visible = labels.filter { $0.count > 0 }.count  // 20
         let first = LabelList.section(labels)
         #expect(first.rows.count == 10)
         #expect(first.rows.first?.name == "L1")
-        #expect(first.hidden == visible - 10)
-        let second = LabelList.section(labels, pages: 1)
-        #expect(second.rows.count == 20 && second.hidden == 0)
-        #expect(LabelList.section(labels, pages: 5).rows.count == 20)
-        #expect(LabelList.section([label("Z", count: 0)]).rows.isEmpty)
+        #expect(first.rows.allSatisfy { $0.count > 0 })
+        #expect(first.hidden == 15)
+        let third = LabelList.section(labels, pages: 2)
+        #expect(third.rows.count == 25 && third.hidden == 0)
+        #expect(third.rows.suffix(5).map(\.name) == ["L0", "L5", "L10", "L15", "L20"])
+        #expect(LabelList.section([label("Z", count: 0)]).rows.map(\.name) == ["Z"])
+    }
+
+    @Test func deleteAsksOnlyWhenTicketsCarryTheLabel() {
+        #expect(LabelList.deleteWarning(label("Idle", count: 0)) == nil)
+        #expect(LabelList.deleteWarning(label("One", count: 1)) == "It will be removed from 1 ticket.")
+        #expect(LabelList.deleteWarning(label("Many", count: 3)) == "It will be removed from 3 tickets.")
     }
 
     @Test func suggestionsMatchWordPrefixesAndSkipTakenLabels() {

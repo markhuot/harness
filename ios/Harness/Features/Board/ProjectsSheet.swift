@@ -36,6 +36,7 @@ struct ProjectsSidebar: View {
     @State private var newPath = ""
     /// Taps on the Labels section's "More" row so far
     @State private var labelPages = 0
+    @State private var confirmation: Confirmation?
 
     var body: some View {
         let state = store.state
@@ -122,6 +123,7 @@ struct ProjectsSidebar: View {
         .navigationBarTitleDisplayMode(.inline)
         // The sidebar column needs no title; the board's bottom-left button toggles it.
         .toolbar(column ? .hidden : .automatic, for: .navigationBar)
+        .confirmation($confirmation)
         .alert("Add project", isPresented: $adding) {
             TextField("/Users/you/Sites/app", text: $newPath)
                 .textInputAutocapitalization(.never)
@@ -143,6 +145,7 @@ struct ProjectsSidebar: View {
                 Card {
                     ForEach(Array(section.rows.enumerated()), id: \.element.id) { i, l in
                         if i > 0 { Divider().overlay(c.border) }
+                        HStack(spacing: 0) {
                         Button { filter(by: l.name) } label: {
                             HStack(spacing: 10) {
                                 LabelDot(color: l.color, size: 10).frame(width: 24)
@@ -157,6 +160,17 @@ struct ProjectsSidebar: View {
                         .buttonStyle(.plain)
                         .accessibilityLabel("\(l.name), \(l.count)")
                         .accessibilityIdentifier("sidebar-label-\(l.name)")
+                        Menu {
+                            Button("Delete label", systemImage: "trash", role: .destructive) { deleteLabel(l) }
+                        } label: {
+                            Image(systemName: "ellipsis").font(.scaled(size: 16)).foregroundStyle(c.text3).frame(width: 44, height: 44).contentShape(.rect)
+                        }
+                        .accessibilityLabel("Actions for \(l.name)")
+                        .accessibilityIdentifier("sidebar-label-menu-\(l.name)")
+                        }
+                        .contextMenu {
+                            Button("Delete label", systemImage: "trash", role: .destructive) { deleteLabel(l) }
+                        }
                     }
                     if section.hidden > 0 {
                         Divider().overlay(c.border)
@@ -176,6 +190,13 @@ struct ProjectsSidebar: View {
                 }
             }
         }
+    }
+
+    /// Delete a label from every ticket. One no ticket carries goes without asking; one in use asks first, naming how many tickets lose it.
+    private func deleteLabel(_ l: LabelInfo) {
+        let delete = { actions.perform { try await store.connectedAPI().deleteLabel(l.name) } }
+        guard let warning = LabelList.deleteWarning(l) else { return delete() }
+        confirmation = Confirmation(title: "Delete the label \"\(l.name)\"?", message: warning, action: "Delete label", onConfirm: delete)
     }
 
     /// The board has no filter box of its own: its search is the palette, so a label row opens it on `label:<name>`.

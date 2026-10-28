@@ -362,7 +362,7 @@ export interface HarnessOps {
   ): Promise<{ hits: { ticket: BoardTicket; snippet: string }[]; nextCursor: string | null; total: number }>;
   /** Every project with its settings (null permissionMode → the settings default) */
   listProjects(ctx: ToolContext): Promise<ProjectView[]>;
-  /** Every label with its color and its count of in-progress, blocked and review tickets, most recently used first */
+  /** Every label with its color and its count of tickets in any status (done included, not drafts), most recently used first */
   listLabels(ctx: ToolContext): Promise<LabelInfo[]>;
   /**
    * The events addressed to the calling ticket (what the Inbox shows a chief), newest first, capped at `limit`

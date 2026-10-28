@@ -1,8 +1,8 @@
 import Foundation
 
 /// The Labels section under Projects in the projects sheet and the iPad/Duo sidebar: the first
-/// ten labels in collection order (most recently used first) whose server `count` is above zero,
-/// then a "More" row that reveals ten more per tap until all show.
+/// ten labels, those on tickets first (collection order, most recently used first, within each
+/// group) and the empty ones after, then a "More" row that reveals ten more per tap until all show.
 public enum LabelList {
     public static let pageSize = 10
 
@@ -14,9 +14,15 @@ public enum LabelList {
 
     /// `pages` counts the taps on More so far: the section shows `(pages + 1) * pageSize` labels.
     public static func section(_ labels: [LabelInfo], pages: Int = 0) -> Section {
-        let visible = labels.filter { $0.count > 0 }
+        let visible = labels.filter { $0.count > 0 } + labels.filter { $0.count == 0 }
         let shown = min(visible.count, (max(0, pages) + 1) * pageSize)
         return Section(rows: Array(visible.prefix(shown)), hidden: visible.count - shown)
+    }
+
+    /// What deleting a label asks first: nil for one no ticket carries (nothing to lose), else the sentence naming how many tickets lose it.
+    public static func deleteWarning(_ label: LabelInfo) -> String? {
+        guard label.count > 0 else { return nil }
+        return "It will be removed from \(label.count) ticket\(label.count == 1 ? "" : "s")."
     }
 
     /// The label named `name` (compared by key), for chips that only carry the name.

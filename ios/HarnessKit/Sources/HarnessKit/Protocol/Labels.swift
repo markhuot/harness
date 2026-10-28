@@ -9,8 +9,7 @@ public struct LabelInfo: Codable, Sendable, Equatable, Hashable, Identifiable {
     public var createdAt: Timestamp
     /// When the label was last added to a ticket
     public var lastUsedAt: Timestamp
-    /// Open tickets carrying it: planning, in progress, blocked or in review. Done tickets and
-    /// drafts don't count.
+    /// Tickets carrying it in any status, done included. Drafts don't count.
     public var count: Int
 
     public var id: String { name }

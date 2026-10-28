@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { LabelInfo } from "@harness/shared";
+import { removeLabelFromSearch } from "@harness/shared";
 import { LABELS_PAGE, labelSearchActive, labelSearchToggle, sidebarLabels } from "../../../app/src/renderer/state/sidebarLabels";
 
 const label = (name: string, count: number): LabelInfo => ({ name, color: "red", createdAt: 0, lastUsedAt: 0, count });
@@ -17,16 +18,18 @@ describe("sidebarLabels", () => {
     expect(all.shown).toHaveLength(25);
     expect(all.more).toBe(0);
   });
-  test("labels with count 0 are hidden and don't take a slot or count toward More", () => {
+  test("labels with count 0 stay but come after the ones with tickets, in each group's own order", () => {
     const labels = [label("Idle", 0), ...many(11), label("Idle2", 0)];
-    const r = sidebarLabels(labels);
-    expect(r.shown).toHaveLength(10);
+    const r = sidebarLabels(labels, 20);
+    expect(r.shown.map((l) => l.name)).toEqual([...many(11).map((l) => l.name), "Idle", "Idle2"]);
+  });
+  test("empty labels don't take the first page from labels in use, and count toward More", () => {
+    const r = sidebarLabels([label("Idle", 0), ...many(10)]);
     expect(r.shown.some((l) => l.count === 0)).toBe(false);
     expect(r.more).toBe(1);
   });
-  test("a label returns when its count rises above zero", () => {
-    expect(sidebarLabels([label("A", 0)]).shown).toEqual([]);
-    expect(sidebarLabels([label("A", 2)]).shown.map((l) => l.name)).toEqual(["A"]);
+  test("a label with no tickets is listed", () => {
+    expect(sidebarLabels([label("A", 0)]).shown.map((l) => l.name)).toEqual(["A"]);
   });
 });
 
@@ -46,5 +49,16 @@ describe("label search from the sidebar", () => {
   test("a label is active when any qualifier names it", () => {
     expect(labelSearchActive("label:Docs label:bugfix", "Bugfix")).toBe(true);
     expect(labelSearchActive("bugfix", "Bugfix")).toBe(false);
+  });
+});
+
+describe("removeLabelFromSearch", () => {
+  test("drops only the deleted label's terms, any case, quoted or bare, keeping the rest as typed", () => {
+    expect(removeLabelFromSearch("label:Bugfix", "bugfix")).toBe("");
+    expect(removeLabelFromSearch('label:"Release 1.2.3" label:Docs fix', "release 1.2.3")).toBe("label:Docs fix");
+    expect(removeLabelFromSearch("label:Bugfix label:bugfix project:AB some words", "Bugfix")).toBe("project:AB some words");
+  });
+  test("leaves plain text that merely contains the name, and a longer label, alone", () => {
+    expect(removeLabelFromSearch("bugfix label:Bugfix2", "Bugfix")).toBe("bugfix label:Bugfix2");
   });
 });

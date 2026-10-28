@@ -186,3 +186,14 @@ test("the chief-of-staff model is saved on the app and on a project, and clears 
   expect(await rig.call("PATCH", `/projects/${project.id}`, { cosModel: { driver: "nope", model: null } })).toMatchObject({ status: 400 });
   expect(await rig.call("PATCH", "/settings", { cosModel: "opus" })).toMatchObject({ status: 400 });
 });
+
+test("DELETE /labels/:name finds a label by its URL-encoded name in any case, drops it from tickets, and 404s once it's gone", async () => {
+  const rig = await boot();
+  const project = await rig.project("LBL");
+  const ticket = await rig.ok<Ticket>("POST", "/tickets", { projectId: project.id, spec: "x", start: false, labels: ["Odd / name #1 %", "Keep"] });
+  const path = `/labels/${encodeURIComponent("odd / NAME #1 %")}`;
+  expect(await rig.ok("DELETE", path)).toEqual({ ok: true });
+  expect(((await rig.ok<{ name: string }[]>("GET", "/labels")).map((l) => l.name))).toEqual(["Keep"]);
+  expect((await rig.ok<{ ticket: Ticket }>("GET", `/tickets/${ticket.key}`)).ticket.labels).toEqual(["Keep"]);
+  expect(await rig.call("DELETE", path)).toMatchObject({ status: 404, body: { error: expect.stringMatching(/Unknown label/) } });
+});

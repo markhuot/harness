@@ -296,3 +296,28 @@ test("a planning ticket's label shows in the collection at once, and the count s
   expect(changed).toHaveLength(1);
   expect(changed[0]).toMatchObject({ labels: [{ name: "Research", count: 0 }] });
 });
+
+test("deleting a label announces each ticket that carried it and the new collection, and an unknown one is a 404", async () => {
+  const h = makeOrchestrator();
+  const a = await h.orch.createTicket({ projectId: h.project.id, spec: "x", start: false, labels: ["Bugfix", "Odd / name #1"] });
+  const b = await h.orch.createTicket({ projectId: h.project.id, spec: "y", start: false, labels: ["bugfix"] });
+  await h.orch.createTicket({ projectId: h.project.id, spec: "z", start: false, labels: ["Docs"] });
+
+  h.events.length = 0;
+  expect(h.orch.deleteLabel("BUGFIX")).toEqual({ ok: true });
+  const upserted = h.events.flatMap((e) => (e.kind === "ticket.upserted" ? [e.ticket] : []));
+  expect(upserted.map((t) => t.key).sort()).toEqual([a.key, b.key].sort());
+  expect(upserted.every((t) => !(t.labels ?? []).some((n) => n.toLowerCase() === "bugfix"))).toBe(true);
+  expect(upserted.find((t) => t.key === a.key)!.labels).toEqual(["Odd / name #1"]);
+  const changed = h.events.filter((e) => e.kind === "labels.changed");
+  expect(changed).toHaveLength(1);
+  expect((changed[0] as { labels: { name: string }[] }).labels.map((l) => l.name).sort()).toEqual(["Docs", "Odd / name #1"]);
+  expect(h.orch.listLabels().map((l) => l.name)).not.toContain("Bugfix");
+  expect(h.orch.listLabels().find((l) => l.name === "Docs")?.count).toBe(1);
+
+  h.events.length = 0;
+  h.orch.deleteLabel("Odd / name #1");
+  expect(h.events.filter((e) => e.kind === "labels.changed")).toHaveLength(1);
+  await status(() => h.orch.deleteLabel("Nope"), 404, /Unknown label/);
+  expect(h.events.filter((e) => e.kind === "labels.changed")).toHaveLength(1);
+});
