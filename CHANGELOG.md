@@ -14,6 +14,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - The command palette on the Mac and on iPhone and iPad has **Add label…** and **Remove label…** for the ticket in view: a picker of the labels it lacks (with Create for a new name you type) or the ones it has.
 - A ticket's Labels field on the Mac and on iPhone and iPad lists every label the ticket lacks when you focus it, filters as you type, takes arrow keys on the Mac, and offers **Create "name"** for a name no label has yet.
 
+### Changed
+
+- A label's count in the sidebar, the command palette and everywhere else on the Mac, iPhone and iPad now includes done tickets, so a label always finds every ticket that carries it. Drafts still don't count.
+
 ### Fixed
 
 - A finished ticket's Labels on iPhone and iPad were an empty white box you couldn't edit. They now show the chips (with ×) and the Add a label field, and the Mac's Details and both command palettes let you add and remove labels on a done ticket too.

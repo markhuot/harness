@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { COUNTED_STATUSES } from "../../../service/src/store/labels";
+import "../../../service/src/store/labels";
+import type { LabelRepo } from "../../../service/src/store/labels";
 import { fakeClock } from "../../builders/clock";
 import { addProject, makeStore } from "../../builders/store";
 import { addTicketWith } from "../../builders/ticket-input";
@@ -11,6 +12,8 @@ const setup = () => {
   const other = addProject(store, { key: "CD" });
   return { clock, store, project, other };
 };
+
+const countOf = (labels: LabelRepo, name: string) => labels.list().find((l) => l.name === name)?.count;
 
 const keys = (page: { tickets: { key: string }[] }) => page.tickets.map((t) => t.key).sort();
 
@@ -48,8 +51,7 @@ test("the collection is sorted by last use: adding a label to a ticket moves it 
   expect(store.labels.list().map((l) => l.name)).toEqual(["Old", "Newer"]);
 });
 
-test("a label's count is its open tickets (planning, in progress, blocked, review) across projects, never drafts or done", () => {
-  expect(COUNTED_STATUSES).toEqual(["planning", "in_progress", "blocked", "review"]);
+test("a label's count is its tickets in every status, done included, across projects, never drafts", () => {
   const { store, project, other } = setup();
   const planning = addTicketWith(store, project);
   const working = addTicketWith(store, project, { status: "in_progress" });
@@ -58,9 +60,9 @@ test("a label's count is its open tickets (planning, in progress, blocked, revie
   const done = addTicketWith(store, other, { status: "done" });
   const draft = addTicketWith(store, project, { draft: true });
   for (const t of [planning, working, blocked, review, done, draft]) store.labels.setForTicket(t.id, ["Shared"]);
-  expect(store.labels.list()).toMatchObject([{ name: "Shared", count: 4 }]);
+  expect(countOf(store.labels, "Shared")).toBe(5);
   store.tickets.update(planning.id, { status: "done" });
-  expect(store.labels.list()[0]!.count).toBe(3);
+  expect(countOf(store.labels, "Shared")).toBe(5);
 });
 
 test("a label with no tickets stays, so its color survives, and recoloring changes only that label", () => {

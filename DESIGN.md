@@ -207,10 +207,9 @@ project (a label is never per project), so one label can group tickets from any 
   collection is `LabelInfo { name, color, createdAt, lastUsedAt, count }`: `GET /labels` returns it
   most recently used first, and the `labels.changed` event carries the whole list whenever it
   changes (a label is added to a ticket for the first time or moves up, is recolored, or a count
-  moves because a ticket changed column or was deleted). `count` is the number of tickets carrying
-  the label that are open (planning, in progress, blocked or in review); done tickets, drafts and
-  chief-of-staff tickets don't count, so clicking a label can show more tickets than its badge. A
-  planning ticket counts so a label just put on one shows in the sidebar at once.
+  moves because a ticket was deleted). `count` is the number of tickets carrying the label in any
+  status, done included, so clicking a label never shows more tickets than its badge; drafts and
+  chief-of-staff tickets don't count. A label just put on a ticket shows in the sidebar at once.
 - **Setting them.** `POST /tickets` and `PATCH /tickets/:key` take `labels` (the whole list; names
   not seen before create labels). Agents use `create_ticket` `labels` and `update_ticket`
   `add_labels` / `remove_labels` (a work or chat run may use them on its own ticket), `list_labels`
@@ -1379,7 +1378,7 @@ stubs whose full description `tool_search` returns, see "Stubs and tool_search" 
 | `get_ticket_agent` | all | `{ key, id, include_transcript?: 1..50 }` → one sub-agent or task of that ticket's session (`Orchestrator.getTicketAgent_`): its `agent` fields plus `prompt`, prompt and result clipped to 8000 chars; a sub-agent's own last N (default 20) text/status/error `transcript` entries, or a task's `output` (its last 8000 chars, `truncated`, `done`, `available`; a task with no output file reads as unavailable). An unknown id fails pointing at `get_ticket`'s include_agents |
 | `search_tickets` | all | `{ query, project_key?, limit?, cursor?, include_drafts? (default true) }` → `{ total, hits: [{ key, title, status, draft, project, snippet }], nextCursor }`. Same matching, ranking and cursors as `GET /tickets/search` ("Paging and search"), including the `label:` / `project:` terms ("Labels"); default limit 20 |
 | `subscribe_ticket` | work, conductor, chat, cos | `{ key, mode?, events? }`: get woken when another ticket changes (see "Ticket subscriptions"); `unsubscribe_ticket` `{ key }` and `list_subscriptions` `{}` complete the set |
-| `list_labels` | all | `{}` → each label's `name`, `color` and `tickets` (its count of in-progress, blocked and review tickets), most recently used first ("Labels") |
+| `list_labels` | all | `{}` → each label's `name`, `color` and `tickets` (its count of tickets in any status), most recently used first ("Labels") |
 | `list_projects` | all | `{}` → each project's key, name, path and settings, with `completionAction`, the offered `completionActions` and `pullRequestHost` |
 | `list_inbox` | all | `{ status?: TicketEventStatus[], source?, key?, limit? }` (`source` is an event source kind; `key` an event id or a ticket key) → the events addressed to the calling ticket (`target_id`), newest first: id, title, summary, source, status, verdict, reason, the ticket it is about, created_at. A chief (and the triage run working for it) reads its Inbox instead: its own events plus the unassigned ones, the same rows `GET /tickets/:key/events` returns for the chief. Status, source and key are filtered in the query and the total is a `COUNT`, so it is exact however many events there are. Default limit 20, max 100, with a "Showing n of total events" note. `get_ticket` on a `TRIAGE-n` key says Inbox items are events now |
 | `start_ticket` | work, conductor | `{ key }` → `startTicket` (any ticket, not only children). While the ticket's planning run is going it approves the plan instead and the work starts when the run ends |

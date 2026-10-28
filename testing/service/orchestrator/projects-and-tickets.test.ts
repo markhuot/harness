@@ -280,7 +280,7 @@ test("labels on a ticket: created with it, replaced by PATCH, announced as label
   await status(() => h.orch.updateTicket(t.key, { labels: "Bugfix" as never }), 400, /list of label names/);
 });
 
-test("a planning ticket's label shows in the collection at once, and the count follows the ticket's status, announced once", async () => {
+test("a planning ticket's label shows in the collection at once, and the count stays when the ticket is done", async () => {
   const h = makeOrchestrator();
   h.events.length = 0;
   const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x", start: false, labels: ["Research"] });
@@ -288,10 +288,11 @@ test("a planning ticket's label shows in the collection at once, and the count f
   expect(h.events.filter((e) => e.kind === "labels.changed").at(-1)).toMatchObject({ labels: [{ name: "Research", count: 1 }] });
   h.events.length = 0;
   await h.orch.updateTicket(t.key, { status: "done" });
+  expect(h.events.filter((e) => e.kind === "labels.changed")).toHaveLength(0);
+  expect(h.orch.listLabels()[0]).toMatchObject({ name: "Research", count: 1 });
+  h.events.length = 0;
+  await h.orch.deleteTicket(t.key);
   const changed = h.events.filter((e) => e.kind === "labels.changed");
   expect(changed).toHaveLength(1);
   expect(changed[0]).toMatchObject({ labels: [{ name: "Research", count: 0 }] });
-  h.events.length = 0;
-  await h.orch.deleteTicket(t.key);
-  expect(h.events.filter((e) => e.kind === "labels.changed")).toHaveLength(0);
 });

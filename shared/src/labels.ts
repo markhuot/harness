@@ -15,8 +15,8 @@ export interface LabelInfo {
   /** When the label was last added to a ticket */
   lastUsedAt: number;
   /**
-   * Tickets carrying it that are in progress, blocked or in review: the rule the project counts in
-   * the sidebar use. Done tickets and drafts don't count.
+   * Tickets carrying it, whatever their status (done included), so a label always
+   * finds its tickets. Drafts and chief-of-staff tickets don't count.
    */
   count: number;
 }

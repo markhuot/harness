@@ -3,12 +3,6 @@ import { defaultLabelColor, labelKey, normalizeLabelNames, type LabelInfo } from
 import { newId } from "./util";
 import { type Clock, systemClock } from "../clock";
 
-/**
- * The statuses a label's count includes: every open ticket on the board (a planning ticket too,
- * unless it is a draft), so a label just put on a ticket being planned shows in the sidebar.
- */
-export const COUNTED_STATUSES = ["planning", "in_progress", "blocked", "review"];
-
 interface LabelRow {
   id: string;
   name: string;
@@ -25,13 +19,13 @@ export class LabelRepo {
     private now: Clock = systemClock,
   ) {}
 
-  /** Every label, most recently added to a ticket first, with its count of open tickets (planning, in progress, blocked and review; not drafts). */
+  /** Every label, most recently added to a ticket first, with its count of tickets in any status (done included; not drafts or chief-of-staff tickets). */
   list(): LabelInfo[] {
     const rows = this.db
       .query(
         `SELECT l.id, l.name, l.color, l.created_at, l.last_used_at,
            (SELECT COUNT(*) FROM ticket_labels tl JOIN tickets t ON t.id = tl.ticket_id
-             WHERE tl.label_id = l.id AND t.kind <> 'cos' AND t.draft = 0 AND t.status IN (${COUNTED_STATUSES.map((s) => `'${s}'`).join(", ")})) AS count
+             WHERE tl.label_id = l.id AND t.kind <> 'cos' AND t.draft = 0) AS count
          FROM labels l ORDER BY l.last_used_at DESC, l.created_at DESC, l.key`,
       )
       .all() as LabelRow[];

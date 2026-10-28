@@ -2,10 +2,7 @@ import type { LabelInfo } from "@harness/shared";
 import { hoursAgo, minutesAgo } from "./time";
 import { tickets } from "./tickets";
 
-/** The statuses a label's count includes: the ones the sidebar's project counts show. */
-const COUNTED = ["in_progress", "blocked", "review"];
-
-/** Colors and recency of the labels the tickets carry; the counts come from the tickets. "Docs" has only a planning ticket, so its count is 0 and the sidebar hides it. */
+/** Colors and recency of the labels the tickets carry; the counts come from the tickets, whatever their status. "Archive" carries no ticket, so its count is 0 and the sidebar hides it. */
 const specs: Pick<LabelInfo, "name" | "color" | "lastUsedAt">[] = [
   { name: "Bugfix", color: "red", lastUsedAt: minutesAgo(5) },
   { name: "Performance", color: "orange", lastUsedAt: minutesAgo(20) },
@@ -14,11 +11,12 @@ const specs: Pick<LabelInfo, "name" | "color" | "lastUsedAt">[] = [
   { name: "Settings", color: "teal", lastUsedAt: hoursAgo(3) },
   { name: "Reference", color: "green", lastUsedAt: hoursAgo(5) },
   { name: "Docs", color: "blue", lastUsedAt: hoursAgo(6) },
+  { name: "Archive", color: "pink", lastUsedAt: hoursAgo(8) },
 ];
 
-/** GET /labels: every label, most recently used first, with its count of in-progress, blocked and review tickets. */
+/** GET /labels: every label, most recently used first, with its count of tickets in any status. */
 export const labels: LabelInfo[] = specs.map((s) => ({
   ...s,
   createdAt: s.lastUsedAt - 60_000,
-  count: tickets.filter((t) => COUNTED.includes(t.status) && (t.labels ?? []).includes(s.name)).length,
+  count: tickets.filter((t) => (t.labels ?? []).includes(s.name)).length,
 }));

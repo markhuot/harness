@@ -22,11 +22,12 @@ describe("world invariants (a bad edit fails here, not as a blank screen)", () =
     }
   });
 
-  test("every label a ticket carries is in the collection, with the count of its in-progress, blocked and review tickets", () => {
+  test("every label a ticket carries is in the collection, with the count of its tickets in any status", () => {
     const names = new Set(world.labels.map((l) => l.name));
     for (const t of world.tickets) for (const n of t.labels ?? []) expect(names.has(n)).toBe(true);
-    expect(world.labels.find((l) => l.name === "Bugfix")?.count).toBe(2);
-    expect(world.labels.find((l) => l.name === "Docs")?.count).toBe(0);
+    expect(world.labels.find((l) => l.name === "Bugfix")?.count).toBe(3);
+    expect(world.labels.find((l) => l.name === "Docs")?.count).toBe(1);
+    expect(world.labels.find((l) => l.name === "Archive")?.count).toBe(0);
     expect(world.labels.map((l) => l.lastUsedAt)).toEqual([...world.labels.map((l) => l.lastUsedAt)].sort((a, b) => b - a));
   });
 

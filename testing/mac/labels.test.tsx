@@ -58,7 +58,8 @@ describe("the sidebar's Labels section", () => {
     const active = world.labels.filter((l) => l.count > 0);
     expect(sidebarRows(m).map((r) => text(r))).toEqual(active.map((l) => `${l.name}${l.count}`));
     expect(world.labels.some((l) => l.count === 0)).toBe(true);
-    expect(text(m.container)).not.toContain("Docs");
+    expect(text(m.container)).not.toContain("Archive");
+    expect(sidebarRows(m).map((r) => text(r))).toContain("Docs1");
   });
 
   test("shows ten, and More reveals ten at a time until it's gone", async () => {
@@ -78,10 +79,10 @@ describe("the sidebar's Labels section", () => {
   test("a label whose count drops to 0 leaves, and returns when a ticket makes it active", async () => {
     const m = await mount(<Sidebar onNewSession={() => {}} onNewTerminal={() => {}} />);
     await m.until("labels load", () => sidebarRows(m).length > 0);
-    const set = (docs: number) => world.labels.map((l) => (l.name === "Docs" ? { ...l, count: docs } : l.name === "Bugfix" ? { ...l, count: 0 } : l));
+    const set = (docs: number) => world.labels.map((l) => (l.name === "Archive" ? { ...l, count: docs } : l.name === "Bugfix" ? { ...l, count: 0 } : l));
     await m.settle(() => m.client.push({ kind: "labels.changed", labels: set(1) }));
     const names = sidebarRows(m).map((r) => text(r));
-    expect(names).toContain("Docs1");
+    expect(names).toContain("Archive1");
     expect(names.some((n) => n.startsWith("Bugfix"))).toBe(false);
   });
 

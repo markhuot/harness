@@ -665,7 +665,7 @@
       "color": "red",
       "lastUsedAt": 1773500100000,
       "createdAt": 1773500040000,
-      "count": 2
+      "count": 3
     },
     {
       "name": "Performance",
@@ -707,6 +707,13 @@
       "color": "blue",
       "lastUsedAt": 1773478800000,
       "createdAt": 1773478740000,
+      "count": 1
+    },
+    {
+      "name": "Archive",
+      "color": "pink",
+      "lastUsedAt": 1773471600000,
+      "createdAt": 1773471540000,
       "count": 0
     }
   ],

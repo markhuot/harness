@@ -140,7 +140,7 @@ export const searchTickets = defineTool<{ query: string; project_key?: string; l
 export const listLabels = defineTool<Record<string, never>>({
   name: "list_labels",
   description:
-    "List the labels any ticket can carry: name, color and how many in-progress, blocked or review tickets carry it, most recently used first. Labels are shared by every project. Check it before labeling so you reuse a name instead of making a near duplicate.",
+    "List the labels any ticket can carry: name, color and how many tickets carry it in any status, most recently used first. Labels are shared by every project. Check it before labeling so you reuse a name instead of making a near duplicate.",
   inputSchema: schema({}),
   async run(_input, ctx) {
     const labels = await ctx.ops.listLabels(ctx);
