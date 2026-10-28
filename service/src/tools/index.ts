@@ -180,3 +180,12 @@ export function toolsForRun(
   if (driver.hasBuiltinTools || entry.native === "none") return tools;
   return [...tools, ...(entry.native === "full" ? nativeTools : readOnlyNativeTools)];
 }
+
+/**
+ * Whether a run of this kind on this ticket has the block tool: work and complete runs, and a chat
+ * on a ticket that isn't a conductor or a chief of staff. A classifier soft denial is the agent's to
+ * block on only in these runs; the others get an approval card (DESIGN.md "Permissions").
+ */
+export function runCanBlock(kind: RunKind, ticket: Pick<Ticket, "kind"> | null): boolean {
+  return kind !== "compact" && toolsForRun(kind, { hasBuiltinTools: true, usesPermissionPromptTool: false }, ticket).includes(block);
+}

@@ -11,7 +11,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
-- When auto mode's classifier turns down one of an agent's commands, the ticket no longer gets an approval card for it at the end of the run. The agent finds another way, or blocks and asks you, quoting the command. Approve it in your answer and the agent retries it. A card used to appear after the run even when the agent had already worked around the command, and when the agent had blocked for something else, the card hid its question.
+- When auto mode's classifier turns down one of an agent's commands, the ticket no longer gets an approval card for it at the end of the run. The agent finds another way, or blocks and asks you, quoting the command. Approve that command in your answer and the agent retries it once; if auto mode still turns it down, the agent says so, and switching the ticket to Ask mode gets you an approval card for it. A card used to appear after the run even when the agent had already worked around the command, and when the agent had blocked for something else, the card hid its question. Conductor and chief-of-staff runs, which can't block, still get an approval card for a turned-down command, so you're always told.
 - Allowing a tool on a ticket no longer makes Harness retry a command of that tool that auto mode's classifier turned down. The agent works around it or asks you in its block, as for any other turned-down command.
 
 ### Fixed

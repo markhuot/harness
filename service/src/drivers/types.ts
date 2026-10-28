@@ -71,12 +71,13 @@ export type DriverEvent =
   /** A permission decision made inside the driver (e.g. Claude Code's auto-mode classifier) */
   | ({ type: "permission"; log: PermissionDecisionLog } & FromSubagent)
   /**
-   * A tool call the driver's permission policy denied without asking the harness (Copilot's ask
-   * mode). The orchestrator turns the run's last one into a pending approval when the run ends
-   * without block/submit (DESIGN.md "Permissions"). Classifier denials aren't reported this way:
-   * the agent works around them or blocks.
+   * A tool call a permission system inside the driver denied without asking the harness: Copilot's
+   * ask mode (source "policy") or Claude Code's auto-mode classifier (source "classifier"). The
+   * orchestrator turns the run's last one into a pending approval when the run ends without
+   * block/submit, except a classifier denial in a run that can block (runCanBlock): that agent
+   * works around it or blocks to ask (DESIGN.md "Permissions").
    */
-  | { type: "permission_denied"; callId: string; toolName: string; input: unknown; reason: string }
+  | { type: "permission_denied"; callId: string; toolName: string; input: unknown; reason: string; source: "classifier" | "policy" }
   /**
    * A one-time grant from RunRequest.grants the driver handed to its agent up front (claude-code:
    * an exact --allowedTools rule). The grant is used up: the orchestrator consumes it.

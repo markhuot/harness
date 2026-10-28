@@ -879,7 +879,8 @@ export class StreamJsonParser {
                 },
                 ...from,
               });
-              // Only logged: the agent works around it or blocks to ask the human (no approval card).
+              // The orchestrator decides: an agent that can block works around it or asks; other runs get a card.
+              if (!subagentId) events.push({ type: "permission_denied", callId, toolName: name, input: this.toolInputs.get(callId) ?? {}, reason, source: "classifier" });
             }
           }
         }

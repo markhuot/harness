@@ -150,7 +150,7 @@ import { LIST_INBOX_DEFAULT_LIMIT } from "../tools/board";
 import { RemoteIdError, truncateMiddle } from "../tools/util";
 import type { BrowserService } from "../browser/types";
 import type { HarnessPaths } from "../config";
-import { GATED_TOOL_NAMES, stopBrowserJobs, toolsForRun } from "../tools/index";
+import { GATED_TOOL_NAMES, runCanBlock, stopBrowserJobs, toolsForRun } from "../tools/index";
 import { isTask, positionForDrop } from "@harness/shared/state";
 import * as prompts from "./prompts";
 import { PROMPTS, promptTemplateError } from "./prompt-templates";
@@ -331,10 +331,10 @@ interface ActiveRun {
    */
   resumeCompletion: { note: string } | null;
   /**
-   * Calls the driver's permission policy denied without asking (permission_denied: Copilot's ask
-   * mode) and the agent didn't then run successfully in the same run
+   * Calls a permission system inside the driver denied without asking (permission_denied) that
+   * should reach a human, and the agent didn't then run successfully in the same run
    */
-  denials: { toolName: string; input: unknown; reason: string }[];
+  denials: { toolName: string; input: unknown; reason: string; source: "classifier" | "policy" }[];
   /** callId → tool call of this run, to match a later successful call against the denials */
   calls: Map<string, { toolName: string; input: unknown }>;
   /** ids of the one-time grants handed to this run (RunRequest.grants.once) */
@@ -4909,13 +4909,13 @@ ${numberLines(r.body)}`;
   }
 
   /**
-   * After a succeeded work/complete/conductor run: the driver's own permission policy denied a
-   * call without asking (Copilot's ask mode: permission_denied) and the call never went through.
-   * A run that submitted is reviewed as usual, with the denied calls noted in Activity. Otherwise
-   * the run's last denial becomes a pending approval, the only way a human can grant it: attached
-   * to the agent's block if it blocked, or blocking the ticket if the run just ended. Classifier
-   * denials never get here: the agent works around them or blocks. Returns true when it handled
-   * the run.
+   * After a succeeded approvable run: a permission system inside the driver denied a call without
+   * asking (permission_denied: Copilot's ask mode, or Claude Code's classifier in a run that can't
+   * block) and the call never went through. A run that submitted is reviewed as usual, with the
+   * denied calls noted in Activity. Otherwise the run's last denial becomes a pending approval:
+   * attached to the agent's block if it blocked, or blocking the ticket if the run just ended.
+   * Classifier denials in runs that can block never get here: the agent works around them or
+   * blocks. Returns true when it handled the run.
    */
   private surfaceDenial(ticket: Ticket, run: Run, active: ActiveRun): boolean {
     const denial = active.denials.at(-1);
@@ -4929,7 +4929,7 @@ ${numberLines(r.body)}`;
       // are on record for the reviewer and the human.
       const calls = [...new Map(active.denials.map((d) => [grantKey(d.toolName, d.input), d])).values()];
       const lines = calls.map((d) => `- ${d.toolName} (${summarizeToolInput(d.input)}): ${d.reason}`);
-      const summary = `The ticket's permission mode denied ${calls.length === 1 ? "a call" : `${calls.length} calls`} during this run, and the agent submitted without ${calls.length === 1 ? "it" : "them"}`;
+      const summary = `${calls.every((d) => d.source === "classifier") ? "The classifier" : "The ticket's permission mode"} denied ${calls.length === 1 ? "a call" : `${calls.length} calls`} during this run, and the agent submitted without ${calls.length === 1 ? "it" : "them"}`;
       this.addActivity(t, "permission", "system", `${summary}.`, { detail: `${summary}:\n${lines.join("\n")}` });
       this.appendStatus(t.sessionId, run.id, `${summary}:\n${lines.join("\n")}`);
       return false;
@@ -4937,7 +4937,7 @@ ${numberLines(r.body)}`;
     // A chat's denial surfaces wherever the ticket is (its card leaves the column alone).
     if (run.kind !== "chat" && t.status !== "in_progress" && t.status !== "blocked" && !(t.status === "review" && run.kind === "complete")) return false;
     if (run.kind === "chat" && t.status === "done") return false;
-    this.openApproval(t, run.id, denial.toolName, denial.input, { reason: denial.reason, source: "policy" });
+    this.openApproval(t, run.id, denial.toolName, denial.input, { reason: denial.reason, source: denial.source });
     return true;
   }
 
@@ -5121,8 +5121,9 @@ ${numberLines(r.body)}`;
       isGranted: (tool, i) => !!ticket && (this.store.tickets.consumeGrant(ticket.id, tool, i) || ticket.allowedTools.includes(tool)),
       requestApproval: (tool, i, meta) => this.requestApproval(ctx, tool, i, meta),
       // A soft denial is the agent's to work around, or to block on and ask the human, whose
-      // answer the classifier then reads (runs that can block only). No approval card.
-      agentDecides: !!active && !!ticket && APPROVABLE_RUNS.includes(ctx.runKind),
+      // answer the classifier then reads: only in runs that have block. Other runs (conductor, a
+      // conductor's chat, chief of staff) send it to requestApproval, which opens a card.
+      agentDecides: !!active && !!ticket && runCanBlock(ctx.runKind, ticket),
       log: (entry) => this.logPermission(ctx.session.id, ctx.runId, entry),
       context: () => ({
         ticket: ticket ? { key: ticket.key, title: ticket.title, spec: ticket.spec } : null,
@@ -6246,9 +6247,14 @@ ${numberLines(r.body)}`;
       case "permission":
         this.logPermission(run.sessionId, run.id, ev.log, ev.subagentId);
         return null;
-      case "permission_denied":
-        active.denials.push({ toolName: ev.toolName, input: ev.input, reason: ev.reason });
+      case "permission_denied": {
+        // A classifier denial in a run that can block is the agent's: it works around it or blocks to ask.
+        const ticketId = this.store.sessions.get(run.sessionId)?.ticketId;
+        const ticket = ticketId ? this.store.tickets.get(ticketId) : null;
+        if (ev.source === "classifier" && runCanBlock(run.kind, ticket ?? null)) return null;
+        active.denials.push({ toolName: ev.toolName, input: ev.input, reason: ev.reason, source: ev.source });
         return null;
+      }
       case "grant_applied": {
         const ticketId = this.store.sessions.get(run.sessionId)?.ticketId;
         if (ticketId) this.store.tickets.consumeGrant(ticketId, ev.toolName, ev.input);

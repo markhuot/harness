@@ -1880,25 +1880,34 @@ claude-code, verified against claude 2.1.283 from a clean `env -i` shell:
   available". With `0` the first turn waits for the connectors (about a second, capped at
   `MCP_CONNECT_TIMEOUT_MS`).
 
-**Classifier denials are the agent's.** A classifier denial (Claude Code's auto mode, or a
-PermissionGate `soft_deny`) doesn't stop the run and never opens an approval card. The system
-prompt ("Tool approvals") tells the agent to rethink the step and take a genuinely safer route to
-the same goal if there is one (not the same action reworded or moved to another tool), and to
-block (complete/conductor runs: stop) only when nothing else gets the task done, quoting the
-denied call. The human answers that block like any other; both classifiers read the transcript,
-so the agent's retry after an approving answer goes through. Each denial is a transcript audit
-row only. A card at run end would be stale: the agent has usually moved on, and on a block it
-hid the agent's own question (ACAMD-106).
+**Classifier denials are the agent's, in runs that can block.** In a run with the `block` tool
+(work, complete, and a chat on a task ticket: `runCanBlock`, derived from the run's tool set), a
+classifier denial (Claude Code's auto mode, or a PermissionGate `soft_deny`) doesn't stop the run
+and never opens an approval card. The system prompt ("Tool approvals") tells the agent to rethink
+the step and take a genuinely safer route to the same goal if there is one (not the same action
+reworded or moved to another tool), and to block only when nothing else gets the task done,
+quoting the denied call. The human answers that block like any other; both classifiers read the
+transcript, and Harness's classifier counts only a human line approving that exact call, so the
+agent's one retry after an approving answer goes through. Each denial is a transcript audit row
+only. A card at run end would be stale: the agent has usually moved on, and on a block it hid the
+agent's own question (ACAMD-106). Accepted risk: nothing guarantees Claude Code's classifier honours
+the answer. If the retry is denied again, the agent blocks once more saying so, and the human
+can set the ticket's permission mode to Ask, which turns the call into an approval card.
+
+Conductor runs, a conductor ticket's chat and chief-of-staff runs have no `block`, so the agent
+could only stop with nobody told. There a gate `soft_deny` goes to `requestApproval` (an approval
+card at once), and Claude Code's classifier denial (`permission_denied`, `source: "classifier"`)
+is collected like a policy denial below.
 
 **Driver policy denials → approval cards.** Copilot's ask mode denies calls itself
-(`permission_denied`) and has no classifier to read a human's answer, so a card is the only way
-to grant one. The orchestrator collects a work/complete/conductor/chat run's `permission_denied`
-events, dropping any whose exact call (`grantKey`) later succeeded in the same run. When the run
-succeeds and a denial is left:
+(`permission_denied`, `source: "policy"`) and has no classifier to read a human's answer, so a card
+is the only way to grant one. The orchestrator collects an approvable run's `permission_denied`
+events (a classifier one only when the run can't block), dropping any whose exact call
+(`grantKey`) later succeeded in the same run. When the run succeeds and a denial is left:
 - the agent submitted: it got there another way, so the review goes ahead; a system
   `permission` Activity entry lists the denied calls and their reasons for the reviewer and
   human;
-- otherwise the last denial becomes a `pendingApproval` (`source: "policy"`, tool + input of
+- otherwise the last denial becomes a `pendingApproval` (its `source`, tool + input of
   the denied call). If the agent called `block`, the approval is attached to that block and its
   question stays `blockedReason`; if not, in_progress (or review, for a complete run) →
   blocked, as `requestApproval` does. A chat's card leaves the ticket in its column.

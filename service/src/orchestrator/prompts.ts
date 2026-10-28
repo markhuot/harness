@@ -13,7 +13,7 @@
 import type { ActivityEntry, CompletionAction, Project, RunKind, Schedule, Session, Ticket, TicketStatus } from "@harness/shared";
 import { describeSpec, describeTime } from "../cos/schedule-time";
 import { displayKey, harnessBranch, plannedBranch, resolveBaseBranch, secondaryKey } from "@harness/shared";
-import { toolsForRun } from "../tools/index";
+import { runCanBlock, toolsForRun } from "../tools/index";
 import { type PromptOverrides, renderPrompt } from "./prompt-templates";
 
 export type { PromptOverrides } from "./prompt-templates";
@@ -486,7 +486,7 @@ export function systemPrompt(info: PromptInfo): string {
     changes && renderPrompt("system.board_changes", { conductor }, o),
     // Config tools (tools/config.ts): reads for every run; the gated writes where a human can approve them.
     renderPrompt("system.config", { canChange: changes }, o),
-    (changes || cos || kind === "complete") && renderPrompt("system.approvals", { canBlock: kind === "work" || kind === "complete" }, o),
+    (changes || cos || kind === "complete") && renderPrompt("system.approvals", { canBlock: runCanBlock(info.kind, ticket) }, o),
     browser && renderPrompt("system.browser", {}, o),
   );
 }

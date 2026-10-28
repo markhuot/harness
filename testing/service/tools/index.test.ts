@@ -1,11 +1,22 @@
 import { expect, test } from "bun:test";
 import type { RunKind } from "@harness/shared";
 import { SUBSCRIPTION_EVENTS } from "../../../service/src/store/subscriptions";
-import { toolsForRun } from "../../../service/src/tools/index";
+import { runCanBlock, toolsForRun } from "../../../service/src/tools/index";
 import { subscribeTicket } from "../../../service/src/tools/subscriptions";
 
 const RUN_KINDS: RunKind[] = ["plan", "work", "review", "complete", "conductor", "chat", "compact", "cos"];
 const names = (kind: RunKind, driver = { hasBuiltinTools: true, usesPermissionPromptTool: false }, ticket: { kind: "task" | "conductor" | "cos" } | null = null) => toolsForRun(kind, driver, ticket).map((t) => t.name);
+
+test("only runs with the block tool can block: work, complete, and a chat on a task ticket", () => {
+  expect(runCanBlock("work", { kind: "task" })).toBe(true);
+  expect(runCanBlock("complete", { kind: "task" })).toBe(true);
+  expect(runCanBlock("chat", { kind: "task" })).toBe(true);
+  expect(runCanBlock("chat", { kind: "conductor" })).toBe(false);
+  expect(runCanBlock("conductor", { kind: "conductor" })).toBe(false);
+  expect(runCanBlock("cos", { kind: "cos" })).toBe(false);
+  expect(runCanBlock("chat", { kind: "cos" })).toBe(false);
+  expect(runCanBlock("compact", { kind: "task" })).toBe(false);
+});
 
 test("a compact run has no tools", () => {
   expect(names("compact")).toEqual([]);

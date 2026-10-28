@@ -414,7 +414,7 @@ export class CopilotJsonParser {
             type: "permission",
             log: { tool: name, summary: summarizeInput(input), decision: "deny", reason, source: "policy", backend: "github-copilot", mode: this.mode },
           });
-          events.push({ type: "permission_denied", callId, toolName: name, input, reason });
+          events.push({ type: "permission_denied", callId, toolName: name, input, reason, source: "policy" });
         }
         break;
       }

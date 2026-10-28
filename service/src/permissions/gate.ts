@@ -30,8 +30,10 @@ export interface GateEnv {
   requestApproval(tool: string, input: unknown, meta: { reason: string; source: "classifier" | "policy" }): Promise<ApprovalAnswer>;
   /**
    * A classifier soft_deny is the agent's to handle: the call is denied with the reason, and the
-   * agent finds another way or blocks to ask the human (no approval card). Without it (runs with
-   * nobody to block to), a soft_deny goes to requestApproval.
+   * agent finds another way or blocks to ask the human (no approval card). Set only for runs that
+   * have the block tool (runCanBlock). Without it (conductor and chief-of-staff runs, which can't
+   * block, or a run with no ticket), a soft_deny goes to requestApproval: a card, or a denial
+   * where no human can be asked.
    */
   agentDecides?: boolean;
   log(entry: PermissionDecisionLog): void;
