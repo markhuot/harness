@@ -2863,10 +2863,15 @@ export class Orchestrator {
     await this.steerOrEnqueue(ticket.sessionId, ticket.kind === "cos" ? "cos" : "chat", message);
   }
 
+  /** A blocked ticket whose worktree couldn't be made (and still isn't there): its chat runs in the project checkout. */
+  private worktreeBlocked(t: Ticket): boolean {
+    return t.status === "blocked" && !!t.blockedReason?.startsWith("Could not create worktree") && (!t.workdir || (!!t.branch && !existsSync(t.workdir)));
+  }
+
   /** What the agent reads when its chat runs in the project checkout because the ticket's worktree couldn't be made. */
   private noWorktreeNote(ticket: Ticket, error: string): string {
     const project = this.store.projects.get(ticket.projectId);
-    return `\n\n[Harness note: ${error} This chat runs in the project checkout${project ? ` (${project.path})` : ""} so you can fix that. Don't change the project's files or branch. When the cause is fixed, call unblock: the harness retries the worktree and, if it works, starts the work in a fresh session.]`;
+    return `\n\n[Harness note: ${error} This chat runs in the project checkout${project ? ` (${project.path})` : ""} so you can fix that. Branch and worktree housekeeping in the checkout is fine (switch its branch, remove a stale worktree), but don't edit its tracked files. When the cause is fixed, call unblock: the harness retries the worktree and, if it works, starts the work in a fresh session.]`;
   }
 
   /**
@@ -3792,22 +3797,31 @@ ${numberLines(r.body)}`;
     if (t.status !== "blocked") throw new Error(`${t.key} is ${t.status}, not blocked: there's nothing to unblock.`);
     const why = typeof note === "string" ? note.trim() : "";
     const a = this.ctxActive(ctx);
-    if (t.blockedRunKind === "complete" && a && ctx.runKind === "chat" && (await this.headUnmoved(t))) {
-      a.resumeCompletion = { note: why };
-      return "Noted. The completion resumes on its own when this reply ends, with the question and the human's answer: don't change the work or call submit_for_review. If the answer means the work needs changes, call resume_work instead.";
-    }
     // A block raised for a missing worktree: the unblock retries it. If it still can't be made the
     // ticket stays blocked and the agent reads why; if it works, this temporary chat in the project
     // checkout ends and the work starts in a fresh session in the worktree.
-    if (t.blockedRunKind !== "complete" && (!t.workdir || (t.branch && !existsSync(t.workdir))) && (ctx.runKind === "chat")) {
-      const dir = await this.workdirFor(t);
-      if (typeof dir === "string") throw new Error(`${dir}. ${t.key} stays blocked: fix that, then call unblock again.`);
-      this.store.sessions.update(t.sessionId, { cwd: dir.workdir });
-      this.addActivityLine(t, "unblocked", "agent", why || "Unblocked: picking the work back up.", { ...(why ? { note: why } : {}), ...this.moveMeta(t, "in_progress") });
-      const moved = this.transition(t, "in_progress", { ...dir, blockedReason: null, pendingApproval: null, reviewRejections: 0 }, `Unblocked by the agent${why ? `: ${why}` : ""}`);
-      this.newSession(t.sessionId);
-      this.enqueueRun(t.sessionId, this.workKind(moved), this.prompts().unblockPrompt(moved, why));
-      return "The worktree is ready, so the work starts in a fresh session when this reply ends. Stop here: don't continue the work in this chat.";
+    if (ctx.runKind === "chat" && this.worktreeBlocked(t)) {
+      if (this.starting.has(t.id)) throw new Error(`${t.key} is being started already: try again in a moment.`);
+      this.starting.add(t.id);
+      try {
+        const dir = await this.workdirFor(t);
+        if (typeof dir === "string") throw new Error(`${dir}. ${t.key} stays blocked: fix that, then call unblock again.`);
+        // Whatever moved the ticket while the worktree was made wins.
+        const current = this.store.tickets.get(t.id);
+        if (!current || current.status !== "blocked") throw new Error(`${t.key} is no longer blocked: there's nothing to unblock.`);
+        this.store.sessions.update(current.sessionId, { cwd: dir.workdir });
+        this.addActivityLine(current, "unblocked", "agent", why || "Unblocked: picking the work back up.", { ...(why ? { note: why } : {}), ...this.moveMeta(current, "in_progress") });
+        const moved = this.transition(current, "in_progress", { ...dir, blockedReason: null, pendingApproval: null, reviewRejections: 0, agentReview: "pending", humanReview: "pending", startAfterPlan: false, startAfterPlanBy: null }, `Unblocked by the agent${why ? `: ${why}` : ""}`);
+        this.newSession(moved.sessionId);
+        this.enqueueRun(moved.sessionId, this.workKind(moved), this.prompts().unblockPrompt(moved, why));
+        return "The worktree is ready, so the work starts in a fresh session when this reply ends. Stop here: don't continue the work in this chat.";
+      } finally {
+        this.starting.delete(t.id);
+      }
+    }
+    if (t.blockedRunKind === "complete" && a && ctx.runKind === "chat" && (await this.headUnmoved(t))) {
+      a.resumeCompletion = { note: why };
+      return "Noted. The completion resumes on its own when this reply ends, with the question and the human's answer: don't change the work or call submit_for_review. If the answer means the work needs changes, call resume_work instead.";
     }
     // Approvals a completion's block kept start over: the resumed work must be reviewed again.
     const reviews: TicketPatch = t.blockedRunKind === "complete" ? { agentReview: "pending", humanReview: "pending" } : {};
@@ -5216,7 +5230,7 @@ ${numberLines(r.body)}`;
         // A human unblocking is waiting on an answer: a temporary chat in the project checkout
         // gets their note and fixes the cause (see chat()); its unblock starts the work.
         if (ticket.status === "blocked" && by === "human") {
-          this.enqueueRun(ticket.sessionId, "chat", `${prompt}${this.noWorktreeNote(ticket, dir)}`, undefined, { attachments });
+          this.enqueueRun(ticket.sessionId, "chat", `[The human tried to unblock or start this ticket, but its worktree couldn't be made, so it is still blocked. Their message follows.]\n\n${prompt}${this.noWorktreeNote(ticket, dir)}`, undefined, { attachments });
         }
         return;
       }
@@ -6066,7 +6080,7 @@ ${numberLines(r.body)}`;
         // conversation keeps them after that).
         const firstRun = !this.store.runs.listBySession(session.id).some((r) => r.id !== run.id && r.status === "succeeded" && MENTION_RUN_KINDS.has(r.kind));
         const attached = MENTION_RUN_KINDS.has(run.kind) ? this.withAttachments(session.id, run.id, [...(ticket && firstRun ? (ticket.promptAttachments ?? []) : []), ...(run.attachments ?? [])]) : null;
-        const missing = gone && ticket ? await this.missingWorktreeNote(ticket, run.kind, cwd, project) : "";
+        const missing = gone && ticket && !(run.kind === "chat" && this.worktreeBlocked(ticket)) ? await this.missingWorktreeNote(ticket, run.kind, cwd, project) : "";
         if (missing) this.appendStatus(session.id, run.id, `Worktree missing: running from ${cwd}`);
         // The transcript keeps the human's words; the agent also reads when to unblock.
         const prompt = (run.kind === "chat" ? withFiles + this.blockedNote(ticket) : withFiles) + missing + (attached?.block ?? "");

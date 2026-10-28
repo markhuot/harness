@@ -71,3 +71,20 @@ test("the human's Unblock button with notes starts a temporary chat in the proje
   expect(h.driver.requests[0]!.prompt).toContain("remove the old worktree");
   expect(h.driver.requests[0]!.prompt).toContain("already checked out");
 });
+
+test("a completion block that lost its worktree still restarts the work in a fresh session, and the old approvals start over", async () => {
+  const { h, repo, t } = await blockedOnWorktree();
+  h.orch["store"].tickets.update(t.id, { blockedRunKind: "complete", agentReview: "approved", humanReview: "approved" });
+  const retry = callTools([["unblock", { note: "freed" }]]);
+  h.driver.script([{ run: async () => void git(repo, "switch", "-q", "-c", "scratch") }, ...retry.steps], replyScript("working in the worktree"));
+  await h.orch.sendMessage(t.key, "Free up main");
+  await h.settle();
+
+  expect(retry.results[0]).toMatchObject({ isError: false });
+  const [chat, work] = h.driver.requests;
+  expect(chat!.prompt).not.toContain("Worktree missing");
+  expect(work).toMatchObject({ kind: "work", state: null });
+  const ticket = h.ticket(t.key);
+  expect(ticket.workdir).toBe(join(h.orch["paths"].worktreesDir, t.key));
+  expect(ticket.humanReview).not.toBe("approved");
+});
