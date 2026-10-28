@@ -915,6 +915,10 @@ ol.md-list {
   padding-left: 10px;
   color: var(--text-2);
 }
+.md blockquote > :last-child,
+.md li > :last-child {
+  margin-bottom: 0;
+}
 .md hr {
   border: 0;
   border-top: 1px solid var(--border);

@@ -311,13 +311,36 @@ public enum Markdown {
         return (.code(lang: fence[2] ?? "", text: body.joined(separator: "\n")), min(i, lines.count - 1))
     }
 
+    /// Whether `lines[i]` opens a block that isn't a paragraph, list or fence: a heading, rule, quote,
+    /// image or table.
+    private static func startsBlock(_ lines: [String], _ i: Int) -> Bool {
+        let line = lines[i]
+        let t = JSCompat.trim(line)
+        if Pattern.heading.test(t) || Pattern.rule.test(t) || t.unicodeScalars.first == ">" || thumbLine(line) != nil { return true }
+        if let img = Pattern.imageLine.exec(line), case .img = image(alt: img[1]!, src: img[2]!, title: img[3]) { return true }
+        if includesPipe(t), i + 1 < lines.count, let align = delimiterRow(lines[i + 1]) { return splitRow(line).count == align.count }
+        return false
+    }
+
+    /// `line` without its first `cols` columns of leading whitespace.
+    private static func dedent(_ line: String, _ cols: Int) -> String {
+        var scalars = Substring(line).unicodeScalars[...]
+        var n = 0
+        while n < cols, let u = scalars.first, JSCompat.isWhitespace(u) {
+            n += u == "\t" ? 4 : 1
+            scalars = scalars.dropFirst()
+        }
+        return String(scalars)
+    }
+
     /// The list whose first item is `lines[start]`, and the index of its last line. An item indented 2+
     /// columns past this list's marker starts a list nested under the item before it; one indented
     /// less than `outer` (the parent's marker + 2, 0 at the top) belongs to the parent. A sibling of the
     /// other kind (bullet vs number) ends the list. A non-item line indented 2+ past the marker (2+ at
     /// the top) belongs to the last item: a fenced code block under it, or more of its text (a paragraph
-    /// of its own after a code block or a blank line). Blank lines followed by such a line, or by a
-    /// nested item, stay in the item; anything else ends the list.
+    /// of its own after a code block or a blank line), or any other block (heading, quote, table, rule,
+    /// image) parsed as at the top level from the item's indented lines. Blank lines followed by such a
+    /// line, or by a nested item, stay in the item; anything else ends the list.
     private static func parseList(_ lines: [String], start: Int, outer: Int) -> (block: Block, end: Int) {
         let first = Pattern.listItem.exec(lines[start])!
         let indent = indentOf(lines[start])
@@ -354,6 +377,17 @@ public enum Markdown {
                     let code = parseFence(lines, start: i + 1, fence: fence)
                     kids.append(code.block)
                     i = code.end
+                } else if startsBlock(lines, i + 1) {
+                    // The run of indented lines up to a blank line, nested item or fence, read as top-level markdown.
+                    var run = [line]
+                    while i + 1 + run.count < lines.count {
+                        let nl = lines[i + 1 + run.count]
+                        if JSCompat.trim(nl).isEmpty || indentOf(nl) < inside || Pattern.listItem.test(nl) || Pattern.fence.test(nl) { break }
+                        run.append(nl)
+                    }
+                    let cut = run.map(indentOf).min() ?? 0
+                    kids.append(contentsOf: parseBlocks(run.map { dedent($0, cut) }.joined(separator: "\n")))
+                    i += run.count
                 } else {
                     let text = JSCompat.trim(line)
                     switch kids.last {

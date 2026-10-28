@@ -86,7 +86,14 @@ function indentOf(line: string): number {
   return n;
 }
 
-const FENCE = /^\s*(```|~~~)\s*([\w+-]*)\s*$/;
+/** `line` without its first `cols` columns of leading whitespace. */
+function dedent(line: string, cols: number): string {
+  let cut = 0;
+  for (let n = 0; cut < line.length && n < cols && /\s/.test(line[cut]!); cut++) n += line[cut] === "\t" ? 4 : 1;
+  return line.slice(cut);
+}
+
+const FENCE =/^\s*(```|~~~)\s*([\w+-]*)\s*$/;
 
 /**
  * The fenced code block opening at `lines[start]`, and the index of its closing line (the last line
@@ -106,14 +113,26 @@ function parseFence(lines: string[], start: number, fence: RegExpExecArray): { b
   return { block: { t: "code", lang: fence[2] ?? "", text: body.join("\n") }, end: Math.min(i, lines.length - 1) };
 }
 
+/** Whether `lines[i]` opens a block that isn't a paragraph, list or fence: a heading, rule, quote, image or table. */
+function startsBlock(lines: string[], i: number): boolean {
+  const line = lines[i]!;
+  const t = line.trim();
+  if (/^#{1,4}\s+/.test(t) || /^(-{3,}|\*{3,})$/.test(t) || t.startsWith(">") || thumbLine(line)) return true;
+  const img = IMAGE_LINE.exec(line);
+  if (img && image(img[1]!, img[2]!, img[3]).t === "img") return true;
+  const align = t.includes("|") && i + 1 < lines.length ? delimiterRow(lines[i + 1]!) : null;
+  return !!align && splitRow(line).length === align.length;
+}
+
 /**
  * The list whose first item is `lines[start]`, and the index of its last line. An item indented 2+
  * columns past this list's marker starts a list nested under the item before it; one indented
  * less than `outer` (the parent's marker + 2, 0 at the top) belongs to the parent. A sibling of the
  * other kind (bullet vs number) ends the list. A non-item line indented 2+ past the marker (2+ at
  * the top) belongs to the last item: a fenced code block under it, or more of its text (a paragraph
- * of its own after a code block or a blank line). Blank lines followed by such a line, or by a
- * nested item, stay in the item; anything else ends the list.
+ * of its own after a code block or a blank line), or any other block (heading, quote, table, rule,
+ * image) parsed as at the top level from the item's indented lines. Blank lines followed by such a
+ * line, or by a nested item, stay in the item; anything else ends the list.
  */
 function parseList(lines: string[], start: number, outer: number): { block: Block; end: number } {
   const first = LIST_ITEM.exec(lines[start]!)!;
@@ -154,6 +173,17 @@ function parseList(lines: string[], start: number, outer: number): { block: Bloc
         const code = parseFence(lines, i + 1, fence);
         kids.push(code.block);
         i = code.end;
+      } else if (startsBlock(lines, i + 1)) {
+        // The run of indented lines up to a blank line, nested item or fence, read as top-level markdown.
+        const run = [line];
+        while (i + 1 + run.length < lines.length) {
+          const nl = lines[i + 1 + run.length]!;
+          if (!nl.trim() || indentOf(nl) < inside || LIST_ITEM.test(nl) || FENCE.test(nl)) break;
+          run.push(nl);
+        }
+        const cut = Math.min(...run.map(indentOf));
+        kids.push(...parseBlocks(run.map((l) => dedent(l, cut)).join("\n")));
+        i += run.length;
       } else {
         if (prev?.t === "p" && !gap) prev.text += "\n" + line.trim();
         else if (gap || (prev && prev.t !== "ul" && prev.t !== "ol")) kids.push({ t: "p", text: line.trim() });

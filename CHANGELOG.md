@@ -9,6 +9,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- Markdown in a list item or a block quote can now hold any markdown on the Mac, iPhone and iPad: a table, heading, rule, image, list or quote under a list item, and a table, heading, list or nested quote inside a `>` quote, all render as they do on their own. A table in a list used to show as raw pipes.
+
 ## [app-20261028.1240](https://github.com/markhuot/harness/releases/tag/app-20261028.1240) - 2026-10-28
 
 ### Added

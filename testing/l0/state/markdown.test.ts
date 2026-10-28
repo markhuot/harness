@@ -91,9 +91,38 @@ describe("parseBlocks: lists", () => {
   });
 });
 
+describe("parseBlocks: blocks inside a list item", () => {
+  const kids = (src: string) => (parseBlocks(src)[0] as { items: { text: string; children: unknown[] }[] }).items[0]!;
+  const TABLE = "| a | b |\n|---|---|\n| 1 | 2 |";
+  test("a table under an item, after a blank line or right under its text, is a child table", () => {
+    const table = { t: "table", align: [null, null], header: ["a", "b"], rows: [["1", "2"]] };
+    expect(kids("- item\n\n  | a | b |\n  |---|---|\n  | 1 | 2 |").children).toEqual([table]);
+    const tight = kids("- item\n  | a | b |\n  |---|---|\n  | 1 | 2 |");
+    expect(tight.text).toBe("item");
+    expect(tight.children).toEqual([table]);
+  });
+  test("a heading, quote, rule and image under an item are children, not item text", () => {
+    const it = kids("- item\n  ## Head\n\n  > said\n\n  ---\n\n  ![shot](attachment:a.png)");
+    expect(it.text).toBe("item");
+    expect(it.children.map((c) => (c as { t: string }).t)).toEqual(["h", "quote", "hr", "img"]);
+  });
+  test("a table in a nested item stays in the nested item, and the next sibling still follows", () => {
+    const [list] = parseBlocks("- a\n  - b\n    " + TABLE.split("\n").join("\n    ") + "\n- c") as { items: { text: string; children: { t: string; items?: { children: { t: string }[] }[] }[] }[] }[];
+    expect(list!.items.map((i) => i.text)).toEqual(["a", "c"]);
+    expect(list!.items[0]!.children[0]!.items![0]!.children.map((c) => c.t)).toEqual(["table"]);
+  });
+  test("plain continuation text is still joined into the item", () => {
+    expect(kids("- a\n  more\n  words")).toEqual({ text: "a more words", children: [] });
+  });
+});
+
 describe("parseBlocks: quotes", () => {
   test("consecutive > lines join, stripping one optional space", () => {
     expect(parseBlocks("> a\n>b\n> > c")).toEqual([{ t: "quote", text: "a\nb\n> c" }]);
+  });
+  test("a quote's text holds the rest of the markdown, ready to parse again", () => {
+    const [q] = parseBlocks("> # Head\n>\n> - a\n>\n> | a | b |\n> |---|---|\n> | 1 | 2 |") as { t: "quote"; text: string }[];
+    expect(parseBlocks(q!.text).map((b) => b.t)).toEqual(["h", "ul", "table"]);
   });
   test("a non-quote line ends the quote", () => {
     expect(parseBlocks("> a\nb").map((b) => b.t)).toEqual(["quote", "p"]);

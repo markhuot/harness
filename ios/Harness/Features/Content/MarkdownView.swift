@@ -437,8 +437,18 @@ private struct MarkdownBlockView: View {
         case let .code(lang, text):
             CodeBlockView(code: text, language: lang, struck: style.removed)
         case let .quote(text):
-            MarkdownRichText(text: text, style: style, color: c.text2)
-                .padding(.leading, 10)
+            // A quote holds any markdown, like a list item: its text is parsed again as blocks.
+            let kids = MarkdownCache.shared.blocks(text)
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(kids.indices, id: \.self) { k in
+                    if case let .p(para) = kids[k] {
+                        MarkdownRichText(text: para, style: style, color: c.text2)
+                    } else {
+                        MarkdownBlockView(block: kids[k], style: style, depth: depth + 1)
+                    }
+                }
+            }
+            .padding(.leading, 10)
                 .overlay(alignment: .leading) {
                     Rectangle().fill(c.borderStrong).frame(width: 3)
                 }

@@ -34,6 +34,8 @@ public enum MarkdownTable {
         blocks.contains {
             switch $0 {
             case .table, .code: true
+            case let .ul(items), let .ol(_, items): items.contains { scrollsSideways($0.children) }
+            case let .quote(text): scrollsSideways(text)
             default: false
             }
         }

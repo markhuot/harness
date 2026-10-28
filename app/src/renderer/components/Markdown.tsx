@@ -292,7 +292,14 @@ function MdBlock({ block: b, depth = 0, tickets }: { block: Block; depth?: numbe
     case "code":
       return <FencedCode text={b.text} lang={b.lang} />;
     case "quote":
-      return <blockquote>{withBreaks(b.text, tickets)}</blockquote>;
+      // A quote holds any markdown, like a list item: its text is parsed again as blocks.
+      return (
+        <blockquote>
+          {parseBlocks(b.text).map((child, k) => (
+            <MdBlock key={k} block={child} depth={depth + 1} tickets={tickets} />
+          ))}
+        </blockquote>
+      );
     case "table":
       return (
         <div className="md-table">
