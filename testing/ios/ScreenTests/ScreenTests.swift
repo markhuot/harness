@@ -267,6 +267,16 @@ final class ScreenTests: ScreenTestCase {
         XCTAssertEqual(completing.transport.unrouted, [])
     }
 
+    /// HARNESS-5 with a spec holding a table in a list item and a table in a block quote.
+    func testTicketSpecNested() async throws {
+        var json = try WorldJSON.load()
+        json.patch("HARNESS-5", ["spec": "# Status\n\n- Checked the rollout\n\n  | File | Change |\n  | --- | --- |\n  | board.ts | faster |\n  | api.ts | cached |\n\n> | Metric | Value |\n> | --- | --- |\n> | p50 | 120ms |\n>\n> - one\n> - two"])
+        let nested = await ScreenWorld(json)
+        let image = try await render(nested, router: ticket("HARNESS-5", .spec)) { RootView() }
+        ReferenceImages.assert(image, named: "ticket-spec-nested")
+        XCTAssertEqual(nested.transport.unrouted, [])
+    }
+
     /// HARNESS-8: a conductor, with its two children on the Tickets tab.
     func testTicketChildren() async throws {
         try await screen("ticket-children", router: ticket("HARNESS-8", .children)) { RootView() }
