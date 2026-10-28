@@ -194,7 +194,7 @@ struct ProjectsSidebar: View {
 
     /// Delete a label from every ticket. One no ticket carries goes without asking; one in use asks first, naming how many tickets lose it.
     private func deleteLabel(_ l: LabelInfo) {
-        let delete = { actions.perform { try await store.connectedAPI().deleteLabel(l.name) } }
+        let delete: @MainActor @Sendable () -> Void = { actions.perform { try await store.connectedAPI().deleteLabel(l.name) } }
         guard let warning = LabelList.deleteWarning(l) else { return delete() }
         confirmation = Confirmation(title: "Delete the label \"\(l.name)\"?", message: warning, action: "Delete label", onConfirm: delete)
     }

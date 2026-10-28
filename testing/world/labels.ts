@@ -2,7 +2,7 @@ import type { LabelInfo } from "@harness/shared";
 import { hoursAgo, minutesAgo } from "./time";
 import { tickets } from "./tickets";
 
-/** Colors and recency of the labels the tickets carry; the counts come from the tickets, whatever their status. "Archive" carries no ticket, so its count is 0 and the sidebar hides it. */
+/** Colors and recency of the labels the tickets carry; the counts come from the tickets, whatever their status. "Archive" carries no ticket, so its count is 0 and the sidebar lists it last. */
 const specs: Pick<LabelInfo, "name" | "color" | "lastUsedAt">[] = [
   { name: "Bugfix", color: "red", lastUsedAt: minutesAgo(5) },
   { name: "Performance", color: "orange", lastUsedAt: minutesAgo(20) },
