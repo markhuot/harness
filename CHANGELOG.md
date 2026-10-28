@@ -16,6 +16,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
+- A ticket blocked because its worktree couldn't be created (for example, its branch is checked out somewhere else) can now be answered. Your message, or Unblock with notes, starts a temporary agent session in the project folder that can fix the cause. When the agent unblocks, Harness retries the worktree, ends that session and starts the work in a fresh one. Before, your message went nowhere and the ticket stayed stuck.
 - Markdown in a list item or a block quote can now hold any markdown on the Mac, iPhone and iPad: a table, heading, rule, image, list or quote under a list item, and a table, heading, list or nested quote inside a `>` quote, all render as they do on their own. A table in a list used to show as raw pipes.
 
 ## [app-20261028.1240](https://github.com/markhuot/harness/releases/tag/app-20261028.1240) - 2026-10-28

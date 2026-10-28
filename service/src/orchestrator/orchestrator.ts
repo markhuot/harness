@@ -2850,13 +2850,23 @@ export class Orchestrator {
     if (ticket.status === "blocked" && (!ticket.workdir || (ticket.branch && !existsSync(ticket.workdir)))) {
       const error = await this.prepareWorkdir(ticket);
       if (error) {
+        // The human can't be left without an agent to talk to: the message goes to a temporary
+        // chat in the project checkout, which fixes what stopped the worktree and unblocks (the
+        // unblock tool retries the worktree and starts the work in a fresh session).
         this.addActivityLine(ticket, "failed", "system", error);
         this.store.tickets.update(ticket.id, { blockedReason: error });
         this.touchSession(ticket.sessionId);
+        await this.steerOrEnqueue(ticket.sessionId, "chat", { ...message, text: `${message.text}${this.noWorktreeNote(ticket, error)}` });
         return;
       }
     }
     await this.steerOrEnqueue(ticket.sessionId, ticket.kind === "cos" ? "cos" : "chat", message);
+  }
+
+  /** What the agent reads when its chat runs in the project checkout because the ticket's worktree couldn't be made. */
+  private noWorktreeNote(ticket: Ticket, error: string): string {
+    const project = this.store.projects.get(ticket.projectId);
+    return `\n\n[Harness note: ${error} This chat runs in the project checkout${project ? ` (${project.path})` : ""} so you can fix that. Don't change the project's files or branch. When the cause is fixed, call unblock: the harness retries the worktree and, if it works, starts the work in a fresh session.]`;
   }
 
   /**
@@ -3785,6 +3795,19 @@ ${numberLines(r.body)}`;
     if (t.blockedRunKind === "complete" && a && ctx.runKind === "chat" && (await this.headUnmoved(t))) {
       a.resumeCompletion = { note: why };
       return "Noted. The completion resumes on its own when this reply ends, with the question and the human's answer: don't change the work or call submit_for_review. If the answer means the work needs changes, call resume_work instead.";
+    }
+    // A block raised for a missing worktree: the unblock retries it. If it still can't be made the
+    // ticket stays blocked and the agent reads why; if it works, this temporary chat in the project
+    // checkout ends and the work starts in a fresh session in the worktree.
+    if (t.blockedRunKind !== "complete" && (!t.workdir || (t.branch && !existsSync(t.workdir))) && (ctx.runKind === "chat")) {
+      const dir = await this.workdirFor(t);
+      if (typeof dir === "string") throw new Error(`${dir}. ${t.key} stays blocked: fix that, then call unblock again.`);
+      this.store.sessions.update(t.sessionId, { cwd: dir.workdir });
+      this.addActivityLine(t, "unblocked", "agent", why || "Unblocked: picking the work back up.", { ...(why ? { note: why } : {}), ...this.moveMeta(t, "in_progress") });
+      const moved = this.transition(t, "in_progress", { ...dir, blockedReason: null, pendingApproval: null, reviewRejections: 0 }, `Unblocked by the agent${why ? `: ${why}` : ""}`);
+      this.newSession(t.sessionId);
+      this.enqueueRun(t.sessionId, this.workKind(moved), this.prompts().unblockPrompt(moved, why));
+      return "The worktree is ready, so the work starts in a fresh session when this reply ends. Stop here: don't continue the work in this chat.";
     }
     // Approvals a completion's block kept start over: the resumed work must be reviewed again.
     const reviews: TicketPatch = t.blockedRunKind === "complete" ? { agentReview: "pending", humanReview: "pending" } : {};
@@ -5190,6 +5213,11 @@ ${numberLines(r.body)}`;
       if (typeof dir === "string") {
         this.addActivityLine(ticket, "failed", "system", dir, this.moveMeta(ticket, "blocked"));
         this.transition(ticket, "blocked", { blockedReason: dir }, "Could not create worktree");
+        // A human unblocking is waiting on an answer: a temporary chat in the project checkout
+        // gets their note and fixes the cause (see chat()); its unblock starts the work.
+        if (ticket.status === "blocked" && by === "human") {
+          this.enqueueRun(ticket.sessionId, "chat", `${prompt}${this.noWorktreeNote(ticket, dir)}`, undefined, { attachments });
+        }
         return;
       }
       let fresh = this.store.tickets.get(ticket.id);
