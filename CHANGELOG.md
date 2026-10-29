@@ -9,6 +9,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Changed
+
+- iPhone: with a ticket sheet pulled down to half height, the board above it is no longer dimmed and works as usual: scroll it, or tap another card to open that ticket in the sheet (the one it showed moves to the dock).
+
 ## [app-20261029.0327](https://github.com/markhuot/harness/releases/tag/app-20261029.0327) - 2026-10-29
 
 ### Added

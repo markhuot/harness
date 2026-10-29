@@ -225,6 +225,12 @@ final class ScreenTests: ScreenTestCase {
         try await screen("ticket-sheet-book", router: ticket("HARNESS-5", .spec), landscape: true) { RootView().environment(\.devicePosture, .book) }
     }
 
+    /// The ticket sheet half open: the board above it isn't dimmed, since it takes touches there.
+    func testTicketSheetHalfOpen() async throws {
+        try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .pad, "the form sheet doesn't take detents")
+        try await screen("ticket-sheet-half-open", router: ticket("HARNESS-5", .spec)) { RootView().environment(\.ticketSheetStartsHalfOpen, true) }
+    }
+
     func testTicketActivity() async throws {
         try await screen("ticket-activity", router: ticket("HARNESS-5", .activity)) { RootView() }
     }

@@ -446,7 +446,8 @@ server reports it missing). Only the top mounts at launch; the rest stay parked 
 At every width SceneChrome presents the ticket as one plain system sheet (`TicketSheetHost`:
 `.presentationSizing(.form)`, so a regular-width window gets the narrower form sheet and a compact one
 the usual full-width sheet, and `.presentationDetents([.medium, .large])` for a half-open stop where
-the system honors detents) while the Router is `.presented`; the sheet is a view of the Router's state, and
+the system honors detents, with `.presentationBackgroundInteraction(.enabled(upThrough: .medium))` so
+the board stays live and undimmed above a half-open sheet) while the Router is `.presented`; the sheet is a view of the Router's state, and
 adding or switching tickets swaps its content in place without presenting it again. The system owns
 the drag, its momentum and the dismissal, and the app never inspects them: when it takes the sheet
 down (a swipe away, the two-finger escape, UIKit dismissing it) the root's binding calls

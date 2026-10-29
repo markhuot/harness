@@ -25,7 +25,8 @@ import SwiftUI
 /// The sheet rises from the bottom everywhere, and the system's own presentation decides the rest.
 /// On an iPhone Duo held in the book pose (`\.devicePosture`) it takes the right half of the screen
 /// (`TicketSheetPlacement`); a half-open detent is offered next to the full one where the system
-/// honors detents (not the form sheet).
+/// honors detents (not the form sheet). Half open, the board above it stays live and undimmed: a
+/// scroll moves it, and a card tapped there opens in the sheet (the ticket it showed goes to the dock).
 struct TicketSheetHost: View {
     @Environment(Router.self) private var router
     @Environment(\.palette) private var c
@@ -34,6 +35,7 @@ struct TicketSheetHost: View {
     @State private var last: TicketSheet?
     /// Where the system sheet rests: full height by default, or half open.
     @State private var detent: PresentationDetent = .large
+    @Environment(\.ticketSheetStartsHalfOpen) private var startsHalfOpen
     @Environment(\.devicePosture) private var posture
     @Environment(\.horizontalSizeClass) private var sizeClass
 
@@ -71,6 +73,9 @@ struct TicketSheetHost: View {
         .onChange(of: current?.id) { resignFirstResponder() }
         .presentationDragIndicator(.visible)
         .presentationDetents([.medium, .large], selection: $detent)
+        // Half open, the board behind takes touches; full height, it stays dimmed and inert.
+        .presentationBackgroundInteraction(.enabled(upThrough: .medium))
+        .onAppear { if startsHalfOpen { detent = .medium } }
         .ticketSheetPresentation(TicketSheetPlacement.placement(for: posture), regularWidth: sizeClass == .regular)
         // The window's chords don't fire under a sheet: the palette's are here too.
         .hiddenShortcuts { PaletteShortcuts(router: router) }
@@ -160,6 +165,8 @@ extension EnvironmentValues {
     /// False while a docked sheet is mounted behind the top one (or minimized to its card): hidden,
     /// it has lost focus, which a file's editor saves for (Save on blur).
     @Entry var sheetFront = true
+    /// The ticket sheet comes up half open rather than at full height: a screen test sets it.
+    @Entry var ticketSheetStartsHalfOpen = false
 }
 
 /// Where the docked cards float, as last measured. The dock is in a window of its own, so this
