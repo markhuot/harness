@@ -685,11 +685,13 @@ export function pullRequestList(pullRequests: { url: string; title: string | nul
 }
 
 /** A done ticket sent back to in progress by the human. */
-export function reopenPrompt(ticket: Ticket, notes: string, base?: string, byCos = false, overrides?: PromptOverrides | null): string {
+export function reopenPrompt(ticket: Ticket, notes: string, base?: string, byCos = false, overrides?: PromptOverrides | null, subscription?: { reason: string }): string {
   return renderPrompt(
     "run.reopen",
     {
       byCos,
+      bySubscription: !!subscription,
+      reason: subscription?.reason.trim() ?? "",
       ticket: ticketLabel(ticket),
       notes: notes.trim(),
       specRevision: String(ticket.specRevision ?? 1),
@@ -738,7 +740,7 @@ export function promptsWith(overrides: PromptOverrides | null | undefined) {
     conductorUpdatePrompt: (changes: Parameters<typeof conductorUpdatePrompt>[0]) => conductorUpdatePrompt(changes, overrides),
     ticketEventsPrompt: (changes: Parameters<typeof ticketEventsPrompt>[0]) => ticketEventsPrompt(changes, overrides),
     changesRequestedPrompt: (notes: string, by: "agent" | "human" | "conductor", specRevision?: number) => changesRequestedPrompt(notes, by, specRevision, overrides),
-    reopenPrompt: (ticket: Ticket, notes: string, base?: string, byCos = false) => reopenPrompt(ticket, notes, base, byCos, overrides),
+    reopenPrompt: (ticket: Ticket, notes: string, base?: string, byCos = false, subscription?: { reason: string }) => reopenPrompt(ticket, notes, base, byCos, overrides, subscription),
     unblockPrompt: (ticket: Ticket, notes: string) => unblockPrompt(ticket, notes, overrides),
     replanPrompt: (ticket: Ticket, reason: string, humanMessage: string, startAfterPlan: boolean) => replanPrompt(ticket, reason, humanMessage, startAfterPlan, overrides),
   };

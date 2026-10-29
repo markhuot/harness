@@ -11,7 +11,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
-- Agents can now subscribe to other tickets from a chat run and from a ticket in any column, not only an in-progress one. A ticket in review or blocked hears about the change once it is back in progress, and a done ticket is re-opened with the update as its prompt.
+- Agents can now subscribe to other tickets from a chat run and from a ticket in any column, not only an in-progress one. A ticket in review or blocked hears about the change once it is back in progress, and a done ticket is re-opened automatically (logged as a system re-open, not a human one, with the reason it subscribed) and then gets the update. Changes that arrive while it is being re-opened or while its chat run is still going aren't lost, and a `forever` subscription ends with that re-open.
 
 ## [app-20261029.1134](https://github.com/markhuot/harness/releases/tag/app-20261029.1134) - 2026-10-29
 
