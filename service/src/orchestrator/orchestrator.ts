@@ -604,6 +604,10 @@ export class Orchestrator {
   private mcpRuns = new Map<string, { tools: ToolDefinition[]; ctx: ToolContext }>();
   private liveDebounceMs: number;
   private starting = new Set<string>();
+  /** Done tickets being re-opened by a subscription change (one at a time each). */
+  private subscriptionReopens = new Set<string>();
+  /** The subscriptions (target ids) and reasons behind a done ticket's pending subscription re-open. */
+  private subscriptionTriggers = new Map<string, { targets: Set<string>; reasons: Set<string> }>();
   private watcherRunner: WatcherSupervisor | null;
   private stopping = false;
   private reconcileIntervalMs: number;
@@ -4594,9 +4598,9 @@ ${numberLines(r.body)}`;
 
   // --- subscriptions ---
 
-  /** The in-progress ticket a work, conductor or chief of staff run subscribes for (DESIGN.md "Ticket subscriptions"). */
+  /** The ticket a work, chat, conductor or chief of staff run subscribes for, in any status (DESIGN.md "Ticket subscriptions"). */
   private subscriberOf(ctx: ToolContext, tool: string): Ticket {
-    if (ctx.runKind !== "work" && ctx.runKind !== "conductor" && ctx.runKind !== "cos") throw new Error(`${tool} is only available in work, conductor and chief of staff runs`);
+    if (ctx.runKind !== "work" && ctx.runKind !== "chat" && ctx.runKind !== "conductor" && ctx.runKind !== "cos") throw new Error(`${tool} is only available in work, chat, conductor and chief of staff runs`);
     return this.ctxTicket(ctx);
   }
 
@@ -4626,7 +4630,6 @@ ${numberLines(r.body)}`;
       throw new Error(`${target.key} is your child: its status changes already wake you. Pass events ["note"] or ["spec"] to follow more.`);
     }
     if (target.status === "done") throw new Error(`${target.key} is done: it won't change again.`);
-    if (own.status !== "in_progress") throw new Error(`${own.key} is ${own.status}: only an in-progress ticket waits for events.`);
     const sub = this.store.subscriptions.upsert(own.id, target.id, mode, [...new Set(chosen)], why || null);
     return { ...sub, key: target.key };
   }
@@ -5397,11 +5400,15 @@ ${numberLines(r.body)}`;
       const change: ConductorChange = { ticketId: t.id, sourceRef: entryId, key: t.key, title: t.title, from, to, note, specRevision: t.specRevision };
       if (t.parentId && !(from === "planning" && to === "in_progress")) this.notifyConductor(t.parentId, change);
       this.notifySubscribers(t, change);
-      // Waiting on events is over once the ticket is no longer in progress; reopened work subscribes again.
-      if (to !== "in_progress" && to !== "blocked") this.store.subscriptions.deleteBySubscriber(t.id);
+      // Subscriptions outlive the ticket's column: a change while it is in review or blocked waits for in progress,
+      // and one that reaches it in done reopens it (notifySubscribers).
       // Nothing follows a ticket that is over; its subscribers were told above.
       if (to === "done") this.store.subscriptions.deleteByTarget(t.id);
-      if (to === "done") this.closeTicketEvents(t.id, `${t.key} is done`);
+      if (to === "done") {
+        // Subscription rows still waiting survive: the ticket is re-opened to read them
+        this.closeTicketEvents(t.id, `${t.key} is done`, ["escalated", "handling"], true);
+        if (this.hasWaitingSubscriptionEvent(t.id)) this.reopenForSubscription(t.id);
+      }
       if (to === "in_progress") this.deliverTicketEvents(t.id);
       if (to === "review") this.track(this.refreshHasChanges(t));
       if (to === "done") {
@@ -5760,7 +5767,7 @@ ${numberLines(r.body)}`;
       if (sub.subscriberId === caller) continue;
       let off = false;
       const subscriber = this.store.tickets.get(sub.subscriberId);
-      if (!subscriber || subscriber.status === "done") {
+      if (!subscriber) {
         this.store.subscriptions.deleteBySubscriber(sub.subscriberId);
         continue;
       }
@@ -5785,6 +5792,11 @@ ${numberLines(r.body)}`;
         }
         continue;
       }
+      // A done ticket that subscribed (a chat run after completion) keeps the change as a row, like any
+      // subscriber, and is re-opened to read it. It is over, so a `forever` subscription is spent by that
+      // one re-open (reopenSubscriber; the agent subscribes again if it still waits): a chatty target can't loop it,
+      // while changes that arrive before the re-open is through are still rows.
+      const over = subscriber.status === "done";
       const row = this.store.transaction(() => {
         const inserted = this.insertTicketEvent(subscriber.id, "subscription", { ...change, event });
         if (sub.mode === "once") this.store.subscriptions.delete(sub.subscriberId, sub.targetId);
@@ -5793,7 +5805,8 @@ ${numberLines(r.body)}`;
       if (row) {
         // After the transaction: a rolled-back row is never announced
         this.bus.emit({ kind: "ticket.event.upserted", event: wireCosEvent(row) });
-        this.deliverTicketEvents(subscriber.id, true);
+        if (over) this.reopenForSubscription(subscriber.id, { targetId: sub.targetId, reason: sub.reason });
+        else this.deliverTicketEvents(subscriber.id, true);
       }
     }
   }
@@ -5804,9 +5817,57 @@ ${numberLines(r.body)}`;
   }
 
   /** The ticket's waiting rows are closed: nothing will read them (it is done or deleted). */
-  private closeTicketEvents(ticketId: string, why: string, statuses: readonly ("escalated" | "handling")[] = ["escalated", "handling"]) {
+  private closeTicketEvents(ticketId: string, why: string, statuses: readonly ("escalated" | "handling")[] = ["escalated", "handling"], keepSubscriptions = false) {
     for (const status of statuses) {
-      for (const e of this.store.ticketEvents.byTarget(status, ticketId, "ticket")) this.patchTicketEvent(e.id, { status: "ignored", reason: why, wakeId: null, consumingRunId: null });
+      for (const e of this.store.ticketEvents.byTarget(status, ticketId, "ticket")) {
+        if (keepSubscriptions && status === "escalated" && e.sourceKind === "subscription") continue;
+        this.patchTicketEvent(e.id, { status: "ignored", reason: why, wakeId: null, consumingRunId: null });
+      }
+    }
+  }
+
+  /**
+   * A done ticket has subscription rows waiting: send it back to in progress so they are delivered. Deferred out of the
+   * change that caused it (its transaction, its caller and its actor are not this ticket's), and one re-open at a time:
+   * a change arriving meanwhile is a row too, delivered with the rest once the ticket is in progress.
+   */
+  private reopenForSubscription(ticketId: string, trigger?: { targetId: string; reason?: string | null }) {
+    if (trigger) {
+      const entry = this.subscriptionTriggers.get(ticketId) ?? { targets: new Set<string>(), reasons: new Set<string>() };
+      entry.targets.add(trigger.targetId);
+      if (trigger.reason?.trim()) entry.reasons.add(trigger.reason.trim());
+      this.subscriptionTriggers.set(ticketId, entry);
+    }
+    queueMicrotask(() => {
+      if (this.stopping) return;
+      this.callerContext.exit(() =>
+        this.actorContext.run(null, () => {
+          this.track(this.reopenSubscriber(ticketId).catch((err) => this.log(`events: re-opening ${ticketId} failed: ${err instanceof Error ? err.message : String(err)}`)));
+        }),
+      );
+    });
+  }
+
+  private async reopenSubscriber(ticketId: string) {
+    const ticket = this.store.tickets.get(ticketId);
+    if (!ticket || ticket.status !== "done" || this.subscriptionReopens.has(ticketId) || !this.hasWaitingSubscriptionEvent(ticketId)) return;
+    // A chat run of the done ticket is still going (the one that subscribed, say): it re-opens once that run ends (afterRun)
+    if (this.liveRunOf(ticketId)) return;
+    this.subscriptionReopens.add(ticketId);
+    try {
+      this.notCos(ticket, "re-opened");
+      this.notDraft(ticket, "re-opened");
+      this.notCompacting(ticket, "re-opened");
+      const reason = [...(this.subscriptionTriggers.get(ticketId)?.reasons ?? [])].join("\n");
+      this.addActivity(ticket, "reopened", "system", "A ticket it subscribed to changed", this.moveMeta(ticket, "in_progress"));
+      await this.reopen(ticket, this.prompts().reopenPrompt(ticket, "", (await this.refreshBaseBranch(ticket)).branch, false, { reason }), "Re-opened by a ticket it subscribed to");
+      // Spent: a `forever` subscription that re-opened a done ticket ends with that re-open
+      for (const targetId of this.subscriptionTriggers.get(ticketId)?.targets ?? []) {
+        if (this.store.subscriptions.listByTarget(targetId).some((s) => s.subscriberId === ticketId && s.mode === "forever")) this.store.subscriptions.delete(ticketId, targetId);
+      }
+    } finally {
+      this.subscriptionTriggers.delete(ticketId);
+      this.subscriptionReopens.delete(ticketId);
     }
   }
 
@@ -6057,6 +6118,9 @@ ${numberLines(r.body)}`;
     } catch (err) {
       this.log(`post-run handling failed for ${run.id}: ${errMsg(err)}`);
     }
+    // A done ticket's chat run held back the re-open its subscription asked for (reopenSubscriber)
+    const after = this.store.sessions.get(run.sessionId)?.ticketId;
+    if (after && this.store.tickets.get(after)?.status === "done" && this.hasWaitingSubscriptionEvent(after)) this.reopenForSubscription(after);
     this.kickScheduler();
   }
 

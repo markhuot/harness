@@ -806,22 +806,27 @@ Address every point and verify the fix the way a work run does: a test for each 
       ticket: TICKET,
       notes: "What the human wants changed",
       byCos: "True when the chief of staff re-opened the ticket for new follow-on work, not the human to change it",
+      bySubscription: "True when a change to a ticket this one subscribed to re-opened it, not a person",
+      reason: "Why the ticket subscribed (what it was waiting for), when it said, for a subscription re-open",
       specRevision: "The spec's current revision number",
       branch: BRANCH,
       baseBranch: "The base branch the earlier work merged into, or empty when unknown",
       isHarnessBranch: "True when the ticket's branch is the harness's own (recreated from the base branch)",
       pullRequests: "The ticket's pull requests, one per line as - <url> (<title>), or empty",
     },
-    template: `{{ticket}} was done, and {{#if byCos}}the chief of staff has re-opened it because new work came up that belongs to it{{else}}the human has re-opened it{{/if}}.
+    template: `{{ticket}} was done, and {{#if bySubscription}}a ticket it subscribed to has changed, so it was re-opened automatically. Nobody asked for changes: what changed arrives as a separate message.{{else if byCos}}the chief of staff has re-opened it because new work came up that belongs to it{{else}}the human has re-opened it{{/if}}.
 
-## What the human wants
+{{#if bySubscription}}{{#if reason}}## Why you subscribed
+{{reason}}
+{{/if}}{{else}}## What the human wants
 {{notes}}
+{{/if}}
 
 {{#if pullRequests}}The earlier work was pushed to \`{{branch}}\` and is in these pull requests:
 {{pullRequests}}
 They may have review comments to address (\`gh pr view {{branch}} --comments\` shows the one for this branch). Commit on \`{{branch}}\` as usual; when the ticket completes again the new commits go to the same pull request.{{else if branch}}The earlier work was probably merged into {{#if baseBranch}}\`{{baseBranch}}\`{{else}}the base branch{{/if}} when the ticket was completed, and the worktree may have been recreated on \`{{branch}}\`{{#if isHarnessBranch}} from {{#if baseBranch}}\`{{baseBranch}}\`{{else}}the base branch{{/if}}{{/if}}. Check \`git log\` to see what is already there before you change anything.{{else}}Check the current state of the working tree before you change anything; the earlier work is already in it.{{/if}}
 
-Do the work and verify it the way a work run does: a test for each behaviour change, the tests and typecheck passing, screenshots in Status for visible changes. {{#if byCos}}This is follow-on work, so the Goal stays the original spec: don't add the new work to it. Create the work as a child ticket with \`create_ticket\` and \`child: true\` (a child is linked to this ticket, gates its \`submit_for_review\` and reports back to you), with a spec that says why the work is needed and what part of this ticket's goal it follows from. Conduct it: review each child and \`complete_ticket\` it, as your child tickets instructions say. When every child is done, check the result against this ticket's original spec: the follow-on work must still fit the Goal. Then update the Status for what is now true, with no section for this round, and call \`submit_for_review\` with \`spec_is_up_to_date\` true. The submit note covers only the follow-on work.{{else}}The spec is at revision {{specRevision}}: add what the human wants to its Goal as requirements, rewriting any requirement it changes, and rewrite the Status statements the work changes so they describe the current state, with no section for this round. Then call \`submit_for_review\` again with \`spec_is_up_to_date\` true. The submit note covers only these changes.{{/if}}`,
+{{#if bySubscription}}Read the update, decide whether it needs anything from this ticket, and if so do the work and verify it the way a work run does: a test for each behaviour change, the tests and typecheck passing, screenshots in Status for visible changes. Then update the Status for what is now true, with no section for this round, and call \`submit_for_review\` again with \`spec_is_up_to_date\` true. If nothing is needed, say so in the submit note.{{else}}Do the work and verify it the way a work run does: a test for each behaviour change, the tests and typecheck passing, screenshots in Status for visible changes. {{#if byCos}}This is follow-on work, so the Goal stays the original spec: don't add the new work to it. Create the work as a child ticket with \`create_ticket\` and \`child: true\` (a child is linked to this ticket, gates its \`submit_for_review\` and reports back to you), with a spec that says why the work is needed and what part of this ticket's goal it follows from. Conduct it: review each child and \`complete_ticket\` it, as your child tickets instructions say. When every child is done, check the result against this ticket's original spec: the follow-on work must still fit the Goal. Then update the Status for what is now true, with no section for this round, and call \`submit_for_review\` with \`spec_is_up_to_date\` true. The submit note covers only the follow-on work.{{else}}The spec is at revision {{specRevision}}: add what the human wants to its Goal as requirements, rewriting any requirement it changes, and rewrite the Status statements the work changes so they describe the current state, with no section for this round. Then call \`submit_for_review\` again with \`spec_is_up_to_date\` true. The submit note covers only these changes.{{/if}}{{/if}}`,
   },
 
   "run.unblock": {

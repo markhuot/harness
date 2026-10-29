@@ -139,6 +139,99 @@ test("a change the subscriber makes itself doesn't wake it", async () => {
   expect(h.ticket(me.key).status).toBe("review");
 });
 
+test("a ticket that subscribed and then went to review keeps the subscription, and the change is delivered once it is in progress again", async () => {
+  const { h, other, me, results } = await subscriber((key) => [["subscribe_ticket", { key, mode: "forever" }], ["submit_for_review", { note: "done for now", spec_is_up_to_date: true }]]);
+  expect(results[0]).toMatchObject({ isError: false });
+  expect(h.ticket(me.key).status).toBe("review");
+  expect(h.store.subscriptions.listBySubscriber(me.id)).toHaveLength(1);
+  await h.orch.startTicket(other.key);
+  await h.settle();
+  expect(wakes(h)).toHaveLength(0);
+  expect(h.store.ticketEvents.byTarget("escalated", me.id, "ticket").length).toBeGreaterThan(0);
+  h.orch.humanReview(me.key, { decision: "request_changes", notes: "more" });
+  await h.settle();
+  expect(wakes(h)).toHaveLength(1);
+  expect(wakes(h)[0]!.prompt).toContain(`${other.key} "Other"`);
+});
+
+async function doneSubscriber(mode: "once" | "forever", reason?: string) {
+  const r = await subscriber((key) => [["subscribe_ticket", { key, mode, reason }]]);
+  await r.h.orch.updateTicket(r.me.key, { status: "done" });
+  await r.h.settle();
+  expect(r.h.ticket(r.me.key).status).toBe("done");
+  expect(r.h.store.subscriptions.listBySubscriber(r.me.id)).toHaveLength(1);
+  return r;
+}
+
+test("a done ticket can subscribe, and the change re-opens it as an automatic re-open that says why it subscribed, then delivers the update", async () => {
+  const { h, other, me } = await doneSubscriber("once", "wait for Other to start");
+  await h.orch.startTicket(other.key);
+  await h.settle();
+  expect(h.ticket(me.key).status).not.toBe("done");
+  const reopen = h.driver.requests.find((r) => r.prompt.includes("re-opened automatically"))!;
+  expect(reopen.prompt).toContain("wait for Other to start");
+  expect(reopen.prompt).not.toContain("What the human wants");
+  const entry = h.store.activity.listBySession(me.sessionId).find((e) => e.kind === "reopened")!;
+  expect(entry.author).toBe("system");
+  expect(wakes(h)).toHaveLength(1);
+  expect(wakes(h)[0]!.prompt).toContain(`${other.key} "Other": planning → in_progress`);
+  expect(h.store.subscriptions.listBySubscriber(me.id)).toHaveLength(0);
+});
+
+test("two changes in a row while the subscriber is done are both delivered, with one re-open", async () => {
+  const { h, other, me } = await doneSubscriber("forever");
+  await h.orch.updateTicket(other.key, { status: "blocked" });
+  await h.orch.updateTicket(other.key, { status: "review" });
+  await h.settle();
+  expect(h.ticket(me.key).status).not.toBe("done");
+  expect(h.driver.requests.filter((r) => r.prompt.includes("re-opened automatically"))).toHaveLength(1);
+  // The two moves are collapsed into one change in a single message
+  expect(wakes(h)).toHaveLength(1);
+  expect(wakes(h)[0]!.prompt).toContain(`${other.key} "Other": planning → review`);
+  // The forever subscription is spent by the re-open: a chatty target can't keep re-opening it.
+  expect(h.store.subscriptions.listBySubscriber(me.id)).toHaveLength(0);
+});
+
+test("a re-open that is rejected keeps the change as a waiting row and the subscription", async () => {
+  const { h, other, me } = await doneSubscriber("once");
+  h.store.tickets.update(me.id, { draft: true });
+  await h.orch.startTicket(other.key);
+  await h.settle();
+  expect(h.ticket(me.key).status).toBe("done");
+  expect(h.store.ticketEvents.byTarget("escalated", me.id, "ticket")).toHaveLength(1);
+});
+
+test("a subscriber that goes from review to done with a change waiting is re-opened with it", async () => {
+  const { h, other, me } = await subscriber((key) => [["subscribe_ticket", { key }], ["submit_for_review", { note: "waiting", spec_is_up_to_date: true }]]);
+  expect(h.ticket(me.key).status).toBe("review");
+  await h.orch.startTicket(other.key);
+  await h.settle();
+  expect(h.store.ticketEvents.byTarget("escalated", me.id, "ticket").length).toBeGreaterThan(0);
+  await h.orch.updateTicket(me.key, { status: "done" });
+  await h.settle();
+  expect(h.ticket(me.key).status).not.toBe("done");
+  expect(wakes(h)).toHaveLength(1);
+  expect(wakes(h)[0]!.prompt).toContain(`${other.key} "Other": planning → in_progress`);
+});
+
+test("a change that fires while the done ticket's chat run is still going re-opens it once that run ends", async () => {
+  const { h, other, me } = await subscriber(() => []);
+  await h.orch.updateTicket(me.key, { status: "done" });
+  await h.settle();
+  const release = gate();
+  h.driver.script([...callTools([["subscribe_ticket", { key: other.key }]]).steps, { wait: release }, ...replyScript("watching")]);
+  await h.orch.sendMessage(me.key, "keep an eye on Other");
+  while (!h.store.subscriptions.listBySubscriber(me.id).length) await new Promise((r) => setTimeout(r, 5));
+  await h.orch.startTicket(other.key);
+  await new Promise((r) => setTimeout(r, 50));
+  expect(h.ticket(me.key).status).toBe("done");
+  expect(h.store.ticketEvents.byTarget("escalated", me.id, "ticket")).toHaveLength(1);
+  release.open();
+  await h.settle();
+  expect(h.ticket(me.key).status).not.toBe("done");
+  expect(wakes(h)).toHaveLength(1);
+});
+
 test("only the events a subscription asked for wake the ticket", async () => {
   const { h, other } = await subscriber((key) => [["subscribe_ticket", { key, mode: "forever", events: ["spec"] }]]);
   await h.orch.startTicket(other.key);
