@@ -21,6 +21,8 @@ let ignoredFields: [String: String] = [
     "Ticket.blockedRunKind": "Swift has no property for it, and no iPhone screen reads it",
     "Ticket.blockedHead": "Swift has no property for it, and no iPhone screen reads it",
     "Ticket.startAfterPlanBy": "Swift has no property for it, and no iPhone screen reads it",
+    "UpdateTicketBody.completionAction": "Swift has no property for it: no iPhone screen edits a ticket's approval method outside the approve sheet (HumanReviewBody)",
+    "UpdateTicketBody.completionInstructions": "Swift has no property for it: no iPhone screen edits a ticket's approval method outside the approve sheet (HumanReviewBody)",
     "WatcherBody.cosId": "Swift has no property for it: no iPhone screen creates a watcher (the chief of staff does, with its own tools)",
 ]
 
