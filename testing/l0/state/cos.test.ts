@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { resolveTriageModel, resolveTriagePermissionMode, triageDriver, type Cos, type CosChatEntry, type TicketEvent } from "../../../shared/src/cos";
+import { resolveSpecGuardModel, specGuardEnabled, resolveTriageModel, resolveTriagePermissionMode, triageDriver, type Cos, type CosChatEntry, type TicketEvent } from "../../../shared/src/cos";
 import { anchoredScrollTop, canEscalate, cosBadgeCount, COS_TABS, eventRows, eventStateLabel, EVENT_SOURCE_LABEL, inboxState, isCosTab, mergeChat, mergeEvents, nearTop, openEventCount, sortChiefs, triStateOf, triStateValue } from "../../../shared/src/state/cos";
 import { applyEvent, initialState, reducer } from "../../../shared/src/state/reducer";
 
@@ -183,6 +183,14 @@ describe("triage settings", () => {
     expect(resolveTriageModel({ classifier: "anthropic-api", cosTriageModel: "  " })).toBe("claude-haiku-5-5");
     expect(resolveTriageModel({ classifier: "claude-cli", cosTriageModel: "sonnet" })).toBe("sonnet");
     expect(triageDriver({ classifier: "off" })).toBe("claude-code");
+  });
+
+  test("the spec guard is on unless switched off, and judges on the triage Haiku unless a model is set", () => {
+    expect(specGuardEnabled({})).toBe(true);
+    expect(specGuardEnabled({ specGuardEnabled: false })).toBe(false);
+    expect(resolveSpecGuardModel({ classifier: "claude-cli", specGuardModel: null })).toBe("haiku");
+    expect(resolveSpecGuardModel({ classifier: "anthropic-api", specGuardModel: "" })).toBe("claude-haiku-5-5");
+    expect(resolveSpecGuardModel({ classifier: "claude-cli", specGuardModel: "opus" })).toBe("opus");
   });
 
   test("the permission mode is read-only unless set", () => {

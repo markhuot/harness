@@ -1049,6 +1049,10 @@ export interface Settings {
   cosModel?: PhaseChoice | null;
   /** The model that triages a chief's events before it wakes (empty or absent: the backend's Haiku, `triageDefaultModel`). Optional like cosEnabled. */
   cosTriageModel?: string | null;
+  /** Whether a small model checks an agent's spec writes for history before they are stored (absent: true). Optional like cosEnabled. */
+  specGuardEnabled?: boolean;
+  /** The model that checks them (empty or absent: the backend's Haiku, `specGuardDefaultModel`). Optional like cosEnabled. */
+  specGuardModel?: string | null;
   /** How a triage run's lookups are judged (null or absent: "read_only"). Resolve with `resolveTriagePermissionMode`. Optional like cosEnabled. */
   cosTriagePermissionMode?: TriagePermissionMode | null;
   /**

@@ -18,6 +18,21 @@ export function resolveTriageModel(settings: Pick<Settings, "classifier" | "cosT
   return settings.cosTriageModel?.trim() || triageDefaultModel(settings);
 }
 
+/** The model the spec guard runs on when settings.specGuardModel is empty: the same Haiku triage defaults to. */
+export function specGuardDefaultModel(settings: Pick<Settings, "classifier">): string {
+  return triageDefaultModel(settings);
+}
+
+/** The model the spec guard runs on: settings.specGuardModel, else the driver's Haiku. */
+export function resolveSpecGuardModel(settings: Pick<Settings, "classifier" | "specGuardModel">): string {
+  return settings.specGuardModel?.trim() || specGuardDefaultModel(settings);
+}
+
+/** Whether the spec guard checks agent spec writes: on unless settings.specGuardEnabled is false. */
+export function specGuardEnabled(settings: Pick<Settings, "specGuardEnabled">): boolean {
+  return settings.specGuardEnabled !== false;
+}
+
 /** How triage's lookups are judged: settings.cosTriagePermissionMode, else read-only. */
 export function resolveTriagePermissionMode(settings: Pick<Settings, "cosTriagePermissionMode">): TriagePermissionMode {
   return settings.cosTriagePermissionMode ?? "read_only";

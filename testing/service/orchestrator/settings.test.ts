@@ -155,6 +155,15 @@ test("the triage model and permission mode: a model name or null, read-only or a
   for (const v of ["ask", "yolo", true]) bad(() => validateSettingsPatch({ cosTriagePermissionMode: v }), /cosTriagePermissionMode must be one of read_only, auto/);
 });
 
+test("the spec guard switch is a boolean and its model a name or null", () => {
+  expect(validateSettingsPatch({ specGuardEnabled: false })).toEqual({ specGuardEnabled: false });
+  for (const v of ["false", 0, null]) bad(() => validateSettingsPatch({ specGuardEnabled: v }), /specGuardEnabled must be true or false/);
+  expect(validateSettingsPatch({ specGuardModel: "  opus " })).toEqual({ specGuardModel: "opus" });
+  expect(validateSettingsPatch({ specGuardModel: " " })).toEqual({ specGuardModel: null });
+  bad(() => validateSettingsPatch({ specGuardModel: 5 }), /specGuardModel must be a model name or null/);
+  expect(DEFAULT_SETTINGS).toMatchObject({ specGuardEnabled: true, specGuardModel: null });
+});
+
 test("eventRetentionDays accepts whole days from 1 to 365 and defaults to a week", () => {
   expect(validateSettingsPatch({ eventRetentionDays: 1 })).toEqual({ eventRetentionDays: 1 });
   expect(validateSettingsPatch({ eventRetentionDays: 365 })).toEqual({ eventRetentionDays: 365 });

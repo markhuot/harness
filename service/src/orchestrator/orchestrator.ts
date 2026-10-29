@@ -104,6 +104,8 @@ import {
   TICKET_EVENT_STATUSES,
   cosScopeKey,
   resolveTriageModel,
+  resolveSpecGuardModel,
+  specGuardEnabled,
   resolveTriagePermissionMode,
   type TriagePermissionMode,
   parseCosScopeKey,
@@ -206,6 +208,7 @@ import { PermissionGate, type GateEnv } from "../permissions/gate";
 import { AnthropicApiClassifier, ClaudeCliClassifier, type Classifier } from "../permissions/classifier";
 import { AutoModeRulesProvider } from "../permissions/rules";
 import { anthropicStructured, claudeCliStructured } from "../permissions/structured";
+import { LlmSpecGuard, SPEC_GUARD_TIMEOUT_MS, changedSections, specGoal, type SpecGuard, type SpecGuardInput, type SpecGuardVerdict } from "./spec-guard";
 import { CosEngine, wire as wireCosEvent } from "../cos/engine";
 import { EventDelivery, type Timers as CosTimers } from "../events/delivery";
 import { CHILD_EVENT_WAKE_CAP, DEFAULT_EVENT_RETENTION_DAYS, EVENT_WAKE_CAP } from "@harness/shared";
@@ -282,6 +285,10 @@ export interface OrchestratorOptions {
   classifier?: Classifier | null;
   /** The chief-of-staff triage layer (default: built from settings.classifier and cosTriageModel); `{ unavailable }` for none */
   cosTriage?: CosTriage | { unavailable: string };
+  /** The spec guard that checks agents' spec writes (default: built from settings.classifier and specGuardModel); null for none */
+  specGuard?: SpecGuard | null;
+  /** How long a spec guard check may take before the write goes through (default SPEC_GUARD_TIMEOUT_MS) */
+  specGuardTimeoutMs?: number;
   /** Timers for the chief-of-staff event pipeline (default: real ones) */
   cosTimers?: CosTimers;
   /** Classifier rules (default: `claude auto-mode config`, cached in HARNESS_HOME) */
@@ -627,6 +634,8 @@ export class Orchestrator {
   private readonly terminalAccess: TerminalAccess | undefined;
   private readonly macRequests: MacRequests | undefined;
   private cosOpts: Pick<OrchestratorOptions, "cosTriage">;
+  private specGuardOption: SpecGuard | null | undefined;
+  private specGuardTimeoutMs: number;
   /** The triage agent runs in flight, by their session: what each was asked and the verdicts it has recorded (runTriage) */
   private triageRuns = new Map<string, { cosId: string; system: string; model: string; permissionMode: TriagePermissionMode; cliMode?: string; ids: string[]; verdicts: Map<string, TriageVerdict> }>();
   private cosOff: (() => void)[] = [];
@@ -650,6 +659,8 @@ export class Orchestrator {
     this.modelCatalog = new ModelCatalog(opts.modelCatalog);
     this.classifierOption = opts.classifier;
     this.cosOpts = { cosTriage: opts.cosTriage };
+    this.specGuardOption = opts.specGuard;
+    this.specGuardTimeoutMs = opts.specGuardTimeoutMs ?? SPEC_GUARD_TIMEOUT_MS;
     this.autoModeRules =
       opts.autoModeRules ??
       new AutoModeRulesProvider({
@@ -1442,6 +1453,54 @@ export class Orchestrator {
     // The CLI backend gets an agent run that can look things up; a service with no claude-code driver keeps the one-shot call.
     if (this.drivers.get("claude-code")) return new AgentTriage("claude-cli", model, (req, signal) => this.runTriage(req, signal));
     return new LlmTriage("claude-cli", model, (req, signal) => claudeCliStructured({ bin: () => resolveClaudeBin(process.env), env: () => claudeCliEnv(process.env, this.settings()) }, req, signal), this.paths.home);
+  }
+
+  /** The spec guard for the next agent spec write: injected, else a Haiku call on the classifier's backend; null when switched off or there is none to call. */
+  private specGuard(): SpecGuard | null {
+    const settings = this.settings();
+    if (!specGuardEnabled(settings)) return null;
+    if (this.specGuardOption !== undefined) return this.specGuardOption;
+    if (settings.classifier === "off" || process.env.NODE_ENV === "test") return null;
+    const model = () => resolveSpecGuardModel(this.settings());
+    if (settings.classifier === "anthropic-api") {
+      const apiKey = () => this.settings().anthropicApiKey ?? process.env.ANTHROPIC_API_KEY ?? null;
+      if (!apiKey()) return null;
+      return new LlmSpecGuard("anthropic-api", model, (req, signal) => anthropicStructured({ apiKey }, req, signal), this.paths.home);
+    }
+    return new LlmSpecGuard("claude-cli", model, (req, signal) => claudeCliStructured({ bin: () => resolveClaudeBin(process.env), env: () => claudeCliEnv(process.env, this.settings()) }, req, signal), this.paths.home);
+  }
+
+  /**
+   * Asks the spec guard about an agent's write and throws its refusal (a tool error naming the line).
+   * A check that can't answer (error, timeout) lets the write through.
+   */
+  private async guardSpecWrite(t: Ticket, w: { kind: "edit" | "replace"; before: string; body: string }): Promise<void> {
+    const guard = this.specGuard();
+    if (!guard) return;
+    const edit = w.kind === "edit" ? changedSections(w.before, w.body) : null;
+    if (edit && !edit.added.trim()) return; // only deletions: nothing was added to judge
+    const input: SpecGuardInput = {
+      ticketTitle: t.title,
+      goal: specGoal(w.before),
+      kind: w.kind,
+      text: edit ? edit.sections : w.body,
+      added: edit ? edit.added : w.body,
+    };
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.specGuardTimeoutMs);
+    let verdict: SpecGuardVerdict | null = null;
+    try {
+      verdict = await guard.check(input, controller.signal);
+    } catch (err) {
+      this.log(`spec guard for ${t.key} couldn't judge the write, so it goes through: ${errMsg(err)}`);
+    } finally {
+      clearTimeout(timer);
+    }
+    if (verdict && !verdict.ok) {
+      throw new Error(
+        `Not saved: this write adds history or logging, and the spec is a current summary. ${verdict.reason} Offending line: "${verdict.quote}". Rewrite it as the current state (a decision goes inline in the Plan step or acceptance criterion it shapes, with its reason) and write again. Nothing was changed; the spec is still at revision ${t.specRevision ?? 1}.`,
+      );
+    }
   }
 
   /**
@@ -3638,7 +3697,7 @@ ${numberLines(r.body)}`;
       if (err instanceof SpecEditError) throw new Error(`${err.message}. No edit was applied; the spec is still at revision ${current}.`);
       throw err;
     }
-    return this.agentSpecWrite(ctx, t, { body, baseRevision: current, note: input.note });
+    return this.agentSpecWrite(ctx, t, { kind: "edit", body, baseRevision: current, note: input.note });
   }
 
   async updateSpec(ctx: ToolContext, input: { spec: string; note: string; baseRevision: number; title?: string }): Promise<string> {
@@ -3646,7 +3705,7 @@ ${numberLines(r.body)}`;
     if (typeof input.spec !== "string" || !input.spec.trim()) throw new Error("spec is empty");
     const current = t.specRevision ?? 1;
     if (input.baseRevision !== current) throw new Error(this.staleSpecMessage(t, input.baseRevision));
-    const out = await this.agentSpecWrite(ctx, t, { body: input.spec, baseRevision: current, note: input.note });
+    const out = await this.agentSpecWrite(ctx, t, { kind: "replace", body: input.spec, baseRevision: current, note: input.note });
     const title = input.title?.trim();
     if (title && title !== t.title) {
       const u = this.store.tickets.update(t.id, { title })!;
@@ -3666,10 +3725,12 @@ ${numberLines(r.body)}`;
   /**
    * An agent's spec write: local images in `body` are validated and stored as the ticket's
    * attachments (their src becomes attachment:<id>), then the revision is added. Nothing is kept
-   * when any of it fails.
+   * when any of it fails. The spec guard judges the text first (guardSpecWrite).
    */
-  private async agentSpecWrite(ctx: ToolContext, t: Ticket, w: { body: string; baseRevision: number; note: string }): Promise<string> {
+  private async agentSpecWrite(ctx: ToolContext, t: Ticket, w: { kind: "edit" | "replace"; body: string; baseRevision: number; note: string }): Promise<string> {
     if (typeof w.note !== "string" || !w.note.trim()) throw new Error("note is empty: say in a few words what changed");
+    // Before anything is stored, so a refusal leaves no attachment files behind. A human edit during the check still fails the base-revision check below.
+    if (w.body !== t.spec) await this.guardSpecWrite(t, { kind: w.kind, before: t.spec, body: w.body });
     const sources = localImageSources(w.body);
     const prepared = prepareAttachments(sources, ctx.cwd);
     const stored = storeAttachments(this.paths.attachmentsDir, prepared);

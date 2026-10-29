@@ -25,6 +25,8 @@ export const DEFAULT_SETTINGS: Settings = {
   cosModel: null,
   cosTriageModel: null,
   cosTriagePermissionMode: null,
+  specGuardEnabled: true,
+  specGuardModel: null,
   anthropicApiKey: null,
   claudeOauthToken: null,
   copilotGithubToken: null,
@@ -239,6 +241,14 @@ export function validateSettingsPatch(body: unknown, knownDrivers?: string[], cu
       case "cosEnabled":
         if (typeof value !== "boolean") throw badRequest(`${key} must be true or false`);
         out[key] = value;
+        break;
+      case "specGuardEnabled":
+        if (typeof value !== "boolean") throw badRequest(`${key} must be true or false`);
+        out[key] = value;
+        break;
+      case "specGuardModel":
+        if (value !== null && typeof value !== "string") throw badRequest("specGuardModel must be a model name or null");
+        out.specGuardModel = (value as string | null)?.trim() || null;
         break;
       case "cosStatuses":
         out.cosStatuses = validateCosStatuses("cosStatuses", value, false);
