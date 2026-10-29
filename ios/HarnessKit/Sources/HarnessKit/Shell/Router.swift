@@ -26,9 +26,8 @@ import Observation
 /// ticket or project; the first link's lines stay). A ticket opened from a file's "Open ticket"
 /// is a card of its own too. In a ticket window a file still pushes on the stack.
 ///
-/// Ticket sheets (main scope, compact and regular width alike): tickets and New session open in a
-/// `TicketSheet` over the sections (iPhone) or beside them (iPad, `sheetIsBesideBoard`) instead of
-/// on a section's stack. A size-class change keeps them as they are. The router keeps a list of
+/// Ticket sheets (main scope, at every width): tickets and New session open in a `TicketSheet`, a
+/// system sheet over the sections, instead of on a section's stack. A size-class change keeps them as they are. The router keeps a list of
 /// them, `dockedSheets`, most recently used first; the first is the one on top, the only one on
 /// screen. `ticketSheetState` is `.presented`, `.docked` or `.gone` (the list is empty).
 /// - Presented (`ticketSheet`, the top): every push lands on its own `path`, so a conductor's child
@@ -75,18 +74,10 @@ public final class Router {
     private var ticketSheetDocked = false
     @ObservationIgnored private var nextTicketSheetID = 0
 
-    /// Main scope: the presented ticket sheet sits beside the board (the iPad's side panel at
-    /// regular width) rather than covering it (the iPhone's sheet), so the board still counts as on
-    /// screen (`PresenceRules`). The view layer sets it from the width; it changes nothing else.
-    public var sheetIsBesideBoard = false {
-        didSet { if oldValue != sheetIsBesideBoard { layoutChangedAt = Date() } }
-    }
-
-    /// When `sheetIsBesideBoard` last flipped (a rotation or resize across the size class).
-    @ObservationIgnored private var layoutChangedAt: Date?
-
-    /// How long after a layout flip a system dismissal is taken for the flip itself, not the user.
-    public static let layoutFlipGrace: TimeInterval = 1.5
+    /// Main scope: the window is at regular width (the iPad's split view with the sidebar), where
+    /// Settings is a section beside the sidebar rather than a sheet. The view layer sets it from the
+    /// width; it changes nothing else.
+    public var desktopLayout = false
 
     /// The last board column the phone showed (the pager's page), kept here, above the board
     /// screen (which is a new view on every layout flip and section switch), so it comes back. It
@@ -143,7 +134,7 @@ public final class Router {
             dismissModals()
             dockSheet()
             paths[tab] = []
-            if tab == .settings && !sheetIsBesideBoard {
+            if tab == .settings && !desktopLayout {
                 // Compact width: Settings is a sheet over the section, so a swipe down closes it.
                 sheet = .settings
             } else {
@@ -399,14 +390,8 @@ public final class Router {
     /// it): that closes the ticket, like any dismissal. `dock` is only the armed release of the hold
     /// gesture (DockArming), which docks it instead. Nothing happens unless the ticket sheet was
     /// presented, so a dismissal the app itself made first can't close a second ticket.
-    ///
-    /// A layout flip (the iPhone Plus/Max rotating across the size class) also takes the system
-    /// sheet down, and SwiftUI can report that as a dismissal: it isn't one. While the panel is the
-    /// ticket's surface, and for `layoutFlipGrace` after a flip, nothing closes.
-    public func sheetDismissedBySystem(dock: Bool, now: Date = Date()) {
+    public func sheetDismissedBySystem(dock: Bool) {
         guard ticketSheetState == .presented else { return }
-        if sheetIsBesideBoard { return }
-        if let flipped = layoutChangedAt, now.timeIntervalSince(flipped) < Self.layoutFlipGrace { return }
         if dock { dockSheet() } else { dismissSheet() }
     }
 

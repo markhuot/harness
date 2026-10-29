@@ -77,17 +77,4 @@ import HarnessKit
         // No cards counted still reserves one row.
         #expect(DockMetrics.boardClearance(screenHeight: nil, stackTop: nil, barInset: 83, rows: 0) == 60)
     }
-
-    @Test func theIPadsCardsRiseAboveTheBarBeyondWhatTheHostKeepsClear() {
-        // The bar reaches 70 up; the host already keeps 20 clear.
-        #expect(DockMetrics.padBottomMargin(barInset: 70, safeArea: 20) == DockMetrics.cornerMargin + 50)
-        #expect(DockMetrics.padBottomMargin(barInset: 0, safeArea: 20) == DockMetrics.cornerMargin)
-        #expect(DockMetrics.padBottomMargin(barInset: 10, safeArea: 20) == DockMetrics.cornerMargin)
-    }
-
-    @Test func aHigherBottomMarginFitsFewerPadRows() {
-        let flat = DockMetrics.rowsFitting(height: 400)
-        let lifted = DockMetrics.rowsFitting(height: 400, bottom: DockMetrics.cornerMargin + 120)
-        #expect(lifted < flat)
-    }
 }

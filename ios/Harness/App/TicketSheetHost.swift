@@ -1,8 +1,8 @@
 import HarnessKit
 import SwiftUI
 
-/// The ticket sheets (`Router.dockedSheets`, the top `Router.ticketSheet`) at compact width (iPhone,
-/// and a narrow iPad window; regular width is TicketPanelHost): a plain system sheet, presented only
+/// The ticket sheets (`Router.dockedSheets`, the top `Router.ticketSheet`) at every width: a plain
+/// system sheet (the form-sized one at regular width), presented only
 /// while a ticket is presented (`Router.ticketSheetState == .presented`). It is TicketSheetContent,
 /// the top ticket (or New session) in its own NavigationStack, so a child, dep or parent pushes inside
 /// the sheet and Back returns. Every live sheet (`Router.liveSheets`) keeps its stack mounted behind
@@ -21,12 +21,20 @@ import SwiftUI
 /// they're presented from here. Projects docks it instead (`Router.open(.sheet(.projects))`), and
 /// anything the board behind presents (an alert in Settings, say) has UIKit dismiss it, which the
 /// root's binding turns into `dismissSheet()`. New session drafts are saved either way.
+///
+/// The sheet rises from the bottom everywhere, and the system's own presentation decides the rest.
+/// On an iPhone Duo held in the book pose (`\.devicePosture`) it takes the right half of the screen
+/// (`TicketSheetPlacement`); a half-open detent is offered next to the full one where the system
+/// honors detents (not the form sheet).
 struct TicketSheetHost: View {
     @Environment(Router.self) private var router
     @Environment(\.palette) private var c
     @Environment(DockHold.self) private var hold
     /// The sheet as it was last up, so its content stays while it animates away.
     @State private var last: TicketSheet?
+    /// Where the system sheet rests: full height by default, or half open.
+    @State private var detent: PresentationDetent = .large
+    @Environment(\.devicePosture) private var posture
 
     var body: some View {
         let current = router.ticketSheet
@@ -61,6 +69,8 @@ struct TicketSheetHost: View {
         // Switching tickets mustn't leave the keyboard up for the one now hidden.
         .onChange(of: current?.id) { resignFirstResponder() }
         .presentationDragIndicator(.visible)
+        .presentationDetents([.medium, .large], selection: $detent)
+        .ticketSheetPresentation(TicketSheetPlacement.placement(for: posture))
         // The window's chords don't fire under a sheet: the palette's are here too.
         .hiddenShortcuts { PaletteShortcuts(router: router) }
         .sheet(item: Binding(get: { router.sheet }, set: { router.sheet = $0 })) { sheet in
@@ -88,20 +98,18 @@ struct TicketSheetHost: View {
     UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
 }
 
-/// A ticket sheet's content, the same in the iPhone's sheet (TicketSheetHost) and the iPad's side
-/// panel (TicketPanelHost): the ticket (or New session) in its own NavigationStack, bound to that
+/// A ticket sheet's content (TicketSheetHost): the ticket (or New session) in its own NavigationStack, bound to that
 /// sheet's path, so a child, dep or parent pushes inside it and Back returns. Each screen's toolbar
 /// carries the docked tickets' switcher while there's more than one.
 struct TicketSheetContent: View {
     let sheet: TicketSheet
-    /// The iPhone's sheet: each screen runs to the screen's bottom edge, keeping no inset there but
+    /// Each screen runs to the screen's bottom edge, keeping no inset there but
     /// the keyboard's. Docked, the system gives the small floating sheet the home indicator's inset
     /// and keeps it once the sheet is back at `.large`, which would lift the composer by that much;
     /// it has to be ignored inside the stack, since the stack's screens take their safe area from it.
     var toBottomEdge = false
     @Environment(Router.self) private var router
     @Environment(\.palette) private var c
-    @Environment(\.ticketPanelTrailingInset) private var panelInset
 
     /// The store wraps the whole stack: pushed screens take their environment from the stack.
     var body: some View {
@@ -126,9 +134,6 @@ struct TicketSheetContent: View {
     }
 
     @ViewBuilder private func bottomEdge(_ screen: some View) -> some View {
-        // Inside the panel the stack's screens take their safe area from the window, not from the
-        // panel that already runs into it: the ones that draw into the trailing inset ignore it again.
-        let screen = panelInset > 0 ? AnyView(screen.ignoresSafeArea(.container, edges: .trailing)) : AnyView(screen)
         if toBottomEdge { screen.ignoresSafeArea(.container, edges: .bottom) } else { screen }
     }
 
@@ -144,26 +149,16 @@ struct TicketSheetContent: View {
 }
 
 extension EnvironmentValues {
-    /// Inside the ticket sheet's stack (TicketSheetContent), at either width: a link there is a
+    /// Inside the ticket sheet's stack (TicketSheetContent): a link there is a
     /// step within the sheet rather than a new choice from outside it (`Router.openTicket`).
     @Entry var inTicketSheet = false
-    /// Inside the iPad's ticket panel (TicketPanelHost), whose buttons float over the top trailing
-    /// corner and whose root ticket has no navigation bar (TicketDetailHeader).
-    @Entry var inTicketPanel = false
-    /// False while the iPhone's ticket sheet isn't at its resting size (the system shrinks it
+    /// False while the ticket sheet isn't at its resting size (the system shrinks it
     /// under a finger, and springs it back): measurements that depend on where the ticket's edges
     /// are (TicketDetailBody's bottom room) wait for it to rest.
     @Entry var sheetResting = true
     /// False while a docked sheet is mounted behind the top one (or minimized to its card): hidden,
     /// it has lost focus, which a file's editor saves for (Save on blur).
     @Entry var sheetFront = true
-    /// How far the panel's buttons reach in from the trailing edge: the root ticket's hero title
-    /// wraps before them. 0 outside the panel.
-    @Entry var ticketPanelTitleInset: CGFloat = 0
-    /// The window's trailing safe-area inset the panel runs into (a phone in landscape with the
-    /// inset on that side): the panel's content draws into it, and the pieces near the corner
-    /// (collapsed hero, composer) keep clear. 0 outside the panel.
-    @Entry var ticketPanelTrailingInset: CGFloat = 0
 }
 
 /// Where the docked cards float, as last measured. The dock is in a window of its own, so this
@@ -185,34 +180,22 @@ extension EnvironmentValues {
     var composerUp = false
     /// A keyboard is up: the dock is faded out, so the ticket's composer keeps no room for it.
     var keyboardUp = false
-    /// The iPad: how much of the board's bottom the docked card stack takes (DockedCardsContainer); 0
-    /// without one.
-    var cards: CGFloat = 0
-    /// The iPad: where the board's column starts in the window, right of the sidebar, so the docked
-    /// card stack keeps off the sidebar (DesktopShell measures it).
-    var contentLeading: CGFloat = 0
 }
 
 /// Keeps a section's screen clear of the docked cards. It goes inside the section's
 /// NavigationStack, on each screen: a safe-area inset outside the stack doesn't reach the board's
-/// own bottom bar. Not while a keyboard is up: the dock is behind it. In the iPad's DesktopShell,
-/// room for the docked tickets' card stack in the bottom-right corner instead
-/// (`DockedSheetInset.cards`), so the last cards scroll clear of it.
+/// own bottom bar. Not while a keyboard is up: the dock is behind it.
 private struct DockClearance: ViewModifier {
     @Environment(Router.self) private var router
     @Environment(\.concentricScreen) private var screen
-    @Environment(\.desktopShell) private var desktop
     @Environment(DockedSheetInset.self) private var dockInset: DockedSheetInset?
     /// The board makes room above its own system bottom bar (BoardScreen), not below it.
     let board: Bool
 
     func body(content: Content) -> some View {
         content
-            // On the iPad the cards sit over the screen, which keeps its full height: only its
-            // scroll content backs off, so the last items still scroll clear of them.
-            .contentMargins(.bottom, desktop ? (dockInset?.cards ?? 0) : 0, for: .scrollContent)
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                if !desktop && !board && !router.waitingSheets.isEmpty {
+                if !board && !router.waitingSheets.isEmpty {
                     // The whole card stack, up to its measured top edge. Keyboard or not: the
                     // cards stay where they are, behind it.
                     Color.clear.frame(height: TicketDock.clearance(screen: screen, stackTop: dockInset?.stackTop, count: router.waitingSheets.count))

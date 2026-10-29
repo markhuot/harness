@@ -2,8 +2,7 @@ import HarnessKit
 import SwiftUI
 
 // What a docked ticket looks like minimized, the same on both platforms: a card in the dock and the
-// expanded "N more…" list (DockedCard), plus the system menu a long press on the ticket's title shows
-// in the iPad's panel (DockedTicketsMenuItems). A parked sheet (past
+// expanded "N more…" list (DockedCard). A parked sheet (past
 // `Router.liveSheetCount`) is only ever drawn this way, from the board's own `Ticket`.
 
 /// A docked sheet's ref, title and status, read from the `Ticket` the board's card renders
@@ -305,50 +304,6 @@ struct DockedBackdrop: View {
     }
 }
 
-/// The other docked tickets as system menu items, for the context menu on a ticket's title (the
-/// sheet's or the panel's ticket screen): the `Router.shownDockCount` most recently used, then
-/// "N more" with the rest. Choosing one makes it the top, presented as the top was.
-struct DockedTicketsMenuItems: View {
-    @Environment(Router.self) private var router
-    @Environment(AppModel.self) private var app
-
-    var body: some View {
-        let state = app.store?.state
-        let others = Array(router.dockedSheets.dropFirst())
-        ForEach(others.prefix(Router.shownDockCount)) { row($0, state: state) }
-        let overflow = Array(others.dropFirst(Router.shownDockCount))
-        if !overflow.isEmpty {
-            Menu("\(overflow.count) more") {
-                ForEach(overflow) { row($0, state: state) }
-            }
-        }
-    }
-
-    private func row(_ sheet: TicketSheet, state: BoardState?) -> some View {
-        Button(DockedTicketText(sheet, state: state, terminals: app.store?.terminals ?? []).menuLine) { router.activateSheet(id: sheet.id) }
-    }
-}
-
-extension View {
-    /// A long press shows the other docked tickets to switch to, while this screen is in the iPad's
-    /// ticket panel and more than one ticket is docked.
-    func dockedTicketsMenu(_ router: Router, inSheet: Bool) -> some View {
-        modifier(DockedTicketsContextMenu(enabled: inSheet && router.dockedSheets.count > 1))
-    }
-}
-
-private struct DockedTicketsContextMenu: ViewModifier {
-    let enabled: Bool
-
-    func body(content: Content) -> some View {
-        if enabled {
-            content.contextMenu { DockedTicketsMenuItems() }
-        } else {
-            content
-        }
-    }
-}
-
 /// Keeps every docked ticket resolved on the board (`BoardStore.watchKey`), so a parked one's row
 /// has its title even when it's a done ticket the board hasn't paged in, and drops the sheets of
 /// tickets the server says are gone (`BoardState.missingKeys`), as `Router.removeTicket` does for a
@@ -394,81 +349,22 @@ struct DockedTicketsKeeper: ViewModifier {
     }
 }
 
-/// Where and how a DockedCardsContainer lays its cards: the platform's placement and policy, which
-/// are all that differs between the iPhone's dock and the iPad's corner stack.
+/// Where a DockedCardsContainer lays its cards: over the bar the cards float above (the board's
+/// system bar, the ticket's composer), at the gaps its `placement` gives.
 struct DockedCardsLayout {
-    enum Edge { case bottom, trailing }
-
-    /// The room the dock has: the window on the phone, the board's column left of the panel on the iPad.
+    /// The room the dock has: the window.
     var region: CGSize
-    var alignment: Alignment
-    var columnAlignment: HorizontalAlignment
     var insets: EdgeInsets
-    /// Nil: as wide as the room (the phone).
-    var cardWidth: CGFloat?
-    /// The "N docked…" card alone holds every ticket (an iPad column with no room for a card).
-    var collapsed = false
-    /// Nothing shows (an iPad column too narrow even for that).
-    var hidden = false
-    var listWidth: CGFloat?
-    /// The tallest the expanded list gets; nil fills the room.
-    var listHeightCap: CGFloat?
-    var maxVisible: Int
-    var fitting: Int?
-    var edge: Edge
-    var backdropAnchor: UnitPoint
-    var backdropRadius: CGFloat
-    /// The backdrop and its tap-catcher cover `region` rather than the whole screen.
-    var backdropFillsRegion: Bool
-    /// The hold-to-dock ghost takes an incoming bottom slot (the phone's; the iPad's ghost is the panel host's).
-    var ghostSlot = false
+    var maxVisible = DockCards.phoneVisible
 
-    static let margin = DockMetrics.cornerMargin
-
-    /// Over the bar the cards float above (the board's system bar, the ticket's composer), at the gaps
-    /// its `placement` gives.
     static func phone(placement: DockPlacement, region: CGSize) -> DockedCardsLayout {
-        return DockedCardsLayout(
-            region: region, alignment: .bottom, columnAlignment: .center,
-            insets: EdgeInsets(top: 0, leading: placement.leading, bottom: placement.bottom, trailing: placement.trailing),
-            cardWidth: nil, listWidth: nil, listHeightCap: nil, maxVisible: DockCards.phoneVisible, fitting: nil,
-            edge: .bottom, backdropAnchor: .bottom, backdropRadius: region.height * 1.1, backdropFillsRegion: false,
-            ghostSlot: true)
+        DockedCardsLayout(
+            region: region,
+            insets: EdgeInsets(top: 0, leading: placement.leading, bottom: placement.bottom, trailing: placement.trailing))
     }
 
-    /// The board's bottom-right corner, in the column `available` wide, `bottom` from its bottom edge
-    /// (above the system bar's buttons).
-    static func pad(available: CGSize, bottom: CGFloat = margin) -> DockedCardsLayout {
-        var layout = DockedCardsLayout(
-            region: available, alignment: .bottomTrailing, columnAlignment: .trailing,
-            insets: EdgeInsets(top: margin, leading: margin, bottom: bottom, trailing: margin),
-            cardWidth: nil, listWidth: nil, listHeightCap: available.height - margin - bottom,
-            maxVisible: DockCards.padVisible, fitting: DockMetrics.rowsFitting(height: available.height, bottom: bottom),
-            edge: .trailing, backdropAnchor: .bottomTrailing, backdropRadius: max(available.width, available.height) * 0.9,
-            backdropFillsRegion: true)
-        switch DockMetrics.cardMode(width: available.width) {
-        case let .cards(width):
-            layout.cardWidth = width
-            layout.listWidth = width
-        case let .collapsed(width):
-            layout.cardWidth = width
-            layout.collapsed = true
-            layout.listWidth = max(width, min(DockMetrics.maxCardWidth, available.width - margin * 2))
-        case .hidden:
-            layout.hidden = true
-        }
-        return layout
-    }
-
-    /// The rows (cards and "N more…") `count` docked tickets take.
-    func rows(count: Int) -> Int {
-        if hidden { return 0 }
-        if collapsed { return count > 0 ? 1 : 0 }
-        return DockCards.rows(count: count, maxVisible: maxVisible, fitting: fitting)
-    }
-
-    /// The collapsed stack's height for `count` docked tickets, for the board's bottom clearance.
-    func stackHeight(count: Int) -> CGFloat { DockedCardMetrics.stackHeight(rows: rows(count: count)) }
+    /// The backdrop's radius: the blur spreads from the bottom edge.
+    var backdropRadius: CGFloat { region.height * 1.1 }
 }
 
 /// What a DockedCardsContainer tells its host: where its collapsed stack is in the window (nil with
@@ -478,13 +374,13 @@ struct DockedCardsReport: Equatable {
     var expanded: Bool
 }
 
-/// The docked tickets as cards, the same on both platforms: newest at the bottom, up to the layout's
-/// `maxVisible + 1` (fewer when the height doesn't fit them); with more, `maxVisible` and "N more…",
-/// which expands a scrolling list of them all on a blurred backdrop. A tap opens a card in the sheet (or panel) and its ✕ closes it
+/// The docked tickets as cards: newest at the bottom, up to the layout's `maxVisible + 1`; with
+/// more, `maxVisible` and "N more…", which expands a scrolling list of them all on a blurred
+/// backdrop. A tap opens a card in the sheet and its ✕ closes it
 /// (a file holding unsaved edits asks first). Cards insert and remove by id, so switching tickets
 /// animates only the cards that change; the container itself is never torn down or slid away with
-/// them. The iPhone hosts it in a window of its own above the board and the ticket sheet
-/// (DockWindow); the iPad hosts it over the board beside the panel (TicketPanelHost).
+/// them. It lives in a window of its own above the board and the ticket sheet (DockWindow), at every
+/// width.
 struct DockedCardsContainer: View {
     /// What it lists, most recently used first (`Router.waitingSheets`).
     let sheets: [TicketSheet]
@@ -505,23 +401,19 @@ struct DockedCardsContainer: View {
     @AccessibilityFocusState private var focused: Int?
 
     var body: some View {
-        ZStack(alignment: layout.alignment) {
-            if expanded, !layout.hidden {
+        ZStack(alignment: .bottom) {
+            if expanded {
                 backdrop
             }
-            if !layout.hidden {
-                cards.padding(layout.insets)
-                    .accessibilityAddTraits(expanded ? .isModal : [])
-            }
-            if layout.ghostSlot {
-                DockGhostCard(title: ghost ?? "", armed: ghost != nil)
-                    .padding(layout.insets)
-            }
+            cards.padding(layout.insets)
+                .accessibilityAddTraits(expanded ? .isModal : [])
+            DockGhostCard(title: ghost ?? "", armed: ghost != nil)
+                .padding(layout.insets)
         }
         .animation(reduceMotion ? .easeInOut(duration: 0.2) : .snappy, value: sheets.map(\.id))
         .animation(.snappy, value: expanded)
         // Nothing left to expand: back to the cards.
-        .onChange(of: sheets.count) { _, n in if n <= layout.maxVisible + 1, !layout.collapsed { expanded = false } }
+        .onChange(of: sheets.count) { _, n in if n <= layout.maxVisible + 1 { expanded = false } }
         .onChange(of: sheets.isEmpty) { _, empty in
             if empty { expanded = false; stack = nil }
         }
@@ -531,38 +423,24 @@ struct DockedCardsContainer: View {
     }
 
     private var report: DockedCardsReport {
-        DockedCardsReport(stack: sheets.isEmpty || layout.hidden ? nil : stack, expanded: expanded)
+        DockedCardsReport(stack: sheets.isEmpty ? nil : stack, expanded: expanded)
     }
 
-    /// Behind the list: blurred out of the corner, and a tap there collapses it.
+    /// Behind the list: blurred out of the bottom edge, and a tap there collapses it.
     @ViewBuilder private var backdrop: some View {
-        if layout.backdropFillsRegion {
-            DockedBackdrop(anchor: layout.backdropAnchor, radius: layout.backdropRadius)
-                .frame(width: layout.region.width, height: layout.region.height)
-                .transition(.opacity)
-            Color.clear
-                .frame(width: layout.region.width, height: layout.region.height)
-                .contentShape(.rect)
-                .onTapGesture { expanded = false }
-                .accessibilityHidden(true)
-        } else {
-            DockedBackdrop(anchor: layout.backdropAnchor, radius: layout.backdropRadius)
-            Color.clear
-                .contentShape(.rect)
-                .ignoresSafeArea()
-                .onTapGesture { expanded = false }
-                .accessibilityHidden(true)
-        }
+        DockedBackdrop(anchor: .bottom, radius: layout.backdropRadius)
+        Color.clear
+            .contentShape(.rect)
+            .ignoresSafeArea()
+            .onTapGesture { expanded = false }
+            .accessibilityHidden(true)
     }
 
     @ViewBuilder private var cards: some View {
         if expanded {
-            list
-        } else if layout.collapsed {
-            if !sheets.isEmpty {
-                DockedMoreCard(count: sheets.count, all: true) { expanded = true }
-                    .frame(width: layout.cardWidth)
-            }
+            DockedCardList(sheets: sheets, open: open, close: { closeCard($0) }, collapse: { expanded = false })
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .transition(.opacity)
         } else if !sheets.isEmpty {
             // Not an empty stack for no cards: it would still cost the VStack's gap.
             collapsedStack
@@ -571,21 +449,19 @@ struct DockedCardsContainer: View {
 
     private var cardTransition: AnyTransition {
         if reduceMotion { return .opacity }
-        return .move(edge: layout.edge == .bottom ? .bottom : .trailing).combined(with: .opacity)
+        return .move(edge: .bottom).combined(with: .opacity)
     }
 
     private var collapsedStack: some View {
-        let split = DockCards.split(count: sheets.count, maxVisible: layout.maxVisible, fitting: layout.fitting)
+        let split = DockCards.split(count: sheets.count, maxVisible: layout.maxVisible, fitting: nil)
         let lift = ghost != nil ? DockedCardMetrics.height + DockedCardMetrics.spacing : 0
-        return VStack(alignment: layout.columnAlignment, spacing: DockedCardMetrics.spacing) {
+        return VStack(alignment: .center, spacing: DockedCardMetrics.spacing) {
             if split.more > 0 {
                 DockedMoreCard(count: split.more) { expanded = true }
-                    .frame(width: layout.cardWidth)
             }
             // Oldest at the top, newest at the bottom.
             ForEach(sheets.prefix(split.cards).reversed()) { sheet in
                 DockedCard(sheet: sheet, open: { open(sheet) }, close: { closeCard(sheet) })
-                    .frame(width: layout.cardWidth)
                     .accessibilityFocused($focused, equals: sheet.id)
                     .transition(cardTransition)
             }
@@ -597,21 +473,6 @@ struct DockedCardsContainer: View {
         }
         .offset(y: -lift)
         .animation(.snappy(duration: 0.2), value: lift)
-    }
-
-    private var list: some View {
-        // As tall as its cards, up to the room it has; past that it scrolls.
-        let list = DockedCardList(sheets: sheets, open: open, close: { closeCard($0) }, collapse: { expanded = false })
-        return Group {
-            if let cap = layout.listHeightCap {
-                let natural = 20 + 40 + DockedCardMetrics.spacing + DockedCardMetrics.stackHeight(rows: sheets.count)
-                list.frame(width: layout.listWidth, height: min(natural, cap))
-                    .transition(.scale(scale: 0.9, anchor: .bottomTrailing).combined(with: .opacity))
-            } else {
-                list.frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .transition(.opacity)
-            }
-        }
     }
 
     /// ✕ on a card. A file whose save failed as it went to the dock holds its edits

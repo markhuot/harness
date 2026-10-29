@@ -11,10 +11,9 @@ struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var scene: UIWindowScene?
     @State private var dockInset = DockedSheetInset()
-    @Environment(\.horizontalSizeClass) private var sizeClass
     /// The hold-to-dock gesture's state, shared by the ticket sheet (SceneChrome) and the dock window.
     @State private var hold = DockHold()
-    /// The phone's dock, in a window of its own above the board and the ticket sheet.
+    /// The dock, in a window of its own above the board and the ticket sheet.
     @State private var dockWindow = DockWindowController()
 
     #if DEBUG
@@ -45,7 +44,6 @@ struct RootView: View {
                 WindowDirectory.shared.mainActive(router, scene: s)
                 syncDockWindow()
             })
-            .onChange(of: sizeClass, initial: true) { syncDockWindow() }
             .onDisappear { dockWindow.tearDown() }
             .onAppear {
                 bindChiefs()
@@ -79,9 +77,9 @@ struct RootView: View {
             }
     }
 
-    /// The dock window exists at compact width only: the iPad's regular-width panel draws its own stack.
+    /// The dock window exists in every main window, at every width.
     private func syncDockWindow() {
-        guard let scene, sizeClass != .regular else { dockWindow.tearDown(); return }
+        guard let scene else { dockWindow.tearDown(); return }
         dockWindow.show(in: scene) { hit, state, probe in
             DockWindowRoot(router: router, app: app, hold: hold, inset: dockInset, hit: hit, state: state, dialogProbe: probe)
         }
@@ -154,6 +152,8 @@ private struct SceneChrome: ViewModifier {
     func body(content: Content) -> some View {
         let palette = Palette(app.resolvedTheme(systemDark: scheme == .dark))
         content
+            // Before the sheet, so the sheets it presents see the posture too.
+            .readsDevicePosture()
             .sheet(item: rootSheetBinding) { modal in
                 switch modal {
                 case .ticket: TicketSheetHost()
@@ -192,20 +192,17 @@ private struct SceneChrome: ViewModifier {
         }, set: { router.sheet = $0 })
     }
 
-    /// The ticket sheet, presented or docked, when the root presents it as a system sheet: at
-    /// compact width. At regular width it's the side panel inside DesktopShell (TicketPanelHost),
-    /// so the root presents `sheet` and the cover as if there were none.
-    private var ticketSheet: TicketSheet? { sizeClass == .regular ? nil : router.ticketSheet }
+    /// The ticket sheet, presented or docked, which the root presents as a system sheet at every width.
+    private var ticketSheet: TicketSheet? { router.ticketSheet }
 
-    /// What the root presents: the iPhone's ticket sheet while one is presented (TicketSheetHost then
+    /// What the root presents: the ticket sheet while one is presented (TicketSheetHost then
     /// presents `sheet` and the cover over itself), else `sheet`. The sheet is a plain system sheet,
     /// a view of the Router's state, and it is one whichever tickets it holds: adding or switching
     /// tickets swaps its content without presenting it again, and a docked ticket is a card in the
     /// window instead (the dock, DockWindow). When the system takes the sheet down (a swipe away, the
     /// escape gesture, UIKit dismissing it) the ticket closes (`sheetDismissedBySystem`), with one
     /// exception: the release of an armed hold-to-dock docks it (DockHold). Programmatic dismissals
-    /// never call this setter. A window widening to regular width takes the system sheet down
-    /// without a dismissal, so the panel carries on with it.
+    /// never call this setter.
     private var rootSheetBinding: Binding<RootSheet?> {
         Binding(get: {
             if ticketSheet != nil { return .ticket }
@@ -213,16 +210,13 @@ private struct SceneChrome: ViewModifier {
         }, set: { new in
             guard new == nil else { return }
             guard ticketSheet != nil else { router.sheet = nil; return }
-            // The system sheet withdrawing for the side panel reports a nil too: not a dismissal
-            // (`sheetDismissedBySystem` ignores it while the panel shows and just after a flip).
             let dock = hold.takeIntent()
-            guard !router.sheetIsBesideBoard else { return }
             withAnimation(.snappy) { router.sheetDismissedBySystem(dock: dock) }
         })
     }
 
     /// The cover is presented by whichever level is on top: the sheet when one is up, else the root.
-    /// TicketSheetHost presents it while there's a compact ticket sheet.
+    /// TicketSheetHost presents it while there's a ticket sheet.
     private func coverBinding(whenSheet: Bool) -> Binding<CoverRoute?> {
         Binding(get: {
             if ticketSheet != nil { return nil }
@@ -244,8 +238,8 @@ private enum RootSheet: Hashable, Identifiable {
 /// section's sidebar button, switches between them; the board has no header, and its own bottom
 /// bar holds that button, the search field (with the filter inside it) and New session. There a
 /// ticket or New session opens in a system sheet over the sections (TicketSheetHost), which can
-/// dock under them. At regular width (iPad) it's DesktopShell, where the same ticket sheet is a
-/// side panel beside the board (TicketPanelHost), so a width change hands it across intact.
+/// dock under them. At regular width (iPad) it's DesktopShell, the sections beside the sidebar;
+/// the ticket sheet is the same one, so a width change keeps it as it is.
 struct MainTabs: View {
     @Environment(Router.self) private var router
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -267,7 +261,7 @@ struct MainTabs: View {
             }
         }
         // Beside the board at regular width, the board still counts as on screen (presence).
-        .onChange(of: sizeClass, initial: true) { _, size in router.sheetIsBesideBoard = size == .regular }
+        .onChange(of: sizeClass, initial: true) { _, size in router.desktopLayout = size == .regular }
         .modifier(DockedTicketsKeeper())
     }
 }
@@ -288,12 +282,11 @@ private struct SectionStack: View {
 /// selected section, hidden and shown by the system toggle and remembered in prefs
 /// (`sidebarHidden`). The sections put search and their actions in the top bar
 /// (`\.desktopShell`). `harness://projects` shows the sidebar instead of a sheet. A ticket or New
-/// session opens in the side panel over the right of it all (TicketPanelHost).
+/// session opens in a system sheet over it all (TicketSheetHost).
 private struct DesktopShell: View {
     @Environment(AppModel.self) private var app
     @Environment(Router.self) private var router
     @Environment(\.palette) private var c
-    @Environment(DockedSheetInset.self) private var dockInset: DockedSheetInset?
 
     var body: some View {
         NavigationSplitView(columnVisibility: visibility) {
@@ -303,12 +296,9 @@ private struct DesktopShell: View {
         } detail: {
             // The column paints the system background; the phone's sections show RootView's `bg`.
             SectionStack().environment(\.desktopShell, true).background(c.bg.ignoresSafeArea())
-                // Where the column starts, for the docked cards to keep off the sidebar.
-                .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minX } action: { dockInset?.contentLeading = $0 }
         }
         // Side by side in portrait too, like the Mac's sidebar, rather than over the section.
         .navigationSplitViewStyle(.balanced)
-        .overlay { TicketPanelHost() }
         // ⌃⌘S, as the desktop toggles its sidebar.
         .hiddenShortcuts {
             Button("Toggle Sidebar") { app.setPref(\.sidebarHidden, app.prefs.sidebarHidden != true) }

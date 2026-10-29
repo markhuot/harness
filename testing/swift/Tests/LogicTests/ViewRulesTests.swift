@@ -130,14 +130,9 @@ private func ext(_ id: String, _ source: BrowserExtensionSource) -> BrowserExten
         #expect(DockCards.rows(count: 9, maxVisible: DockCards.phoneVisible) == 3)
     }
 
-    @Test func padShowsSixCardsBeforeAMoreRow() {
-        #expect(shape(6, DockCards.padVisible) == [6, 0])
-        #expect(shape(7, DockCards.padVisible) == [5, 2])
-    }
-
-    @Test func aShortPadColumnKeepsItsCap() {
-        #expect(shape(3, DockCards.padVisible, fitting: 3) == [3, 0])
-        #expect(shape(4, DockCards.padVisible, fitting: 3) == [2, 2])
-        #expect(DockCards.rows(count: 4, maxVisible: DockCards.padVisible, fitting: 3) == 3)
+    @Test func aShortWindowKeepsItsRowCap() {
+        #expect(shape(3, DockCards.phoneVisible, fitting: 3) == [3, 0])
+        #expect(shape(4, DockCards.phoneVisible, fitting: 2) == [1, 3])
+        #expect(DockCards.rows(count: 4, maxVisible: DockCards.phoneVisible, fitting: 2) == 2)
     }
 }

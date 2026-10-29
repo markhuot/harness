@@ -16,10 +16,18 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
+- On iPad a ticket (and New session, a file, a terminal, Chief of Staff) now opens in the same bottom sheet as on iPhone, instead of a panel sliding in from the right. It uses the narrower form width, dims the board behind it, closes with a swipe down, and docks with the iPhone's drag-down-and-hold. Docked tickets are the iPhone's full-width cards rising from the bottom. The sheet's pop-out button now sits in the ticket's details row.
+- On iPhone and iPad the ticket sheet has a half-open stop next to full height wherever the system allows one (iPad's form-width sheet has none).
+- On an iPhone Duo held in the book pose (partly open, fold vertical) the ticket sheet covers only the right half of the screen; fully open it is the normal sheet.
+- Internal: the iPad side panel and its resize, release rules, width preference and corner dock layout are gone, along with the tests and references only they used; the dock window now exists at every width. `Router.sheetIsBesideBoard` became `desktopLayout` and no longer affects presence or dismissal.
 - Agents are told to put each decision, with its reason, in the Plan step or acceptance criterion it shapes, instead of a Decisions section in Status.
 - The sidebar's Labels section now lists every label, including ones no ticket carries, so you can delete them. Labels on tickets come first and empty ones follow.
 - When auto mode's classifier turns down one of an agent's commands, the ticket no longer gets an approval card for it at the end of the run. The agent finds another way, or blocks and asks you, quoting the command. Approve that command in your answer and the agent retries it once; if auto mode still turns it down, the agent says so, and switching the ticket to Ask mode gets you an approval card for it. A card used to appear after the run even when the agent had already worked around the command, and when the agent had blocked for something else, the card hid its question. Conductor and chief-of-staff runs, which can't block, still get an approval card for a turned-down command, so you're always told.
 - Allowing a tool on a ticket no longer makes Harness retry a command of that tool that auto mode's classifier turned down. The agent works around it or asks you in its block, as for any other turned-down command.
+
+### Removed
+
+- The iPad's ticket panel buttons (dock, close), its resizable width, and the long-press menu of docked tickets on a ticket's title. Swipe down closes a ticket, and the iPhone's hold gesture docks it.
 
 ### Fixed
 

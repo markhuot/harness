@@ -44,17 +44,14 @@ struct BoardScreen: View {
     @State private var trailingMargin: CGFloat = 0
 
     /// The room the last card keeps for the bottom bar the columns run under.
-    /// On the phone, plus the room the docked cards floating over the bar take.
+    /// Plus the room the docked cards floating over the bar take.
     private var belowBar: CGFloat {
-        barInset + (desktop ? 0 : TicketDock.boardRoom(screen: screen, inset: dockInset, count: router.waitingSheets.count))
+        barInset + TicketDock.boardRoom(screen: screen, inset: dockInset, count: router.waitingSheets.count)
     }
 
     private var layout: BoardScreenRules.Layout { BoardScreenRules.layout(regularWidth: sizeClass == .regular, compactHeight: verticalSizeClass == .compact) }
 
     private var tabs: BoardScreenRules.Tabs { BoardScreenRules.tabs(layout: layout, trailingMargin: trailingMargin) }
-
-    /// An open ticket panel covers the board's bottom-right corner, where the bar's search and New session sit.
-    private var panelCoversBar: Bool { desktop && router.ticketSheet != nil }
 
     /// New session's icon: the pencil on a square, like Mail and Notes' compose button.
     static let newSessionSymbol = "square.and.pencil"
@@ -246,23 +243,18 @@ struct BoardScreen: View {
 
     /// The system's bottom bar everywhere, left to right: one glass capsule with Projects and Search
     /// (adjacent items share a capsule), a fixed spacer that splits off the CoS button's own capsule,
-    /// flexible space, then New session as the only glass element on the right. Search and New
-    /// session hide while a ticket panel covers them.
+    /// flexible space, then New session as the only glass element on the right.
     @ToolbarContentBuilder private func toolbar(_ ctx: BoardContext) -> some ToolbarContent {
         ToolbarItem(placement: .bottomBar) { ProjectsButton(action: toggleProjects) }
-        if !panelCoversBar {
-            ToolbarItem(placement: .bottomBar) {
-                Button("Command palette", systemImage: "magnifyingglass") { router.present(.palette(files: false)) }
-                    .accessibilityHint("Search tickets or run a command in \(scopeName(ctx))")
-                    .accessibilityIdentifier("palette-field")
-            }
+        ToolbarItem(placement: .bottomBar) {
+            Button("Command palette", systemImage: "magnifyingglass") { router.present(.palette(files: false)) }
+                .accessibilityHint("Search tickets or run a command in \(scopeName(ctx))")
+                .accessibilityIdentifier("palette-field")
         }
         ToolbarSpacer(.fixed, placement: .bottomBar)
         ToolbarItem(placement: .bottomBar) { CosButton(scope: CosLogic.boardScope(filter: ctx.filter, projects: store.state.projects)) }
         ToolbarSpacer(.flexible, placement: .bottomBar)
-        if !panelCoversBar {
-            ToolbarItem(placement: .bottomBar) { newSession(ctx) }
-        }
+        ToolbarItem(placement: .bottomBar) { newSession(ctx) }
     }
 
     /// The iPad's sidebar is a column that toggles; on the phone Projects is a sheet.

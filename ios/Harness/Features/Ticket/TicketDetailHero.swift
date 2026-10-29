@@ -16,9 +16,6 @@ struct TicketDetailHero: View {
     @Environment(BoardStore.self) private var store
     @Environment(Router.self) private var router
     @Environment(\.inTicketSheet) private var inTicketSheet
-    @Environment(\.inTicketPanel) private var inTicketPanel
-    @Environment(\.ticketPanelTitleInset) private var panelInset
-    @Environment(\.ticketPanelTrailingInset) private var cornerInset
     @Environment(\.dismiss) private var dismiss
     @Environment(\.isPresented) private var isPresented
     @Environment(Actions.self) private var actions
@@ -73,6 +70,20 @@ struct TicketDetailHero: View {
                 if state.hasCustomDriver(ticket) { DriverBadge(driver: ticket.driver, drivers: state.drivers) }
                 ModelBadge(ticket: ticket, state: state)
                 Spacer(minLength: 6)
+                // The sheet's ticket in a window of its own, where the device has windows.
+                if inTicketSheet, router.canPopOutSheet {
+                    Button { router.popOutSheet() } label: {
+                        Image(systemName: "macwindow.badge.plus")
+                            .font(.body.weight(.medium))
+                            .foregroundStyle(c.text2)
+                            .frame(width: 32, height: 24)
+                            .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                    .hoverEffect(.highlight)
+                    .accessibilityLabel("Open \(ticket.key) in a new window")
+                    .accessibilityIdentifier("ticket-popout")
+                }
                 if ticket.status == .review {
                     ReviewMark(who: .agent, state: ticket.agentReview)
                     ReviewMark(who: .human, state: ticket.humanReview)
@@ -115,31 +126,21 @@ struct TicketDetailHero: View {
     private var showsBack: Bool {
         // `isPresented` is false at the root of a stack (a ticket window, the board card preview),
         // where there's nothing to go back to.
-        navigable && isPresented && !((inTicketSheet || inTicketPanel) && router.showsAsSheetRoot(ticket.key))
+        navigable && isPresented && !(inTicketSheet && router.showsAsSheetRoot(ticket.key))
     }
 
     /// The crumb and title, with the Back button at their leading edge when there is one, centered
-    /// on the two together. In the iPad panel the header is as tall as the floating window buttons
-    /// and level with them, so the title, its chevron and the buttons share one middle.
+    /// on the two together.
     @ViewBuilder private func header(compact: Bool, crumb: ParentCrumb?) -> some View {
         let back = showsBack
-        let row = HStack(alignment: inTicketPanel ? .center : .top, spacing: 0) {
+        HStack(alignment: .top, spacing: 0) {
             if back { backButton }
             // With a crumb the title block's own top padding (clear of the sheet's corner) isn't
             // needed, so the crumb sits close to the status row.
-            VStack(alignment: .leading, spacing: inTicketPanel ? 4 : crumb == nil ? 10 : 2) {
+            VStack(alignment: .leading, spacing: crumb == nil ? 10 : 2) {
                 if let crumb { crumb }
                 title(compact: compact, hasBack: back, hasCrumb: crumb != nil)
             }
-        }
-        if inTicketPanel {
-            row
-                .frame(minHeight: TicketSidePanel<EmptyView>.buttonSize)
-                // The hero's 10pt top padding up to the buttons' 4; below, what the title had.
-                .padding(.top, -6)
-                .padding(.bottom, compact ? -8 : -4)
-        } else {
-            row
         }
     }
 
@@ -156,7 +157,7 @@ struct TicketDetailHero: View {
         // Pinned to the top of the row, whatever the title wraps to or whether it is collapsed, and
         // dropped so its top inset equals its 14pt leading inset: the circle then shares the sheet
         // corner's center.
-        .offset(y: inTicketPanel ? 0 : 4)
+        .offset(y: 4)
         .accessibilityLabel("Back")
         .accessibilityIdentifier("ticket-back")
     }
@@ -183,24 +184,16 @@ struct TicketDetailHero: View {
                     Icon(expanded ? "chevronDown" : "chevronRight", size: 14).foregroundStyle(c.text3)
                 }
             }
-            // The iPad panel's buttons float over the ticket's top corner; the row is as tall as
-            // they are, so the title, its chevron and the buttons share one middle.
-            // The buttons sit that far inside the screen's corner, so the title keeps clear of them
-            // by the trailing safe area too.
-            .padding(.trailing, inTicketPanel ? panelInset + cornerInset : 0)
             // Both states use 14pt to align with the Spec tab's 14pt padding. Expanded gets 5pt
             // more above, clear of the sheet's rounded corner. The hero's 14pt horizontal padding
             // is the space on both sides, so the title adds none extra.
             .padding(.leading, hasBack ? 0 : 14)
             .padding(.trailing, 14)
-            .padding(.top, inTicketPanel || hasCrumb ? 10 : compact ? 20 : 25)
+            .padding(.top, hasCrumb ? 10 : compact ? 20 : 25)
             .padding(.bottom, compact ? 10 : 5)
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
-        // In the iPad's panel, a long press lists the other docked tickets to switch to (the iPhone's
-        // dock is over the ticket, so its cards are how you switch).
-        .dockedTicketsMenu(router, inSheet: inTicketPanel)
         .padding(.leading, hasBack ? 0 : -14)
         .padding(.trailing, -14)
         .padding(.top, -10)

@@ -52,10 +52,8 @@ final class DockHostController: UIHostingController<DockWindowRoot> {
     var dialogUp = false
 }
 
-/// One dock window per main window scene at compact width (the iPhone, and a narrow iPad window):
-/// none for a ticket window, and none at regular width, where the iPad's panel host draws its own
-/// stack over the board (TicketPanelHost). RootView creates and tears it down as its scene and size
-/// class change.
+/// One dock window per main window scene, at every width: none for a ticket window. RootView creates
+/// and tears it down as its scene changes.
 @MainActor final class DockWindowController {
     private var window: DockWindow?
     private var disconnect: NSObjectProtocol?

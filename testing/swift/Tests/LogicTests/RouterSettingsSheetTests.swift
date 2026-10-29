@@ -11,7 +11,7 @@ import HarnessKit
 
     @Test func settingsIsASectionAtRegularWidth() {
         let r = Router()
-        r.sheetIsBesideBoard = true
+        r.desktopLayout = true
         r.open(.tab(.settings))
         #expect(r.sheet == nil)
         #expect(r.selectedTab == .settings)

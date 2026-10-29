@@ -1,14 +1,12 @@
 import Foundation
 
-/// How the docked tickets show as minimized cards (the iPhone dock, the iPad's corner stack): up to
+/// How the docked tickets show as minimized cards (the dock): up to
 /// `maxVisible + 1` cards show as they are; past that, `maxVisible` cards for the most recently used
 /// and one "N more…" card counting the rest, which expands into a list of them all. `fitting` caps
-/// the rows (the "N more…" card included) when the space is short, as on an iPad in a short window.
+/// the rows (the "N more…" card included) when the space is short.
 public enum DockCards {
     /// The iPhone's dock: two cards and a "N more…" row, three rows; three cards fill them all.
     public static let phoneVisible = 2
-    /// The iPad's corner: five cards and a "N more…" row, six rows; six cards fill them all.
-    public static let padVisible = 5
 
     /// The cards to show for `count` docked tickets, and what the "N more…" card counts (0: none).
     public static func split(count: Int, maxVisible: Int, fitting: Int? = nil) -> (cards: Int, more: Int) {

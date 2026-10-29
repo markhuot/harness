@@ -28,25 +28,14 @@ final class ScreenTests: ScreenTestCase {
 
     /// A ticket docked: its card floats above the system bottom bar, which stays where the system puts it.
     func testBoardDocked() async throws {
-        try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .pad, "the iPad's cards are a corner stack beside its panel")
         let router = Router()
         router.openTicket(key: "HARNESS-4", tab: .spec)
         router.dockSheet()
         try await screen("board-docked", router: router) { RootView() }
     }
 
-    /// The iPad: the docked card stack sits above the bottom bar's search and New session buttons.
-    func testBoardDockedPad() async throws {
-        try XCTSkipUnless(UIDevice.current.userInterfaceIdiom == .pad, "the phone's card floats over its bar")
-        let router = Router()
-        router.openTicket(key: "HARNESS-4", tab: .spec)
-        router.dockSheet()
-        try await screen("board-docked-pad", router: router) { RootView() }
-    }
-
     /// A ticket open with another one docked: the composer sits above the card.
     func testTicketWithDockedCard() async throws {
-        try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .pad, "the iPad's cards are a corner stack beside its panel")
         let router = Router()
         router.openTicket(key: "HARNESS-4", tab: .spec)
         router.dockSheet()
@@ -220,18 +209,10 @@ final class ScreenTests: ScreenTestCase {
         try await screen("ticket-spec", router: ticket("HARNESS-5", .spec)) { RootView() }
     }
 
-    /// A Duo open in landscape or a Pro Max: regular width with a safe area on the trailing side, so the
-    /// ticket is the side panel, and it fills that side. The expanded title and the tab content run
-    /// into the inset; the buttons stay clear of the corner and the composer is concentric with it.
-    func testTicketPanelTrailingInset() async throws {
-        try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .pad, "the iPad has no side inset")
-        try await screen("ticket-panel-inset", router: ticket("HARNESS-5", .spec), landscape: true, regularWidth: true, requiresTrailingInset: true) { RootView() }
-    }
-
-    /// The same panel with the title collapsed (any tab but the Spec): its row and the buttons keep out of the inset.
-    func testTicketPanelTrailingInsetCollapsed() async throws {
-        try XCTSkipIf(UIDevice.current.userInterfaceIdiom == .pad, "the iPad has no side inset")
-        try await screen("ticket-panel-inset-collapsed", router: ticket("HARNESS-5", .activity), landscape: true, regularWidth: true, requiresTrailingInset: true) { RootView() }
+    /// The iPhone Duo held in the book pose: the ticket sheet covers only the right half of the screen.
+    func testTicketSheetBookPose() async throws {
+        try XCTSkipUnless(ReferenceImages.device == "duo", "the Duo's hinge")
+        try await screen("ticket-sheet-book", router: ticket("HARNESS-5", .spec), landscape: true) { RootView().environment(\.devicePosture, .book) }
     }
 
     func testTicketActivity() async throws {

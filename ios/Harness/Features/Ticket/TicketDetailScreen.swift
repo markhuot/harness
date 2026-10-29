@@ -147,8 +147,6 @@ private struct TicketDetailBody: View {
     /// The latest readings, which become `pageMaxY` and `composerTop` once the sheet is at rest.
     @State private var settling = PageSettling()
     @Environment(\.sheetResting) private var sheetResting
-    @Environment(\.inTicketPanel) private var inTicketPanel
-    @Environment(\.ticketPanelTrailingInset) private var panelTrailingInset
     @Environment(DockedSheetInset.self) private var dockInset: DockedSheetInset?
     @Environment(Router.self) private var router
     /// The annotator a tab body opened (the Browser tab's Annotate): presented here, outside the
@@ -205,7 +203,7 @@ private struct TicketDetailBody: View {
         // The iPhone's sheet is torn down when dismissed: the keyboard comes back if the composer had
         // it (TicketViewMemory). Its draft is the store's, already there.
         .task(id: ticket.key) {
-            guard !inTicketPanel, TicketViewMemory.shared.consumeFocus(key: ticket.key) else { return }
+            guard TicketViewMemory.shared.consumeFocus(key: ticket.key) else { return }
             try? await Task.sleep(for: .milliseconds(600))
             if !Task.isCancelled { focusComposer += 1 }
         }
@@ -268,7 +266,7 @@ private struct TicketDetailBody: View {
                 pageBody(t, strip: page, tornOff: tornOff)
                     .modifier(HeroRoom(hero: hero, overlap: max(0, pageMaxY - hero.distance - composerTop)
                         // The docked cards float above the composer, over the page's bottom.
-                        + TicketDock.stackRoom(cards: inTicketPanel ? 0 : router.waitingSheets.count, inset: dockInset)))
+                        + TicketDock.stackRoom(cards: router.waitingSheets.count, inset: dockInset)))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     // A page's frame, not the pager's: the pager reports its frame before it reached
                     // under the composer, and a page keeps the home indicator's inset of its own.
@@ -281,16 +279,13 @@ private struct TicketDetailBody: View {
                     }
                     .environment(\.ticketDetailHero, page == strip ? hero : nil)
                     .environment(\.scrollMemoryKey, "\(ticket.key)/\(page.rawValue)")
-                    .background { PagerYieldsToBackSwipe(hero: hero, inset: panelTrailingInset) }
+                    .background { PagerYieldsToBackSwipe(hero: hero) }
                     // Opaque, as the page slides over the hero on the pager's layer.
                     .background(c.bg)
                     .tag(page)
             }
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
-        // The page view keeps the offset of the width it first laid out at, so a panel that grows
-        // into the trailing inset (or rotates into it) would show it shifted by the inset: start over.
-        .id(panelTrailingInset)
         // No blur or fade under the composer: its glass is the only thing between it and the tab.
         .scrollEdgeEffectHidden(true, for: .bottom)
         // Down to the bottom of the screen, under the composer, so its glass shows the tab through
@@ -428,9 +423,6 @@ private struct TicketPinnedHeader: ViewModifier {
 /// automatic safe-area insets (see `hook`) and hands the pager to the hero collapse, which slides it.
 private struct PagerYieldsToBackSwipe: UIViewRepresentable {
     let hero: TicketDetailHeroCollapse
-    /// The panel's trailing inset: the pager is as wide as the panel, which UIKit may have first
-    /// inset by it (see `Probe.settle`), so a change takes another look.
-    var inset: CGFloat = 0
 
     func makeUIView(context: Context) -> Probe {
         let v = Probe()
@@ -441,15 +433,10 @@ private struct PagerYieldsToBackSwipe: UIViewRepresentable {
 
     func updateUIView(_ uiView: Probe, context: Context) {
         uiView.hero = hero
-        if uiView.inset != inset {
-            uiView.inset = inset
-            DispatchQueue.main.async { [weak uiView] in uiView?.settle() }
-        }
     }
 
     final class Probe: UIView {
         weak var hero: TicketDetailHeroCollapse?
-        var inset: CGFloat = 0
 
         /// UIKit may have adjusted the pager's offset for a side safe area it ran into before the
         /// adjustment was turned off (`hook`), leaving the page shifted by it: put it back on its page.

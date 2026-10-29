@@ -20,43 +20,8 @@ public enum DockMetrics {
         ConcentricBar.padding(screen, barHeight: barHeight)?.horizontal ?? fallbackSides
     }
 
-    /// The iPad's cards keep this far from the board column's trailing and bottom edges.
-    public static let cornerMargin: CGFloat = 16
     /// From a card's ✕ tap target to the capsule's trailing edge.
     public static let closeInset: CGFloat = 10
-    /// The widest and narrowest card worth showing (the narrowest keeps the ref and a few words).
-    public static let maxCardWidth: CGFloat = 320
-    public static let minCardWidth: CGFloat = 200
-    /// The room a lone "N more…" card needs, margins included.
-    public static let collapsedRoom: CGFloat = 150
-
-    /// How far the iPad's cards sit from the host's bottom edge: the corner margin above the board's
-    /// system bar. `barInset` reaches up from the screen's edge and includes the `safeArea` the host
-    /// already keeps clear, so only the rest of it is added.
-    public static func padBottomMargin(barInset: CGFloat, safeArea: CGFloat) -> CGFloat {
-        cornerMargin + max(0, barInset - safeArea)
-    }
-
-    /// What the iPad's corner stack shows in a board column `width` wide.
-    public enum CardMode: Equatable {
-        /// Cards this wide.
-        case cards(CGFloat)
-        /// The "N more…" card alone, this wide, holding every docked ticket.
-        case collapsed(CGFloat)
-        case hidden
-    }
-
-    public static func cardMode(width: CGFloat) -> CardMode {
-        let room = width - cornerMargin * 2
-        if room >= minCardWidth { return .cards(min(maxCardWidth, room)) }
-        return width >= collapsedRoom ? .collapsed(room) : .hidden
-    }
-
-    /// How many rows (cards and "N more…") fit a column `height` tall.
-    public static func rowsFitting(height: CGFloat, bottom: CGFloat = cornerMargin) -> Int {
-        max(1, Int((height - cornerMargin - bottom + spacing) / (self.height + spacing)))
-    }
-
     /// A stack of `rows` cards, gaps included.
     public static func stackHeight(rows: Int) -> CGFloat {
         rows > 0 ? CGFloat(rows) * height + CGFloat(rows - 1) * spacing : 0

@@ -1092,8 +1092,7 @@ chat, because the chief creates listeners with its own tools. Memory is a sheet 
 saved against the revision it opened. The app's two switches are in Settings → Chief of staff; a
 project's are Inherit/On/Off selects (`null` clears the override). The old watcher Inbox, its ⌘2
 binding and the watcher forms are gone; `#/inbox` links open the board. The iPhone and iPad have the
-same button in the board's bottom bar and open the chief as a sheet (iPhone) or a panel beside the
-board (iPad, iPhone Duo); `harness://cos` and `harness://cos/<group id>` open one.
+same button in the board's bottom bar and open the chief as a sheet; `harness://cos` and `harness://cos/<group id>` open one.
 
 #### Memory and activity query
 
@@ -4057,27 +4056,23 @@ the conventions, and ios/README.md the build and test commands.
 - **iPad.** One universal build (device family `1,2`) that allows all four orientations, which
   iPad multitasking (Split View, Stage Manager) needs, so the window can be any size. The screens
   are the phone's, laid out at the window's width. The iPad runs several windows (one AppModel
-  and store, a Router per window). At regular width a ticket (or New session) opens in a panel
-  that slides in from the right, full height, with the board still live to its left. A ticket
-  opened from outside the panel (a card, search, a link) opens on top of the one in
-  it, which waits docked, and a link inside the panel (a child, a dep, a file) pushes inside it
-  with Back. The panel resizes from its leading edge (25–80% of the window, 800pt until resized,
-  then remembered as a fraction of the window), and its title bar docks, pops out or closes the
-  ticket it shows. Dragging the panel by its top edge closes it when the drag moved at least 40pt and is headed past the panel's halfway point (the finger's momentum carries into the slide, and a shorter drag springs back); holding the dragged panel in the window's trailing 40% for about half a second shows a ghost "Dock" card in the card stack, and letting go then docks it. Docked tickets (the dock button, that hold, or another ticket opened
-  over them) wait as minimized cards in the board's bottom-right corner, newest at the bottom: each
-  its own fully rounded glass capsule, as the single docked sheet was, about 320pt wide with a
-  status dot (the board's colors), the ticket's ref, as much of its title as fits, and an ✕, keeping their drafts and place; while the panel is open they sit just left of it,
-  never over the sidebar (where the board's column is too narrow they fold into one "N docked…"
-  card, and a panel that leaves no column hides them). A tap opens one and its ✕ closes it. Past
-  six (or as many as fit the height) an "N more…" card on top expands into a scrolling list of
-  them all, with no background of its own: a radial blur rising out of the corner sets it apart. The iPhone ticket sheet is a plain system sheet: swiping it away, at any speed, closes the ticket. Docking is a deliberate hold: drag the sheet down and hold your finger in the bottom 40% of the screen for half a second, and a ghost "Dock" card appears at the bottom; letting go then docks it (VoiceOver has a Dock action instead). The iPhone docks any number of tickets as cards in one dock that stays put above the board, an open ticket and a file sheet alike: the most recent card at the bottom with the next cards and "N more…" stacked above it as glass
+  and store, a Router per window). A ticket (or New session) opens in the same system sheet as on
+  the iPhone: it rises from the bottom, dims the board and sidebar behind it, and at regular width
+  takes the narrower form width so lines stay readable in landscape. A ticket opened from
+  outside the sheet (a card, search, a link) opens on top of the one in it, which waits docked, and
+  a link inside the sheet (a child, a dep, a file) pushes inside it with Back. Swiping it down
+  closes the ticket, and the sheet's pop-out button opens it in a window of its own. Docked tickets wait as
+  minimized cards in the dock, the iPhone's: full-width glass capsules rising from the bottom over
+  the board, newest at the bottom, each with a status dot (the board's colors), the ticket's ref, as
+  much of its title as fits, and an ✕, keeping their drafts and place. A tap opens one and its ✕
+  closes it. Past
+  three an "N more…" card on top expands into a scrolling list of
+  them all, with no background of its own: a radial blur rising out of the bottom sets it apart. The ticket sheet is a plain system sheet at every width, and it offers a half-open stop next to full height where the system allows one (a form sheet at regular width has none): swiping it away, at any speed, closes the ticket. On an iPhone Duo held in the book pose (partly open, the fold running vertically) the sheet covers only the right half of the screen; fully open, it is the system's centered sheet. Docking is a deliberate hold: drag the sheet down and hold your finger in the bottom 40% of the screen for half a second, and a ghost "Dock" card appears at the bottom; letting go then docks it (VoiceOver has a Dock action instead). The iPhone docks any number of tickets as cards in one dock that stays put above the board, an open ticket and a file sheet alike: the most recent card at the bottom with the next cards and "N more…" stacked above it as glass
   capsules, lifting the board's bottom bar and the ticket's message box the same distance; the list rises over a blur out of the bottom; a tap on a card opens it (over an open ticket it swaps the sheet, and only the cards that change move), and ✕
-  closes just that one. The dock steps aside while the keyboard, a picker, the palette or a dialog is up. Reopening a docked ticket restores its scroll position, draft and keyboard. The iPad's long press on a ticket's title in the panel lists the other docked
-  tickets in a menu. Only the five most recently used stay mounted; older ones are kept as a
+  closes just that one. The dock steps aside while the keyboard, a picker, the palette or a dialog is up. Reopening a docked ticket restores its scroll position, draft and keyboard. Only the five most recently used stay mounted; older ones are kept as a
   reference and open again at their place. The docked tickets come back after the app is quit or
   relaunched (kept on the device only). Pop-out opens the ticket in a
-  window of its own, as does Open in New Window in a card's or the ticket's menu. Narrow windows
-  keep the phone's bottom sheet and dock. Any ticket tab and any single browser tab
+  window of its own, as does Open in New Window in a card's or the ticket's menu. Any ticket tab and any single browser tab
   tear off into a pinned window of their own: dragged out of the window (the drag
   carries the window's NSUserActivity, so iPadOS opens it) or from the thing's context menu
   (Open in New Window). A pinned window shows only that one tab, fully working, under the

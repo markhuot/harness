@@ -190,49 +190,15 @@ private func router(open keys: [String] = [], dock: Bool = false) -> Router {
         #expect(Router().persistedState(now: t0) == nil)
     }
 
-    // MARK: Layout flips
+    // MARK: System dismissal
 
-    @Test func aDismissalReportedByTheLayoutFlipDoesNotCloseTheTicket() {
-        let r = router(open: ["A-1"])
-        r.setTicketTab(.spec, key: "A-1")
-        r.sheetIsBesideBoard = true
-        // The system sheet is withdrawn for the panel; SwiftUI writes nil back.
-        r.sheetDismissedBySystem(dock: false, now: Date())
-        #expect(r.ticketSheetState == .presented)
-        // Back to the compact layout: the same flip, the other way.
-        r.sheetIsBesideBoard = false
-        r.sheetDismissedBySystem(dock: false, now: Date())
-        #expect(r.ticketSheetState == .presented)
-        #expect(r.ticketTab(key: "A-1") == .spec)
-    }
-
-    @Test func aSwipeAwayLongAfterTheFlipStillClosesTheTicket() {
-        let r = router(open: ["A-1"])
-        r.sheetIsBesideBoard = true
-        r.sheetIsBesideBoard = false
-        r.sheetDismissedBySystem(dock: false, now: Date().addingTimeInterval(Router.layoutFlipGrace + 1))
-        #expect(r.ticketSheetState == .gone)
-    }
-
-    @Test func aSwipeAwayWithNoFlipClosesAndAnArmedReleaseDocks() {
+    @Test func aSwipeAwayClosesAndAnArmedReleaseDocks() {
         let closing = router(open: ["A-1"])
         closing.sheetDismissedBySystem(dock: false)
         #expect(closing.ticketSheetState == .gone)
         let docking = router(open: ["A-1"])
         docking.sheetDismissedBySystem(dock: true)
         #expect(docking.ticketSheetState == .docked)
-    }
-
-    @Test func flippingTheLayoutKeepsSheetsPathsTabsAndTheDock() {
-        let r = router(open: ["A-1", "A-2"])
-        r.setTicketSheetPath([.ticket(key: "A-3", tab: nil)])
-        r.setTicketTab(.spec, key: "A-3")
-        r.dockSheet()
-        let before = r.dockedSheets
-        r.sheetIsBesideBoard = true
-        r.sheetIsBesideBoard = false
-        #expect(r.dockedSheets == before)
-        #expect(r.ticketSheetState == .docked)
     }
 }
 

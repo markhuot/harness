@@ -40,9 +40,6 @@ struct FileViewerScreen: View {
 
 private enum FileViewerTab { case file, diff }
 
-/// Identifies this screen to the panel's close button (TicketPanelCloser).
-private final class PanelOwner {}
-
 private struct FileViewerContent: View {
     let root: FileRoot
     let path: String
@@ -59,11 +56,6 @@ private struct FileViewerContent: View {
     /// False while another docked sheet is on top (or the sheet is minimized): this editor is
     /// mounted but out of sight, which is it losing focus.
     @Environment(\.sheetFront) private var front
-    /// The iPad panel's close button and Escape, which close this file's card while it's on top there.
-    @Environment(TicketPanelCloser.self) private var panelCloser: TicketPanelCloser?
-    @State private var onScreen = PanelOwner()
-    /// The dialog is for closing the whole card (the panel's ✕) rather than going back a screen.
-    @State private var closingCard = false
     @State private var session: FileEditorSession?
     @State private var tab = FileViewerTab.file
     @State private var askingToLeave = false
@@ -130,7 +122,7 @@ private struct FileViewerContent: View {
             if guarded {
                 ToolbarItem(placement: .topBarLeading) {
                     // A card has no screen to go back to: it closes, whatever presents it.
-                    Button { closingCard = false; askingToLeave = true } label: {
+                    Button { askingToLeave = true } label: {
                         if cardID != nil { Label("Close", systemImage: "xmark") } else { Label("Back", systemImage: "chevron.left") }
                     }
                 }
@@ -175,20 +167,7 @@ private struct FileViewerContent: View {
             }
         }
         .onChange(of: front, initial: true) { _, front in
-            if front {
-                // The panel's ✕ and Escape: a dirty file with Save on blur off asks first.
-                panelCloser?.take(onScreen) {
-                    // Read when it's pressed: this closure outlives the body that made it.
-                    if (session?.model.dirty ?? false) && (!saveOnBlur || session?.model.saveError != nil) {
-                        closingCard = true
-                        askingToLeave = true
-                    } else if session?.model.dirty ?? false {
-                        // Save on blur: write first, and keep the card (with the failure showing) if that fails.
-                        Task { if await session?.save() == true { closeCard() } }
-                    } else { closeCard() }
-                }
-            } else {
-                panelCloser?.release(onScreen)
+            if !front {
                 // Another card came to the front: the editor loses focus like it does on blur.
                 session?.fileHost.resignFocus()
                 session?.didBackground()
@@ -216,17 +195,14 @@ private struct FileViewerContent: View {
         }
         .onAppear { session?.didReturn() }
         .onDisappear {
-            panelCloser?.release(onScreen)
             session?.didLeave()
         }
     }
 
     /// After Save or Discard: closes the card (by id, since the top card may have changed during a
-    /// save; the panel's ✕ on a pushed file closes the sheet it's in) or pops back a screen.
+    /// save) or pops back a screen.
     private func leave() {
-        let closing = closingCard
-        closingCard = false
-        if cardID != nil || closing { closeCard() } else { dismiss() }
+        if cardID != nil { closeCard() } else { dismiss() }
     }
 
     private func closeCard() {

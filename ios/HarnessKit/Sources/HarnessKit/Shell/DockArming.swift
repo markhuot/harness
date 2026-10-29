@@ -76,21 +76,3 @@ public struct DockArming: Equatable, Sendable {
         return now - latchedAt <= Self.intentLifetime
     }
 }
-
-/// What letting go of the iPad's side panel does. The phone's sheet has the system for this; the
-/// panel is a custom view and decides itself, as little as possible: a drag closes it when it moved
-/// at least `minDistance` and the finger was heading for past half the panel's width, else it
-/// springs back. Never docks (that's the hold, DockArming).
-public enum PanelRelease {
-    /// The least a drag moves to close. The panel, unlike the system sheet, has nothing else to stop
-    /// a tiny flick sending it away; the attachment viewer's flick distance is the same.
-    public static let minDistance = 40.0
-    /// How far across the panel's width the drag's projected end has to reach.
-    public static let halfway = 0.5
-
-    /// `translation` is how far the finger moved toward the way out, `predictedEnd` where its
-    /// momentum would carry that translation (DragGesture's `predictedEndTranslation`).
-    public static func closes(translation: Double, predictedEnd: Double, width: Double) -> Bool {
-        translation >= minDistance && predictedEnd >= width * halfway
-    }
-}

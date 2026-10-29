@@ -39,16 +39,16 @@ class ScreenTestCase: XCTestCase {
     }
 
     /// Renders `content` in `world` (this test's, unless another is given) and returns the image.
-    func render<V: View>(_ world: ScreenWorld? = nil, router: Router = Router(), dark: Bool = false, landscape: Bool = false, regularWidth: Bool = false, requiresTrailingInset: Bool = false, @ViewBuilder _ content: () -> V) async throws -> UIImage {
+    func render<V: View>(_ world: ScreenWorld? = nil, router: Router = Router(), dark: Bool = false, landscape: Bool = false, regularWidth: Bool = false, @ViewBuilder _ content: () -> V) async throws -> UIImage {
         let w = world ?? self.world!
         Self.resetPersistedState()
-        return try await Renderer.render(w.environment(content(), router: router, scheme: dark ? .dark : .light), world: w, dark: dark, landscape: landscape, regularWidth: regularWidth, requiresTrailingInset: requiresTrailingInset)
+        return try await Renderer.render(w.environment(content(), router: router, scheme: dark ? .dark : .light), world: w, dark: dark, landscape: landscape, regularWidth: regularWidth)
     }
 
     /// Renders `content` and checks it against its reference image.
-    func screen<V: View>(_ name: String, router: Router = Router(), landscape: Bool = false, regularWidth: Bool = false, requiresTrailingInset: Bool = false, file: StaticString = #filePath, line: UInt = #line, @ViewBuilder _ content: () -> V) async throws {
+    func screen<V: View>(_ name: String, router: Router = Router(), landscape: Bool = false, regularWidth: Bool = false, file: StaticString = #filePath, line: UInt = #line, @ViewBuilder _ content: () -> V) async throws {
         do {
-            let image = try await render(router: router, landscape: landscape, regularWidth: regularWidth, requiresTrailingInset: requiresTrailingInset, content)
+            let image = try await render(router: router, landscape: landscape, regularWidth: regularWidth, content)
             ReferenceImages.assert(image, named: name, file: file, line: line)
         } catch {
             XCTFail("\(name): render threw \(type(of: error)): \(String(reflecting: error))", file: file, line: line)

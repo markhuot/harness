@@ -33,7 +33,6 @@ struct TicketDetailComposer: View {
     @Environment(\.palette) private var c
     @Environment(Router.self) private var router
     @Environment(\.inTicketSheet) private var inTicketSheet
-    @Environment(\.inTicketPanel) private var inTicketPanel
     @Environment(DockedSheetInset.self) private var dockInset: DockedSheetInset?
     @State private var sending = false
     @State private var focused = false
@@ -41,8 +40,8 @@ struct TicketDetailComposer: View {
     @Environment(\.sheetFront) private var sheetFront
     @Environment(\.sheetResting) private var sheetResting
 
-    /// The phone's ticket sheet floats the docked cards above its composer; the iPad's panel doesn't.
-    private var keepsRoom: Bool { inTicketSheet && !inTicketPanel }
+    /// The ticket sheet floats the docked cards above its composer.
+    private var keepsRoom: Bool { inTicketSheet }
 
     /// Tells the sheet its screen has a composer while it's the front sheet's.
     private func reportUp() {

@@ -27,20 +27,17 @@ enum Renderer {
 
     /// Turns the scene to landscape or back to portrait and waits until the screen has the new shape,
     /// so the render gets the real landscape size, safe areas and size classes.
-    ///
-    /// `turnedLeft` turns it the other way (landscape left), which puts the Duo's inset on the
-    /// trailing side instead of the leading one.
-    static func rotate(landscape: Bool, turnedLeft: Bool = false) async throws {
+    static func rotate(landscape: Bool) async throws {
         guard let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first else { return }
         func isLandscape() -> Bool { scene.screen.bounds.width > scene.screen.bounds.height }
         guard isLandscape() != landscape else { return }
-        scene.requestGeometryUpdate(.iOS(interfaceOrientations: landscape ? (turnedLeft ? .landscapeLeft : .landscapeRight) : .portrait)) { _ in }
+        scene.requestGeometryUpdate(.iOS(interfaceOrientations: landscape ? .landscapeRight : .portrait)) { _ in }
         for _ in 0..<100 where isLandscape() != landscape { try await Task.sleep(for: .milliseconds(50)) }
         guard isLandscape() == landscape else { throw Rotation.stuck(landscape) }
         try await Task.sleep(for: .milliseconds(300))
     }
 
-    enum Rotation: Error { case stuck(Bool), noTrailingInset(left: CGFloat, right: CGFloat) }
+    enum Rotation: Error { case stuck(Bool) }
 
     /// The iPad's safe area the references were recorded under (an iPad Pro 11-inch, portrait, Full Screen Apps):
     /// the status bar's 32 points on top and 25 below. A fresh simulator starts in Windowed Apps (20 below, and
@@ -65,9 +62,9 @@ enum Renderer {
     }
 
     /// `regularWidth` renders a landscape phone as a Plus or Pro Max does: regular width, compact height.
-    static func render<V: View>(_ view: V, world: ScreenWorld, dark: Bool = false, landscape: Bool = false, regularWidth: Bool = false, requiresTrailingInset: Bool = false) async throws -> UIImage {
+    static func render<V: View>(_ view: V, world: ScreenWorld, dark: Bool = false, landscape: Bool = false, regularWidth: Bool = false) async throws -> UIImage {
         UIView.setAnimationsEnabled(false)
-        try await rotate(landscape: landscape, turnedLeft: requiresTrailingInset)
+        try await rotate(landscape: landscape)
         let size = screenSize
         let style: UIUserInterfaceStyle = dark ? .dark : .light
         let root = UIHostingController(rootView: view.transaction { $0.animation = nil; $0.disablesAnimations = true })
@@ -99,15 +96,6 @@ enum Renderer {
         }
         // After the defer, so a mismatch hides the window again instead of leaving it over later renders.
         try checkSceneMatchesReferences(window: window, scene: scene, size: size)
-        // A render of the trailing safe area (the panel running into it) means nothing when the
-        // device turned the other way, or has no inset there: the reference would show no inset.
-        if requiresTrailingInset {
-            await FrameClock.tick()
-            window.layoutIfNeeded()
-            let i = window.safeAreaInsets
-            if i.right <= 0 { throw Rotation.noTrailingInset(left: i.left, right: i.right) }
-        }
-
         var previous: Data?
         var stable = 0
         for frame in 0..<maxFrames {
