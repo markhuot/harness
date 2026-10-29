@@ -1,4 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
+import { execSync } from "node:child_process";
 import { callTools, makeOrchestrator, stopAll } from "../orchestrator-harness";
 
 afterEach(stopAll);
@@ -131,29 +132,81 @@ test("update_ticket takes pull_request_urls alone on the agent's own ticket in a
   expect(h.ticket(me.key).title).not.toBe("Nope");
 });
 
-test("a work run changes its own ticket's approval method with update_ticket; a bad method is refused and changes nothing", async () => {
-  const { results, h, me } = await agent([
-    ["update_ticket", { key: "ACME-2", completion_action: "custom", completion_instructions: "no changes, just tidy up" }],
-    ["update_ticket", { key: "ACME-2", completion_action: "bogus" }],
-    ["update_ticket", { key: "ACME-2", completion_instructions: "post a note and stop" }],
+/** A rig whose project directory is a git repository, so merge, cleanup and custom are all offered. */
+function gitRig() {
+  const h = makeOrchestrator({ tools: undefined });
+  execSync("git init -q", { cwd: h.project.path });
+  return h;
+}
+
+test("a work run may switch its own ticket to cleanup, with an Activity entry; merge, custom and instructions are refused", async () => {
+  const h = gitRig();
+  const run = callTools([
+    ["update_ticket", { key: "ACME-1", completion_action: "merge" }],
+    ["update_ticket", { key: "ACME-1", completion_action: "custom", completion_instructions: "rm -rf things" }],
+    ["update_ticket", { key: "ACME-1", completion_instructions: "something" }],
+    ["update_ticket", { key: "ACME-1", completion_action: "cleanup" }],
   ]);
-  expect(results[0]!.isError).toBe(false);
-  expect(results[1]!.isError).toBe(true);
-  expect(results[2]!.isError).toBe(false);
-  expect(h.ticket(me.key)).toMatchObject({ completionAction: "custom", completionInstructions: "post a note and stop" });
+  h.driver.script(run.steps);
+  const me = await h.orch.createTicket({ projectId: h.project.id, spec: "My ticket", skipAgentReview: true });
+  await h.settle();
+  expect(run.results.map((r) => r.isError)).toEqual([true, true, true, false]);
+  expect(h.ticket(me.key).completionAction).toBe("cleanup");
+  expect(h.store.activity.listBySession(me.sessionId).some((e) => e.author === "agent" && e.body.startsWith("Changed the approval method to cleanup"))).toBe(true);
 });
 
-test("a complete run changes the ticket's approval method with update_ticket", async () => {
+test("a refused approval method changes nothing else in the same update_ticket call", async () => {
+  const { results, h, me } = await agent([["update_ticket", { key: "ACME-2", pull_request_urls: ["https://github.com/acme/app/pull/9"], completion_action: "bogus" }]]);
+  expect(results[0]!.isError).toBe(true);
+  expect(h.ticket(me.key).pullRequests).toEqual([]);
+});
+
+test("a done ticket refuses an approval method change until it is re-opened", async () => {
   const h = makeOrchestrator({ tools: undefined });
   const first = callTools([["submit_for_review", { note: "done", spec_is_up_to_date: true }]]);
-  const done = callTools([["update_ticket", { key: "ACME-1", completion_action: "custom", completion_instructions: "nothing to land" }]]);
-  h.driver.script(first.steps, done.steps);
+  h.driver.script(first.steps);
+  const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x", skipAgentReview: true });
+  await h.settle();
+  h.orch.humanReview(t.key, { decision: "approve", action: "custom", instructions: "nothing" });
+  await h.settle();
+  expect(h.ticket(t.key).status).toBe("done");
+  await expect(h.orch.updateTicket(t.key, { completionAction: "custom", completionInstructions: "again" })).rejects.toThrow(/is done/);
+  expect(h.ticket(t.key).completionInstructions).toBe("nothing");
+});
+
+test("a complete run changes the ticket's approval method with update_ticket, and the new method gets its own completion run", async () => {
+  const h = gitRig();
+  const first = callTools([["submit_for_review", { note: "done", spec_is_up_to_date: true }]]);
+  const switching = callTools([["update_ticket", { key: "ACME-1", completion_action: "custom", completion_instructions: "nothing to land" }]]);
+  h.driver.script(first.steps, switching.steps);
   const t = await h.orch.createTicket({ projectId: h.project.id, spec: "Nothing to change", skipAgentReview: true });
   await h.settle();
-  h.orch.humanReview(t.key, { decision: "approve", action: "custom", instructions: "open a PR" });
+  h.orch.humanReview(t.key, { decision: "approve", action: "cleanup" });
   await h.settle();
-  expect(done.results[0]!.isError).toBe(false);
+  expect(switching.results[0]!.isError).toBe(false);
   expect(h.ticket(t.key)).toMatchObject({ completionAction: "custom", completionInstructions: "nothing to land" });
+  const completes = h.driver.requests.filter((r) => r.kind === "complete");
+  expect(completes.length).toBe(2);
+  expect(completes[1]!.prompt).toContain("approval method was changed to custom");
+  expect(completes[1]!.prompt).toContain("nothing to land");
+});
+
+test("a complete run can't edit another ticket", async () => {
+  const h = makeOrchestrator({ tools: undefined });
+  const other = await h.orch.createTicket({ projectId: h.project.id, spec: "Other", title: "Other", start: false });
+  await h.settle();
+  const first = callTools([["submit_for_review", { note: "done", spec_is_up_to_date: true }]]);
+  const done = callTools([
+    ["update_ticket", { key: other.key, title: "Hijacked" }],
+    ["update_ticket", { key: other.key, completion_action: "custom", completion_instructions: "x" }],
+  ]);
+  h.driver.script(first.steps, done.steps);
+  const t = await h.orch.createTicket({ projectId: h.project.id, spec: "x", skipAgentReview: true });
+  await h.settle();
+  h.orch.humanReview(t.key, { decision: "approve", action: "custom", instructions: "go" });
+  await h.settle();
+  expect(done.results.map((r) => r.isError)).toEqual([true, true]);
+  expect(h.ticket(other.key)).toMatchObject({ title: "Other", completionAction: null });
 });
 
 test("a chat run records a pull request on its own ticket with update_ticket, but can't edit anything else on it", async () => {

@@ -805,7 +805,7 @@ custom (`projectCompletionDefault`).
 **The choice** is stored on the ticket (`Ticket.completionAction`, `completionInstructions`) when
 it's approved (`POST /review`, `review_ticket`) or completed (`POST /complete`,
 `complete_ticket`), because a human approval can come before the agent review finishes. A new
-action without instructions drops the old instructions. The ticket's own agent can change the choice too, in a work, chat or complete run, with `update_ticket { completion_action, completion_instructions }` (the validation is the same, and a done ticket refuses it), so a method that can't work isn't stuck. `completionOptions` (shared) decides what
+action without instructions drops the old instructions. The ticket's own agent can change the choice too, in a work, chat or complete run, with `update_ticket { completion_action, completion_instructions }` (the validation is the same, and a done ticket refuses it, before anything else in the call is written), so a method that can't work isn't stuck. A work or chat run may only pick `pr` or `cleanup` without instructions (never while a completion runs), a complete run edits only its own ticket, and every agent change adds an Activity entry. When a complete run changes the method, `afterRun` enqueues a new completion (`enqueueComplete`) instead of judging the old run by the new method, so the lock, merge tip, prompts and end-of-run checks always belong to one method. `completionOptions` (shared) decides what
 a ticket may do and what's preselected: a child on its parent's branch only merges; otherwise the
 offered actions (`cleanup` always among them in git, even for a worktree with no commits, when
 the work was a change outside git), less `merge` and `pr` when there's nothing to merge or open a

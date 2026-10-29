@@ -337,6 +337,8 @@ interface ActiveRun {
    * completion resumes (afterRun), so the queue runs one job at a time
    */
   resumeCompletion: { note: string } | null;
+  /** A complete run: the approval method it started with (its prompt, lock and merge tip follow it) */
+  completionAction: CompletionAction | null;
   /**
    * Calls a permission system inside the driver denied without asking (permission_denied) that
    * should reach a human, and the agent didn't then run successfully in the same run
@@ -2441,6 +2443,11 @@ export class Orchestrator {
     const externalRef = body.externalRef !== undefined ? this.manualExternalRef(ticket.externalRef, body.externalRef) : undefined;
     const pullRequestUrls = body.pullRequestUrls !== undefined ? this.validPullRequestUrls(body.pullRequestUrls) : undefined;
     const labels = body.labels !== undefined ? this.validLabels(body.labels) : undefined;
+    let completionPatch: TicketPatch | null = null;
+    if (body.completionAction !== undefined || body.completionInstructions !== undefined) {
+      if (ticket.status === "done") throw conflict(`${ticket.key} is done: re-open it to change its approval method`);
+      completionPatch = this.completionChoicePatch(ticket, { action: body.completionAction, instructions: body.completionInstructions });
+    }
     // The spec first: a conflict refuses the whole PATCH before anything else changed.
     if (spec !== undefined) {
       if (ticket.draft) {
@@ -2475,11 +2482,12 @@ export class Orchestrator {
       }
       this.fetchPullRequestTitles(ticket.id, change.added);
     }
-    if (body.completionAction !== undefined || body.completionInstructions !== undefined) {
-      if (ticket.status === "done") throw conflict(`${ticket.key} is done: re-open it to change its approval method`);
-      ticket = this.storeCompletionChoice(ticket, { action: body.completionAction, instructions: body.completionInstructions });
+    if (completionPatch) {
+      ticket = this.store.tickets.update(ticket.id, completionPatch)!;
       this.touchTicket(ticket.id);
       this.appendStatus(ticket.sessionId, null, `Approval method: ${ticket.completionAction ?? "default"}`);
+      // An agent's change is on the card for the human to see, not only in the transcript.
+      if (as.author === "agent") this.addActivity(ticket, "note", "agent", `Changed the approval method to ${ticket.completionAction ?? "default"}${ticket.completionInstructions ? `: ${ticket.completionInstructions}` : ""}`);
       this.touchSession(ticket.sessionId);
     }
     if (labels !== undefined) {
@@ -3117,16 +3125,22 @@ export class Orchestrator {
 
   /** Keep the approver's choice on the ticket until the completion runs. */
   private storeCompletionChoice(t: Ticket, choice: { action?: unknown; instructions?: unknown }): Ticket {
+    const patch = this.completionChoicePatch(t, choice);
+    return patch ? this.store.tickets.update(t.id, patch)! : t;
+  }
+
+  /** Validate an approval method choice without writing it: the patch it makes, or null when it changes nothing. */
+  private completionChoicePatch(t: Ticket, choice: { action?: unknown; instructions?: unknown }): TicketPatch | null {
     const action = this.requestedCompletion(t, choice.action);
     if (choice.instructions !== undefined && choice.instructions !== null && typeof choice.instructions !== "string") {
       throw badRequest("instructions must be text");
     }
     const instructions = typeof choice.instructions === "string" ? choice.instructions.trim() || null : undefined;
-    if (action === undefined && instructions === undefined) return t;
+    if (action === undefined && instructions === undefined) return null;
     // A new action without instructions drops the earlier action's instructions.
     const patch: TicketPatch = { completionInstructions: instructions ?? (action !== undefined ? null : t.completionInstructions ?? null) };
     if (action !== undefined) patch.completionAction = action;
-    return this.store.tickets.update(t.id, patch)!;
+    return patch;
   }
 
   private resetRejections(ticket: Ticket) {
@@ -4438,7 +4452,17 @@ ${numberLines(r.body)}`;
     // nothing else, and has full access to its own card.
     const fields = Object.keys(input).filter((k) => input[k as keyof UpdateTicketInput] !== undefined);
     const own = ctx.runKind === "plan" ? this.ownPlanTarget(ctx, key) : this.ownWorkCardEdits(ctx, key, fields);
+    // A completion run edits its own ticket only: nothing else on the board is its business.
+    if (ctx.runKind === "complete" && !own) throw new Error("a completion run can only change its own ticket, and only its pull requests, labels and approval method");
     const { actor, target } = own ? { actor: own, target: own } : this.boardTarget(ctx, key, "update_ticket");
+    if (own && (input.completionAction !== undefined || input.completionInstructions !== undefined) && ctx.runKind !== "complete") {
+      // The human approves what lands. A work or chat run may only pick a method that lands nothing by itself
+      // (pr, cleanup), never merge or instructions of its own, and not while a completion is under way.
+      if (input.completionInstructions !== undefined || (input.completionAction !== "pr" && input.completionAction !== "cleanup")) {
+        throw new Error("a work or chat run can change the approval method to pr or cleanup only, without instructions: merge and custom need the human's approval");
+      }
+      if (this.completing(own)) throw new Error(`${own.key} is completing: its completion run changes the approval method now`);
+    }
     // Editing a looser ticket (its spec, dependencies, driver...) would get it to act for the caller
     // under looser permissions. The one edit allowed on it is tightening its mode, alone.
     if (!own && !(fields.length === 1 && fields[0] === "permissionMode")) this.notLooserThanCaller(actor, target);
@@ -6062,6 +6086,7 @@ ${numberLines(r.body)}`;
       blocked: false,
       replanned: null,
       resumeCompletion: null,
+      completionAction: run.kind === "complete" ? ticket?.completionAction ?? null : null,
       denials: [],
       calls: new Map(),
       offeredGrants: [],
@@ -6545,6 +6570,12 @@ ${numberLines(r.body)}`;
         // done: the human marked it so meanwhile. blocked: the agent called block, which kept the
         // approvals for the resumed completion. in_progress: the agent called resume_work, which queued the work run.
         if (ticket.status === "done" || ticket.status === "blocked" || ticket.status === "in_progress") break;
+        if (run.status === "succeeded" && (ticket.completionAction ?? null) !== active.completionAction) {
+          // The agent switched the approval method during the run. The lock, merge tip, prompts and end-of-run
+          // checks belong to a method, so the new one gets its own completion run instead of judging this one by it.
+          await this.enqueueComplete(ticket, `\n\nThe approval method was changed to ${ticket.completionAction} during the previous attempt: finish the ticket by it.`);
+          break;
+        }
         if ((ticket.completionAction ?? "merge") === "merge" && run.status === "succeeded") {
           const sha = this.mergeTips.get(ticket.id);
           this.mergeTips.delete(ticket.id);

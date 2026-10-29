@@ -11,7 +11,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
-- An agent can now change its own ticket's approval method (merge, pull request, clean up or custom, with its instructions) with `update_ticket` `completion_action` and `completion_instructions`, from a work, chat or completion run, so a ticket approved as a pull request that has no changes no longer goes around in circles: the completion agent picks a method that fits. The pull request completion prompt tells it to do that instead of blocking. A done ticket's method stays fixed until it is re-opened.
+- An agent can now change its own ticket's approval method (merge, pull request, clean up or custom, with its instructions) with `update_ticket` `completion_action` and `completion_instructions`, from a work, chat or completion run, so a ticket approved as a pull request that has no changes no longer goes around in circles: the completion agent picks a method that fits. The pull request completion prompt tells it to do that instead of blocking. A done ticket's method stays fixed until it is re-opened. A completion run that switches the method is followed by a fresh completion with the new method's instructions and checks; a work or chat run may only switch to pull request or clean up, and every change by an agent shows in Activity.
 
 ## [app-20261029.1155](https://github.com/markhuot/harness/releases/tag/app-20261029.1155) - 2026-10-29
 
