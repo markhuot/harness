@@ -70,13 +70,13 @@ test("an allowed write is stored as the next revision", async () => {
   expect(calls).toHaveLength(1);
 });
 
-test("an edit_spec sends the edited section and the added lines, not the whole spec; update_spec sends the whole text", async () => {
+test("an edit_spec sends the edited section and the added lines, not the whole spec; update_spec sends what the new spec added", async () => {
   const { guard, calls } = fakeGuard(() => allow);
   await agentRun(guard, [edit("1. Build it.", "1. Build it.\n2. Ship it."), ["update_spec", { base_revision: 2, note: "n", spec: "# Goal\nShip a changelog page.\n\n# Plan\nJust ship." }]]);
   expect(calls[0]).toMatchObject({ kind: "edit", ticketTitle: "Changelog page", goal: "Ship a changelog page.", added: "2. Ship it." });
   expect(calls[0]!.text).toBe("# Plan\n1. Build it.\n2. Ship it.\n");
   expect(calls[0]!.text).not.toContain("Not started.");
-  expect(calls[1]).toMatchObject({ kind: "replace", text: "# Goal\nShip a changelog page.\n\n# Plan\nJust ship.", added: "# Goal\nShip a changelog page.\n\n# Plan\nJust ship." });
+  expect(calls[1]).toMatchObject({ kind: "replace", text: "# Plan\nJust ship.", added: "Just ship." });
 });
 
 test("a checker that errors or never answers lets the write through", async () => {
@@ -139,6 +139,41 @@ test("an edit that only deletes text is not sent to the checker", async () => {
   const { results } = await agentRun(guard, [edit("\n\n# Plan\n1. Build it.", "")]);
   expect(results[0]!.isError).toBe(false);
   expect(calls).toHaveLength(0);
+});
+
+test("a multi-edit call is judged on its own lines: dirty text between the edits is not blamed on the agent", async () => {
+  const dirty = "# Goal\nShip a changelog page.\n\n# Plan\n1. Build it.\nPreviously: we tried X.\n\n# Status\nNot started.";
+  const { guard, calls } = fakeGuard((i) => (i.added.includes("Previously") ? { ok: false, reason: "History.", quote: "Previously: we tried X." } : allow));
+  const h = makeOrchestrator({ tools: undefined, specGuard: guard });
+  const results: string[] = [];
+  h.driver.script(toolCall("edit_spec", { base_revision: 1, note: "n", edits: [{ old_string: "Ship a changelog page.", new_string: "Ship a changelog page now." }, { old_string: "Not started.", new_string: "Built." }] }, (r) => results.push(r.isError ? "error" : "ok")));
+  const t = await h.orch.createTicket({ projectId: h.project.id, spec: dirty, skipAgentReview: true });
+  await h.settle();
+  expect(results).toEqual(["ok"]);
+  expect(calls[0]!.added).toBe("Ship a changelog page now.\nBuilt.");
+  expect(h.ticket(t.key).specRevision).toBe(2);
+});
+
+test("an update_spec on an already-dirty spec judges only the lines it added", async () => {
+  const dirty = "# Goal\nShip a changelog page.\n\n# Plan\nPreviously: we tried X.\n\n# Status\nNot started.";
+  const { guard, calls } = fakeGuard(() => allow);
+  const h = makeOrchestrator({ tools: undefined, specGuard: guard });
+  h.driver.script(toolCall("update_spec", { base_revision: 1, note: "n", spec: dirty.replace("Not started.", "Built.") }, () => {}));
+  const t = await h.orch.createTicket({ projectId: h.project.id, spec: dirty, skipAgentReview: true });
+  await h.settle();
+  expect(calls[0]!.added).toBe("Built.");
+  expect(h.ticket(t.key).specRevision).toBe(2);
+});
+
+test("changedSections never counts untouched or moved lines, and collects every edited section", () => {
+  const before = "# A\none\n\n# B\ntwo\n\n# C\nthree";
+  expect(changedSections(before, "# A\none!\n\n# B\ntwo\n\n# C\nthree!")).toEqual({ sections: "# A\none!\n\n\n# C\nthree!", added: "one!\nthree!" });
+  expect(changedSections(before, "# C\nthree\n\n# A\none\n\n# B\ntwo").added).toBe("");
+});
+
+test("a quote that is only a fragment of a line doesn't refuse the write", () => {
+  expect(parseSpecGuardVerdict({ ok: false, reason: "r", quote: "ed" }, "Updated the plan").ok).toBe(true);
+  expect(parseSpecGuardVerdict({ ok: false, reason: "r", quote: "Updated" }, "Updated the plan").ok).toBe(false);
 });
 
 test("changedSections finds the edited section and only the lines that were added", () => {

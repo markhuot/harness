@@ -1477,14 +1477,14 @@ export class Orchestrator {
   private async guardSpecWrite(t: Ticket, w: { kind: "edit" | "replace"; before: string; body: string }): Promise<void> {
     const guard = this.specGuard();
     if (!guard) return;
-    const edit = w.kind === "edit" ? changedSections(w.before, w.body) : null;
-    if (edit && !edit.added.trim()) return; // only deletions: nothing was added to judge
+    const changed = changedSections(w.before, w.body);
+    if (!changed.added.trim()) return; // only deletions or moves: nothing was added to judge
     const input: SpecGuardInput = {
       ticketTitle: t.title,
       goal: specGoal(w.before),
       kind: w.kind,
-      text: edit ? edit.sections : w.body,
-      added: edit ? edit.added : w.body,
+      text: changed.sections,
+      added: changed.added,
     };
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.specGuardTimeoutMs);
@@ -1498,7 +1498,7 @@ export class Orchestrator {
     }
     if (verdict && !verdict.ok) {
       throw new Error(
-        `Not saved: this write adds history or logging, and the spec is a current summary. ${verdict.reason} Offending line: "${verdict.quote}". Rewrite it as the current state (a decision goes inline in the Plan step or acceptance criterion it shapes, with its reason) and write again. Nothing was changed; the spec is still at revision ${t.specRevision ?? 1}.`,
+        `Not saved: this write adds history or logging, and the spec is a current summary. ${verdict.reason} Offending line: "${verdict.quote}". Rewrite it as the current state (a decision goes inline in the Plan step or acceptance criterion it shapes, with its reason) and write again. Nothing was changed; the spec is still at revision ${this.store.tickets.get(t.id)?.specRevision ?? t.specRevision ?? 1}.`,
       );
     }
   }
