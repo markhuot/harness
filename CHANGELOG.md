@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261029.1134](https://github.com/markhuot/harness/releases/tag/app-20261029.1134) - 2026-10-29
+
 ### Changed
 
 - iPhone: the ticket sheet's lower stop is now a quarter of the screen instead of half, so most of the board shows above it. With the sheet at that stop, the board is no longer dimmed and works as usual: scroll it, or tap another card to open that ticket in the sheet (the one it showed moves to the dock).
