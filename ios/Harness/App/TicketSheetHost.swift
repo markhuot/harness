@@ -104,7 +104,9 @@ struct TicketSheetHost: View {
         .onChange(of: current?.id) {
             resignFirstResponder()
             // A ticket opened over the quarter-open one (the old one docks) comes up at full height.
-            if detent == Self.peek { withAnimation(.snappy) { detent = .large } }
+            if TicketSheetPlacement.opensFullHeightAfterTicketChange(quarterOpen: detent == Self.peek) {
+                withAnimation(.snappy) { detent = .large }
+            }
         }
         .presentationDragIndicator(.visible)
         .presentationDetents([Self.peek, .large], selection: $detent)

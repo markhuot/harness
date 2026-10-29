@@ -28,6 +28,11 @@ public enum TicketSheetPlacement: Sendable, Equatable {
     /// of the board shows (and works) above it. DockArming's zone starts below its top edge.
     public static let peekFraction = 0.25
 
+    /// Whether the sheet comes up at full height after the top ticket changed (a card tapped on the
+    /// live board docks the quarter-open ticket and opens the tapped one). A sheet already at full
+    /// height stays there.
+    public static func opensFullHeightAfterTicketChange(quarterOpen: Bool) -> Bool { quarterOpen }
+
     public static func placement(for posture: DevicePosture) -> TicketSheetPlacement {
         posture == .book ? .trailing : .system
     }
