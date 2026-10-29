@@ -21,3 +21,13 @@ import HarnessKit
         #expect(TicketSheetPlacement.placement(for: .flat) == .system)
     }
 }
+
+@Suite struct TicketSheetTicketChangeTests {
+    @Test func aTicketOpenedOverAQuarterOpenSheetComesUpAtFullHeight() {
+        #expect(TicketSheetPlacement.opensFullHeightAfterTicketChange(quarterOpen: true))
+    }
+
+    @Test func aSheetAlreadyAtFullHeightIsLeftAlone() {
+        #expect(!TicketSheetPlacement.opensFullHeightAfterTicketChange(quarterOpen: false))
+    }
+}
