@@ -14,6 +14,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - On iPhone, tapping a card on the board while a ticket sheet is quarter open now docks that ticket and opens the tapped one at full height, instead of leaving it quarter open.
 - On iPhone, the ticket sheet at its quarter-open stop keeps its header exactly as at full height (the status above the title stays visible) and only clips the bottom, and it casts a darker shadow so it stands out from the board.
 - An agent can now change its own ticket's approval method (merge, pull request, clean up or custom, with its instructions) with `update_ticket` `completion_action` and `completion_instructions`, from a work, chat or completion run, so a ticket approved as a pull request that has no changes no longer goes around in circles: the completion agent picks a method that fits. The pull request completion prompt tells it to do that instead of blocking. A done ticket's method stays fixed until it is re-opened. A completion run that switches the method is followed by a fresh completion with the new method's instructions and checks; a work or chat run may only switch to pull request or clean up, and every change by an agent shows in Activity.
+- Internal: the Swift contract test for `UpdateTicketBody` no longer expects the approval fields, since agents now change a ticket's approval method themselves, so the iPhone and iPad apps never send them.
 
 ## [app-20261029.1155](https://github.com/markhuot/harness/releases/tag/app-20261029.1155) - 2026-10-29
 
