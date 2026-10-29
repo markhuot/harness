@@ -11,7 +11,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
-- iPhone: with a ticket sheet pulled down to half height, the board above it is no longer dimmed and works as usual: scroll it, or tap another card to open that ticket in the sheet (the one it showed moves to the dock).
+- iPhone: the ticket sheet's lower stop is now a quarter of the screen instead of half, so most of the board shows above it. With the sheet at that stop, the board is no longer dimmed and works as usual: scroll it, or tap another card to open that ticket in the sheet (the one it showed moves to the dock).
+- iPhone and iPad: to dock a ticket, drag its sheet below the quarter stop and hold your finger in the bottom fifth of the screen (it was the bottom 40%), so a drag that settles at the quarter stop never docks.
+
+### Fixed
+
+- iPhone and iPad: dragging a ticket sheet down and holding docks it again. Since the iPad moved to the system sheet, the "Dock" card never appeared however long you held, and letting go closed the ticket. Holding a finger on a quarter-open sheet's content no longer shows the "Dock" card either.
 
 ## [app-20261029.0327](https://github.com/markhuot/harness/releases/tag/app-20261029.0327) - 2026-10-29
 

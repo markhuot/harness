@@ -445,9 +445,10 @@ server reports it missing). Only the top mounts at launch; the rest stay parked 
 
 At every width SceneChrome presents the ticket as one plain system sheet (`TicketSheetHost`:
 `.presentationSizing(.form)`, so a regular-width window gets the narrower form sheet and a compact one
-the usual full-width sheet, and `.presentationDetents([.medium, .large])` for a half-open stop where
-the system honors detents, with `.presentationBackgroundInteraction(.enabled(upThrough: .medium))` so
-the board stays live and undimmed above a half-open sheet) while the Router is `.presented`; the sheet is a view of the Router's state, and
+the usual full-width sheet, and `.presentationDetents([.fraction(0.25), .large])` for a quarter-open stop where
+the system honors detents (`TicketSheetPlacement.peekFraction`), with
+`.presentationBackgroundInteraction(.enabled(upThrough:))` that stop so the board stays live and
+undimmed above a quarter-open sheet) while the Router is `.presented`; the sheet is a view of the Router's state, and
 adding or switching tickets swaps its content in place without presenting it again. The system owns
 the drag, its momentum and the dismissal, and the app never inspects them: when it takes the sheet
 down (a swipe away, the two-finger escape, UIKit dismissing it) the root's binding calls
@@ -455,23 +456,27 @@ down (a swipe away, the two-finger escape, UIKit dismissing it) the root's bindi
 went. With tickets left, the next stays as the docked card and no sheet comes up. TicketSheetHost
 presents pickers, the watcher form and covers over itself.
 
-Docking is a separate, deliberate gesture: drag the sheet down and hold the finger in the bottom 40%
-of the screen for about 0.5 s while the sheet is more than 80pt from rest. `DockArming`
+Docking is a separate, deliberate gesture: drag the sheet below its quarter-open stop and hold the
+finger in the bottom fifth of the screen (below that stop's top edge, so a drag that settles there
+never arms) for about 0.5 s while the sheet is more than 80pt from the detent it rested at when the
+finger came down. `DockArming`
 (HarnessKit) is the one rule for it, axis-agnostic (the finger's progress along the way out as a
 fraction of the screen, and the displacement) so every sheet shares one rule; it
 reads no velocity. On the phone `DockHoldRecognizer` is a passive `UIGestureRecognizer` on the
 sheet's container view that never leaves `.possible` (a long-press would time from touch-down,
 hit-testing is cancelled once the system pan takes over, a SwiftUI drag blocks scrolling) and reads
-touches in window coordinates; the sheet's displacement is its presentation layer's frame against
-where it rested, which is also how a thumb resting low during a scroll is told from a drag, since the
+touches in window coordinates; the sheet's displacement is its view's model frame against
+where it rested (not the presentation layer's, which reports y 0 once the sheet passes its lower
+detent), which is also how a thumb resting low during a scroll is told from a drag, since the
 sheet hasn't moved. `DockHold` runs it (a task wakes when a still finger's hold would arm) and fires a
 medium haptic when it arms. Armed, a ghost dock card (`DockGhostCard`, "Dock") shows at the bottom as
 the dock window's incoming slot (above the sheet, which covers the main window below its top edge);
 nothing sets a transform on the presented view, since UIKit drives its frame. A release
 while armed latches a timestamped intent that the dismissal binding reads and clears once
 (`takeIntent`), so a programmatic dismissal can't dock; if the system cancels an armed dismissal, an
-upward flick say, `notifyWhenInteractionChanges` docks it anyway. VoiceOver has a "Dock" custom action
-on the sheet and no visible button. This leans on sheet internals (the presentation layer, the
+upward flick say, `notifyWhenInteractionChanges` docks it anyway, and a release the system only
+springs back to a detent (no dismissal at all) docks too. VoiceOver has a "Dock" custom action
+on the sheet and no visible button. This leans on sheet internals (the presented view's frame, the
 container view, the transition coordinator): there is no fallback if a release breaks it, and
 `git revert` is the way back.
 

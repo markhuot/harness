@@ -1,21 +1,23 @@
 import Foundation
 
-/// When a drag on an open ticket arms docking, on the iPhone's sheet (dragged down) and the iPad's
-/// side panel (dragged right): one rule for both, so they can't drift apart. Axis-agnostic: it is
-/// fed the finger's progress toward the way out as a fraction of the screen along that axis (0 at
-/// the near edge, 1 at the far one) and how far the sheet or panel itself has left its resting place.
+/// When a drag on an open ticket sheet arms docking. It is fed the finger's progress down the screen
+/// (0 at the top edge, 1 at the bottom) and how far the sheet itself has left the detent it rested
+/// at when the finger came down.
 ///
-/// Docking is a deliberate hold, never momentum: the finger has to stay in the last 40% of the screen
-/// for `dwell` while the sheet is displaced by more than `minDisplacement`. The displacement is how
-/// a drag that moves the sheet is told from one that scrolls its content with a thumb resting low.
-/// Nothing here reads velocity.
+/// Docking is a deliberate hold, never momentum: the finger has to stay in the bottom fifth of the
+/// screen for `dwell` while the sheet is displaced by more than `minDisplacement`. The zone starts
+/// below where the quarter-open sheet's top edge rests (`TicketSheetPlacement.peekFraction`), so a
+/// drag that settles at that detent never arms: docking is pulling the sheet below its smallest stop
+/// and holding. The displacement is how a drag that moves the sheet is told from one that scrolls its
+/// content with a thumb resting low. Nothing here reads velocity.
 ///
-/// A release while armed latches an intent with its time. The system's dismissal (or the panel's
-/// slide) reads it once, with `takeIntent`, so a programmatic dismissal later can never dock, and an
-/// intent nobody picked up goes stale after `intentLifetime`.
+/// A release while armed latches an intent with its time. The system's dismissal reads it once, with
+/// `takeIntent`, so a programmatic dismissal later can never dock, and an intent nobody picked up goes
+/// stale after `intentLifetime`.
 public struct DockArming: Equatable, Sendable {
-    /// The finger counts as in the zone from this fraction of the screen on: the last 40%.
-    public static let zoneStart = 0.6
+    /// The finger counts as in the zone from this fraction of the screen on: the bottom fifth, below
+    /// the quarter-open sheet's top edge.
+    public static let zoneStart = 0.8
     /// How long the finger holds in the zone before it arms (s).
     public static let dwell: TimeInterval = 0.5
     /// How far the sheet has to be from rest (pt) for the hold to count.

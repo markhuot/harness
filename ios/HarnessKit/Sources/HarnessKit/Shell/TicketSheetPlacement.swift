@@ -24,6 +24,10 @@ public enum TicketSheetPlacement: Sendable, Equatable {
     /// The trailing half of the screen.
     case trailing
 
+    /// The sheet's lower stop, next to full height, as a fraction of that height: a quarter, so most
+    /// of the board shows (and works) above it. DockArming's zone starts below its top edge.
+    public static let peekFraction = 0.25
+
     public static func placement(for posture: DevicePosture) -> TicketSheetPlacement {
         posture == .book ? .trailing : .system
     }

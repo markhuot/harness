@@ -275,7 +275,7 @@ struct DockHoldHost: UIViewRepresentable {
         let hold: DockHold
         var dockAnyway: () -> Void = {}
         private let recognizer = DockHoldRecognizer()
-        /// Where the sheet's top edge rests, the highest it has been at a touch-down.
+        /// Where the sheet's top edge rested when this touch came down: whichever detent it was at.
         private var restTop: CGFloat = .infinity
         private weak var container: UIView?
 
@@ -317,11 +317,12 @@ struct DockHoldHost: UIViewRepresentable {
 
         private var presentedView: UIView? { presentedController?.presentationController?.presentedView }
 
-        /// Where the sheet's top edge is on screen right now, mid-drag included.
-        private var top: CGFloat? {
-            guard let view = presentedView else { return nil }
-            return (view.layer.presentation()?.frame ?? view.frame).minY
-        }
+        /// Where the sheet's top edge is right now, mid-drag included. The model frame, not the
+        /// presentation layer's: the system's drag moves the frame with the finger, while the
+        /// presentation layer reports a frame at y 0 once the sheet passes its half-open detent, which
+        /// read as no displacement and never armed. Mid-spring the model frame is where the sheet is
+        /// headed, so a touch-down then takes the detent it is settling at as its rest.
+        private var top: CGFloat? { presentedView?.frame.minY }
 
         private func reading() -> (progress: Double, displacement: Double)? {
             guard let top, let window, window.bounds.height > 0 else { return nil }
@@ -330,7 +331,9 @@ struct DockHoldHost: UIViewRepresentable {
         }
 
         private func began() {
-            if let top { restTop = min(restTop, top) }
+            // From the detent it rests at, so a finger held low on a quarter-open sheet's content
+            // isn't the sheet dragged down from full height.
+            restTop = top ?? .infinity
             hold.touchDown { [weak self] in self?.reading() }
         }
 
@@ -341,9 +344,10 @@ struct DockHoldHost: UIViewRepresentable {
             let controller = presentedController
             DispatchQueue.main.async { [weak self] in
                 guard let coordinator = controller?.transitionCoordinator else {
-                    // No dismissal under way: nothing will take the latched release, so drop it
-                    // rather than let an escape or VoiceOver dismissal inside its window dock.
-                    self?.hold.cancelled()
+                    // No dismissal under way (the system sprang the sheet back to a detent): dock now
+                    // if the release was armed, so the ghost's promise holds. Taking the intent here
+                    // also means a later escape or VoiceOver dismissal can't dock.
+                    if self?.hold.takeIntent() == true { self?.dockAnyway() }
                     return
                 }
                 let settle: (UIViewControllerTransitionCoordinatorContext) -> Void = { context in
