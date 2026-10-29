@@ -36,6 +36,9 @@ struct TicketSheetHost: View {
     @State private var last: TicketSheet?
     /// Where the system sheet rests: full height by default, or quarter open.
     @State private var detent: PresentationDetent = .large
+    /// The sheet's height at `.large`, once it has been there (nil until then).
+    @State private var fullHeight: CGFloat?
+    @State private var fullWidth: CGFloat = 0
     @Environment(\.ticketSheetStartsQuarterOpen) private var startsQuarterOpen
     @Environment(\.devicePosture) private var posture
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -43,12 +46,19 @@ struct TicketSheetHost: View {
     /// The lower stop: a quarter of full height.
     static let peek = PresentationDetent.fraction(TicketSheetPlacement.peekFraction)
 
+    /// The sheet's full height before it has been measured (it opened quarter open): the window less
+    /// the gap the large detent leaves above it.
+    private static var estimatedFullHeight: CGFloat? {
+        let window = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first
+        return window.map { $0.bounds.height - $0.safeAreaInsets.top - 10 }
+    }
+
     var body: some View {
         let current = router.ticketSheet
         let sheet = current ?? last
         // Gone, the last one stays mounted while the sheet animates away.
         let mounted = current == nil ? (last.map { [$0] } ?? []) : router.liveSheets
-        ZStack(alignment: .top) {
+        let stacks = ZStack(alignment: .top) {
             ForEach(mounted) { s in
                 let isTop = s.id == sheet?.id
                 stack(s)
@@ -59,6 +69,23 @@ struct TicketSheetHost: View {
                     // Behind the top: no key commands (New session's Escape) either.
                     .disabled(!isTop)
                     .zIndex(isTop ? 1 : 0)
+            }
+        }
+        // Quarter open, the content keeps its full-height layout, hung from the sheet's top, and the
+        // sheet clips its bottom: the header stays exactly as it is at full height instead of
+        // reflowing into the short room. The clear base takes the sheet's size whatever the content is.
+        Color.clear
+            .overlay(alignment: .top) {
+                stacks.frame(height: detent == Self.peek ? (fullHeight ?? Self.estimatedFullHeight) : nil, alignment: .top)
+            }
+        .background {
+            GeometryReader { proxy in
+                Color.clear.onChange(of: proxy.size, initial: true) { _, size in
+                    // The tallest the sheet has been at this width is its full height (the keyboard
+                    // and a drag only shrink it).
+                    if size.width != fullWidth { fullWidth = size.width; fullHeight = nil }
+                    if size.height > (fullHeight ?? 0) { fullHeight = size.height }
+                }
             }
         }
         // Behind the keyboard too, so its rounded corners show the sheet's background, not the
@@ -74,11 +101,22 @@ struct TicketSheetHost: View {
         .accessibilityAction(named: "Dock") { withAnimation(.snappy) { router.dockSheet() } }
         .onChange(of: current, initial: true) { _, s in if let s { last = s } }
         // Switching tickets mustn't leave the keyboard up for the one now hidden.
-        .onChange(of: current?.id) { resignFirstResponder() }
+        .onChange(of: current?.id) {
+            resignFirstResponder()
+            // A ticket opened over the quarter-open one (the old one docks) comes up at full height.
+            if detent == Self.peek { withAnimation(.snappy) { detent = .large } }
+        }
         .presentationDragIndicator(.visible)
         .presentationDetents([Self.peek, .large], selection: $detent)
         // Quarter open, the board behind takes touches; full height, it stays dimmed and inert.
         .presentationBackgroundInteraction(.enabled(upThrough: Self.peek))
+        // Quarter open the sheet sits over a live board, so its edge gets a darker shadow to stand apart.
+        .presentationBackground {
+            UnevenRoundedRectangle(topLeadingRadius: 38, topTrailingRadius: 38)
+                .fill(c.bg)
+                .shadow(color: .black.opacity(detent == Self.peek ? 0.35 : 0), radius: 14, y: -2)
+                .ignoresSafeArea()
+        }
         .onAppear { if startsQuarterOpen { detent = Self.peek } }
         .ticketSheetPresentation(TicketSheetPlacement.placement(for: posture), regularWidth: sizeClass == .regular)
         // The window's chords don't fire under a sheet: the palette's are here too.
