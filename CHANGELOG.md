@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261029.1724](https://github.com/markhuot/harness/releases/tag/app-20261029.1724) - 2026-10-29
+
 ### Changed
 
 - On iPhone, tapping a card on the board while a ticket sheet is quarter open now docks that ticket and opens the tapped one at full height, instead of leaving it quarter open.
