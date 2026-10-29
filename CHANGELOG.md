@@ -11,10 +11,12 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Added
 
+- Agents' spec writes are now checked before they are saved. A small model (Haiku by default) reads what an agent adds to a spec and refuses history, change logs, review or round narratives, Decisions sections and superseded wording, telling the agent which line to fix; nothing is saved until the text reads as a current summary. Text that only looks like history is fine when it is what the ticket is about, such as ids in test data. Your own edits are never checked, and a check that can't run lets the write through. Settings on the Mac and iPhone/iPad has a switch for the check and a picker for its model.
 - You can delete a label. On the Mac, right-click it in the sidebar and choose Delete label; on iPhone and iPad, use the ⋯ button on its row or press and hold it. The label disappears from every ticket that carried it, with no reassignment, and from the sidebar and cards on every open Mac, iPhone and iPad. A label on tickets asks first, naming how many lose it; an empty one goes without asking. If a Mac board is searching for the deleted label, only that `label:` term leaves the search.
 
 ### Changed
 
+- Agents are told to put each decision, with its reason, in the Plan step or acceptance criterion it shapes, instead of a Decisions section in Status.
 - The sidebar's Labels section now lists every label, including ones no ticket carries, so you can delete them. Labels on tickets come first and empty ones follow.
 - When auto mode's classifier turns down one of an agent's commands, the ticket no longer gets an approval card for it at the end of the run. The agent finds another way, or blocks and asks you, quoting the command. Approve that command in your answer and the agent retries it once; if auto mode still turns it down, the agent says so, and switching the ticket to Ask mode gets you an approval card for it. A card used to appear after the run even when the agent had already worked around the command, and when the agent had blocked for something else, the card hid its question. Conductor and chief-of-staff runs, which can't block, still get an approval card for a turned-down command, so you're always told.
 - Allowing a tool on a ticket no longer makes Harness retry a command of that tool that auto mode's classifier turned down. The agent works around it or asks you in its block, as for any other turned-down command.

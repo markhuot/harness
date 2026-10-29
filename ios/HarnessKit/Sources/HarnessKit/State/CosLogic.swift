@@ -195,6 +195,11 @@ public enum CosSettings {
         triageDriver(settings) == "anthropic-api" ? "claude-haiku-5-5" : "haiku"
     }
 
+    /// specGuardEnabled: on unless the setting says false.
+    public static func specGuardEnabled(_ settings: PublicSettings?) -> Bool {
+        settings?.specGuardEnabled ?? true
+    }
+
     /// resolveTriagePermissionMode: the setting, else read only.
     public static func triageMode(_ settings: PublicSettings?) -> TriagePermissionMode {
         settings?.cosTriagePermissionMode.optional ?? .readOnly

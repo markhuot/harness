@@ -107,6 +107,23 @@ struct SettingsGeneralSection: View {
                 .tint(c.accent)
                 .accessibilityLabel("Save on blur")
             }
+            SettingsRow(label: "Check agents' spec writes", hint: "A small model reads what an agent writes to a spec and refuses history, change logs and Decisions sections, telling the agent which line to fix. Humans' edits are never checked; a check that can't run lets the write through.") {
+                Toggle("Check agents' spec writes", isOn: Binding(
+                    get: { CosSettings.specGuardEnabled(settings) },
+                    set: { save(SettingsPatch(specGuardEnabled: $0)) }
+                ))
+                .labelsHidden()
+                .tint(c.accent)
+                .accessibilityLabel("Check agents' spec writes")
+            }
+            SettingsRow(label: "Spec check model", hint: "Haiku unless you choose another. Applies to the next spec write.") {
+                ModelPicker(
+                    driver: CosSettings.triageDriver(settings),
+                    value: settings.specGuardModel.optional,
+                    inherited: CosSettings.triageDefaultModel(settings),
+                    title: "Spec check model"
+                ) { save(SettingsPatch(specGuardModel: Patch($0))) }
+            }
             SettingsRow(label: "Base branch", hint: "Completed tickets merge into it and new ticket branches start from it. Projects and tickets can override it.") {
                 DraftField(value: settings.baseBranch ?? Branches.defaultBaseBranch, prompt: Branches.defaultBaseBranch, mono: true) { v in
                     switch SettingsRules.settingsBaseBranchCommit(v, current: settings.baseBranch) {

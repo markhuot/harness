@@ -242,6 +242,20 @@ private func project(_ id: String, group: String?) -> Project {
         #expect(patch["cosTriagePermissionMode"] as? String == "auto")
     }
 
+    @Test func theSpecGuardIsOnUntilSwitchedOffAndItsPatchEncodesBothFields() throws {
+        func settings(enabled: Bool?) -> PublicSettings {
+            PublicSettings(defaultDriver: "claude-code", maxConcurrentRuns: 4, permissionMode: .auto, classifier: .claudeCli, anthropicApiKeySet: false, specGuardEnabled: enabled)
+        }
+        #expect(CosSettings.specGuardEnabled(settings(enabled: nil)), "a service that never said stays on")
+        #expect(CosSettings.specGuardEnabled(settings(enabled: true)))
+        #expect(!CosSettings.specGuardEnabled(settings(enabled: false)))
+        let patch = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(SettingsPatch(specGuardEnabled: false, specGuardModel: Patch(nil)))) as? [String: Any])
+        #expect(patch["specGuardEnabled"] as? Bool == false)
+        #expect(patch["specGuardModel"] is NSNull, "Default clears the spec check model")
+        let untouched = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(SettingsPatch(saveOnBlur: true))) as? [String: Any])
+        #expect(untouched["specGuardEnabled"] == nil && untouched["specGuardModel"] == nil, "a patch that doesn't mention the guard leaves it alone")
+    }
+
     @Test func theChiefPickerLeavesOutDriversThatCantRunAChief() throws {
         func driver(_ id: String, runsCos: Bool?) -> DriverInfo {
             DriverInfo(id: id, name: id, description: "", available: true, authenticated: true, detail: "", supportsLogin: false, runsCos: runsCos)

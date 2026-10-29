@@ -75,6 +75,10 @@ public struct Settings: Codable, Sendable, Equatable {
     public var cosTriageModel: Patch<String>
     /// How triage's lookups are judged; absent or null → read only (`CosSettings.triageMode`).
     public var cosTriagePermissionMode: Patch<TriagePermissionMode>
+    /// Whether a small model checks agents' spec writes for history; nil → on (`CosSettings.specGuardEnabled`).
+    public var specGuardEnabled: Bool?
+    /// The model that checks them; absent or null → the triage driver's Haiku (`CosSettings.triageDefaultModel`).
+    public var specGuardModel: Patch<String>
 
     public init(
         phaseModels: PhaseModels? = nil, defaultDriver: String, maxConcurrentRuns: Int, permissionMode: PermissionMode, classifier: ClassifierBackend,
@@ -84,13 +88,16 @@ public struct Settings: Codable, Sendable, Equatable {
         listen: ListenSetting? = nil, browserIdleTabMinutes: Int? = nil, eventRetentionDays: Int? = nil, prompts: [String: String?]? = nil,
         notifications: NotificationSettings? = nil, contextGaugeLimit: Int? = nil, saveOnBlur: Bool? = nil,
         cosEnabled: Bool? = nil, cosStatuses: [TicketStatus]? = nil, cosModel: Patch<PhaseChoice> = .absent,
-        cosTriageModel: Patch<String> = .absent, cosTriagePermissionMode: Patch<TriagePermissionMode> = .absent
+        cosTriageModel: Patch<String> = .absent, cosTriagePermissionMode: Patch<TriagePermissionMode> = .absent,
+        specGuardEnabled: Bool? = nil, specGuardModel: Patch<String> = .absent
     ) {
         self.cosEnabled = cosEnabled
         self.cosStatuses = cosStatuses
         self.cosModel = cosModel
         self.cosTriageModel = cosTriageModel
         self.cosTriagePermissionMode = cosTriagePermissionMode
+        self.specGuardEnabled = specGuardEnabled
+        self.specGuardModel = specGuardModel
         self.contextGaugeLimit = contextGaugeLimit
         self.saveOnBlur = saveOnBlur
         self.phaseModels = phaseModels
@@ -162,6 +169,10 @@ public struct PublicSettings: Codable, Sendable, Equatable {
     /// Settings.cosTriageModel / cosTriagePermissionMode; absent or null when unset (and from an older service).
     public var cosTriageModel: Patch<String>
     public var cosTriagePermissionMode: Patch<TriagePermissionMode>
+    /// Whether a small model checks agents' spec writes for history; nil → on (`CosSettings.specGuardEnabled`).
+    public var specGuardEnabled: Bool?
+    /// The model that checks them; absent or null → the triage driver's Haiku (`CosSettings.triageDefaultModel`).
+    public var specGuardModel: Patch<String>
     /// Whether an API key for the anthropic-api driver is stored
     public var anthropicApiKeySet: Bool
     /// Whether a long-lived Claude token for the claude-code driver is stored. Services from before
@@ -178,13 +189,16 @@ public struct PublicSettings: Codable, Sendable, Equatable {
         notifications: NotificationSettings? = nil,
         anthropicApiKeySet: Bool, claudeOauthTokenSet: Bool? = nil, copilotGithubTokenSet: Bool? = nil, contextGaugeLimit: Int? = nil, saveOnBlur: Bool? = nil,
         cosEnabled: Bool? = nil, cosStatuses: [TicketStatus]? = nil, cosModel: Patch<PhaseChoice> = .absent,
-        cosTriageModel: Patch<String> = .absent, cosTriagePermissionMode: Patch<TriagePermissionMode> = .absent
+        cosTriageModel: Patch<String> = .absent, cosTriagePermissionMode: Patch<TriagePermissionMode> = .absent,
+        specGuardEnabled: Bool? = nil, specGuardModel: Patch<String> = .absent
     ) {
         self.cosEnabled = cosEnabled
         self.cosStatuses = cosStatuses
         self.cosModel = cosModel
         self.cosTriageModel = cosTriageModel
         self.cosTriagePermissionMode = cosTriagePermissionMode
+        self.specGuardEnabled = specGuardEnabled
+        self.specGuardModel = specGuardModel
         self.contextGaugeLimit = contextGaugeLimit
         self.saveOnBlur = saveOnBlur
         self.phaseModels = phaseModels

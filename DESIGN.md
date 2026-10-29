@@ -2750,8 +2750,9 @@ On the Mac (`app/src/renderer/views/SpecTab.tsx`, `ActivityTab.tsx`):
 
 A ticket's **spec** is its living markdown document, what a human reads to know where the work
 stands: Goal (the request and its acceptance criteria, changed only when the human asks), Plan,
-Status (what's done and left, decisions, screenshots inline; passing test results stay out) and
-Open questions. It replaced the ticket description and the plan (migration 26 renamed
+Status (what's done and left, screenshots inline; passing test results stay out) and
+Open questions. A decision has no section of its own: it sits in the Plan step or acceptance
+criterion it shapes, with its reason. It replaced the ticket description and the plan (migration 26 renamed
 `tickets.description` to `tickets.spec`). Agents keep it current rather than appending to it,
 since its history lives in its revisions.
 
@@ -2769,6 +2770,22 @@ since its history lives in its revisions.
   `spec_revised` Activity entry (the note as its line, by the revision's author) and emits
   `spec.revised`. Revision 1 adds no Activity entry: a new ticket isn't news. A draft's spec has no history: its PATCH rewrites revision 1 in place
   (`SpecRepo.replaceDraft`).
+- **Spec guard.** Before an agent's `update_spec` or `edit_spec` is stored (`Orchestrator.agentSpecWrite`,
+  after the edit applies in memory and before attachments are stored, so a refusal leaves no
+  files), a stateless Haiku call (`orchestrator/spec-guard.ts`, on the classifier's backend like
+  triage) judges whether the new text keeps the spec a current summary. It is given the ticket's
+  title and Goal; for `edit_spec` the edited section(s) and the lines the edit added, for
+  `update_spec` the whole new spec. It refuses, with the offending line quoted, text that adds
+  history, a change log, a review or round narrative, a Decisions-style section or superseded
+  wording; the write throws a tool error and no revision is stored. It reasons and never matches a
+  pattern, since history-looking text (ids that resemble hashes, a "Previously" section) can be the
+  ticket's subject. A refusal without a quote found in the added text, malformed output, an error
+  or a timeout (`SPEC_GUARD_TIMEOUT_MS`) lets the write through (logged), and there is no "allow
+  after N refusals". Human writes (`reviseSpec` callers other than agents), a ticket's creation
+  spec and `update_ticket { spec }` are not checked. `settings.specGuardEnabled` (default on) and
+  `settings.specGuardModel` (empty: the same Haiku as the triage model, `resolveSpecGuardModel`) are
+  read at each write and shown in Settings on the Mac and iOS; the agent `update_settings` tool
+  doesn't expose them.
 - **Conflicts.** A spec write names the revision it started from. `PATCH` needs `baseRevision`
   with `spec` outside drafts (400 without it); `specNote` is the revision's note (default "Edited
   by hand"). A stale one gets a 409 whose `data` is `SpecConflict { currentRevision, spec }`

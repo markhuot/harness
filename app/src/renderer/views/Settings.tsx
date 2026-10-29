@@ -3,7 +3,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import type { PhaseChoice, Project, PublicSettings, Settings, TicketStatus, TriagePermissionMode } from "@harness/shared";
-import { DEFAULT_BASE_BRANCH, DEFAULT_BROWSER_IDLE_TAB_MINUTES, DEFAULT_CONTEXT_GAUGE_LIMIT, DEFAULT_EVENT_RETENTION_DAYS, MAX_BROWSER_IDLE_TAB_MINUTES, resolveCosChoice, resolveCosStatuses, resolveTriagePermissionMode, TICKET_STATUSES, TRIAGE_PERMISSION_MODE_LABELS, TRIAGE_PERMISSION_MODES, triageDefaultModel, triageDriver } from "@harness/shared";
+import { DEFAULT_BASE_BRANCH, DEFAULT_BROWSER_IDLE_TAB_MINUTES, DEFAULT_CONTEXT_GAUGE_LIMIT, DEFAULT_EVENT_RETENTION_DAYS, MAX_BROWSER_IDLE_TAB_MINUTES, resolveCosChoice, resolveCosStatuses, resolveTriagePermissionMode, TICKET_STATUSES, TRIAGE_PERMISSION_MODE_LABELS, TRIAGE_PERMISSION_MODES, specGuardDefaultModel, specGuardEnabled, triageDefaultModel, triageDriver } from "@harness/shared";
 import { limitError, parseLimit } from "../state/contextGauge";
 import { useAction, useStore } from "../state/store";
 import { modelName, parseEventRetentionDays, sortedProjects } from "@harness/shared/state";
@@ -199,6 +199,14 @@ function GeneralSection({ settings }: { settings: PublicSettings }) {
         </Row>
         <Row title="Save files on blur" sub="The file viewer saves your edits when the editor, the pane or the app loses focus, and when a pane with edits closes. Off, you save with ⌘S or the Save button.">
           <Switch checked={settings.saveOnBlur ?? false} ariaLabel="Save files on blur" onChange={(v) => void save({ saveOnBlur: v })} />
+        </Row>
+        <Row title="Check agents' spec writes" sub="A small model reads what an agent writes to a spec and refuses history, change logs and Decisions sections, telling the agent which line to fix. Humans' edits are never checked; a check that can't run lets the write through.">
+          <Switch checked={specGuardEnabled(settings)} ariaLabel="Check agents' spec writes" onChange={(v) => void save({ specGuardEnabled: v })} />
+        </Row>
+        <Row title="Spec check model" sub="Haiku unless you choose another. Applies to the next spec write.">
+          <span data-testid="specGuardModel">
+            <ModelSelect driver={triageDriver(settings)} value={settings.specGuardModel ?? null} inherited={specGuardDefaultModel(settings)} onChange={(specGuardModel) => void save({ specGuardModel })} />
+          </span>
         </Row>
         <Row title="Base branch" sub="New ticket branches start from it, and finished tickets merge into it.">
           <DraftInput className="input mono" value={settings.baseBranch ?? DEFAULT_BASE_BRANCH} placeholder={DEFAULT_BASE_BRANCH} onCommit={(v) => void save({ baseBranch: v.trim() || DEFAULT_BASE_BRANCH })} />

@@ -589,6 +589,26 @@ describe("settings", () => {
     expect(patched(m, "PATCH /settings")).toEqual([{ cosTriageModel: "claude-opus-5-5" }, { cosTriageModel: null }, { cosTriagePermissionMode: "auto" }]);
   });
 
+  test("the spec check shows on with Haiku as its default model; switching it off and picking a model save", async () => {
+    const w = edited((x) => {
+      x.settings.specGuardEnabled = undefined;
+      x.settings.specGuardModel = null;
+    });
+    const m = await mount(<SettingsView />, { hash: "#/settings", world: w });
+    m.client.overrides.set("PATCH /settings", () => m.client.world.settings);
+    await m.until("the spec check rows", () => !!byId(m, "specGuardModel")?.querySelector("select"));
+    const sw = m.container.querySelector<HTMLInputElement>('input[aria-label="Check agents\' spec writes"]')!;
+    expect(sw.checked).toBe(true);
+    const model = byId(m, "specGuardModel")!.querySelector("select")!;
+    expect(text(all(model, "option")[0])).toBe("Default (haiku)");
+    await click(m, sw);
+    await m.settle(() => {
+      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")!.set!.call(model, "claude-opus-5-5");
+      model.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(patched(m, "PATCH /settings")).toEqual([{ specGuardEnabled: false }, { specGuardModel: "claude-opus-5-5" }]);
+  });
+
   test("with the API classifier, triage's default model is the API's Haiku", async () => {
     const w = edited((x) => void (x.settings.classifier = "anthropic-api"));
     const m = await mount(<SettingsView />, { hash: "#/settings", world: w });

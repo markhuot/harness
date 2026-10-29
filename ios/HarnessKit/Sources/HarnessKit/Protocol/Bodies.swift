@@ -489,6 +489,10 @@ public struct SettingsPatch: Codable, Sendable, Equatable {
     public var cosTriageModel: Patch<String>
     /// How triage's lookups are judged; null → read only
     public var cosTriagePermissionMode: Patch<TriagePermissionMode>
+    /// Whether a small model checks agents' spec writes for history; nil → on (`CosSettings.specGuardEnabled`).
+    public var specGuardEnabled: Bool?
+    /// The model that checks them; absent or null → the triage driver's Haiku (`CosSettings.triageDefaultModel`).
+    public var specGuardModel: Patch<String>
 
     public init(
         phaseModels: PhaseModelsPatch? = nil, defaultDriver: String? = nil, maxConcurrentRuns: Int? = nil, permissionMode: PermissionMode? = nil,
@@ -498,13 +502,16 @@ public struct SettingsPatch: Codable, Sendable, Equatable {
         claudeOauthToken: Patch<String> = .absent, copilotGithubToken: Patch<String> = .absent, baseBranch: String? = nil, listen: ListenSetting? = nil, browserIdleTabMinutes: Int? = nil, eventRetentionDays: Int? = nil,
         prompts: [String: String?]? = nil, notifications: NotificationSettingsPatch? = nil, contextGaugeLimit: Int? = nil, saveOnBlur: Bool? = nil,
         cosEnabled: Bool? = nil, cosStatuses: [TicketStatus]? = nil, cosModel: Patch<PhaseChoice> = .absent,
-        cosTriageModel: Patch<String> = .absent, cosTriagePermissionMode: Patch<TriagePermissionMode> = .absent
+        cosTriageModel: Patch<String> = .absent, cosTriagePermissionMode: Patch<TriagePermissionMode> = .absent,
+        specGuardEnabled: Bool? = nil, specGuardModel: Patch<String> = .absent
     ) {
         self.cosEnabled = cosEnabled
         self.cosStatuses = cosStatuses
         self.cosModel = cosModel
         self.cosTriageModel = cosTriageModel
         self.cosTriagePermissionMode = cosTriagePermissionMode
+        self.specGuardEnabled = specGuardEnabled
+        self.specGuardModel = specGuardModel
         self.contextGaugeLimit = contextGaugeLimit
         self.saveOnBlur = saveOnBlur
         self.phaseModels = phaseModels
