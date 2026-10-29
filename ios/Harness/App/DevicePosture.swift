@@ -13,12 +13,14 @@ extension View {
 
     /// The sheet's sizing and placement: the form sheet, placed by the system, or in the Duo's book
     /// pose on the trailing side (`presentationPlacement`, iOS 27), the right half of the screen.
-    @ViewBuilder func ticketSheetPresentation(_ placement: TicketSheetPlacement) -> some View {
+    @ViewBuilder func ticketSheetPresentation(_ placement: TicketSheetPlacement, regularWidth: Bool) -> some View {
+        // Form sizing only at regular width: at compact width it would drop the phone sheet's
+        // rounded bottom corners.
+        let sized = regularWidth ? AnyView(presentationSizing(.form)) : AnyView(self)
         if #available(iOS 27.0, *) {
-            presentationSizing(.form)
-                .presentationPlacement(placement == .trailing ? .trailing : .automatic)
+            sized.presentationPlacement(placement == .trailing ? .trailing : .automatic)
         } else {
-            presentationSizing(.form)
+            sized
         }
     }
 }

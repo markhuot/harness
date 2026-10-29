@@ -75,6 +75,8 @@ final class WorldTransport: HTTPTransport, @unchecked Sendable {
             let chief = w.list("chiefs").contains { $0["ticketId"] as? String == id }
             return ["items": w.list("ticketEvents").filter { ($0["targetId"] as? String == id) || (chief && $0["targetId"] is NSNull) }, "nextCursor": NSNull()] as [String: Any]
         }
+        // A ticket's Browser tab, which the regular-width pager mounts beside the tab on screen: the world's sessions have no browser.
+        if parts.count == 2, parts[0] == "browser" { return NSNull() }
         if parts.count == 3, parts[0] == "cos", parts[2] == "transcript" {
             // Newest page first, as the service sends it; the world's chat is one page.
             return ["entries": Array(w.list("cosChat").filter { $0["cosId"] as? String == parts[1] }.reversed()), "nextCursor": NSNull()] as [String: Any]

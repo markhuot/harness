@@ -356,6 +356,9 @@ struct DockedCardsLayout {
     var region: CGSize
     var insets: EdgeInsets
     var maxVisible = DockCards.phoneVisible
+    /// The stack never gets wider than this, centered: an iPhone Pro Max's width, so on an iPad the
+    /// cards are the phone's cards rather than a bar across the screen.
+    var maxWidth: CGFloat = DockMetrics.maxWidth
 
     static func phone(placement: DockPlacement, region: CGSize) -> DockedCardsLayout {
         DockedCardsLayout(
@@ -405,10 +408,10 @@ struct DockedCardsContainer: View {
             if expanded {
                 backdrop
             }
-            cards.padding(layout.insets)
+            cards.frame(maxWidth: layout.maxWidth).padding(layout.insets)
                 .accessibilityAddTraits(expanded ? .isModal : [])
             DockGhostCard(title: ghost ?? "", armed: ghost != nil)
-                .padding(layout.insets)
+                .frame(maxWidth: layout.maxWidth).padding(layout.insets)
         }
         .animation(reduceMotion ? .easeInOut(duration: 0.2) : .snappy, value: sheets.map(\.id))
         .animation(.snappy, value: expanded)

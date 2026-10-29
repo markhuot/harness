@@ -72,6 +72,13 @@ import HarnessKit
         #expect(DockMetrics.boardClearance(screenHeight: 874, stackTop: 874, barInset: 83, rows: 2) == 120)
     }
 
+    @Test func cardsRestAboveAComposerThatStopsShortOfTheScreensBottom() {
+        // An iPad's form sheet: the composer's top is 120 above the window's bottom edge.
+        #expect(DockMetrics.bottomAboveComposer(screenHeight: 1194, composerTop: 1074) == 128)
+        // A composer at the very bottom (or a stale reading below it) never drops under the gap.
+        #expect(DockMetrics.bottomAboveComposer(screenHeight: 1194, composerTop: 1300) == DockMetrics.phoneBottomGap)
+    }
+
     @Test func beforeTheStackIsMeasuredItIsTheFloor() {
         #expect(DockMetrics.boardClearance(screenHeight: nil, stackTop: nil, barInset: 83, rows: 1) == 60)
         // No cards counted still reserves one row.

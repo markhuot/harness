@@ -13,6 +13,15 @@ public enum DockMetrics {
     /// (landscape, not yet measured): the docked cards take the bar's sides.
     public static let barHeight: CGFloat = 50
     public static let fallbackSides: CGFloat = 16
+    /// The widest the card stack gets: an iPhone Pro Max's screen, so an iPad's cards are the phone's.
+    public static let maxWidth: CGFloat = 430
+
+    /// How far above the window's bottom the cards rest when they float over a ticket's composer
+    /// whose top edge is `composerTop` (a form sheet doesn't run to the screen's edge, so the
+    /// bottom gap alone would put the cards inside the composer). Never below the bottom gap.
+    public static func bottomAboveComposer(screenHeight: CGFloat, composerTop: CGFloat) -> CGFloat {
+        max(phoneBottomGap, screenHeight - composerTop + phoneBottomGap)
+    }
 
     /// How far the iPhone's docked cards sit from the screen's sides: the board's bottom bar's
     /// concentric inset (ConcentricBar), so the cards and the bar share their left and right edges.

@@ -35,6 +35,7 @@ struct TicketSheetHost: View {
     /// Where the system sheet rests: full height by default, or half open.
     @State private var detent: PresentationDetent = .large
     @Environment(\.devicePosture) private var posture
+    @Environment(\.horizontalSizeClass) private var sizeClass
 
     var body: some View {
         let current = router.ticketSheet
@@ -70,7 +71,7 @@ struct TicketSheetHost: View {
         .onChange(of: current?.id) { resignFirstResponder() }
         .presentationDragIndicator(.visible)
         .presentationDetents([.medium, .large], selection: $detent)
-        .ticketSheetPresentation(TicketSheetPlacement.placement(for: posture))
+        .ticketSheetPresentation(TicketSheetPlacement.placement(for: posture), regularWidth: sizeClass == .regular)
         // The window's chords don't fire under a sheet: the palette's are here too.
         .hiddenShortcuts { PaletteShortcuts(router: router) }
         .sheet(item: Binding(get: { router.sheet }, set: { router.sheet = $0 })) { sheet in
@@ -178,6 +179,9 @@ extension EnvironmentValues {
     var boardBar: DockBar?
     /// The front ticket sheet's screen has a composer, which keeps its own room above it for the cards.
     var composerUp = false
+    /// The top edge of that composer in the window, which the cards rest above when the sheet doesn't
+    /// run to the screen's bottom (a form sheet at regular width). Nil with no composer up.
+    var composerTop: CGFloat?
     /// A keyboard is up: the dock is faded out, so the ticket's composer keeps no room for it.
     var keyboardUp = false
 }

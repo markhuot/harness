@@ -96,6 +96,9 @@ struct TicketDetailComposer: View {
                 ComposerSendButton(sending: sending, active: writing && !compacting, disabled: !canSend, hint: sendHint(empty: empty, accepts: accepts)) { send() }
             }
         }
+        .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { top in
+            if keepsRoom, sheetFront, dockInset?.composerTop != top { dockInset?.composerTop = top }
+        }
         .onChange(of: sheetFront) { reportUp() }
         .onAppear { reportUp() }
         .padding(.top, 6)
@@ -109,7 +112,7 @@ struct TicketDetailComposer: View {
         .onAppear { draft.onError = { _ in haptic(.error) } }
         // Leaving the ticket with the field focused sends no blur: the draft isn't being typed in anymore.
         .onDisappear {
-            if keepsRoom, sheetFront { dockInset?.composerUp = false }
+            if keepsRoom, sheetFront { dockInset?.composerUp = false; dockInset?.composerTop = nil }
             TicketViewMemory.shared.composerDisappeared(key: ticket.key, at: DockHold.now)
             draft.focus(false, stored: ticket.messageDraft.optional)
         }

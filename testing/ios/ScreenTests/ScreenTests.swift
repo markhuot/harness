@@ -43,6 +43,16 @@ final class ScreenTests: ScreenTestCase {
         try await screen("ticket-docked-card", router: router) { RootView() }
     }
 
+    /// The iPad turned to landscape: the card stays phone-wide and rests above the sheet's composer.
+    func testTicketWithDockedCardLandscape() async throws {
+        try XCTSkipUnless(ReferenceImages.device == "ipad", "the iPad's form sheet")
+        let router = Router()
+        router.openTicket(key: "HARNESS-4", tab: .spec)
+        router.dockSheet()
+        router.openTicket(key: "HARNESS-5", tab: .spec)
+        try await screen("ticket-docked-card-landscape", router: router, landscape: true) { RootView() }
+    }
+
     func testProjectsSheet() async throws {
         let router = Router()
         router.present(.projects)

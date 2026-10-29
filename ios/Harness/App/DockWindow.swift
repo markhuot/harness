@@ -176,14 +176,21 @@ private struct PhoneDock: View {
 
     /// The cards float above the board's system bar, open ticket or not: the ticket's composer is the
     /// same height (`DockMetrics.barHeight`), so the cards never move when a sheet opens.
-    private var placement: DockPlacement {
-        DockMetrics.phonePlacement(bar: inset.boardBar, screen: screen)
+    /// At regular width the ticket sheet is a form sheet that stops short of the screen's bottom, so
+    /// the cards rest above the composer's measured top instead.
+    private func placement(in geo: GeometryProxy) -> DockPlacement {
+        let region = geo.size
+        var placement = DockMetrics.phonePlacement(bar: inset.boardBar, screen: screen)
+        if router.ticketSheet != nil, let top = inset.composerTop, region.width > DockMetrics.maxWidth * 1.5 {
+            placement.bottom = DockMetrics.bottomAboveComposer(screenHeight: geo.frame(in: .global).maxY, composerTop: top)
+        }
+        return placement
     }
 
     var body: some View {
         let shown = shown
         GeometryReader { geo in
-            DockedCardsContainer(sheets: router.waitingSheets, layout: .phone(placement: placement, region: geo.size),
+            DockedCardsContainer(sheets: router.waitingSheets, layout: .phone(placement: placement(in: geo), region: geo.size),
                                  ghost: hold.armed ? router.ticketSheet?.title : nil,
                                  docked: router.ticketSheetState == .docked, shown: shown, onReport: report)
                 .frame(width: geo.size.width, height: geo.size.height, alignment: .bottom)

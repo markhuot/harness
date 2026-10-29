@@ -18,6 +18,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 - On iPad a ticket (and New session, a file, a terminal, Chief of Staff) now opens in the same bottom sheet as on iPhone, instead of a panel sliding in from the right. It uses the narrower form width, dims the board behind it, closes with a swipe down, and docks with the iPhone's drag-down-and-hold. Docked tickets are the iPhone's full-width cards rising from the bottom. The sheet's pop-out button now sits in the ticket's details row.
 - On iPhone and iPad the ticket sheet has a half-open stop next to full height wherever the system allows one (iPad's form-width sheet has none).
+- On iPad the docked ticket cards rest above the message composer of the open ticket, like on iPhone, and the stack is no wider than an iPhone Pro Max (centered) instead of stretching across the screen.
 - On an iPhone Duo held in the book pose (partly open, fold vertical) the ticket sheet covers only the right half of the screen; fully open it is the normal sheet.
 - Internal: the iPad side panel and its resize, release rules, width preference and corner dock layout are gone, along with the tests and references only they used; the dock window now exists at every width. `Router.sheetIsBesideBoard` became `desktopLayout` and no longer affects presence or dismissal.
 - Agents are told to put each decision, with its reason, in the Plan step or acceptance criterion it shapes, instead of a Decisions section in Status.

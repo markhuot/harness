@@ -21,8 +21,13 @@ enum Renderer {
     nonisolated static let minFrames = 4
     nonisolated static let stableFrames = 3
 
+    /// An iPad in Full Screen Apps mode refuses programmatic rotation, so a landscape render there
+    /// lays the windows out at the turned size instead (the scene stays portrait).
+    nonisolated(unsafe) static var turnedIpad = false
+
     static var screenSize: CGSize {
-        (UIApplication.shared.connectedScenes.first as? UIWindowScene)?.screen.bounds.size ?? CGSize(width: 402, height: 874)
+        let size = (UIApplication.shared.connectedScenes.first as? UIWindowScene)?.screen.bounds.size ?? CGSize(width: 402, height: 874)
+        return turnedIpad ? CGSize(width: size.height, height: size.width) : size
     }
 
     /// Turns the scene to landscape or back to portrait and waits until the screen has the new shape,
@@ -30,6 +35,7 @@ enum Renderer {
     static func rotate(landscape: Bool) async throws {
         guard let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first else { return }
         func isLandscape() -> Bool { scene.screen.bounds.width > scene.screen.bounds.height }
+        if UIDevice.current.userInterfaceIdiom == .pad { turnedIpad = landscape && !isLandscape(); if turnedIpad { return } }
         guard isLandscape() != landscape else { return }
         scene.requestGeometryUpdate(.iOS(interfaceOrientations: landscape ? .landscapeRight : .portrait)) { _ in }
         for _ in 0..<100 where isLandscape() != landscape { try await Task.sleep(for: .milliseconds(50)) }
@@ -105,6 +111,7 @@ enum Renderer {
             // The phone's dock is a window of its own above the screen (RootView makes it): drawn over it.
             let dockWindows = docks(in: scene)
             for dock in dockWindows {
+                if turnedIpad { dock.frame = window.frame }
                 dock.overrideUserInterfaceStyle = style
                 dock.rootViewController?.overrideUserInterfaceStyle = style
                 dock.layoutIfNeeded()
