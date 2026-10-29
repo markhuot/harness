@@ -1225,7 +1225,7 @@ a ticket that is done or deleted is closed `ignored` with the reason.
 
 ### Ticket subscriptions
 
-A work, conductor or chief of staff run subscribes to another ticket with `subscribe_ticket` { key, mode, events, reason }
+A work, chat, conductor or chief of staff run subscribes to another ticket with `subscribe_ticket` { key, mode, events, reason }
 to be woken when it changes, instead of waiting with a shell `sleep` (no prompt recommends that).
 `mode` is `once` (the row is deleted at the first delivery, the default) or `forever`; `events` are
 `status` (moves, review approvals; the default), `note` and `spec`. Rows live in
@@ -1242,8 +1242,9 @@ subscription row for a change it already gets as a `child` row: one change reach
 subscribed (the store's `insert` checks the target and `source_ref` across the two kinds). A subscriber is woken at most 8
 times per 5 minutes (`EVENT_WAKE_CAP`, counted per delivered wake from the `event_wakes` log, so it holds across a
 restart); rows past the limit stay stored and arrive together, collapsed, once the window has room, so two tickets
-subscribed to each other can't loop. A subscriber's rows are deleted when its ticket leaves in progress and blocked, or
-its runs are cancelled (an event must not restart an agent someone stopped). A ticket that ends its turn with a
+subscribed to each other can't loop. A subscriber's rows are deleted when its runs are cancelled (an event must not restart an agent someone stopped);
+they survive a move to any column. A row that fires while the subscriber is in review or blocked waits and is delivered when
+it is in progress again; one that fires while it is done re-opens it (`reopenTicket`) with the update as the notes. A ticket that ends its turn with a
 subscription on a ticket that isn't done, or with a subscription row still waiting, isn't auto-submitted, since it is
 waiting for events: it calls `submit_for_review` when it is done.
 

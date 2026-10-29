@@ -139,6 +139,30 @@ test("a change the subscriber makes itself doesn't wake it", async () => {
   expect(h.ticket(me.key).status).toBe("review");
 });
 
+test("a ticket that subscribed and then went to review keeps the subscription, and the change waits for it to be in progress again", async () => {
+  const { h, other, me, results } = await subscriber((key) => [["subscribe_ticket", { key, mode: "forever" }], ["submit_for_review", { note: "done for now", spec_is_up_to_date: true }]]);
+  expect(results[0]).toMatchObject({ isError: false });
+  expect(h.ticket(me.key).status).toBe("review");
+  expect(h.store.subscriptions.listBySubscriber(me.id)).toHaveLength(1);
+  await h.orch.startTicket(other.key);
+  await h.settle();
+  expect(wakes(h)).toHaveLength(0);
+});
+
+test("a done ticket can subscribe, and the change re-opens it with the update as its prompt", async () => {
+  const { h, other, me } = await subscriber((key) => [["subscribe_ticket", { key }]]);
+  await h.orch.updateTicket(me.key, { status: "done" });
+  await h.settle();
+  expect(h.ticket(me.key).status).toBe("done");
+  expect(h.store.subscriptions.listBySubscriber(me.id)).toHaveLength(1);
+  await h.orch.startTicket(other.key);
+  await h.settle();
+  expect(h.ticket(me.key).status).not.toBe("done");
+  expect(wakes(h)).toHaveLength(1);
+  expect(wakes(h)[0]!.prompt).toContain(`${other.key} "Other": planning → in_progress`);
+  expect(h.store.subscriptions.listBySubscriber(me.id)).toHaveLength(0);
+});
+
 test("only the events a subscription asked for wake the ticket", async () => {
   const { h, other } = await subscriber((key) => [["subscribe_ticket", { key, mode: "forever", events: ["spec"] }]]);
   await h.orch.startTicket(other.key);

@@ -4594,9 +4594,9 @@ ${numberLines(r.body)}`;
 
   // --- subscriptions ---
 
-  /** The in-progress ticket a work, conductor or chief of staff run subscribes for (DESIGN.md "Ticket subscriptions"). */
+  /** The ticket a work, chat, conductor or chief of staff run subscribes for, in any status (DESIGN.md "Ticket subscriptions"). */
   private subscriberOf(ctx: ToolContext, tool: string): Ticket {
-    if (ctx.runKind !== "work" && ctx.runKind !== "conductor" && ctx.runKind !== "cos") throw new Error(`${tool} is only available in work, conductor and chief of staff runs`);
+    if (ctx.runKind !== "work" && ctx.runKind !== "chat" && ctx.runKind !== "conductor" && ctx.runKind !== "cos") throw new Error(`${tool} is only available in work, chat, conductor and chief of staff runs`);
     return this.ctxTicket(ctx);
   }
 
@@ -4626,7 +4626,6 @@ ${numberLines(r.body)}`;
       throw new Error(`${target.key} is your child: its status changes already wake you. Pass events ["note"] or ["spec"] to follow more.`);
     }
     if (target.status === "done") throw new Error(`${target.key} is done: it won't change again.`);
-    if (own.status !== "in_progress") throw new Error(`${own.key} is ${own.status}: only an in-progress ticket waits for events.`);
     const sub = this.store.subscriptions.upsert(own.id, target.id, mode, [...new Set(chosen)], why || null);
     return { ...sub, key: target.key };
   }
@@ -5397,8 +5396,8 @@ ${numberLines(r.body)}`;
       const change: ConductorChange = { ticketId: t.id, sourceRef: entryId, key: t.key, title: t.title, from, to, note, specRevision: t.specRevision };
       if (t.parentId && !(from === "planning" && to === "in_progress")) this.notifyConductor(t.parentId, change);
       this.notifySubscribers(t, change);
-      // Waiting on events is over once the ticket is no longer in progress; reopened work subscribes again.
-      if (to !== "in_progress" && to !== "blocked") this.store.subscriptions.deleteBySubscriber(t.id);
+      // Subscriptions outlive the ticket's column: a change while it is in review or blocked waits for in progress,
+      // and one that reaches it in done reopens it (notifySubscribers).
       // Nothing follows a ticket that is over; its subscribers were told above.
       if (to === "done") this.store.subscriptions.deleteByTarget(t.id);
       if (to === "done") this.closeTicketEvents(t.id, `${t.key} is done`);
@@ -5760,8 +5759,15 @@ ${numberLines(r.body)}`;
       if (sub.subscriberId === caller) continue;
       let off = false;
       const subscriber = this.store.tickets.get(sub.subscriberId);
-      if (!subscriber || subscriber.status === "done") {
+      if (!subscriber) {
         this.store.subscriptions.deleteBySubscriber(sub.subscriberId);
+        continue;
+      }
+      if (subscriber.status === "done") {
+        // A done ticket that subscribed (a chat run after completion) is re-opened with the change as its notes.
+        if (sub.mode === "once") this.store.subscriptions.delete(sub.subscriberId, sub.targetId);
+        const text = this.prompts().ticketEventsPrompt([{ key: t.key, title: t.title, from: change.from, to: change.to, note: change.note, specRevision: change.specRevision, event }]);
+        this.track(this.reopenTicket(subscriber.key, { notes: text }).catch((err) => this.log(`events: re-opening ${subscriber.key} failed: ${err instanceof Error ? err.message : String(err)}`)));
         continue;
       }
       if (subscriber.kind === "cos") {
