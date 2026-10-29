@@ -224,7 +224,7 @@ private struct SheetDockRoom: ViewModifier {
     @Environment(DockedSheetInset.self) private var dockInset: DockedSheetInset?
 
     func body(content: Content) -> some View {
-        let room = dockInset?.composerUp != true ? TicketDock.sheetRoom(cards: router.waitingSheets.count, screen: screen, inset: dockInset) : 0
+        let room = dockInset?.composerUp != true && dockInset?.composerTop == nil ?TicketDock.sheetRoom(cards: router.waitingSheets.count, screen: screen, inset: dockInset) : 0
         content
             .safeAreaInset(edge: .bottom, spacing: 0) { Color.clear.frame(height: room) }
             .animation(.snappy, value: room)
