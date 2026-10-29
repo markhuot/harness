@@ -1856,6 +1856,14 @@ export interface UpdateTicketBody {
    * order kept.
    */
   pullRequestUrls?: string[];
+  /**
+   * The approval method (Ticket.completionAction) the ticket's next completion runs with, validated
+   * against what the ticket offers. A new action without `completionInstructions` drops the old
+   * instructions. 409 once the ticket is done.
+   */
+  completionAction?: CompletionAction;
+  /** The instructions kept with the approval method (Ticket.completionInstructions); "" clears them. */
+  completionInstructions?: string;
   /** Drafts only (409 otherwise): what the ticket is, fixed once it launches */
   kind?: TicketKind;
   /** Drafts only (409 otherwise): Ticket.useWorktree, fixed once it launches */

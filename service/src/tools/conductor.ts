@@ -7,7 +7,7 @@ import { defineTool, json, schema, ticketView } from "./util";
 
 const keyProp = { type: "string", minLength: 1, description: "Ticket key, e.g. \"NYTIMES-12\"." };
 
-const actionProp = {
+export const actionProp = {
   type: "string",
   enum: [...COMPLETION_ACTIONS],
   description:

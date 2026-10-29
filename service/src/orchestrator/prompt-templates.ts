@@ -697,6 +697,8 @@ When you are finished, call \`post_note\` with what you did.`,
     },
     template: `{{ticket}} is approved to land as a pull request.
 
+If a pull request can't fit this ticket (the branch has no changes to propose, or its work is already on the base branch), don't block on it: change the approval method with \`update_ticket\` { key: <this ticket's key>, completion_action } to one that fits (\`cleanup\` removes the worktree and branch), then finish the ticket that way.
+
 {{#if branch}}{{#if onBase}}Branch \`{{branch}}\` is the base branch itself, so there is no branch to open a pull request from: call \`block\` saying so.{{else}}{{#if pullRequests}}Its pull requests are:
 {{pullRequests}}
 

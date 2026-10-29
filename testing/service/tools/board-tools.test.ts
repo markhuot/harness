@@ -131,6 +131,31 @@ test("update_ticket takes pull_request_urls alone on the agent's own ticket in a
   expect(h.ticket(me.key).title).not.toBe("Nope");
 });
 
+test("a work run changes its own ticket's approval method with update_ticket; a bad method is refused and changes nothing", async () => {
+  const { results, h, me } = await agent([
+    ["update_ticket", { key: "ACME-2", completion_action: "custom", completion_instructions: "no changes, just tidy up" }],
+    ["update_ticket", { key: "ACME-2", completion_action: "bogus" }],
+    ["update_ticket", { key: "ACME-2", completion_instructions: "post a note and stop" }],
+  ]);
+  expect(results[0]!.isError).toBe(false);
+  expect(results[1]!.isError).toBe(true);
+  expect(results[2]!.isError).toBe(false);
+  expect(h.ticket(me.key)).toMatchObject({ completionAction: "custom", completionInstructions: "post a note and stop" });
+});
+
+test("a complete run changes the ticket's approval method with update_ticket", async () => {
+  const h = makeOrchestrator({ tools: undefined });
+  const first = callTools([["submit_for_review", { note: "done", spec_is_up_to_date: true }]]);
+  const done = callTools([["update_ticket", { key: "ACME-1", completion_action: "custom", completion_instructions: "nothing to land" }]]);
+  h.driver.script(first.steps, done.steps);
+  const t = await h.orch.createTicket({ projectId: h.project.id, spec: "Nothing to change", skipAgentReview: true });
+  await h.settle();
+  h.orch.humanReview(t.key, { decision: "approve", action: "custom", instructions: "open a PR" });
+  await h.settle();
+  expect(done.results[0]!.isError).toBe(false);
+  expect(h.ticket(t.key)).toMatchObject({ completionAction: "custom", completionInstructions: "nothing to land" });
+});
+
 test("a chat run records a pull request on its own ticket with update_ticket, but can't edit anything else on it", async () => {
   const h = makeOrchestrator({ tools: undefined });
   const first = callTools([["submit_for_review", { note: "done", spec_is_up_to_date: true }]]);

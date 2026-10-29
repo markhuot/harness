@@ -221,6 +221,10 @@ export interface UpdateTicketInput {
   remoteUrl?: string | null;
   /** The ticket's pull request URLs, the whole list ([] clears it); titles are fetched, never passed */
   pullRequestUrls?: string[];
+  /** The approval method the ticket's completion runs with; changed on the agent's own ticket too */
+  completionAction?: CompletionAction;
+  /** The instructions kept with the approval method; "" clears them */
+  completionInstructions?: string;
   /** Label names to add to the ticket; the rest stay */
   addLabels?: string[];
   /** Label names to take off the ticket; ones it doesn't carry are ignored */

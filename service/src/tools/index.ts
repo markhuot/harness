@@ -143,7 +143,7 @@ const RUN_TOOLS: Record<Exclude<RunKind, "chat" | "compact">, { harness: ToolDef
     native: "full",
   },
   review: { harness: [postNote, readSpec, editSpec, reviewDecision, ...boardTools, ...configReadTools, ...browserTools], native: "read" },
-  complete: { harness: [postNote, ...specTools, block, resumeWork, recordPullRequest, ...boardTools, ...configReadTools], native: "full" },
+  complete: { harness: [postNote, ...specTools, block, resumeWork, recordPullRequest, updateTicket, ...boardTools, ...configReadTools], native: "full" },
   conductor: {
     harness: [postNote, ...specTools, updateNotes, unblock, resumeWork, returnToPlanning, submitForReview, updateBranch, ...boardTools, ...boardWriteTools, ...conductorTools, ...subscriptionTools, ...configReadTools, ...configWriteTools, ...browserTools],
     native: "read",

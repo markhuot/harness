@@ -573,7 +573,7 @@ export function draftTitle(prompt: string): string {
 const UNTITLED_DRAFT = "Untitled draft";
 
 /** The fields a work or chat run may change on its own ticket with update_ticket */
-const OWN_CARD_FIELDS = ["pullRequestUrls", "addLabels", "removeLabels"];
+const OWN_CARD_FIELDS = ["pullRequestUrls", "addLabels", "removeLabels", "completionAction", "completionInstructions"];
 
 export class Orchestrator {
   readonly store: Store;
@@ -2474,6 +2474,13 @@ export class Orchestrator {
         this.touchSession(ticket.sessionId);
       }
       this.fetchPullRequestTitles(ticket.id, change.added);
+    }
+    if (body.completionAction !== undefined || body.completionInstructions !== undefined) {
+      if (ticket.status === "done") throw conflict(`${ticket.key} is done: re-open it to change its approval method`);
+      ticket = this.storeCompletionChoice(ticket, { action: body.completionAction, instructions: body.completionInstructions });
+      this.touchTicket(ticket.id);
+      this.appendStatus(ticket.sessionId, null, `Approval method: ${ticket.completionAction ?? "default"}`);
+      this.touchSession(ticket.sessionId);
     }
     if (labels !== undefined) {
       const change = this.store.labels.setForTicket(ticket.id, labels);
@@ -4418,7 +4425,7 @@ ${numberLines(r.body)}`;
    * Anything else on its own ticket is refused by boardTarget.
    */
   private ownWorkCardEdits(ctx: ToolContext, key: string, fields: string[]): Ticket | null {
-    if ((ctx.runKind !== "work" && ctx.runKind !== "chat") || !fields.length || !fields.every((f) => OWN_CARD_FIELDS.includes(f))) return null;
+    if ((ctx.runKind !== "work" && ctx.runKind !== "chat" && ctx.runKind !== "complete") || !fields.length || !fields.every((f) => OWN_CARD_FIELDS.includes(f))) return null;
     const own = this.ctxTicket(ctx);
     // Resolved like ownPlanTarget does, so an earlier key (alias) of this ticket counts too. A remote ID never identifies a ticket.
     const target = this.agentTarget(this.scopeOf(ctx), String(key ?? "").trim());
@@ -4460,6 +4467,8 @@ ${numberLines(r.body)}`;
       body.dependsOn = input.dependsOn;
     }
     if (input.pullRequestUrls !== undefined) body.pullRequestUrls = input.pullRequestUrls;
+    if (input.completionAction !== undefined) body.completionAction = input.completionAction;
+    if (input.completionInstructions !== undefined) body.completionInstructions = input.completionInstructions;
     if (input.addLabels !== undefined || input.removeLabels !== undefined) {
       const drop = new Set((input.removeLabels ?? []).map((n) => labelKey(String(n))));
       body.labels = [...(target.labels ?? []).filter((n) => !drop.has(labelKey(n))), ...(input.addLabels ?? [])];

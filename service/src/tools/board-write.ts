@@ -3,7 +3,8 @@
 // enforces the guard rails (never the caller's own ticket, no way around a tool approval); a plan
 // run gets update_ticket for its own ticket only. See DESIGN.md "Board changes by agents".
 
-import { PERMISSION_MODES, TICKET_STATUSES, type PermissionMode, type PhaseModelsPatch, type TicketStatus } from "@harness/shared";
+import { PERMISSION_MODES, TICKET_STATUSES, type CompletionAction, type PermissionMode, type PhaseModelsPatch, type TicketStatus } from "@harness/shared";
+import { actionProp } from "./conductor";
 import { defineTool, json, phaseModelsProp, schema, ticketView } from "./util";
 
 const keyProp = { type: "string", minLength: 1, description: "Ticket key, e.g. \"NYTIMES-12\". Never your own ticket." };
@@ -161,15 +162,17 @@ export const updateTicket = defineTool<{
   remote_id?: string;
   remote_url?: string;
   pull_request_urls?: string[];
+  completion_action?: CompletionAction;
+  completion_instructions?: string;
   add_labels?: string[];
   remove_labels?: string[];
 }>({
   name: "update_ticket",
   description:
-    "Edit another ticket's card, like a person editing it in the app (in a planning run, your own ticket instead, and only yours: apply the settings the human asked for in the spec, with full access to every field): title, spec (a new revision of it; pass base_revision, the specRevision get_ticket showed, and a spec that changed since is refused so nobody's edit is overwritten), driver, model, permission mode, dependencies, base branch, branch, remote ID and its link, pull request URLs, or whether it skips the agent or human review; add_labels and remove_labels change its labels (others stay). Only the fields you pass change; depends_on replaces the whole list. key is always the ticket's local key, even when it carries a remote ID. remote_id links the ticket to an external item (\"\" unlinks it); remote_url alone changes the link of the remote ID it already carries (\"\" clears it). pull_request_urls replaces the ticket's whole pull request list ([] clears it); each link's title is fetched from GitHub, and titles can't be set. In a work or chat run, your own ticket takes pull_request_urls, add_labels and remove_labels only: add a pull request you open outside the completion run, so the card keeps up. branch can only change before the ticket has a worktree; after that, ask its agent (message_ticket), which moves it with update_branch. On another ticket, a permission mode can be made stricter (auto → ask → read_only) but never looser, and a ticket whose mode is looser than yours can't be edited, except by a call that only tightens its permission_mode. Use move_ticket to change its column.",
+    "Edit another ticket's card, like a person editing it in the app (in a planning run, your own ticket instead, and only yours: apply the settings the human asked for in the spec, with full access to every field): title, spec (a new revision of it; pass base_revision, the specRevision get_ticket showed, and a spec that changed since is refused so nobody's edit is overwritten), driver, model, permission mode, dependencies, base branch, branch, remote ID and its link, pull request URLs, or whether it skips the agent or human review; add_labels and remove_labels change its labels (others stay). Only the fields you pass change; depends_on replaces the whole list. key is always the ticket's local key, even when it carries a remote ID. remote_id links the ticket to an external item (\"\" unlinks it); remote_url alone changes the link of the remote ID it already carries (\"\" clears it). pull_request_urls replaces the ticket's whole pull request list ([] clears it); each link's title is fetched from GitHub, and titles can't be set. In a work, chat or completion run, your own ticket takes pull_request_urls, add_labels, remove_labels, completion_action and completion_instructions only: add a pull request you open outside the completion run, so the card keeps up, and change the approval method (merge, pr, cleanup or custom) when the one the human chose can't work, say a pull request for a ticket with no changes: pick another one that fits, with completion_instructions when it is custom, rather than blocking on it. A completion run that is already going is judged by the new method when it ends. branch can only change before the ticket has a worktree; after that, ask its agent (message_ticket), which moves it with update_branch. On another ticket, a permission mode can be made stricter (auto → ask → read_only) but never looser, and a ticket whose mode is looser than yours can't be edited, except by a call that only tightens its permission_mode. Use move_ticket to change its column.",
   inputSchema: schema(
     {
-      key: { ...keyProp, description: "Ticket key, e.g. \"NYTIMES-12\". Never your own ticket, except in a planning run (where it's only your own) or with pull_request_urls, add_labels or remove_labels only, in a work or chat run." },
+      key: { ...keyProp, description: "Ticket key, e.g. \"NYTIMES-12\". Never your own ticket, except in a planning run (where it's only your own) or with pull_request_urls, add_labels, remove_labels, completion_action or completion_instructions only, in a work, chat or completion run." },
       title: { type: "string", minLength: 1, description: "New title." },
       spec: { type: "string", description: "The ticket's whole new spec (a new revision; its history keeps the old one). Needs base_revision." },
       base_revision: { type: "integer", minimum: 1, description: "Required with spec: the specRevision get_ticket showed. If the spec changed since, the call fails with the current revision." },
@@ -189,6 +192,8 @@ export const updateTicket = defineTool<{
         items: { type: "string", description: "A pull request's http(s) link" },
         description: "The ticket's pull request links, the whole list in order (duplicates dropped); [] clears it. Titles are fetched from GitHub, not passed.",
       },
+      completion_action: { ...actionProp, description: "The approval method the ticket's completion runs with. Applies to a ticket that isn't done; a method the ticket doesn't offer is refused." },
+      completion_instructions: { type: "string", description: "Instructions for the completion run, kept with completion_action (\"custom\" runs only these). \"\" clears them. Without them, a new completion_action drops the earlier instructions." },
       add_labels: labelNamesProp("Labels to add to the ticket."),
       remove_labels: labelNamesProp("Labels to take off the ticket (one it doesn't carry is ignored)."),
     },
@@ -211,6 +216,8 @@ export const updateTicket = defineTool<{
       remoteId: remoteInput(input.remote_id),
       remoteUrl: remoteInput(input.remote_url),
       pullRequestUrls: input.pull_request_urls,
+      completionAction: input.completion_action,
+      completionInstructions: input.completion_instructions,
       addLabels: input.add_labels,
       removeLabels: input.remove_labels,
     });
