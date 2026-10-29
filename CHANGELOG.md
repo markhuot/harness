@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261029.0327](https://github.com/markhuot/harness/releases/tag/app-20261029.0327) - 2026-10-29
+
 ### Added
 
 - Agents' spec writes are now checked before they are saved. A small model (Haiku by default) reads what an agent adds to a spec, judging only the lines that write adds (so older text, yours included, is never blamed on it), and refuses history, change logs, review or round narratives, Decisions sections and superseded wording, telling the agent which line to fix; nothing is saved until the text reads as a current summary. Text that only looks like history is fine when it is what the ticket is about, such as ids in test data. Your own edits are never checked, and a check that can't run lets the write through. Settings on the Mac and iPhone/iPad has a switch for the check and a picker for its model.
