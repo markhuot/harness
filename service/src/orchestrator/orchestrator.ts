@@ -175,7 +175,7 @@ import {
   listBranches,
   switchBranch,
 } from "./worktree";
-import { readFileDiff, readFileView, writeFileContents } from "./file-view";
+import { readFileDiff, readFileImage, readFileView, writeFileContents } from "./file-view";
 import { attachMentions, searchPaths, type SearchOptions } from "./files";
 import { compactNotes } from "../annotations";
 import { attachmentFile as fileOf, ORPHAN_UPLOAD_AGE_MS, registerFile, removeUploadDirs, resolveAttachments, runAttachments, storeUpload, sweepUploads, uploadDirs, type RunImage } from "../attachment-lists";
@@ -1988,6 +1988,11 @@ export class Orchestrator {
   /** A file where the ticket works (the same folder as ticketFiles) for the file viewer. */
   ticketFile(key: string, path: string): Promise<FileView> {
     return readFileView(this.requireTicketRoot(key), path);
+  }
+
+  /** The image file at `path` (GET /projects/:id/file/raw, /tickets/:key/file/raw): where it is on disk and its MIME type. */
+  fileImage(root: { projectId: string } | { ticketKey: string }, path: string): { path: string; mimeType: string } {
+    return readFileImage("projectId" in root ? this.projectRoot(root.projectId) : this.requireTicketRoot(root.ticketKey), path);
   }
 
   ticketFileDiff(key: string, path: string): Promise<FileDiff> {

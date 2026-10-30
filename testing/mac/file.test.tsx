@@ -26,9 +26,29 @@ const save = (m: Mounted) => m.container.querySelector<HTMLButtonElement>("[data
 
 describe("File pane", () => {
   test("a binary file says it can't be shown, with its size, instead of dumping bytes", async () => {
-    const m = await mount(pane("assets/logo.png"));
+    const m = await mount(pane("assets/font.woff2"));
     await m.until("the notice", () => text(m.container).includes("Binary file"));
+    expect(text(m.container)).toContain("4.0 KB");
+  });
+
+  test("an image file is drawn from its bytes with its size, and has no editor or Save", async () => {
+    const m = await mount(pane("assets/logo.png"));
+    await m.until("the image", () => !!m.container.querySelector("[data-testid=file-image] img"));
+    const src = new URL(m.container.querySelector<HTMLImageElement>("[data-testid=file-image] img")!.getAttribute("src")!);
+    expect(src.pathname).toBe("/tickets/HARNESS-5/file/raw");
+    expect(src.searchParams.get("path")).toBe("assets/logo.png");
+    expect(src.searchParams.get("token")).toBeTruthy();
     expect(text(m.container)).toContain("2.0 KB");
+    expect(text(m.container)).not.toContain("Binary file");
+    expect(m.container.querySelector("[data-testid=file-editor]")).toBeNull();
+    expect(m.container.querySelector("[data-testid=file-save]")).toBeNull();
+  });
+
+  test("an image that fails to load says so instead of a broken image", async () => {
+    const m = await mount(pane("assets/logo.png"));
+    await m.until("the image", () => !!m.container.querySelector("[data-testid=file-image] img"));
+    m.container.querySelector("[data-testid=file-image] img")!.dispatchEvent(new Event("error"));
+    await m.until("the notice", () => text(m.container).includes("Couldn't show this image"));
   });
 
   test("a file over the viewer's limit says how big it is", async () => {

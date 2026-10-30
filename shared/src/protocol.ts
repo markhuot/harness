@@ -1920,7 +1920,8 @@ export interface FileGitState {
  * A project or ticket file for the file viewer (GET /projects/:id/file, /tickets/:key/file), read
  * from disk, gitignored files included. `contents` is null for binary files (a NUL in the first
  * 8 KB) and files over 2 MiB (`tooLarge`). `truncated` means `contents` is only the start of the
- * file: it grew past the cap while being read.
+ * file: it grew past the cap while being read. An image the viewer draws (`image`, by extension)
+ * is binary with null contents, and `tooLarge` past 50 MiB; its bytes come from GET …/file/raw.
  */
 export interface FileView {
   /** Relative to `root`, "/"-separated */
@@ -1932,6 +1933,8 @@ export interface FileView {
   binary: boolean;
   truncated: boolean;
   tooLarge: boolean;
+  /** The MIME type of an image the viewer draws (png, jpeg, gif, webp, avif, bmp, ico); null for anything else. Missing from older services. */
+  image?: string | null;
   git: FileGitState;
 }
 

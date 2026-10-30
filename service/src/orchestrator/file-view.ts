@@ -56,13 +56,50 @@ function relativeInside(root: string, abs: string): string | null {
   return null;
 }
 
+/** Largest image the viewer draws (its bytes come whole from GET …/file/raw). */
+export const MAX_IMAGE_BYTES = 50 * 1024 * 1024;
+/** Images the viewers draw, by extension: what both Chromium and iOS decode. SVG stays text, since it's code you edit. */
+const IMAGE_TYPES: Record<string, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  avif: "image/avif",
+  bmp: "image/bmp",
+  ico: "image/x-icon",
+};
+
+/** The MIME type of an image the viewer draws at `path`, or null when it's shown as text (or not at all). */
+export function imageType(path: string): string | null {
+  const dot = path.lastIndexOf(".");
+  if (dot < 0 || dot < path.lastIndexOf("/")) return null;
+  return IMAGE_TYPES[path.slice(dot + 1).toLowerCase()] ?? null;
+}
+
 /** The file at `path` under `root` for the viewer. 404 when it's missing, 400 for a folder. */
 export async function readFileView(root: string, path: string): Promise<FileView> {
   const { rel, abs } = resolveFile(root, path);
   const st = statFile(abs, rel);
   if (!st) throw notFound(`No such file: ${rel}`);
-  const text = await readText(abs, st.size);
-  return { path: rel, root, size: st.size, ...text, git: await gitState(root, rel) };
+  const image = imageType(rel);
+  // An image is drawn from its bytes (GET …/file/raw), never read as text.
+  const text = image ? { contents: null, binary: true, truncated: false, tooLarge: st.size > MAX_IMAGE_BYTES } : await readText(abs, st.size);
+  return { path: rel, root, size: st.size, ...text, image, git: await gitState(root, rel) };
+}
+
+/**
+ * The image at `path` under `root`, for GET …/file/raw: its absolute path and MIME type. 404 when
+ * it's missing, 400 for a path the viewer doesn't draw as an image, 413 past MAX_IMAGE_BYTES.
+ */
+export function readFileImage(root: string, path: string): { path: string; mimeType: string } {
+  const { rel, abs } = resolveFile(root, path);
+  const mimeType = imageType(rel);
+  if (!mimeType) throw badRequest(`${rel} isn't an image the viewer shows`);
+  const st = statFile(abs, rel);
+  if (!st) throw notFound(`No such file: ${rel}`);
+  if (st.size > MAX_IMAGE_BYTES) throw new HarnessError(413, `${rel} is over ${MAX_IMAGE_BYTES / 1024 / 1024} MiB`);
+  return { path: abs, mimeType };
 }
 
 /**

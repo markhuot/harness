@@ -613,6 +613,24 @@ export function createHttpHandler(opts: HttpServerOptions): HttpHandler {
         }
       }
 
+      // An image in a project or ticket folder, for the file viewer (FileView.image): authenticated
+      // the same way, for <img>. Files change in place, so they're revalidated.
+      const raw = /^\/(projects|tickets)\/([^/]+)\/file\/raw$/.exec(path);
+      if (raw && (req.method === "GET" || req.method === "HEAD")) {
+        const token = opts.tokens.get();
+        if (!tokenMatches(bearer(req), token) && !tokenMatches(url.searchParams.get("token"), token)) return json({ error: "Unauthorized" }, 401);
+        const id = decodeURIComponent(raw[2]!);
+        try {
+          const found = opts.orchestrator.fileImage(raw[1] === "projects" ? { projectId: id } : { ticketKey: id }, url.searchParams.get("path") ?? "");
+          const res = await serveFile(req, found.path, found.mimeType, "no-cache");
+          res.headers.set("x-content-type-options", "nosniff");
+          return res;
+        } catch (err) {
+          if (err instanceof HarnessError) return json({ error: err.message }, err.status);
+          return json({ error: "Not found" }, 404);
+        }
+      }
+
       // Legacy (iPhone apps before GET /attachments/:id served every attachment): a ticket's
       // prompt attachments by index, the same way. A file that has gone missing is a 404.
       const promptFile = /^\/tickets\/([^/]+)\/prompt-attachments\/([^/]+)$/.exec(path);

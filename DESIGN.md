@@ -2298,9 +2298,9 @@ Directives are read from the run prompt:
 ## HTTP API
 
 All routes require `Authorization: Bearer <token>` (WS: `?token=`), except `GET /health` and
-the static plugin UIs under `/plugins/:id/ui/`. `GET /attachments/:id` also takes the token as
-`?token=`, because `<img>` and `<video>` can't send headers; no other HTTP route reads it from
-the query. That holds for loopback and remote clients alike;
+the static plugin UIs under `/plugins/:id/ui/`. `GET /attachments/:id` and the file viewer's
+`GET …/file/raw` also take the token as `?token=`, because `<img>` and `<video>` can't send
+headers; no other HTTP route reads it from the query. That holds for loopback and remote clients alike;
 `/mcp/:runToken` is additionally refused (403) to anything but loopback.
 Responses are `{ data }` or `{ error }` with a 4xx/5xx status.
 
@@ -2313,6 +2313,7 @@ GET    /projects/:id/commands?q=&driver=&limit=50   GET /tickets/:key/commands?q
 GET    /projects/:id/file?path=   GET /tickets/:key/file?path=   → FileView (see "File viewer")
 PUT    /projects/:id/file   PUT /tickets/:key/file   {path, contents}   → FileWriteResult (see "File viewer"; last write wins)
 GET    /projects/:id/file/diff?path=   GET /tickets/:key/file/diff?path=   → FileDiff (409 outside a git repo)
+GET    /projects/:id/file/raw?path=   GET /tickets/:key/file/raw?path=   → an image's bytes (FileView.image; bearer or ?token=; 400 not an image, 413 over 50 MiB)
 GET    /projects/:id/branches?q=&limit=50   → BranchInfo[] (branch picker; see "Branches")
 GET    /labels                   → LabelInfo[] (see "Labels")   PATCH /labels/:name {color} → LabelInfo   DELETE /labels/:name → {ok}
 GET    /tickets?projectId=&status=planning,review   POST /tickets {spec, …}   (no status = every ticket)
@@ -3257,6 +3258,12 @@ same folder `/tickets/:key/files` searches (worktree, else session cwd, else pro
   `git` comes from one `git status --porcelain -z --untracked-files=all --ignored=matching` for
   the path: `untracked` (`??`), `ignored` (`!!`), `tracked` otherwise, `dirty` for any entry but
   an ignored one; all false outside a repository.
+- **Images.** A png, jpg/jpeg, gif, webp, avif, bmp or ico file (by extension, what both
+  Chromium and iOS decode) has `image` set to its MIME type and is never read as text: `binary`,
+  null `contents`, and `tooLarge` only past 50 MiB. The viewers draw it from
+  `GET …/file/raw?path=` (`readFileImage`), which takes the same paths as the GET, serves only
+  those types (400 otherwise) with `no-cache` and `nosniff`, and reads the token from the query so
+  an `<img>` can load it. SVG stays text: it's code you edit.
 - **Diff** (`FileDiff`) is the working tree against `HEAD` (the empty tree before the first
   commit), staged and unstaged together, with the git plugin's flags (`--no-color --no-ext-diff
   --no-textconv --src-prefix=a/ --dst-prefix=b/`, no `-M`: renames aren't followed) plus

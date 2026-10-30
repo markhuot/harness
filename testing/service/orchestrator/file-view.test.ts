@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
-import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, symlinkSync, truncateSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { HarnessError } from "../../../service/src/orchestrator/errors";
-import { MAX_VIEW_BYTES, readFileDiff, readFileView, resolveFile, writeFileContents } from "../../../service/src/orchestrator/file-view";
+import { MAX_IMAGE_BYTES, MAX_VIEW_BYTES, readFileDiff, readFileImage, readFileView, resolveFile, writeFileContents } from "../../../service/src/orchestrator/file-view";
 import { tempDir } from "../../builders/tmp";
 import { git, gitRepo } from "../git";
 
@@ -47,6 +47,32 @@ test("a binary file and an oversized file come back without contents", async () 
   writeFileSync(join(root, "big.txt"), Buffer.alloc(MAX_VIEW_BYTES + 1, 97));
   expect(await readFileView(root, "bin.dat")).toMatchObject({ binary: true, contents: null });
   expect(await readFileView(root, "big.txt")).toMatchObject({ tooLarge: true, contents: null });
+});
+
+test("an image is known by its extension and never read as text, even when its bytes have no NUL", async () => {
+  const root = tempDir();
+  // A WebP header has no NUL in its first bytes, so the text sniff alone would have shown it as text.
+  writeFileSync(join(root, "shot.WEBP"), "RIFF\x10\x10\x10\x10WEBPVP8 ");
+  writeFileSync(join(root, "icon.svg"), "<svg/>");
+  writeFileSync(join(root, "notes.png.txt"), "text");
+  expect(await readFileView(root, "shot.WEBP")).toMatchObject({ image: "image/webp", binary: true, contents: null, tooLarge: false });
+  expect(await readFileView(root, "icon.svg")).toMatchObject({ image: null, binary: false, contents: "<svg/>" });
+  expect(await readFileView(root, "notes.png.txt")).toMatchObject({ image: null, contents: "text" });
+});
+
+test("an image's bytes are served only for an image type, inside the root, and up to the image cap", async () => {
+  const root = tempDir();
+  writeFileSync(join(root, "a.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+  writeFileSync(join(root, "a.txt"), "x");
+  expect(readFileImage(root, "a.png")).toEqual({ path: join(root, "a.png"), mimeType: "image/png" });
+  await fails(() => readFileImage(root, "a.txt"), 400, /isn't an image/);
+  await fails(() => readFileImage(root, "gone.png"), 404, /No such file/);
+  await fails(() => readFileImage(root, "../a.png"), 400, /outside/);
+  writeFileSync(join(root, "huge.jpg"), "");
+  // A sparse file: past the cap without writing 50 MiB.
+  truncateSync(join(root, "huge.jpg"), MAX_IMAGE_BYTES + 1);
+  await fails(() => readFileImage(root, "huge.jpg"), 413, /over 50 MiB/);
+  expect(await readFileView(root, "huge.jpg")).toMatchObject({ image: "image/jpeg", tooLarge: true });
 });
 
 test("saving keeps the file's CRLF line endings, its BOM, its missing final newline and its mode", async () => {

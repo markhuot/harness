@@ -1725,6 +1725,7 @@
         "binary": false,
         "truncated": false,
         "tooLarge": false,
+        "image": null,
         "git": {
           "repo": true,
           "tracked": true,
@@ -1741,6 +1742,7 @@
         "binary": false,
         "truncated": false,
         "tooLarge": false,
+        "image": null,
         "git": {
           "repo": true,
           "tracked": true,
@@ -1757,6 +1759,7 @@
         "binary": false,
         "truncated": false,
         "tooLarge": false,
+        "image": null,
         "git": {
           "repo": true,
           "tracked": true,
@@ -1773,6 +1776,24 @@
         "binary": true,
         "truncated": false,
         "tooLarge": false,
+        "image": "image/png",
+        "git": {
+          "repo": true,
+          "tracked": true,
+          "dirty": false,
+          "untracked": false,
+          "ignored": false
+        }
+      },
+      {
+        "path": "assets/font.woff2",
+        "root": "/Users/dev/harness",
+        "size": 4096,
+        "contents": null,
+        "binary": true,
+        "truncated": false,
+        "tooLarge": false,
+        "image": null,
         "git": {
           "repo": true,
           "tracked": true,
@@ -1789,6 +1810,7 @@
         "binary": false,
         "truncated": false,
         "tooLarge": true,
+        "image": null,
         "git": {
           "repo": true,
           "tracked": false,

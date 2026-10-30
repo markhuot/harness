@@ -279,7 +279,7 @@ export function FilePane({ paneId, content, zoomed }: { paneId: string; content:
     <aside className="file-pane" data-file={shownPath}>
       <div className="view-header detail-titlebar file-titlebar">
         <PaneGrip paneId={paneId} chip={name} title={shownPath} />
-        <Icon name="fileText" />
+        <Icon name={view?.image ? "image" : "fileText"} />
         <span className="file-title mono" title={absolute ?? shownPath}>
           {dir && (
             <span className="file-dir">
@@ -411,7 +411,14 @@ export function FilePane({ paneId, content, zoomed }: { paneId: string; content:
                 </FileLinkScope>
               </div>
             )}
-            {view.binary ? (
+            {view.image ? (
+              tab === "file" &&
+              (view.tooLarge ? (
+                <FileProblem icon="image" title="This image is too large to show" detail={`${formatSize(view.size)}; the viewer shows images up to 50 MB.`} />
+              ) : (
+                <FileImage key={`${rootKey}\u0000${view.path}`} src={client.fileImageUrl(ticketKey ? { ticketKey } : { projectId: projectId! }, view.path, file.at)} name={view.path} size={view.size} />
+              ))
+            ) : view.binary ? (
               tab === "file" && <FileProblem icon="image" title="Binary file" detail={`${formatSize(view.size)}; it can't be shown as text.`} />
             ) : view.tooLarge || view.contents === null ? (
               tab === "file" && <FileProblem icon="fileText" title="This file is too large to show" detail={`${formatSize(view.size)}; the viewer shows files up to 2 MB.`} />
@@ -468,6 +475,23 @@ function FileProblem({
           <Icon name="refresh" /> {retryLabel}
         </button>
       )}
+    </div>
+  );
+}
+
+/** An image file, drawn at its own size or shrunk to fit, with its dimensions and size once it loads. */
+function FileImage({ src, name, size }: { src: string; name: string; size: number }) {
+  // Per src: a reload (new src) tries again.
+  const [loaded, setLoaded] = useState<{ src: string; width: number; height: number } | null>(null);
+  const [failed, setFailed] = useState<string | null>(null);
+  if (failed === src) return <FileProblem icon="image" title="Couldn't show this image" detail={`${formatSize(size)}; it may be damaged, or a format this viewer can't draw.`} />;
+  const dims = loaded?.src === src ? loaded : null;
+  return (
+    <div className="file-image" data-testid="file-image">
+      <div className="file-image-frame">
+        <img src={src} alt={name} onLoad={(e) => setLoaded({ src, width: e.currentTarget.naturalWidth, height: e.currentTarget.naturalHeight })} onError={() => setFailed(src)} />
+      </div>
+      <div className="file-image-meta mono">{dims ? `${dims.width} × ${dims.height} · ${formatSize(size)}` : formatSize(size)}</div>
     </div>
   );
 }

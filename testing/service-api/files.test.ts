@@ -39,3 +39,22 @@ test("a write outside the ticket's folder, or for a ticket that doesn't exist, i
   expect(missing.status).toBe(404);
   expect(readFileSync(join(project.path, "src/greeting.ts"), "utf8")).toBe('export const greeting = "hello";\n');
 });
+
+test("GET …/file/raw serves an image of the ticket's or project's folder as bytes, with the token in the query for <img>", async () => {
+  const { rig, project, ticket } = await withFile();
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+  writeFileSync(join(project.path, "shot.png"), png);
+  const { url, token } = rig.harness;
+  for (const base of [`/tickets/${ticket.key}`, `/projects/${project.id}`]) {
+    const res = await fetch(`${url}${base}/file/raw?path=shot.png&token=${token}`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("image/png");
+    expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(Buffer.from(await res.arrayBuffer())).toEqual(png);
+  }
+  // Source files aren't served raw: the viewer reads those as text.
+  const text = await fetch(`${url}/tickets/${ticket.key}/file/raw?path=src/greeting.ts&token=${token}`);
+  expect(text.status).toBe(400);
+  expect((await fetch(`${url}/tickets/${ticket.key}/file/raw?path=gone.png&token=${token}`)).status).toBe(404);
+  expect((await fetch(`${url}/tickets/${ticket.key}/file/raw?path=..%2Fshot.png&token=${token}`)).status).toBe(400);
+});

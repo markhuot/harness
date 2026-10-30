@@ -4,11 +4,12 @@ import { WsClient } from "./ws-client";
 
 afterEach(stopRigs);
 
-/** One route per way the handler authenticates: the router, an attachment file, the two legacy file routes, a plugin's API. */
+/** One route per way the handler authenticates: the router, an attachment file, a file viewer image, the two legacy file routes, a plugin's API. */
 const GUARDED: [string, string][] = [
   ["GET", "/projects"],
   ["POST", "/tickets"],
   ["GET", "/attachments/nope"],
+  ["GET", "/tickets/ACME-1/file/raw?path=a.png"],
   ["GET", "/tickets/ACME-1/prompt-attachments/0"],
   ["GET", "/transcript/nope/attachments/0"],
   ["GET", "/plugins/nope/api/x"],

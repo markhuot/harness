@@ -387,6 +387,14 @@ export class HarnessClient {
   specDiff(key: string, from: number, to: number) {
     return this.request<SpecDiff>("GET", `/tickets/${key}/spec/revisions/${to}${query({ diff: from })}`);
   }
+  /**
+   * Absolute URL of an image in a project's or ticket's folder (FileView.image), token in the query
+   * so <img> can load it. `version` (any value) makes a reload fetch it again.
+   */
+  fileImageUrl(root: { projectId: string } | { ticketKey: string }, path: string, version?: string | number): string {
+    const base = "projectId" in root ? `/projects/${encodeURIComponent(root.projectId)}` : `/tickets/${encodeURIComponent(root.ticketKey)}`;
+    return `${this.baseUrl}${base}/file/raw${query({ path, v: version, token: this.opts.token })}`;
+  }
   /** Absolute URL of any attachment's file (Attachment.id), token in the query so <img>/<video> can load it. 404 once the file is gone. */
   attachmentUrl(id: string): string {
     return `${this.baseUrl}/attachments/${encodeURIComponent(id)}?token=${encodeURIComponent(this.opts.token)}`;
