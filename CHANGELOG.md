@@ -13,6 +13,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 - Image files (png, jpg, gif, webp, avif, bmp and ico) now show as pictures in the Mac file pane and the iPhone and iPad file viewer, with their dimensions and size, instead of saying "Binary file". That covers a `harness://file/` link an agent posts to a screenshot and the Open File palette alike. Images up to 50 MB are drawn; SVG files still open as text so you can edit them.
 
+### Fixed
+
+- On iPhone, a ticket's Activity tab with no activity yet shows its clock icon above "No activity yet" again in a full-height ticket sheet, and the rest of the sheet's content lays out as it did before the quarter-open change.
+
 ## [app-20261029.1724](https://github.com/markhuot/harness/releases/tag/app-20261029.1724) - 2026-10-29
 
 ### Changed
