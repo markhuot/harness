@@ -16,6 +16,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 ### Fixed
 
 - On iPhone, a ticket's Activity tab with no activity yet shows its clock icon above "No activity yet" again in a full-height ticket sheet, and the rest of the sheet's content lays out as it did before the quarter-open change.
+- On iPhone and iPad, the chief of staff's chat always opens scrolled to its very end, with the same space below the last message or approval card as above the first. Before, it could stop 16pt short, cutting off the space above the composer, depending on whether the chat had already loaded. The screen test for the chief's approval card no longer fails now and then because of this.
 
 ## [app-20261029.1724](https://github.com/markhuot/harness/releases/tag/app-20261029.1724) - 2026-10-29
 

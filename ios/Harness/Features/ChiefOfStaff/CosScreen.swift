@@ -190,13 +190,16 @@ struct CosChatView: View {
                         if let approval = chief.pendingApproval {
                             TicketDetailApprovalCard(ticketKey: chief.key, approval: approval).id(approval.id)
                         }
-                        Color.clear.frame(height: 1).id(Self.bottom)
+                        // The marker is the bottom padding, so scrolling to it shows the whole end.
+                        Color.clear.frame(height: 17).id(Self.bottom)
                     }
-                    .padding(16)
+                    .padding([.horizontal, .top], 16)
                 }
                 .defaultScrollAnchor(.bottom)
                 .scrollDismissesKeyboard(.interactively)
-                .onChange(of: rows.last?.id) { _, _ in
+                // Initial too: a chat already in the store has no new last row, and the rest would
+                // then be wherever `defaultScrollAnchor` put it instead of on the marker.
+                .onChange(of: rows.last?.id, initial: true) { _, _ in
                     withAnimation(.snappy) { proxy.scrollTo(Self.bottom, anchor: .bottom) }
                 }
                 .onChange(of: chief.pendingApproval?.id) { _, _ in
