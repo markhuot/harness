@@ -73,11 +73,12 @@ struct TicketSheetHost: View {
         }
         // Quarter open, the content keeps its full-height layout, hung from the sheet's top, and the
         // sheet clips its bottom: the header stays exactly as it is at full height instead of
-        // reflowing into the short room. The outer frame takes the sheet's size whatever the content is.
-        // Not an overlay on a clear base: content there is laid out differently, and at full height
-        // the Activity tab's empty state lost its icon.
+        // reflowing into the short room. With both bounds given, the outer frame takes exactly the
+        // sheet's size whatever the content is (with only a max, it would grow to the taller content
+        // and the sheet would center it). Not an overlay on a clear base: content there is laid out
+        // differently, and at full height the Activity tab's empty state lost its icon.
         .frame(height: detent == Self.peek ? (fullHeight ?? Self.estimatedFullHeight) : nil, alignment: .top)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .top)
         .background {
             GeometryReader { proxy in
                 Color.clear.onChange(of: proxy.size, initial: true) { _, size in
