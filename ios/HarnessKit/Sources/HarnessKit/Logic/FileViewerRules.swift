@@ -11,6 +11,8 @@ public enum FileBodyState: Equatable, Sendable {
     case tooLarge(String)
     /// "Binary file", with its message
     case binary(String)
+    /// An image the viewer draws from its bytes (FileViewerLoader.image)
+    case image
     case empty
     /// The lines, with the "changed while it was read" note above them when `truncated`
     case lines(truncated: Bool)
@@ -111,6 +113,9 @@ public enum FileViewerRules {
     }
 
     public static func fileBody(_ view: FileView) -> FileBodyState {
+        if view.image != nil {
+            return view.tooLarge ? .tooLarge("This image is \(FileViewer.formatSize(Double(view.size))); the viewer opens images up to 50 MB.") : .image
+        }
         if view.tooLarge { return .tooLarge("This file is \(FileViewer.formatSize(Double(view.size))); the viewer opens files up to 2 MB.") }
         guard !view.binary, let contents = view.contents else { return .binary("\(FileViewer.formatSize(Double(view.size))) of binary data.") }
         if contents.isEmpty { return .empty }
@@ -121,7 +126,7 @@ public enum FileViewerRules {
     public static func showsEditor(_ view: FileView) -> Bool {
         switch fileBody(view) {
         case .lines, .empty: true
-        case .tooLarge, .binary: false
+        case .tooLarge, .binary, .image: false
         }
     }
 

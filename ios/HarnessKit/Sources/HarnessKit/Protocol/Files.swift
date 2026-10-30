@@ -42,7 +42,8 @@ public struct FileGitState: Codable, Sendable, Equatable {
 /// A project or ticket file for the file viewer (GET /projects/:id/file, /tickets/:key/file), read
 /// from disk, gitignored files included. `contents` is null for binary files (a NUL in the first
 /// 8 KB) and files over 2 MiB (`tooLarge`). `truncated` means `contents` is only the start of the
-/// file: it grew past the cap while being read.
+/// file: it grew past the cap while being read. An image the viewer draws (`image`, by extension)
+/// is binary with null contents, and `tooLarge` past 50 MiB; its bytes come from GET …/file/raw.
 public struct FileView: Codable, Sendable, Equatable {
     /// Relative to `root`, "/"-separated
     public var path: String
@@ -53,11 +54,13 @@ public struct FileView: Codable, Sendable, Equatable {
     public var binary: Bool
     public var truncated: Bool
     public var tooLarge: Bool
+    /// The MIME type of an image the viewer draws (png, jpeg, gif, webp, avif, bmp, ico); nil for anything else
+    @Nullable public var image: String?
     public var git: FileGitState
 
     public init(
         path: String, root: String, size: Int, contents: String? = nil, binary: Bool = false, truncated: Bool = false,
-        tooLarge: Bool = false, git: FileGitState
+        tooLarge: Bool = false, image: String? = nil, git: FileGitState
     ) {
         self.path = path
         self.root = root
@@ -66,6 +69,7 @@ public struct FileView: Codable, Sendable, Equatable {
         self.binary = binary
         self.truncated = truncated
         self.tooLarge = tooLarge
+        self.image = image
         self.git = git
     }
 }

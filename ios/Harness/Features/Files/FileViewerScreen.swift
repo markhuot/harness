@@ -93,7 +93,7 @@ private struct FileViewerContent: View {
                         FileErrorView(copy: FileViewerRules.errorCopy(.file, e, path: path)) { Task { await session.retry() } }
                     case let .ok(v):
                         ZStack {
-                            FileBody(view: v, host: session.fileHost)
+                            FileBody(view: v, image: loader.image, host: session.fileHost)
                                 .opacity(shown == .file && renderedText == nil ? 1 : 0)
                                 .allowsHitTesting(shown == .file && renderedText == nil)
                             if let renderedText, shown == .file {
@@ -440,9 +440,10 @@ struct EditorSurface: View {
     }
 }
 
-/// The file: the editor (or, for a file it can't show, why not).
+/// The file: the editor, or the image (or, for a file it can't show, why not).
 private struct FileBody: View {
     let view: FileView
+    let image: FileLoad<Data>?
     let host: EditorWebHost
 
     @Environment(\.palette) private var c
@@ -454,6 +455,8 @@ private struct FileBody: View {
             EmptyState(icon: "fileText", title: "Too large to show", message: message)
         case let .binary(message):
             EmptyState(icon: "image", title: "Binary file", message: message)
+        case .image:
+            FileImageBody(name: FileViewerRules.fileName(view.path), size: view.size, load: image)
         case let .lines(truncated):
             editor(truncated: truncated)
         case .empty:
@@ -473,6 +476,63 @@ private struct FileBody: View {
                     .overlay(alignment: .bottom) { c.border.frame(height: 1 / scale) }
             }
             EditorSurface(host: host)
+        }
+    }
+}
+
+/// An image file, shrunk to fit (never enlarged), with its dimensions and size under it.
+private struct FileImageBody: View {
+    let name: String
+    let size: Int
+    let load: FileLoad<Data>?
+
+    @Environment(\.palette) private var c
+    @Environment(\.displayScale) private var scale
+    /// The decoded image and the bytes it came from (a refresh with new bytes decodes again); nil
+    /// image when they aren't one this device can draw.
+    @State private var decoded: (data: Data, image: UIImage?)?
+
+    var body: some View {
+        switch load {
+        case nil, .loading:
+            LoadingScreen()
+        case let .error(e):
+            EmptyState(icon: "image", title: "Couldn't load this image", message: e.message)
+        case let .ok(data):
+            Group {
+                if let decoded, decoded.data == data {
+                    if let image = decoded.image {
+                        picture(image)
+                    } else {
+                        EmptyState(icon: "image", title: "Couldn't show this image", message: "\(FileViewer.formatSize(Double(size))); it may be damaged, or a format this device can't draw.")
+                    }
+                } else {
+                    LoadingScreen()
+                }
+            }
+            .task(id: data) {
+                let image = await Task.detached(priority: .userInitiated) { UIImage(data: data)?.preparingForDisplay() }.value
+                decoded = (data, image)
+            }
+        }
+    }
+
+    private func picture(_ image: UIImage) -> some View {
+        VStack(spacing: 0) {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFit()
+                .frame(maxWidth: image.size.width, maxHeight: image.size.height)
+                .overlay { Rectangle().strokeBorder(c.border, lineWidth: 1 / scale) }
+                .padding(16)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .accessibilityLabel(name)
+            Text("\(Int(image.size.width * image.scale)) × \(Int(image.size.height * image.scale)) · \(FileViewer.formatSize(Double(size)))")
+                .font(.scaled(size: 12, design: .monospaced))
+                .foregroundStyle(c.text3)
+                .padding(.vertical, 8)
+                .frame(maxWidth: .infinity)
+                .overlay(alignment: .top) { c.border.frame(height: 1 / scale) }
         }
     }
 }

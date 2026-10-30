@@ -54,6 +54,14 @@ public final class HarnessClient: Sendable {
         return try JSONDecoder().decode(Envelope<T>.self, from: text).data
     }
 
+    /// A GET whose answer is bytes, not `{ data }` (an image file). A non-2xx status throws as `request` does.
+    private func raw(_ path: String) async throws -> Data {
+        guard let url = URL(string: baseUrl + path) else { throw URLError(.badURL) }
+        let res = try await transport.send(HTTPRequest(method: "GET", url: url, headers: ["authorization": "Bearer \(token)"]))
+        guard res.ok else { throw Self.apiError(status: res.status, body: res.body) }
+        return res.body
+    }
+
     /// The error for a non-2xx response. A body that isn't JSON (a proxy's HTML page) still gives a
     /// HarnessAPIError, with the status text as its message.
     static func apiError(status: Int, body: Data) -> HarnessAPIError {
@@ -144,6 +152,11 @@ public final class HarnessClient: Sendable {
     /// Replace a project file's contents (last write wins).
     public func writeProjectFile(_ id: String, path: String, contents: String) async throws -> FileWriteResult {
         try await request("PUT", "/projects/\(id)/file", body: WriteFileRequest(path: path, contents: contents))
+    }
+
+    /// An image in the project folder (FileView.image): GET …/file/raw, its bytes.
+    public func projectFileImage(_ id: String, path: String) async throws -> Data {
+        try await raw("/projects/\(id)/file/raw\(Query.build([("path", .str(path))]))")
     }
 
     /// A project file's uncommitted changes against HEAD (409 outside a git repository).
@@ -298,6 +311,11 @@ public final class HarnessClient: Sendable {
     /// Replace a file where the ticket's agent works (last write wins).
     public func writeTicketFile(_ key: String, path: String, contents: String) async throws -> FileWriteResult {
         try await request("PUT", "/tickets/\(key)/file", body: WriteFileRequest(path: path, contents: contents))
+    }
+
+    /// An image where the ticket works (FileView.image): GET …/file/raw, its bytes.
+    public func ticketFileImage(_ key: String, path: String) async throws -> Data {
+        try await raw("/tickets/\(key)/file/raw\(Query.build([("path", .str(path))]))")
     }
 
     /// That file's uncommitted changes against HEAD (409 outside a git repository).

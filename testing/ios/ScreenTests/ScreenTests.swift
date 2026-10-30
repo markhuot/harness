@@ -306,4 +306,9 @@ final class ScreenTests: ScreenTestCase {
     func testFileViewer() async throws {
         try await screen("file") { NavigationStack { FileViewerScreen(params: FileRouteParams(path: "src/board.ts", ticket: "HARNESS-5")) } }
     }
+
+    /// An image file, drawn from its bytes instead of "Binary file".
+    func testFileViewerImage() async throws {
+        try await screen("file-image") { NavigationStack { FileViewerScreen(params: FileRouteParams(path: "assets/logo.png", ticket: "HARNESS-5")) } }
+    }
 }

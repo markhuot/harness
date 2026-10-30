@@ -1,5 +1,6 @@
 import Foundation
 import HarnessKit
+import UIKit
 
 /// The service, answered from the world: the real HarnessClient sends its real requests, and this
 /// routes each one by method and path to a slice of world.json. A path no route answers is a 404 and
@@ -25,6 +26,11 @@ final class WorldTransport: HTTPTransport, @unchecked Sendable {
         let query = Dictionary(
             (URLComponents(url: request.url, resolvingAgainstBaseURL: false)?.queryItems ?? []).map { ($0.name, $0.value ?? "") },
             uniquingKeysWith: { a, _ in a })
+        // An image file's bytes (FileView.image): a picture drawn here, since the world holds JSON only.
+        if request.method == "GET", request.url.path.hasSuffix("/file/raw"),
+           let view = fileEntries("views", path: query["path"]) as? [String: Any], view["image"] is String {
+            return HTTPResponse(status: 200, body: Self.picture)
+        }
         if request.method == "GET", let data = answer(request.url.path, query) {
             let body = try JSONSerialization.data(withJSONObject: ["data": data])
             return HTTPResponse(status: 200, body: body)
@@ -35,6 +41,20 @@ final class WorldTransport: HTTPTransport, @unchecked Sendable {
         if request.url.path != "/usage" { lock.withLock { _unrouted.append("\(request.method) \(request.url.path)") } }
         return HTTPResponse(status: 404, body: Data(#"{"error":"the world has no such route"}"#.utf8))
     }
+
+    /// A 320×200 PNG: a two-tone mark on a transparent ground, so the viewer's frame and fit show.
+    static let picture: Data = {
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = false
+        let image = UIGraphicsImageRenderer(size: CGSize(width: 320, height: 200), format: format).image { ctx in
+            UIColor(red: 0.2, green: 0.4, blue: 0.9, alpha: 1).setFill()
+            ctx.cgContext.fillEllipse(in: CGRect(x: 40, y: 30, width: 140, height: 140))
+            UIColor(red: 0.95, green: 0.6, blue: 0.2, alpha: 1).setFill()
+            ctx.fill(CGRect(x: 160, y: 60, width: 120, height: 80))
+        }
+        return image.pngData()!
+    }()
 
     private func answer(_ path: String, _ q: [String: String]) -> Any? {
         let w = world

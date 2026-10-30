@@ -19,14 +19,16 @@ public protocol FileViewerClient: Sendable {
     func projectFile(_ id: String, path: String) async throws -> FileView
     func ticketFileDiff(_ key: String, path: String) async throws -> FileDiff
     func projectFileDiff(_ id: String, path: String) async throws -> FileDiff
+    func ticketFileImage(_ key: String, path: String) async throws -> Data
+    func projectFileImage(_ id: String, path: String) async throws -> Data
     func writeTicketFile(_ key: String, path: String, contents: String) async throws -> FileWriteResult
     func writeProjectFile(_ id: String, path: String, contents: String) async throws -> FileWriteResult
 }
 
 extension HarnessClient: FileViewerClient {}
 
-/// The file viewer's loading: the file, then, when git says it
-/// changed, its diff. A refresh keeps the old diff on screen while the new one loads. Lines and
+/// The file viewer's loading: the file, then its bytes when it's an image the viewer draws, then,
+/// when git says it changed, its diff. A refresh keeps the old diff on screen while the new one loads. Lines and
 /// patch rows are worked out off the main actor once per load, so a 2 MB file never splits on
 /// every render.
 @MainActor
@@ -37,6 +39,9 @@ public final class FileViewerLoader {
     public private(set) var diff: FileLoad<FileDiff>?
     /// The loaded file's lines; nil until it loads, and for a file without contents
     public private(set) var text: FileText?
+    /// An image file's bytes (FileView.image); nil for any other file, or one too large to draw.
+    /// A refresh keeps the old bytes on screen while the new ones load.
+    public private(set) var image: FileLoad<Data>?
     /// The loaded diff's rows
     public private(set) var rows: [PatchRow] = []
     public private(set) var refreshing = false
@@ -79,6 +84,19 @@ public final class FileViewerLoader {
             text = nil
         }
         file = result
+        if let view = result.value, view.image != nil, !view.tooLarge {
+            if image == nil { image = .loading }
+            let next: FileLoad<Data>
+            do {
+                next = .ok(try await root.fetchImage(client, view.path))
+            } catch {
+                next = .error(FileLoadError(error))
+            }
+            guard gen == generation else { return }
+            image = next
+        } else {
+            image = nil
+        }
         guard let view = result.value, FileViewerRules.hasDiff(view) else {
             diff = nil
             rows = []
@@ -113,6 +131,13 @@ extension FileRoot {
         switch self {
         case let .ticket(key): try await client.ticketFile(key, path: path)
         case let .project(id): try await client.projectFile(id, path: path)
+        }
+    }
+
+    fileprivate func fetchImage(_ client: any FileViewerClient, _ path: String) async throws -> Data {
+        switch self {
+        case let .ticket(key): try await client.ticketFileImage(key, path: path)
+        case let .project(id): try await client.projectFileImage(id, path: path)
         }
     }
 
