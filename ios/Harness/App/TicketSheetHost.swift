@@ -58,7 +58,7 @@ struct TicketSheetHost: View {
         let sheet = current ?? last
         // Gone, the last one stays mounted while the sheet animates away.
         let mounted = current == nil ? (last.map { [$0] } ?? []) : router.liveSheets
-        let stacks = ZStack(alignment: .top) {
+        ZStack(alignment: .top) {
             ForEach(mounted) { s in
                 let isTop = s.id == sheet?.id
                 stack(s)
@@ -73,11 +73,11 @@ struct TicketSheetHost: View {
         }
         // Quarter open, the content keeps its full-height layout, hung from the sheet's top, and the
         // sheet clips its bottom: the header stays exactly as it is at full height instead of
-        // reflowing into the short room. The clear base takes the sheet's size whatever the content is.
-        Color.clear
-            .overlay(alignment: .top) {
-                stacks.frame(height: detent == Self.peek ? (fullHeight ?? Self.estimatedFullHeight) : nil, alignment: .top)
-            }
+        // reflowing into the short room. The outer frame takes the sheet's size whatever the content is.
+        // Not an overlay on a clear base: content there is laid out differently, and at full height
+        // the Activity tab's empty state lost its icon.
+        .frame(height: detent == Self.peek ? (fullHeight ?? Self.estimatedFullHeight) : nil, alignment: .top)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background {
             GeometryReader { proxy in
                 Color.clear.onChange(of: proxy.size, initial: true) { _, size in
