@@ -1933,8 +1933,8 @@ export interface FileView {
   binary: boolean;
   truncated: boolean;
   tooLarge: boolean;
-  /** The MIME type of an image the viewer draws (png, jpeg, gif, webp, avif, bmp, ico); null for anything else. Missing from older services. */
-  image?: string | null;
+  /** The MIME type of an image the viewer draws (png, jpeg, gif, webp, avif, bmp, ico); null for anything else */
+  image: string | null;
   git: FileGitState;
 }
 
