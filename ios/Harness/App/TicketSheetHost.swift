@@ -174,8 +174,14 @@ struct TicketSheetContent: View {
             }
         }
         .environment(\.inTicketSheet, true)
-        // New session that became its ticket starts over as the ticket's screen.
-        .id(sheet.root)
+        // New session that became its ticket starts over as the ticket's screen; one that only named
+        // its draft (its first save) keeps its editor.
+        .id(identity)
+    }
+
+    private var identity: TicketSheet.Root {
+        if case let .newSession(projectId, _) = sheet.root { return .newSession(projectId: projectId, key: nil) }
+        return sheet.root
     }
 
     private func screen(_ screen: some View) -> some View {

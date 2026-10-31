@@ -11,9 +11,16 @@ import SwiftUI
 /// /ticket/<key> for one).
 struct NewSessionScreen: View {
     let projectId: String?
-    let key: String?
+    /// The draft to reopen, as it was when the screen mounted: the sheet names its draft once the
+    /// first save makes it (Router.newSessionSaved), and the editor that saved it stays as it is.
+    @State private var key: String?
 
     @Environment(BoardStore.self) private var store
+
+    init(projectId: String?, key: String?) {
+        self.projectId = projectId
+        _key = State(initialValue: key)
+    }
 
     var body: some View {
         // A new store (another Mac, a new token) starts the editor over.
@@ -261,12 +268,17 @@ private struct NewSessionEditorView: View {
     private func begin() {
         if editor == nil {
             guard let client = store.api else { return }
-            let store = store
+            let store = store, router = router, projectId = projectId
+            var named = reopen != nil
             editor = NewSessionEditor(
                 reopen: reopen,
                 api: HarnessDraftAPI(client: client),
                 state: { store.state },
-                onSaved: { store.dispatch(.tickets([$0])) },
+                onSaved: { t in
+                    store.dispatch(.tickets([t]))
+                    // The first save names the draft on its sheet, which reopens it from the dock.
+                    if !named { named = true; router.newSessionSaved(projectId: projectId, key: t.key) }
+                },
                 onError: { _ in haptic(.error) }
             )
         }
@@ -343,12 +355,17 @@ private struct NewSessionEditorView: View {
 
     /// Close this sheet and show the ticket it became (on iPad, in the ticket's own window).
     private func showTicket(_ key: String, tab: TicketTab?) {
-        router.replace(.newSession(projectId: projectId, key: reopen), with: .ticket(key: key, tab: tab))
+        router.replace(route, with: .ticket(key: key, tab: tab))
     }
 
     /// Close this sheet, unless a link has already replaced it with another.
     private func dismiss() {
-        router.close(.newSession(projectId: projectId, key: reopen))
+        router.close(route)
+    }
+
+    /// This screen's route as the router knows it: named by its draft once that's saved.
+    private var route: SheetRoute {
+        .newSession(projectId: projectId, key: reopen ?? editor?.savedKey)
     }
 }
 

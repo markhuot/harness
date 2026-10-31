@@ -268,26 +268,44 @@ public final class Router {
     /// it. Otherwise closes `sheet` unless a link already replaced it, then opens the ticket.
     public func replace(_ sheet: SheetRoute, with route: Route) {
         if case let .newSession(projectId, key) = sheet, case let .ticket(k, tab) = route,
-           let i = sheets.firstIndex(where: { $0.root == .newSession(projectId: projectId, key: key) }) {
+           let i = sheets.firstIndex(where: { $0.shows(.newSession(projectId: projectId, key: key)) }) {
             var s = sheets[i]
             s.root = .ticket(key: k, tab: tab)
             s.path = []
             sheets[i] = s
             return
         }
-        if self.sheet == sheet { self.sheet = nil }
+        if isSheet(sheet) { self.sheet = nil }
         open(.push(route))
     }
 
     /// Closes `sheet` (a `sheet`, or New session's ticket sheet wherever it is in the dock) unless a
     /// link already replaced it.
     public func close(_ sheet: SheetRoute) {
-        if self.sheet == sheet {
+        if isSheet(sheet) {
             self.sheet = nil
         } else if case let .newSession(projectId, key) = sheet,
-                  let s = sheets.first(where: { $0.root == .newSession(projectId: projectId, key: key) }) {
+                  let s = sheets.first(where: { $0.shows(.newSession(projectId: projectId, key: key)) }) {
             closeSheet(id: s.id)
         }
+    }
+
+    /// `sheet` is the one up: the same route, or the New session it was before its first save
+    /// named the draft.
+    private func isSheet(_ sheet: SheetRoute) -> Bool {
+        if self.sheet == sheet { return true }
+        guard case let .newSession(projectId, key?) = sheet else { return false }
+        return self.sheet == .newSession(projectId: projectId, key: nil)
+    }
+
+    /// New session's first save made draft `key`: the ticket sheet with the unsaved New session for
+    /// `projectId` names the draft from now on, so whenever its stack mounts again (restored from
+    /// the dock, back from parked, a relaunch) it reopens the draft, strings and all, instead of
+    /// starting a blank one. The screen that's up keeps its editor.
+    public func newSessionSaved(projectId: String?, key: String) {
+        guard !sheets.contains(where: { $0.shows(.newSession(projectId: projectId, key: key)) }),
+              let i = sheets.firstIndex(where: { $0.root == .newSession(projectId: projectId, key: nil) }) else { return }
+        sheets[i].root = .newSession(projectId: projectId, key: key)
     }
 
     public func dismissModals() {
@@ -849,6 +867,9 @@ public struct TicketSheet: Hashable, Sendable, Identifiable {
     func shows(_ root: Root) -> Bool {
         switch root {
         case let .ticket(key, _): topTicketKey == key
+        // A saved draft is the same New session whichever project it was opened with.
+        case let .newSession(_, key?):
+            if case let .newSession(_, mine) = self.root { mine == key } else { false }
         case .newSession: self.root == root
         case let .file(params):
             if case let .file(mine) = self.root { mine.sameFile(as: params) } else { false }

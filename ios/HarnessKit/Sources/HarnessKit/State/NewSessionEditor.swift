@@ -50,6 +50,8 @@ public final class NewSessionEditor {
     public private(set) var local: Ticket?
     /// The saved draft's ticket id, nil until the first save (or the reopened draft's).
     public private(set) var savedId: String?
+    /// The saved draft's key, nil until the first save (or the reopened draft's).
+    public var savedKey: String? { sync?.saved?.key }
     /// Which submit button is working.
     public private(set) var busy: Busy?
 
