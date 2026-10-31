@@ -72,6 +72,40 @@ test("the human's Unblock button with notes starts a temporary chat in the proje
   expect(h.driver.requests[0]!.prompt).toContain("already checked out");
 });
 
+/** A done ticket that worked in a worktree on `main` (while the checkout was elsewhere), removed when it completed. */
+function doneOnMainWithoutItsWorktree(h: ReturnType<typeof makeOrchestrator>, t: { id: string; key: string }) {
+  h.orch["store"].tickets.update(t.id, { status: "done", blockedReason: null, workdir: join(h.orch["paths"].worktreesDir, t.key), branch: "main" });
+}
+
+test("re-opening a ticket whose removed worktree was on the branch the checkout has now works in the checkout, not blocked", async () => {
+  const { h, repo, t } = await blockedOnWorktree();
+  doneOnMainWithoutItsWorktree(h, t);
+  h.driver.script(replyScript("cutting the release again"));
+  await h.orch.reopenTicket(t.key, { notes: "Cut the release again" });
+  await h.settle();
+
+  expect(h.driver.requests[0]).toMatchObject({ kind: "work", cwd: repo });
+  const ticket = h.ticket(t.key);
+  expect(ticket).toMatchObject({ workdir: repo, branch: null, blockedReason: null });
+  expect(ticket.status).not.toBe("blocked");
+  expect(existsSync(join(h.orch["paths"].worktreesDir, t.key))).toBe(false);
+  const notes = h.orch["store"].activity.listBySession(ticket.sessionId).filter((e) => e.kind === "note");
+  expect(notes.at(-1)?.body).toContain("Working in the project checkout");
+});
+
+test("re-opening it while the checkout is on another branch recreates the worktree on its branch", async () => {
+  const { h, repo, t } = await blockedOnWorktree();
+  doneOnMainWithoutItsWorktree(h, t);
+  git(repo, "switch", "-q", "-c", "scratch");
+  h.driver.script(replyScript("cutting the release again"));
+  await h.orch.reopenTicket(t.key, { notes: "Cut the release again" });
+  await h.settle();
+
+  const worktree = join(h.orch["paths"].worktreesDir, t.key);
+  expect(h.driver.requests[0]).toMatchObject({ kind: "work", cwd: worktree });
+  expect(h.ticket(t.key)).toMatchObject({ workdir: worktree, branch: "main" });
+});
+
 test("a completion block that lost its worktree still restarts the work in a fresh session, and the old approvals start over", async () => {
   const { h, repo, t } = await blockedOnWorktree();
   h.orch["store"].tickets.update(t.id, { blockedRunKind: "complete", agentReview: "approved", humanReview: "approved" });

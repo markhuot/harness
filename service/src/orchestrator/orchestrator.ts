@@ -5384,13 +5384,20 @@ ${numberLines(r.body)}`;
     if (ticket.workdir && !(ticket.branch && !existsSync(ticket.workdir))) return { workdir: ticket.workdir, branch: ticket.branch };
     const project = this.store.projects.get(ticket.projectId)!;
     if (!((ticket.useWorktree ?? project.useWorktrees) && (await isGitRepo(project.path)))) return { workdir: project.path, branch: null };
+    // A re-opened ticket whose worktree was removed gets its branch back.
+    const branch = ticket.requestedBranch ?? ticket.branch;
+    // Unless the project checkout has that branch checked out now: git can't give it a second
+    // worktree, so the ticket works in the checkout, as one that picked the checkout's branch does.
+    if (ticket.branch && branch && (await currentBranch(project.path)) === branch) {
+      this.addActivity(ticket, "note", "system", `Working in the project checkout at ${project.path}: this ticket's worktree was removed, and ${branch} is checked out there now.`);
+      return { workdir: project.path, branch: null };
+    }
     try {
       return await ensureWorktree({
         repo: project.path,
         worktreesDir: this.paths.worktreesDir,
         key: ticket.key,
-        // A re-opened ticket whose worktree was removed gets its branch back.
-        branch: ticket.requestedBranch ?? ticket.branch,
+        branch,
         base: (await this.refreshBaseBranch(ticket, project)).branch,
       });
     } catch (err) {
