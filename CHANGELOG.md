@@ -13,6 +13,11 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 - Image files (png, jpg, gif, webp, avif, bmp and ico) now show as pictures in the Mac file pane and the iPhone and iPad file viewer, with their dimensions and size, instead of saying "Binary file". That covers a `harness://file/` link an agent posts to a screenshot and the Open File palette alike. Images up to 50 MB are drawn; SVG files still open as text so you can edit them.
 
+### Changed
+
+- For people working on Harness: the iPhone and iPad apps now build and test with Xcode 27.2 (`/Applications/Xcode-27.2.0.app`), and every shared simulator runs on iOS 27.2 in place of iOS 27.0 plus a Duo-only iOS 27.1. Apple ships 27.2 as two runtimes, one for the iPhones and iPads and one for the iPhone Duo; `bun run sim` puts each device on the one that supports it, and `bun run sim disk` names any other iOS runtime as one to remove. The screen references are re-recorded on 27.2.
+- For people working on Harness: `bun run sim` now puts the shared iPad in Full Screen Apps (the state its screen references are recorded in) whenever it hands the iPad out, so a new iPad simulator no longer fails every iPad screen test with a safe-area mismatch.
+
 ### Fixed
 
 - Re-opening a done ticket whose worktree was removed no longer blocks with "Could not create worktree" when its branch (say `main`) is now checked out in the project folder. The ticket works right in the project folder instead, the same as a ticket that picked the folder's branch, and its Activity says so.
