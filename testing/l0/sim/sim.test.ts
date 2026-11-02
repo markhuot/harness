@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { deviceTypeFor, extraRuntimes, pinnedRuntime, type Runtime } from "../../../ios/Tools/sim";
+import { deviceTypeFor, ensureFullScreenApps, extraRuntimes, pinnedRuntime, type Runtime } from "../../../ios/Tools/sim";
 
 const type = (name: string) => ({ identifier: `id.${name}`, name });
 const runtime = (version: string, names: string[], identifier = `iOS.${version}`): Runtime => ({ identifier, version, isAvailable: true, supportedDeviceTypes: names.map(type) });
@@ -24,6 +24,17 @@ describe("simulator pool", () => {
   test("the duo kind picks the iPhone Duo device type and never falls back to another phone", () => {
     expect(deviceTypeFor(duo, "duo").name).toBe("iPhone Duo");
     expect(() => deviceTypeFor(main, "duo")).toThrow("no iPhone Duo device type");
+  });
+
+  test("an iPad in Windowed Apps is switched to Full Screen Apps and rebooted; one already in it is left alone", async () => {
+    const calls: string[][] = [];
+    const fake = (setting: string) => async (...args: string[]) => (calls.push(args), args[3] === "read" ? setting : "");
+    await ensureFullScreenApps("U", fake("1"), () => {});
+    expect(calls.map((c) => c.slice(0, 4).join(" "))).toEqual(["spawn U defaults read", "spawn U defaults write", "shutdown U", "boot U", "bootstatus U -b"]);
+    expect(calls[1]).toEqual(["spawn", "U", "defaults", "write", "com.apple.springboard", "SBMedusaMultitaskingEnabled", "-bool", "false"]);
+    calls.length = 0;
+    await ensureFullScreenApps("U", fake("0\n"), () => {});
+    expect(calls).toHaveLength(1);
   });
 
   test("only runtimes other than 27.2 are extras", () => {

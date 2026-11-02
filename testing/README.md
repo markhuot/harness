@@ -52,7 +52,9 @@ socket (`WorldSocket`) replaced. A request the world has no route for fails the 
 - Images are compared in `testing/ios/references/{iphone,ipad,duo}/` with a per-pixel channel tolerance
   and a budget of differing pixels (`ReferenceImages.swift`). They are pinned to iOS 27.2.
 - The iPad references are recorded with the simulator in **Settings > Multitasking & Gestures >
-  Full Screen Apps** (a fresh iPad simulator starts in Windowed Apps). The renderer checks the iPad's
+  Full Screen Apps** (a fresh iPad simulator starts in Windowed Apps). `bun run sim` puts
+  `harness-shared-ipad` in it each time it hands the iPad out (SpringBoard's
+  `SBMedusaMultitaskingEnabled` set to false, then a reboot). The renderer still checks the iPad's
   safe area (top 32, bottom 25 in portrait) before it draws and fails with the values it found
   instead of drawing every screen at another offset. Put the simulator back; don't re-record.
 - `--record` writes references. Nothing else does, and a missing reference fails the test.

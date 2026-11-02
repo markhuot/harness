@@ -353,10 +353,26 @@ export async function ensureDevice(name = SHARED_DEVICE, opts: EnsureOptions = {
         });
         await run("bootstatus", device.udid, "-b");
       }
+      if (opts.kind === "ipad") await ensureFullScreenApps(device.udid, run, log);
       return device.udid;
     },
     { dir: opts.lockDir, timeoutMs: 5 * 60_000 },
   );
+}
+
+/**
+ * Puts a booted iPad in Settings > Multitasking & Gestures > Full Screen Apps, the state the iPad
+ * screen references are recorded in (a new iPad simulator starts in Windowed Apps). SpringBoard reads
+ * the setting at boot, so a change reboots the simulator; an iPad already in it costs one read.
+ */
+export async function ensureFullScreenApps(udid: string, run: Simctl = simctl, log: (line: string) => void = (l) => console.error(l)): Promise<void> {
+  const current = await run("spawn", udid, "defaults", "read", "com.apple.springboard", "SBMedusaMultitaskingEnabled").catch(() => "");
+  if (current.trim() === "0") return;
+  log("switching the iPad to Full Screen Apps (rebooting it)");
+  await run("spawn", udid, "defaults", "write", "com.apple.springboard", "SBMedusaMultitaskingEnabled", "-bool", "false");
+  await run("shutdown", udid);
+  await run("boot", udid);
+  await run("bootstatus", udid, "-b");
 }
 
 /** The pinned runtime, asked of simctl once per `simctl` function: acquirePool polls devices every half second and the runtime doesn't change. */
