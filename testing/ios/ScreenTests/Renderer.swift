@@ -54,7 +54,7 @@ enum Renderer {
     struct SceneMismatch: Error, CustomStringConvertible {
         let found: String
         var description: String {
-            "the simulator isn't in the state the iPad references were recorded in: \(found); expected the iPad Pro 11-inch in portrait (834 x 1210), safe area top 32 and bottom 25 (Settings > Multitasking & Gestures > Full Screen Apps). Put it back and render again; re-recording would bake the shifted layout into the references."
+            "the simulator isn't in the state the iPad references were recorded in: \(found); expected the iPad Pro 11-inch in portrait (834 x 1210), safe area top 32 and bottom 25 (Settings > Multitasking & Gestures > Full Screen Apps). Put it back (`bun run sim ensure --ipad` does) and render again; re-recording would bake the shifted layout into the references."
         }
     }
 
