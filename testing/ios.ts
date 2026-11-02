@@ -24,7 +24,7 @@ const root = resolve(testing, "..");
 export const BUILD_DIR = join(testing, ".build");
 const DERIVED_DATA = join(BUILD_DIR, "dd");
 const STAMP = join(BUILD_DIR, "stamp.json");
-const PINNED_XCODE = "/Applications/Xcode-27.1.0.app/Contents/Developer";
+const PINNED_XCODE = "/Applications/Xcode-27.2.0.app/Contents/Developer";
 
 export interface IosOptions {
   devices: ("iphone" | "ipad" | "duo")[];
@@ -141,7 +141,7 @@ export async function ios(argv: string[]): Promise<number> {
     return 1;
   }
   if (!existsSync(join(env().DEVELOPER_DIR!, "Platforms/iPhoneSimulator.platform"))) {
-    console.error(`✗ ios: Xcode 27.1 isn't at ${env().DEVELOPER_DIR}; this suite runs on the iOS 27.0 runtime only (CLAUDE.md → Simulators). Don't install another.`);
+    console.error(`✗ ios: Xcode 27.2 isn't at ${env().DEVELOPER_DIR}; this suite runs on iOS 27.2 only (CLAUDE.md → Simulators). Don't install another.`);
     return 1;
   }
 

@@ -50,8 +50,7 @@ through the real `HarnessClient` and `BoardStore` with only the transport (`Worl
 socket (`WorldSocket`) replaced. A request the world has no route for fails the test.
 
 - Images are compared in `testing/ios/references/{iphone,ipad,duo}/` with a per-pixel channel tolerance
-  and a budget of differing pixels (`ReferenceImages.swift`). They are pinned to the iOS 27.0
-  runtime (27.1 for the iPhone Duo).
+  and a budget of differing pixels (`ReferenceImages.swift`). They are pinned to iOS 27.2.
 - The iPad references are recorded with the simulator in **Settings > Multitasking & Gestures >
   Full Screen Apps** (a fresh iPad simulator starts in Windowed Apps). The renderer checks the iPad's
   safe area (top 32, bottom 25 in portrait) before it draws and fails with the values it found

@@ -1,5 +1,5 @@
 // A dev loop for one ticket's work on the native app: the shared simulator (harness-shared, iOS
-// 27.0), a throwaway daemon of its own with a little data on it, the app built, installed fresh and
+// 27.2), a throwaway daemon of its own with a little data on it, the app built, installed fresh and
 // paired, then deep links and screenshots on request. It holds the simulator's lock from install to
 // the last screenshot, so parallel agents take turns on the one device (CLAUDE.md → Simulators).
 //
@@ -27,7 +27,7 @@ const DEV_BUNDLE = "com.markhuot.harness.dev";
 export const USAGE = `Usage: bun ios/Tools/dev-sim.ts [options]
        bun ios/Tools/dev-sim.ts --seed-only [--keep]
 
-Boots the shared simulator (harness-shared on iOS 27.0, created if missing), starts a throwaway
+Boots the shared simulator (harness-shared on iOS 27.2, created if missing), starts a throwaway
 daemon with a seeded project, builds the native app with \`bun ios/Tools/build.ts sim\`, then takes
 the simulator's lock, installs the app fresh (no saved servers, keychain reset) and pairs it. The
 lock is held until the last link and screenshot are done; under \`bun run sim with-lock\` it's
@@ -37,7 +37,7 @@ run that doesn't reach the board, or a link that doesn't change the screen, fail
 it saw instead of saving screenshots of the wrong screen.
 
   --sim <name>     the shared simulator (default harness-shared); never create your own. Any
-                   other name must be an existing iOS 27.0 simulator
+                   other name must be an existing iOS 27.2 simulator
   --no-build       install the app that's already built (${DEFAULT_APP.replace(REPO + "/", "")})
   --app <path>     install this Harness.app instead (implies --no-build)
   --link <url>     after pairing, open this link in the app (harness://ticket/GREET-1?tab=details);
@@ -146,7 +146,7 @@ const simctl = (...a: string[]) => sh(["xcrun", "simctl", ...a]);
 // ------------------------------------------------------------------ simulator
 
 /**
- * The simulator's UDID, booted. Only harness-shared is ever created (by ensureDevice, on iOS 27.0);
+ * The simulator's UDID, booted. Only harness-shared is ever created (by ensureDevice, on iOS 27.2);
  * any other name has to exist already.
  */
 async function simulatorFor(name: string): Promise<string> {

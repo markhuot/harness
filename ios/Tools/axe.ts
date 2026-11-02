@@ -1,4 +1,4 @@
-// Reading and tapping the simulator's screen through AXe (brew install cameroncooke/axe/axe, 1.8 or newer: older ones can't tap in Xcode 27.1's simulators), for
+// Reading and tapping the simulator's screen through AXe (brew install cameroncooke/axe/axe, 1.8 or newer: older ones can't tap in the simulators of Xcode 27.1 and later), for
 // dev-sim.ts: the same accessibility-tree approach as the walkthrough, so a dev loop
 // knows what's on screen instead of sleeping and hoping.
 /** AXe's describe-ui JSON → every AXLabel, as it reads on screen (AXe escapes "/" as "\/"). */
@@ -36,7 +36,7 @@ export function screenKey(labels: string[]): string {
  * The middle of the part of the element labelled `label` that shows on screen (its AXFrame reads
  * "{{x, y}, {w, h}}"), or null when it isn't: absent, or laid out wholly beyond the screen's frame.
  * A chip half scrolled off the edge is tapped on its visible half, which AXe's own label lookup (the
- * middle of the whole chip) misses. Taps use `--tap-style physical`: under Xcode 27.1 AXe's default
+ * middle of the whole chip) misses. Taps use `--tap-style physical`: under Xcode 27.1 and later AXe's default
  * tap never lands.
  */
 export function labelCenter(describeUi: string, label: string): { x: number; y: number } | null {

@@ -9,7 +9,7 @@ import { dirname, join } from "node:path";
 import { until } from "./wait";
 
 export const BUNDLE_ID = "com.markhuot.harness";
-export const PINNED_XCODE = "/Applications/Xcode-27.1.0.app/Contents/Developer";
+export const PINNED_XCODE = "/Applications/Xcode-27.2.0.app/Contents/Developer";
 
 /** AXe's describe-ui JSON → every AXLabel, as it reads on screen (AXe escapes "/" as "\/"). */
 export function parseLabels(describeUi: string): string[] {
@@ -50,7 +50,7 @@ export function savedAfter(defaultsRead: string, sinceSeconds: number): boolean 
  * "{{x, y}, {w, h}}"), or null when it isn't: absent, or laid out wholly beyond the screen's frame,
  * like a side-by-side column's header scrolled out of view. A chip half scrolled off the edge is
  * tapped on its visible half, which AXe's own label lookup (the middle of the whole chip) misses.
- * Taps use `--tap-style physical`: under Xcode 27.1 AXe's default tap never lands.
+ * Taps use `--tap-style physical`: under Xcode 27.1 and later AXe's default tap never lands.
  */
 export function labelCenter(describeUi: string, label: string): { x: number; y: number } | null {
   let tree: unknown;

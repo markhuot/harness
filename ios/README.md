@@ -7,10 +7,10 @@ The iPhone and iPad app, in SwiftUI (version 2.0, which replaced the 1.x React N
 
 Disk is tight and several tickets build at once. Follow [ARCHITECTURE.md § Disk budget](ARCHITECTURE.md#disk-budget-parallel-agents) (one simulator, `-derivedDataPath ios/build/dd`, clean up when done).
 
-Every command below needs Xcode 27.1. When `xcode-select` points at the Command Line Tools, set:
+Every command below needs Xcode 27.2. When `xcode-select` points at the Command Line Tools, set:
 
 ```sh
-export DEVELOPER_DIR=/Applications/Xcode-27.1.0.app/Contents/Developer
+export DEVELOPER_DIR=/Applications/Xcode-27.2.0.app/Contents/Developer
 ```
 
 ## Generate the Xcode project
@@ -117,7 +117,7 @@ CLAUDE.md → Simulators and ARCHITECTURE.md → Disk budget):
 bun ios/Tools/dev-sim.ts [--no-build] [--link harness://ticket/GREET-1?tab=details]… [--shot details] [--keep]
 ```
 
-It boots `harness-shared` (an iPhone 18 Pro on iOS 27.0, created the first time it's needed; it
+It boots `harness-shared` (an iPhone 18 Pro on iOS 27.2, created the first time it's needed; it
 never downloads a runtime). `--sim <name>` picks another simulator,
 which has to exist already. It starts a throwaway daemon (temp `HARNESS_HOME`, a free
 port, the dummy driver) and seeds the `GREET` project, a git repo with worktrees, with GREET-1 in
@@ -143,7 +143,7 @@ simulator stops at. Pairing counts only once the board's column chips ("Planning
 link only once the screen changes. Otherwise the run exits 1 with the labels it saw, before any
 screenshot, and it cancels a leftover prompt first, so a stale pair link can't be accepted later.
 To read the screen yourself, `axe describe-ui --udid <udid>` lists the AXLabels. It needs AXe 1.8 or
-newer (`brew upgrade cameroncooke/axe/axe`): 1.5 reads the screen under Xcode 27.1 but its taps
+newer (`brew upgrade cameroncooke/axe/axe`): 1.5 reads the screen under Xcode 27.1 and later but its taps
 never land, and so does 1.8's default tap style, so taps use `--tap-style physical`.
 
 `--seed-only [--keep]` only starts and seeds the daemon and prints what it seeded, without a

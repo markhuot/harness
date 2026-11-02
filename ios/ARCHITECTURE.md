@@ -1052,7 +1052,7 @@ bun run testing ios --out=/tmp/shots         # also write every render
   frames to stop changing and the transport to have nothing in flight, never for a fixed delay.
   Spinners that repeat forever are frozen where they stand so a busy ticket can still settle.
 - **References:** `testing/ios/references/<iphone|ipad|duo>/`, committed. They depend on the
-  simulator's iOS runtime (27.0, or 27.1 for the iPhone Duo) and the device size.
+  simulator's iOS runtime (27.2) and the device size.
 - **A diff:** a failure writes `<name>.actual.png` and `<name>.diff.png` to a temp directory and
   prints the paths. A pixel differs when a channel is more than the tolerance off, and a budget of
   differing pixels is allowed. A missing reference fails and says how to record it.
@@ -1063,7 +1063,7 @@ bun run testing ios --out=/tmp/shots         # also write every render
 Several tickets build at once on a Mac with little free disk. CLAUDE.md → Simulators has the rules;
 for this app they come down to:
 
-- Test only on iOS 27.0 (iPhone, iPad) and iOS 27.1 (the iPhone Duo). Never download a runtime or create a simulator.
+- Test only on iOS 27.2 (the iPhone Duo on its own 27.2 runtime). Never download a runtime or create a simulator.
 - Use the shared `harness-shared` simulator through `bun run sim with-lock -- …`. dev-sim,
   `testing ios` and `testing walk` take the lock themselves.
 - Build with `-derivedDataPath ios/build/dd` inside your own worktree and nowhere else.

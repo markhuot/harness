@@ -1,15 +1,15 @@
 // The pool of shared iOS simulators that agents and scripts test on, and the locks that take turns
-// on them. Every simulator runs on the iOS 27.0 runtime: this never picks another runtime and never
-// downloads one. See CLAUDE.md → Simulators.
+// on them. Every simulator runs on iOS 27.2: this never picks another version and never downloads a
+// runtime. See CLAUDE.md → Simulators.
 //
-//   bun ios/Tools/sim.ts ensure [--all] [--device=name] [--ipad|--duo]  find or create the device (iOS 27.0), boot it, print its UDID
+//   bun ios/Tools/sim.ts ensure [--all] [--device=name] [--ipad|--duo]  find or create the device (iOS 27.2), boot it, print its UDID
 //                                                                 (--all: every pool slot the disk has room for)
 //   bun ios/Tools/sim.ts with-lock [--device=name] [--ipad|--duo] [--timeout=minutes] -- <command…>
 //                                                                 wait for a free slot, run the command with SIM_UDID set, let go
 //   bun ios/Tools/sim.ts shutdown [--device=name]             shut down the slots nobody holds
 //   bun ios/Tools/sim.ts status                               each slot and who holds its lock
 //   bun ios/Tools/sim.ts disk [--min=GiB]                     free disk space; exits 1 below the minimum (default 5), and
-//                                                                 names installed iOS runtimes other than 27.0 and 27.1
+//                                                                 names installed iOS runtimes other than 27.2
 //
 // The iPhone pool is "harness-shared", "harness-shared-2", … (HARNESS_SIM_POOL_SIZE slots, default 2;
 // iPhone 18 Pro each); with-lock takes the first free one. --device names one simulator instead, and
@@ -46,18 +46,18 @@ export function poolSize(env: Record<string, string | undefined> = process.env):
 export function poolSlots(size = poolSize()): string[] {
   return Array.from({ length: size }, (_, i) => (i === 0 ? SHARED_DEVICE : `${SHARED_DEVICE}-${i + 1}`));
 }
-/** The only iOS runtime simulators run on. */
-export const IOS_RUNTIME = "27.0";
-/** The iPhone Duo's runtime: the iOS 27.1 runtime supports no other device (no iPhone 18 Pro, no iPad), so the Duo is the one simulator on it. */
-export const DUO_RUNTIME = "27.1";
-/** The runtime a kind of simulator runs on. */
-export const runtimeVersionFor = (kind: DeviceKind) => (kind === "duo" ? DUO_RUNTIME : IOS_RUNTIME);
-export const XCODE_27_DEVELOPER_DIR = "/Applications/Xcode-27.1.0.app/Contents/Developer";
-/** The Xcode every tool runs against: the caller's DEVELOPER_DIR, else Xcode 27.1 (xcode-select points at the Command Line Tools here). */
+/**
+ * The only iOS version simulators run on. Apple ships it as two runtimes: iOS-27-2 for the iPhones and
+ * iPads, and iOS-27-2-iPhone19-4 for the iPhone Duo alone, so each kind of device runs on whichever
+ * 27.2 runtime supports it.
+ */
+export const IOS_RUNTIME = "27.2";
+export const XCODE_27_DEVELOPER_DIR = "/Applications/Xcode-27.2.0.app/Contents/Developer";
+/** The Xcode every tool runs against: the caller's DEVELOPER_DIR, else Xcode 27.2 (xcode-select points at the Command Line Tools here). */
 export function xcodeDeveloperDir(env: Record<string, string | undefined> = process.env): string {
   return env.DEVELOPER_DIR || XCODE_27_DEVELOPER_DIR;
 }
-/** Resolve it and write it into `env`, so every child process spawned without its own env inherits Xcode 27.1. */
+/** Resolve it and write it into `env`, so every child process spawned without its own env inherits Xcode 27.2. */
 export function exportDeveloperDir(env: Record<string, string | undefined> = process.env): string {
   return (env.DEVELOPER_DIR = xcodeDeveloperDir(env));
 }
@@ -74,17 +74,30 @@ export interface DeviceType { identifier: string; name: string }
 export interface Runtime { identifier: string; version: string; name?: string; platform?: string; isAvailable: boolean; supportedDeviceTypes?: DeviceType[] }
 export interface Device { udid: string; name: string; state: string; isAvailable: boolean }
 
-/** The installed, available iOS 27.0 runtime (27.0.x counts). Throws, naming what is installed, when there isn't one. */
-export function pinnedRuntime(runtimes: Runtime[], version = IOS_RUNTIME): Runtime {
+/**
+ * The installed, available iOS 27.2 runtime (27.2.x counts) that has the `kind`'s device type. Throws,
+ * naming what is installed, when there isn't one.
+ */
+export function pinnedRuntime(runtimes: Runtime[], kind: DeviceKind = "iphone", version = IOS_RUNTIME): Runtime {
   const ios = runtimes.filter((r) => (r.platform ?? r.identifier).includes("iOS"));
-  const found = ios.find((r) => r.isAvailable && (r.version === version || r.version.startsWith(`${version}.`)));
+  const found = ios.find((r) => r.isAvailable && (r.version === version || r.version.startsWith(`${version}.`)) && hasDeviceType(r, kind));
   if (found) return found;
-  const have = ios.map((r) => `${r.version}${r.isAvailable ? "" : " (unavailable)"}`).join(", ") || "none";
+  const have = ios.map((r) => `${r.version} (${r.identifier}${r.isAvailable ? "" : ", unavailable"})`).join(", ") || "none";
   throw new Error(
-    `the iOS ${version} simulator runtime isn't installed (installed iOS runtimes: ${have}). ` +
-      `Simulators only run on iOS ${version}; don't download or pick another runtime. Ask the human to install it with Xcode 27.1.`,
+    `no iOS ${version} simulator runtime with an ${deviceLabel(kind)} is installed (installed iOS runtimes: ${have}). ` +
+      `Simulators only run on iOS ${version}; don't download or pick another runtime. Ask the human to install it with Xcode 27.2.`,
   );
 }
+
+const deviceLabel = (kind: DeviceKind) => (kind === "ipad" ? "iPad" : kind === "duo" ? "iPhone Duo" : "iPhone");
+const hasDeviceType = (runtime: Runtime, kind: DeviceKind) => {
+  try {
+    deviceTypeFor(runtime, kind);
+    return true;
+  } catch {
+    return false;
+  }
+};
 
 /** The device type to create on `runtime`: an iPhone 18 Pro (the iPhone screen tests and the walkthrough are laid out for it) or an iPad Pro 11-inch, else any iPhone or iPad. */
 export function deviceTypeFor(runtime: Runtime, kind: DeviceKind): DeviceType {
@@ -94,17 +107,17 @@ export function deviceTypeFor(runtime: Runtime, kind: DeviceKind): DeviceType {
       ? types.find((t) => /^iPad Pro 11-inch \(M\d+\)$/.test(t.name)) ?? types.find((t) => t.name.startsWith("iPad"))
       : kind === "duo"
         ? types.find((t) => t.name === "iPhone Duo")
-        : types.find((t) => t.name === "iPhone 18 Pro") ?? types.find((t) => t.name.startsWith("iPhone"));
-  if (!found) throw new Error(`iOS ${runtime.version} has no ${kind === "ipad" ? "iPad" : kind === "duo" ? "iPhone Duo" : "iPhone"} device type`);
+        : types.find((t) => t.name === "iPhone 18 Pro") ?? types.find((t) => t.name.startsWith("iPhone") && t.name !== "iPhone Duo");
+  if (!found) throw new Error(`iOS ${runtime.version} has no ${deviceLabel(kind)} device type`);
   return found;
 }
 
 /** A simulator runtime's disk image, as `simctl runtime list -j` reports it. */
 export interface RuntimeImage { identifier: string; version: string; platformIdentifier?: string; sizeBytes?: number }
 
-/** Installed iOS runtimes other than 27.0 and 27.1. Nothing runs on them, and each holds about 8 GB of disk. */
-export function extraRuntimes(images: RuntimeImage[], versions = [IOS_RUNTIME, DUO_RUNTIME]): RuntimeImage[] {
-  return images.filter((r) => r.platformIdentifier === "com.apple.platform.iphonesimulator" && !versions.some((v) => r.version === v || r.version.startsWith(`${v}.`)));
+/** Installed iOS runtimes other than 27.2. Nothing runs on them, and each holds about 8 GB of disk. */
+export function extraRuntimes(images: RuntimeImage[], version = IOS_RUNTIME): RuntimeImage[] {
+  return images.filter((r) => r.platformIdentifier === "com.apple.platform.iphonesimulator" && r.version !== version && !r.version.startsWith(`${version}.`));
 }
 
 // ---------------------------------------------------------------- locks
@@ -307,7 +320,7 @@ const CREATE_LOCK = "sim-create";
 export interface EnsureOptions { kind?: DeviceKind; simctl?: Simctl; lockDir?: string; freeGiB?: () => number; log?: (line: string) => void }
 
 /**
- * Finds the device by name on the iOS 27.0 runtime, creating it if it doesn't exist, boots it and
+ * Finds the device by name on its kind's iOS 27.2 runtime, creating it if it doesn't exist, boots it and
  * returns its UDID. Callers that run at once create one device between them: finding and creating
  * happen under the device's ".ensure" lock. A device by that name on another runtime is an error,
  * not a reason to make a second one.
@@ -318,7 +331,7 @@ export async function ensureDevice(name = SHARED_DEVICE, opts: EnsureOptions = {
   return withLock(
     `${name}.ensure`,
     async () => {
-      const runtime = pinnedRuntime((JSON.parse(await run("list", "runtimes", "--json")) as { runtimes: Runtime[] }).runtimes, runtimeVersionFor(opts.kind ?? "iphone"));
+      const runtime = pinnedRuntime((JSON.parse(await run("list", "runtimes", "--json")) as { runtimes: Runtime[] }).runtimes, opts.kind ?? "iphone");
       const devices = (JSON.parse(await run("list", "devices", "--json")) as { devices: Record<string, Device[]> }).devices;
       let device = (devices[runtime.identifier] ?? []).find((d) => d.isAvailable && d.name === name);
       if (!device) {
@@ -349,21 +362,21 @@ export async function ensureDevice(name = SHARED_DEVICE, opts: EnsureOptions = {
 /** The pinned runtime, asked of simctl once per `simctl` function: acquirePool polls devices every half second and the runtime doesn't change. */
 const runtimes = new WeakMap<Simctl, Map<string, Runtime>>();
 
-/** The available devices on the iOS 27.0 runtime (or the `version` runtime). */
-async function listDevices(run: Simctl = simctl, version = IOS_RUNTIME): Promise<Device[]> {
+/** The available devices on the iOS 27.2 runtime of the iPhones (or of the `kind`). */
+async function listDevices(run: Simctl = simctl, kind: DeviceKind = "iphone"): Promise<Device[]> {
   const cache = runtimes.get(run) ?? runtimes.set(run, new Map()).get(run)!;
-  let runtime = cache.get(version);
+  let runtime = cache.get(kind);
   if (!runtime) {
-    runtime = pinnedRuntime((JSON.parse(await run("list", "runtimes", "--json")) as { runtimes: Runtime[] }).runtimes, version);
-    cache.set(version, runtime);
+    runtime = pinnedRuntime((JSON.parse(await run("list", "runtimes", "--json")) as { runtimes: Runtime[] }).runtimes, kind);
+    cache.set(kind, runtime);
   }
   const devices = (JSON.parse(await run("list", "devices", "--json")) as { devices: Record<string, Device[]> }).devices;
   return (devices[runtime.identifier] ?? []).filter((d) => d.isAvailable);
 }
 
-/** The device's UDID and state on its runtime (27.1 for the Duo, 27.0 for the rest), or null when it doesn't exist. */
+/** The device's UDID and state on its runtime (the Duo's for the Duo, the iPhones' for the rest), or null when it doesn't exist. */
 async function findDevice(name: string, run: Simctl = simctl): Promise<Device | null> {
-  return (await listDevices(run, name === SHARED_DUO_DEVICE ? DUO_RUNTIME : IOS_RUNTIME)).find((d) => d.name === name) ?? null;
+  return (await listDevices(run, name === SHARED_DUO_DEVICE ? "duo" : "iphone")).find((d) => d.name === name) ?? null;
 }
 
 // ---------------------------------------------------------------- the pool
@@ -395,7 +408,7 @@ export interface PoolOptions extends AcquireOptions {
   slots?: string[];
   /** Slots to take first when free (a caller's preferred ones). */
   prefer?: string[];
-  /** The devices that exist on the iOS 27.0 runtime. */
+  /** The devices that exist on the iPhones' iOS 27.2 runtime. */
   devices?: () => Promise<Device[]>;
   freeGiB?: () => number;
   minFreeGiB?: number;
