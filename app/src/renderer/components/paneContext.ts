@@ -6,7 +6,7 @@ import { createContext, useCallback, useContext } from "react";
 import { ALL_SCOPE, type TicketTab } from "@harness/shared/state";
 import { replaceContent, updatePanes } from "../state/panes";
 import { boardRoute, paneScopeOf } from "../state/route";
-import { useOptionalStore } from "../state/store";
+import { useLinkStore } from "../state/store";
 
 export interface PaneInfo {
   paneId: string;
@@ -50,7 +50,8 @@ export function useOpenTicket(): (key: string, tab?: TicketTab) => void {
   const pane = usePane();
   const paneId = pane?.paneId ?? null;
   const scope = usePaneScope();
-  const store = useOptionalStore();
+  // The link slice, not the whole store: this runs in every Markdown, which shouldn't re-render per store event.
+  const store = useLinkStore();
   const navigate = store?.navigate;
   const board = (store && paneScopeOf(store.route)) ?? ALL_SCOPE;
   return useCallback(

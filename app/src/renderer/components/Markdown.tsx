@@ -30,9 +30,10 @@ import {
   type EditBlock,
   type InlineToken,
   type Media,
+  type State,
 } from "@harness/shared/state";
 import type { FileLinkContext } from "../state/fileOpen";
-import { useOptionalStore } from "../state/store";
+import { useLinkStore } from "../state/store";
 import { mediaAttachment } from "../state/promptAttachmentFiles";
 import { Lightbox, Missing } from "./Attachments";
 import { DiffCodeBlock, FencedCode } from "./Code";
@@ -64,7 +65,7 @@ export function FileLinkScope({ ticketKey, projectId, file, children }: FileLink
 }
 
 function MdLink({ url, children }: { url: string; children: ReactNode }) {
-  const store = useOptionalStore();
+  const store = useLinkStore();
   const { file: from, ...ctx } = useContext(FileLinkScopeContext);
   const file = useMemo(() => parseFileLink(from ? resolveFileRelative(from, url) : url), [url, from]);
   const pane = useContext(PaneContext);
@@ -167,12 +168,20 @@ function withBreaks(text: string, tickets?: TicketLinks) {
  * Ticket keys link to the ticket (opening it the way a link in this pane does) when the store can
  * resolve them. Without a store (Markdown rendered on its own) they stay text.
  */
+/**
+ * Ticket links for a piece of markdown. Stable until the slices it reads change, so a streamed
+ * token or any other store event doesn't re-render every block of every Markdown on screen.
+ */
 function useTicketLinks(): TicketLinks | undefined {
-  const store = useOptionalStore();
+  const store = useLinkStore();
   const openTicket = useOpenTicket();
-  if (!store) return undefined;
-  const { state } = store;
-  return { title: (key) => (ticketLinkable(state, key) ? (ticketByKey(state, key)?.title ?? "") : null), open: (key) => openTicket(key) };
+  const { tickets, keyAliases, missingKeys, projects } = store ?? {};
+  return useMemo(() => {
+    if (!tickets || !keyAliases || !missingKeys || !projects) return undefined;
+    // ticketLinkable and ticketByKey read only these slices of the state.
+    const slice = { tickets, keyAliases, missingKeys, projects } as Pick<State, "tickets" | "keyAliases" | "missingKeys" | "projects"> as State;
+    return { title: (key) => (ticketLinkable(slice, key) ? (ticketByKey(slice, key)?.title ?? "") : null), open: (key) => openTicket(key) };
+  }, [tickets, keyAliases, missingKeys, projects, openTicket]);
 }
 
 /** The images in a piece of markdown, for the lightbox: what kind each turned out to be, and opening one. */
@@ -200,7 +209,7 @@ const knownKind = (known: readonly Attachment[] | undefined, id: string): Attach
  * the caption beside it already shows it).
  */
 function MdMedia({ media, figure, captioned }: { media: Media; figure?: boolean; captioned?: boolean }) {
-  const store = useOptionalStore();
+  const store = useLinkStore();
   const scope = useContext(MediaScopeContext);
   const [own, setOwn] = useState<AttachmentKind | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
@@ -372,11 +381,11 @@ export function Markdown({ text, className }: { text: string; className?: string
   const blocks = useMemo(() => parseBlocks(text), [text]);
   const media = useMemo(() => mediaIn(blocks), [blocks]);
   const tickets = useTicketLinks();
+  // The same elements while the text and links hold, so React skips the blocks on a re-render.
+  const body = useMemo(() => blocks.map((b, i) => <MdBlock key={i} block={b} tickets={tickets} />), [blocks, tickets]);
   return (
     <MarkdownFrame media={media} className={className}>
-      {blocks.map((b, i) => (
-        <MdBlock key={i} block={b} tickets={tickets} />
-      ))}
+      {body}
     </MarkdownFrame>
   );
 }
@@ -507,11 +516,10 @@ export function MarkdownDiff({ diff, before, after, className }: { diff: DiffBlo
     return [...mediaIn(parseBlocks(after)), ...mediaIn(parseBlocks(before))].filter((m) => !seen.has(m.id) && seen.add(m.id));
   }, [before, after]);
   const tickets = useTicketLinks();
+  const body = useMemo(() => diff.map((d, i) => <MdDiffBlock key={i} diff={d} tickets={tickets} />), [diff, tickets]);
   return (
     <MarkdownFrame media={media} className={`md-diff ${className ?? ""}`}>
-      {diff.map((d, i) => (
-        <MdDiffBlock key={i} diff={d} tickets={tickets} />
-      ))}
+      {body}
     </MarkdownFrame>
   );
 }

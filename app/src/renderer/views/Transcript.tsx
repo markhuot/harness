@@ -1,7 +1,7 @@
-import { memo, useEffect, useMemo, useState, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Attachment, Subagent, ToolResultContent, TranscriptEntry } from "@harness/shared";
 import { useStore } from "../state/store";
-import { formatMaybeJson, groupTranscript, isTask, itemRun, liveDelta, runHeader, splitRunSections, shortToolName, SUBAGENT_STATUS_LABEL, subagentById, subagentOpenLabel, subagentsOf, subagentTitle, toolElapsed, toolIcon, toolLabel, toolOutputMedia, transcriptKey } from "@harness/shared/state";
+import { formatMaybeJson, groupTranscript, isTask, itemRun, liveDelta, runHeader, sameItems, splitRunSections, type TranscriptItem, shortToolName, SUBAGENT_STATUS_LABEL, subagentById, subagentOpenLabel, subagentsOf, subagentTitle, toolElapsed, toolIcon, toolLabel, toolOutputMedia, transcriptKey } from "@harness/shared/state";
 import { Lightbox } from "../components/Attachments";
 import { Icon } from "../components/Icon";
 import { Markdown } from "../components/Markdown";
@@ -56,6 +56,11 @@ export function Transcript({
 
   const sections = useMemo(() => splitRunSections(items, itemRun), [items]);
 
+  // The pane passes a new callback on every render; a stable one lets the rows skip re-rendering.
+  const openRef = useRef(onOpenSubagent);
+  openRef.current = onOpenSubagent;
+  const openAgent = useCallback((id: string) => openRef.current?.(id), []);
+
   // Stick to the bottom while the user is there; leave them alone when they scroll up.
   const scroller = useStickToBottom<HTMLDivElement>();
 
@@ -106,34 +111,42 @@ export function Transcript({
             {emptyHint}
           </div>
         )}
-        {sections.map((section, i) => {
-          const last = i === sections.length - 1;
-          const rows = section.rows.map((item) =>
-            item.kind === "tool" ? (
-              <ToolRow
-                key={item.call.id}
-                call={item.call}
-                result={item.result}
-                agent={onOpenSubagent ? (subagents?.find((a) => a.id === item.call.content.callId) ?? null) : null}
-                onOpenAgent={onOpenSubagent}
-              />
-            ) : (
-              <EntryRow key={item.entry.id} entry={item.entry} who={subagentId ? "Sub-agent" : "Agent"} />
-            ),
-          );
-          return (
-            <section key={i} className="t-run" data-run={section.runId ?? undefined}>
-              {section.runId && <RunHeader runId={section.runId} startText={section.startText} firstAt={section.firstAt} />}
-              {rows}
-              {last && streaming}
-            </section>
-          );
-        })}
+        {sections.map((section, i) => (
+          <section key={i} className="t-run" data-run={section.runId ?? undefined}>
+            {section.runId && <RunHeader runId={section.runId} startText={section.startText} firstAt={section.firstAt} />}
+            <RunRows rows={section.rows} subagents={subagents} who={subagentId ? "Sub-agent" : "Agent"} onOpenAgent={onOpenSubagent ? openAgent : undefined} />
+            {i === sections.length - 1 && streaming}
+          </section>
+        ))}
         {sections.length === 0 && streaming}
       </div>
     </div>
   );
 }
+
+/**
+ * A run's rows. Every streamed token and every store event re-renders the transcript, so this
+ * skips them unless its own rows (by entry identity) or the sub-agents they link to changed: a
+ * long transcript costs nothing per token.
+ */
+const RunRows = memo(
+  function RunRows({ rows, subagents, who, onOpenAgent }: { rows: TranscriptItem[]; subagents: Subagent[] | null; who: string; onOpenAgent?: (id: string) => void }) {
+    return rows.map((item) =>
+      item.kind === "tool" ? (
+        <ToolRow
+          key={item.call.id}
+          call={item.call}
+          result={item.result}
+          agent={onOpenAgent ? (subagents?.find((a) => a.id === item.call.content.callId) ?? null) : null}
+          onOpenAgent={onOpenAgent}
+        />
+      ) : (
+        <EntryRow key={item.entry.id} entry={item.entry} who={who} />
+      ),
+    );
+  },
+  (a, b) => a.subagents === b.subagents && a.who === b.who && a.onOpenAgent === b.onOpenAgent && sameItems(a.rows, b.rows),
+);
 
 /** A run's sticky header: "Work • Claude Code, Opus 5.5" with its start time. */
 function RunHeader({ runId, startText, firstAt }: { runId: string; startText: string | null; firstAt: number | null }) {

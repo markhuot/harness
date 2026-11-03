@@ -11,6 +11,7 @@ import {
   formatDuration,
   formatMaybeJson,
   groupTranscript,
+  sameItems,
   newSessionPlaceholder,
   normalizeUrl,
   permissionModeLabel,
@@ -216,6 +217,28 @@ describe("groupTranscript", () => {
   test("a call with no result has none", () => {
     const [item] = groupTranscript([entry(1, { type: "tool_call", callId: "c", name: "Bash", input: {} })]);
     expect(item!.kind === "tool" && (item as Extract<TranscriptItem, { kind: "tool" }>).result).toBeUndefined();
+  });
+});
+
+describe("sameItems", () => {
+  const call = entry(1, { type: "tool_call", callId: "c", name: "Bash", input: {} });
+  const text = entry(2, { type: "text", text: "hi" });
+  const result = entry(3, { type: "tool_result", callId: "c", name: "Bash", output: [], isError: false });
+  test("regrouping the same entries gives new items that are still the same rows", () => {
+    const before = groupTranscript([call, text]);
+    const after = groupTranscript([call, text]);
+    expect(after[0]).not.toBe(before[0]);
+    expect(sameItems(before, after)).toBe(true);
+  });
+  test("a call's result arriving changes its row", () => {
+    expect(sameItems(groupTranscript([call, text]), groupTranscript([call, text, result]))).toBe(false);
+  });
+  test("an entry replaced by id (a new object) changes its row", () => {
+    expect(sameItems(groupTranscript([call, text]), groupTranscript([call, { ...text }]))).toBe(false);
+  });
+  test("a row added or a different kind of row in its place is a change", () => {
+    expect(sameItems(groupTranscript([text]), groupTranscript([text, call]))).toBe(false);
+    expect(sameItems(groupTranscript([text]), groupTranscript([call]))).toBe(false);
   });
 });
 

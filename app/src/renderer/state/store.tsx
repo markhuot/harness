@@ -151,6 +151,28 @@ export function useStore(): Store {
 /** The store, or null outside the provider (for pieces also rendered standalone, like Markdown). */
 export const useOptionalStore = (): Store | null => useContext(Ctx);
 
+/**
+ * What Markdown's links and media need: the tickets and projects to resolve a ticket key, the route
+ * to open it, files to open and the client for attachment URLs. Its own context, so every Markdown
+ * on screen doesn't re-render on every store event, a streamed token included, the way a
+ * useStore() reader does.
+ */
+export interface LinkStore {
+  tickets: State["tickets"];
+  keyAliases: State["keyAliases"];
+  missingKeys: State["missingKeys"];
+  projects: State["projects"];
+  route: Route;
+  navigate: (r: Route) => void;
+  client: HarnessClient;
+  openFile: Store["openFile"];
+}
+
+const LinkCtx = createContext<LinkStore | null>(null);
+
+/** The link slice of the store, or null outside the provider. */
+export const useLinkStore = (): LinkStore | null => useContext(LinkCtx);
+
 /** Arriving at a board link to a ticket opens it in a pane of that board (or focuses the pane it's already in). */
 function openFromRoute(r: Route, chiefScope: (key: string) => string | null) {
   if (r.view !== "board" || !r.ticketKey) return;
@@ -650,7 +672,13 @@ export function StoreProvider({
     }),
     [state, client, socket, onEvent, epoch, route, navigate, refresh, toast, reconnect, boardProjectId, boardScope, loadMoreDone, setSearch, loadMoreSearch, serviceCode, serviceStale, serviceDeferred, serviceDownSince, retryService, restartService, openTerminal, terminals, onTerminalMessage, showTerminal, endTerminal, openCompose, openFile],
   );
-  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+  const { tickets, keyAliases, missingKeys, projects } = state;
+  const links = useMemo<LinkStore>(() => ({ tickets, keyAliases, missingKeys, projects, route, navigate, client, openFile }), [tickets, keyAliases, missingKeys, projects, route, navigate, client, openFile]);
+  return (
+    <Ctx.Provider value={value}>
+      <LinkCtx.Provider value={links}>{children}</LinkCtx.Provider>
+    </Ctx.Provider>
+  );
 }
 
 /** Wrap a mutation: surfaces errors as a toast, returns undefined on failure. */

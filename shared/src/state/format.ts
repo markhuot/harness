@@ -221,6 +221,26 @@ export function groupTranscript(entries: TranscriptEntry[]): TranscriptItem[] {
   return items;
 }
 
+/**
+ * Whether two groupings show the same rows: the same entries, calls and results, in order. Every
+ * append regroups the whole transcript into new item objects, so a run whose rows didn't change
+ * is found by its entries' identities rather than its items'.
+ */
+export function sameItems(a: readonly TranscriptItem[], b: readonly TranscriptItem[]): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i]!;
+    const y = b[i]!;
+    if (x.kind === "tool" && y.kind === "tool") {
+      if (x.call !== y.call || x.result !== y.result) return false;
+    } else if (x.kind === "entry" && y.kind === "entry") {
+      if (x.entry !== y.entry) return false;
+    } else return false;
+  }
+  return true;
+}
+
 /** One-line preview of a tool input, e.g. the bash command or file path. */
 export function toolPreview(name: string, input: unknown): string {
   if (input && typeof input === "object") {

@@ -20,6 +20,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Fixed
 
+- The Mac app no longer slows down and stutters while an agent streams its reply into an open Transcript tab. Each streamed word used to re-render every earlier message and tool row, so a long transcript got slower with every step. Now only the live preview updates; on a 1,200-entry transcript a streamed word costs about 30 times less, and a new message about 15 times less. Markdown elsewhere (the Spec, Activity, chats) also stops re-rendering on unrelated updates.
 - Re-opening a done ticket whose worktree was removed no longer blocks with "Could not create worktree" when its branch (say `main`) is now checked out in the project folder. The ticket works right in the project folder instead, the same as a ticket that picked the folder's branch, and its Activity says so.
 - On iPhone and iPad, a New session you've typed into and then docked comes back with its prompt and everything else you set when you reopen it from the dock (or after a relaunch), instead of an empty form that started a second draft. Opening that draft's card on the board brings the docked sheet forward rather than opening a second copy.
 - On iPhone, a ticket's Activity tab with no activity yet shows its clock icon above "No activity yet" again in a full-height ticket sheet, and the rest of the sheet's content lays out as it did before the quarter-open change.
