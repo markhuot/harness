@@ -36,9 +36,8 @@ struct TicketSheetHost: View {
     @State private var last: TicketSheet?
     /// Where the system sheet rests: full height by default, or quarter open.
     @State private var detent: PresentationDetent = .large
-    /// The sheet's height at `.large`, once it has been there (nil until then).
-    @State private var fullHeight: CGFloat?
-    @State private var fullWidth: CGFloat = 0
+    /// The sheet's full height and the place its top rests at, and whether it has left it.
+    @State private var rest = TicketSheetRest()
     @Environment(\.ticketSheetStartsQuarterOpen) private var startsQuarterOpen
     @Environment(\.devicePosture) private var posture
     @Environment(\.horizontalSizeClass) private var sizeClass
@@ -71,21 +70,27 @@ struct TicketSheetHost: View {
                     .zIndex(isTop ? 1 : 0)
             }
         }
-        // Quarter open, the content keeps its full-height layout, hung from the sheet's top, and the
-        // sheet clips its bottom: the header stays exactly as it is at full height instead of
-        // reflowing into the short room. With both bounds given, the outer frame takes exactly the
+        // Off its full-height place (quarter open, or under a finger and through the spring back) the
+        // content keeps its full-height layout, hung from the sheet's top, and the sheet clips its
+        // bottom: nothing reflows into the room the sheet has while it moves, so a drag re-lays out
+        // nothing. The keyboard shrinks the sheet without moving its top, so there the content
+        // follows the sheet's height. With both bounds given, the outer frame takes exactly the
         // sheet's size whatever the content is (with only a max, it would grow to the taller content
         // and the sheet would center it). Not an overlay on a clear base: content there is laid out
         // differently, and at full height the Activity tab's empty state lost its icon.
-        .frame(height: detent == Self.peek ? (fullHeight ?? Self.estimatedFullHeight) : nil, alignment: .top)
+        .frame(height: rest.pinsContent(quarterOpen: detent == Self.peek)
+               ? (rest.fullHeight.map { CGFloat($0) } ?? Self.estimatedFullHeight) : nil,
+               alignment: .top)
         .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .top)
+        // Readings that depend on where the ticket's edges are (its pages' bottom room) wait until
+        // the sheet is back in place.
+        .environment(\.sheetResting, !rest.displaced)
         .background {
             GeometryReader { proxy in
-                Color.clear.onChange(of: proxy.size, initial: true) { _, size in
-                    // The tallest the sheet has been at this width is its full height (the keyboard
-                    // and a drag only shrink it).
-                    if size.width != fullWidth { fullWidth = size.width; fullHeight = nil }
-                    if size.height > (fullHeight ?? 0) { fullHeight = size.height }
+                Color.clear.onChange(of: proxy.frame(in: .global), initial: true) { _, frame in
+                    var next = rest
+                    next.read(width: frame.width, height: frame.height, top: frame.minY)
+                    if next != rest { rest = next }
                 }
             }
         }
