@@ -16,8 +16,9 @@
 //                                                      testflight: upload to App Store Connect
 //                                                      (ExportOptions-testflight.plist), signed in with the
 //                                                      ASC API key when ASC_KEY_ID and ASC_ISSUER_ID are set
-//   bun ios/Tools/build.ts device --device <name|udid> [--launch]
-//                                                      Debug build installed with devicectl
+//   bun ios/Tools/build.ts device --device <name|udid> [--launch] [--optimized]
+//                                                      Debug build installed with devicectl; --optimized builds Release
+//                                                      (still development-signed, so Instruments can attach) to profile
 //   bun ios/Tools/build.ts verify --bundle-id ID --build-number N <Harness.app>
 //                                                      checks an unpacked app before it's published
 //
@@ -41,7 +42,7 @@ export type Options =
   | { command: "screens"; derivedData: string }
   | { command: "archive"; buildNumber: string; archivePath: string }
   | { command: "export"; method: Method; archivePath: string; exportPath: string }
-  | { command: "device"; device: string; launch: boolean }
+  | { command: "device"; device: string; launch: boolean; optimized: boolean }
   | { command: "verify"; bundleId: string; buildNumber: string; app: string };
 
 export class UsageError extends Error {}
@@ -73,7 +74,7 @@ export function parseArgs(argv: string[]): Options {
     screens: ["derived-data"],
     archive: ["build-number", "archive-path"],
     export: ["method", "archive-path", "export-path"],
-    device: ["device", "launch"],
+    device: ["device", "launch", "optimized"],
     verify: ["bundle-id", "build-number"],
   };
   if (!command || !(command in allowed)) throw new UsageError(`unknown command ${command ?? "(none)"}; expected ${Object.keys(allowed).join(", ")}`);
@@ -108,7 +109,7 @@ export function parseArgs(argv: string[]): Options {
       };
     }
     case "device":
-      return { command, device: need("device"), launch: flags.get("launch") === true };
+      return { command, device: need("device"), launch: flags.get("launch") === true, optimized: flags.has("optimized") };
     default: {
       if (positional.length !== 1) throw new UsageError("verify needs exactly one Harness.app path");
       return { command: "verify", bundleId: need("bundle-id"), buildNumber: buildNumber(), app: resolve(positional[0]!) };
@@ -298,19 +299,25 @@ function exportArchive(o: Extract<Options, { command: "export" }>): string {
   return ipa;
 }
 
-/** The xcodebuild arguments of the device build: Debug, signed automatically. */
-export function deviceArgs(): string[] {
+/** The device build's configuration: Release when optimized (to profile), else Debug. */
+export function deviceConfiguration(optimized: boolean): "Debug" | "Release" {
+  return optimized ? "Release" : "Debug";
+}
+
+/** The xcodebuild arguments of the device build, signed automatically for development either way. */
+export function deviceArgs(optimized = false): string[] {
   return [
-    "xcodebuild", ...project(), "-configuration", "Debug", "-destination", "generic/platform=iOS",
+    "xcodebuild", ...project(), "-configuration", deviceConfiguration(optimized), "-destination", "generic/platform=iOS",
     "-allowProvisioningUpdates", `DEVELOPMENT_TEAM=${TEAM_ID}`, "CODE_SIGN_STYLE=Automatic", "build",
   ];
 }
 
 function device(o: Extract<Options, { command: "device" }>): string {
   prepare();
-  log(`==> Building Harness (Debug) for ${o.device}`);
-  run("device", deviceArgs());
-  const app = join(DERIVED_DATA, "Build/Products/Debug-iphoneos/Harness.app");
+  const config = deviceConfiguration(o.optimized);
+  log(`==> Building Harness (${config}) for ${o.device}`);
+  run("device", deviceArgs(o.optimized));
+  const app = join(DERIVED_DATA, `Build/Products/${config}-iphoneos/Harness.app`);
   const records = join(BUILD, "device-installs.json");
   let recorded: Record<string, { hash: string; url: string }> = {};
   try {
