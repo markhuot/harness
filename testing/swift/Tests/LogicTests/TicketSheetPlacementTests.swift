@@ -61,12 +61,59 @@ import HarnessKit
         #expect(!rest.displaced)
     }
 
-    @Test func theKeyboardShrinksTheSheetWithoutPinningTheContent() {
+    /// Up with the keyboard: the sheet is 520 tall.
+    private func withTheKeyboard() -> TicketSheetRest {
         var rest = atFullHeight()
-        rest.keyboard(true)
+        rest.keyboardWillShow()
         rest.read(width: 430, height: 520)
+        return rest
+    }
+
+    @Test func theKeyboardShrinksTheSheetWithoutPinningTheContent() {
+        let rest = withTheKeyboard()
+        #expect(!rest.displaced)
         #expect(!rest.pinsContent(quarterOpen: false))
-        rest.keyboard(false)
+    }
+
+    @Test func asTheKeyboardHidesTheContentFollowsTheSheetBackToFullHeight() {
+        var rest = withTheKeyboard()
+        rest.keyboardWillHide()
+        #expect(!rest.displaced)
+        rest.read(width: 430, height: 700)
+        #expect(!rest.displaced)
+        rest.read(width: 430, height: 870)
+        #expect(!rest.displaced)
+    }
+
+    @Test func onceTheKeyboardHasGoneBackToFullHeightADragPinsTheContentAgain() {
+        var rest = withTheKeyboard()
+        rest.keyboardWillHide()
+        rest.read(width: 430, height: 870)
+        rest.read(width: 430, height: 600)
+        #expect(rest.displaced)
+    }
+
+    @Test func aSheetStillShortWhenTheKeyboardIsGoneIsDisplaced() {
+        var rest = withTheKeyboard()
+        rest.keyboardWillHide()
+        rest.read(width: 430, height: 600)
+        rest.keyboardDidHide()
+        #expect(rest.displaced)
+    }
+
+    @Test func aKeyboardBackBeforeTheSheetIsUpKeepsTheContentFollowingIt() {
+        var rest = withTheKeyboard()
+        rest.keyboardWillHide()
+        rest.keyboardWillShow()
+        rest.read(width: 430, height: 870)
+        rest.read(width: 430, height: 520)
+        #expect(!rest.displaced)
+    }
+
+    @Test func aHideWithNoKeyboardUpChangesNothing() {
+        var rest = atFullHeight()
+        rest.keyboardWillHide()
+        rest.read(width: 430, height: 600)
         #expect(rest.displaced)
     }
 

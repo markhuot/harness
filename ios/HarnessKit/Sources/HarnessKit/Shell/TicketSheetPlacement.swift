@@ -51,8 +51,12 @@ public struct TicketSheetRest: Sendable, Equatable {
     private var fullHeights: [Double: Double] = [:]
     private var width: Double?
     private var height: Double?
-    /// The keyboard is up, or on its way.
+    /// The keyboard accounts for the sheet's height: it is up, on its way, or on its way down with
+    /// the sheet still growing back.
     public private(set) var keyboardUp = false
+    /// The keyboard is on its way down: the sheet grows back with it, and the content follows that
+    /// growth until the sheet is back at full height (or the keyboard is gone).
+    private var keyboardLeaving = false
 
     /// Less than this short of full height is rounding, not a move.
     static let tolerance = 0.5
@@ -67,10 +71,32 @@ public struct TicketSheetRest: Sendable, Equatable {
         self.width = width
         self.height = height
         fullHeights[width] = max(fullHeights[width] ?? 0, height)
+        // Back at full height as the keyboard leaves: from here, a shorter sheet is a move again.
+        if keyboardLeaving, let fullHeight, height >= fullHeight - Self.tolerance { keyboardGone() }
     }
 
-    /// The keyboard is showing or about to (true) or hiding (false).
-    public mutating func keyboard(_ up: Bool) { keyboardUp = up }
+    /// The keyboard is showing, or about to.
+    public mutating func keyboardWillShow() {
+        keyboardUp = true
+        keyboardLeaving = false
+    }
+
+    /// The keyboard is about to hide. The sheet is still short for it and grows back as it goes, so
+    /// the content keeps following the sheet until a reading finds it back at full height: ending
+    /// the exemption now would pin the content at full height mid-dismiss, dropping the composer
+    /// from above the keyboard to the clipped bottom.
+    public mutating func keyboardWillHide() {
+        if keyboardUp { keyboardLeaving = true }
+    }
+
+    /// The keyboard is gone. If the sheet never got back to full height (a drag took it down as
+    /// the keyboard left), it is displaced from here.
+    public mutating func keyboardDidHide() { keyboardGone() }
+
+    private mutating func keyboardGone() {
+        keyboardUp = false
+        keyboardLeaving = false
+    }
 
     /// The sheet is shorter than full height without the keyboard to account for it: dragged,
     /// springing back, or resting at a lower stop.

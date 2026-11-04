@@ -95,10 +95,14 @@ struct TicketSheetHost: View {
         }
         // Ahead of the sheet shrinking for the keyboard, so the content follows that height.
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
-            rest.keyboard(true)
+            rest.keyboardWillShow()
         }
+        // The sheet grows back with the keyboard, and the content follows it until it's at full height.
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
-            rest.keyboard(false)
+            rest.keyboardWillHide()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidHideNotification)) { _ in
+            rest.keyboardDidHide()
         }
         // Behind the keyboard too, so its rounded corners show the sheet's background, not the
         // system sheet's.
