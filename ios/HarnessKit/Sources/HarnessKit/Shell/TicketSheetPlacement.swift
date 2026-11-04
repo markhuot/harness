@@ -38,50 +38,53 @@ public enum TicketSheetPlacement: Sendable, Equatable {
     }
 }
 
-/// The ticket sheet's full-height place, from the readings of its frame on screen, and whether it
-/// has left it. The system resizes the sheet under a finger (and through its spring back), so a
-/// drag would hand the content a new height every frame and re-lay it out. Off its place, the
-/// content keeps its full-height layout and the sheet clips it instead. The keyboard shrinks the
-/// sheet too, but leaves its top where it was: that one the content follows, so the composer rides
-/// above the keyboard.
+/// The ticket sheet's full height, from the readings of its size, and whether it is shorter than
+/// that because it moved. The system resizes the sheet under a finger (and through its spring back),
+/// so a drag would hand the content a new height every frame and re-lay it out. Moved, the content
+/// keeps its full-height layout and the sheet clips it instead. The keyboard shrinks the sheet too:
+/// that height the content follows, so the composer rides above the keyboard. (The sheet's top in
+/// the window can't tell the two apart: quarter open, UIKit reports the sheet at y 0.)
 public struct TicketSheetRest: Sendable, Equatable {
-    /// The tallest the sheet has been at this width: its full height.
-    public private(set) var fullHeight: Double?
-    /// The highest its top has been at this width: where it rests at full height.
-    public private(set) var restTop: Double?
+    /// The tallest the sheet has been at each width it has had. Per width, not just the latest: on
+    /// its way to quarter open the sheet passes through a narrower inset width for a frame, and
+    /// forgetting the full height there would pin the content at the short height once it's back.
+    private var fullHeights: [Double: Double] = [:]
     private var width: Double?
-    private var top: Double?
+    private var height: Double?
+    /// The keyboard is up, or on its way.
+    public private(set) var keyboardUp = false
 
-    /// Less than this off its place is rounding, not a move.
+    /// Less than this short of full height is rounding, not a move.
     static let tolerance = 0.5
 
     public init() {}
 
-    /// A reading of the sheet's frame in the window. A new width (a rotation) starts over.
-    public mutating func read(width: Double, height: Double, top: Double) {
-        if width != self.width {
-            self.width = width
-            fullHeight = nil
-            restTop = nil
-        }
-        if height > (fullHeight ?? 0) { fullHeight = height }
-        if top < (restTop ?? .infinity) { restTop = top }
-        self.top = top
+    /// The tallest the sheet has been at its current width: its full height.
+    public var fullHeight: Double? { width.flatMap { fullHeights[$0] } }
+
+    /// A reading of the sheet's size. Each width (a rotation) has a full height of its own.
+    public mutating func read(width: Double, height: Double) {
+        self.width = width
+        self.height = height
+        fullHeights[width] = max(fullHeights[width] ?? 0, height)
     }
 
-    /// The sheet's top is below its full-height place: dragged, springing back, or resting at a
-    /// lower stop.
+    /// The keyboard is showing or about to (true) or hiding (false).
+    public mutating func keyboard(_ up: Bool) { keyboardUp = up }
+
+    /// The sheet is shorter than full height without the keyboard to account for it: dragged,
+    /// springing back, or resting at a lower stop.
     public var displaced: Bool {
-        guard let top, let restTop else { return false }
-        return top > restTop + Self.tolerance
+        guard !keyboardUp, let height, let fullHeight else { return false }
+        return height < fullHeight - Self.tolerance
     }
 
     /// Whether the content keeps its full-height layout rather than the sheet's current height.
     public func pinsContent(quarterOpen: Bool) -> Bool { quarterOpen || displaced }
 
-    /// Equal when nothing the layout reads differs: a drag moves the top every frame, but only
-    /// leaving or reaching the place counts, so the view keeping this updates twice a drag.
+    /// Equal when nothing the layout reads differs: a drag changes the height every frame, but only
+    /// leaving or reaching full height counts, so the view keeping this updates twice a drag.
     public static func == (a: Self, b: Self) -> Bool {
-        a.width == b.width && a.fullHeight == b.fullHeight && a.restTop == b.restTop && a.displaced == b.displaced
+        a.width == b.width && a.fullHeight == b.fullHeight && a.keyboardUp == b.keyboardUp && a.displaced == b.displaced
     }
 }

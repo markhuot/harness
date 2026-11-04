@@ -33,14 +33,14 @@ import HarnessKit
 }
 
 @Suite struct TicketSheetRestTests {
-    /// Up at full height on an iPhone: 430 wide, 870 tall, its top 62 down.
+    /// Up at full height on an iPhone: 430 wide, 870 tall.
     private func atFullHeight() -> TicketSheetRest {
         var rest = TicketSheetRest()
-        rest.read(width: 430, height: 870, top: 62)
+        rest.read(width: 430, height: 870)
         return rest
     }
 
-    @Test func atRestTheContentFollowsTheSheet() {
+    @Test func atFullHeightTheContentFollowsTheSheet() {
         let rest = atFullHeight()
         #expect(!rest.displaced)
         #expect(!rest.pinsContent(quarterOpen: false))
@@ -48,54 +48,65 @@ import HarnessKit
 
     @Test func draggedDownTheContentKeepsItsFullHeightLayout() {
         var rest = atFullHeight()
-        rest.read(width: 430, height: 600, top: 332)
+        rest.read(width: 430, height: 600)
         #expect(rest.displaced)
         #expect(rest.pinsContent(quarterOpen: false))
         #expect(rest.fullHeight == 870)
     }
 
-    @Test func backInPlaceTheContentFollowsTheSheetAgain() {
+    @Test func backAtFullHeightTheContentFollowsTheSheetAgain() {
         var rest = atFullHeight()
-        rest.read(width: 430, height: 600, top: 332)
-        rest.read(width: 430, height: 870, top: 62)
+        rest.read(width: 430, height: 600)
+        rest.read(width: 430, height: 870)
         #expect(!rest.displaced)
     }
 
     @Test func theKeyboardShrinksTheSheetWithoutPinningTheContent() {
         var rest = atFullHeight()
-        rest.read(width: 430, height: 520, top: 62)
+        rest.keyboard(true)
+        rest.read(width: 430, height: 520)
         #expect(!rest.pinsContent(quarterOpen: false))
+        rest.keyboard(false)
+        #expect(rest.displaced)
     }
 
     @Test func aFractionOfAPointIsNotAMove() {
         var rest = atFullHeight()
-        rest.read(width: 430, height: 869.7, top: 62.3)
+        rest.read(width: 430, height: 869.7)
         #expect(!rest.displaced)
     }
 
     @Test func quarterOpenPinsTheContentBeforeTheSheetHasBeenUp() {
         var rest = TicketSheetRest()
-        rest.read(width: 430, height: 232, top: 700)
+        rest.read(width: 430, height: 232)
         #expect(!rest.displaced)
         #expect(rest.pinsContent(quarterOpen: true))
     }
 
-    @Test func aRotationStartsOver() {
+    @Test func aPassingInsetWidthOnTheWayToQuarterOpenKeepsTheFullHeight() {
         var rest = atFullHeight()
-        rest.read(width: 932, height: 380, top: 20)
+        rest.read(width: 430, height: 232)
+        rest.read(width: 414, height: 224)
+        rest.read(width: 430, height: 232)
+        #expect(rest.fullHeight == 870)
+    }
+
+    @Test func aRotationHasAFullHeightOfItsOwn() {
+        var rest = atFullHeight()
+        rest.read(width: 932, height: 380)
         #expect(rest.fullHeight == 380)
-        #expect(rest.restTop == 20)
-        rest.read(width: 932, height: 300, top: 100)
+        #expect(!rest.displaced)
+        rest.read(width: 932, height: 300)
         #expect(rest.displaced)
     }
 
-    @Test func aDragChangesTheStateOnlyWhenItLeavesOrReachesThePlace() {
+    @Test func aDragChangesTheStateOnlyWhenItLeavesOrReachesFullHeight() {
         var rest = atFullHeight()
-        rest.read(width: 430, height: 800, top: 132)
+        rest.read(width: 430, height: 800)
         let left = rest
-        rest.read(width: 430, height: 700, top: 232)
+        rest.read(width: 430, height: 700)
         #expect(rest == left)
-        rest.read(width: 430, height: 870, top: 62)
+        rest.read(width: 430, height: 870)
         #expect(rest != left)
     }
 }

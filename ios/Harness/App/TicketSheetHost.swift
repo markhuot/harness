@@ -36,7 +36,7 @@ struct TicketSheetHost: View {
     @State private var last: TicketSheet?
     /// Where the system sheet rests: full height by default, or quarter open.
     @State private var detent: PresentationDetent = .large
-    /// The sheet's full height and the place its top rests at, and whether it has left it.
+    /// The sheet's full height, and whether it is shorter because it moved.
     @State private var rest = TicketSheetRest()
     @Environment(\.ticketSheetStartsQuarterOpen) private var startsQuarterOpen
     @Environment(\.devicePosture) private var posture
@@ -73,8 +73,7 @@ struct TicketSheetHost: View {
         // Off its full-height place (quarter open, or under a finger and through the spring back) the
         // content keeps its full-height layout, hung from the sheet's top, and the sheet clips its
         // bottom: nothing reflows into the room the sheet has while it moves, so a drag re-lays out
-        // nothing. The keyboard shrinks the sheet without moving its top, so there the content
-        // follows the sheet's height. With both bounds given, the outer frame takes exactly the
+        // nothing. The keyboard shrinks the sheet too, and that height the content follows. With both bounds given, the outer frame takes exactly the
         // sheet's size whatever the content is (with only a max, it would grow to the taller content
         // and the sheet would center it). Not an overlay on a clear base: content there is laid out
         // differently, and at full height the Activity tab's empty state lost its icon.
@@ -87,12 +86,19 @@ struct TicketSheetHost: View {
         .environment(\.sheetResting, !rest.displaced)
         .background {
             GeometryReader { proxy in
-                Color.clear.onChange(of: proxy.frame(in: .global), initial: true) { _, frame in
+                Color.clear.onChange(of: proxy.size, initial: true) { _, size in
                     var next = rest
-                    next.read(width: frame.width, height: frame.height, top: frame.minY)
+                    next.read(width: size.width, height: size.height)
                     if next != rest { rest = next }
                 }
             }
+        }
+        // Ahead of the sheet shrinking for the keyboard, so the content follows that height.
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+            rest.keyboard(true)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+            rest.keyboard(false)
         }
         // Behind the keyboard too, so its rounded corners show the sheet's background, not the
         // system sheet's.
