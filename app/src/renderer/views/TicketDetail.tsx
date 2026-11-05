@@ -64,8 +64,6 @@ import { TicketDetails } from "./TicketDetails";
 import { SpecTab } from "./SpecTab";
 import { NeedsYouPanel, needsYouCount } from "./NeedsYouPanel";
 import { focusFirstQuestion, InlineAnswer, NeedsYouBar, useMessageDraft, useNeedsYouLayout } from "./QuestionAnswers";
-import { BlockedCallout } from "./BlockedCallout";
-import { blockedCallout } from "../state/blockedCallout";
 import { ActivityTab } from "./ActivityTab";
 import { DraftEditor } from "./DraftEditor";
 import { ApprovalCard } from "./Approval";
@@ -948,7 +946,7 @@ export function MessageComposer({ ticket, onSent, tab, layout = "panel" }: { tic
   sendRef.current = send;
   // The inline layout's bar: "Needs you · N" takes the human to the first question in the spec (or
   // this input, when only the block waits); "N answers ready · Send" sends.
-  const bar = onSpec && layout === "inline" ? needsYouBar(needsYouCount(ticket, panel), replies.length) : null;
+  const bar = onSpec && layout === "inline" ? needsYouBar(needsYouCount(ticket, panel), replies.length, panel.open.length) : null;
   const onBar = () => {
     if (bar?.action === "send") return void send();
     if (!focusFirstQuestion(ref.current?.closest(".detail"))) ref.current?.focus();
@@ -972,11 +970,6 @@ export function MessageComposer({ ticket, onSent, tab, layout = "panel" }: { tic
         />
       )}
       {bar && <NeedsYouBar bar={bar} onClick={onBar} disabled={bar.action === "send" && !canSend} />}
-      {onSpec && layout === "inline" && blockedCallout(ticket).kind !== "none" && (
-        <div className="needs-you-bar-block">
-          <BlockedCallout ticket={ticket} />
-        </div>
-      )}
       <PromptAttachmentList
         items={attachments}
         onRemove={attach.remove}

@@ -250,8 +250,8 @@ final class ScreenTests: ScreenTestCase {
     }
 
     /// HARNESS-4: blocked on a question for the human, no restart time, and a spec that asks
-    /// nothing: the bar reads "Needs you · 1" with the block's question under it, no Unblock, and the
-    /// composer's placeholder says a message answers the block.
+    /// nothing: the block's question heads the spec, the bar reads "Needs you · 1", there's no
+    /// Unblock, and the composer's placeholder says a message answers the block.
     func testTicketBlocked() async throws {
         try await screen("ticket-blocked", router: ticket("HARNESS-4", .spec)) { RootView() }
     }
@@ -273,7 +273,7 @@ final class ScreenTests: ScreenTestCase {
     }
 
     /// The inline layout (every iPhone, an iPad in portrait): each open question in the spec, mid-spec
-    /// included, shows its text with an answer field under it, the checked one stays a checked line,
+    /// included, shows its text with an answer field under it, the answered one keeps a check in an amber circle,
     /// and the bar above the composer reads "Needs you · 3".
     func testTicketOpenQuestions() async throws {
         let world = try await questionsWorld()
@@ -282,7 +282,7 @@ final class ScreenTests: ScreenTestCase {
         XCTAssertEqual(world.transport.unrouted, [])
     }
 
-    /// Two answers drafted inline: they show in their fields and the bar becomes "2 answers ready · Send".
+    /// Two answers drafted inline: they show in their fields and the bar becomes "2/3 answers ready · Send".
     func testTicketOpenQuestionsAnswered() async throws {
         try XCTSkipIf(ReferenceImages.device == "ipad", "the inline layout is the iPhone's; the iPad's portrait render is ticket-open-questions")
         let world = try await questionsWorld(replies: [
@@ -296,8 +296,8 @@ final class ScreenTests: ScreenTestCase {
 
     /// A full ticket window on the iPad in landscape (the ticket sheet is never 700pt wide) is large
     /// enough for the panel: the Needs you panel above the composer
-    /// lists the block's question (no Unblock), then each open question with its answer field (one
-    /// holding a drafted reply), then the answered one folded away. The spec keeps its checkboxes.
+    /// lists each open question with its answer field (one holding a drafted reply), then the
+    /// answered one folded away; the block's question heads the spec (no Unblock).
     func testTicketOpenQuestionsPanel() async throws {
         try XCTSkipUnless(ReferenceImages.device == "ipad", "only a large landscape view gets the panel")
         let world = try await questionsWorld(blocked: true, replies: [["question": "Do we keep SQLite for local installs?", "body": "Yes, local stays on SQLite."]])

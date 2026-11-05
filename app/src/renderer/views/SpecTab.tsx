@@ -12,6 +12,7 @@ import { depChipTitle, dependencyStates, diffUnchanged, specBody, specDiff } fro
 import { useStore } from "../state/store";
 import { FOLLOW_LATEST, revisionAt, scrubTo, segmentTone, shownRevision, wheelScrub, type SpecHistory } from "../state/specHistory";
 import { Icon } from "../components/Icon";
+import { BlockedCallout } from "./BlockedCallout";
 import { Markdown, MarkdownDiff, TaskAnswerScope } from "../components/Markdown";
 import { MenuButton, relativeTime, TicketKey, useNow } from "../components/bits";
 import { ViewMenuItems } from "../components/ViewMenuItems";
@@ -123,6 +124,9 @@ export function SpecTab({ ticket, answers }: { ticket: Ticket; answers?: ((quest
         )}
       </div>
       <div className="spec-body">
+        {/* What the ticket waits on the human for heads the spec, scrolling with it however long it
+            runs; the answer goes in the composer. */}
+        <BlockedCallout ticket={ticket} />
         {deps.length > 0 && (
           <div className="row" style={{ flexWrap: "wrap", gap: 6 }}>
             <span className="section-title">Depends on</span>

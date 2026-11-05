@@ -129,9 +129,12 @@ describe("needsYouLayout", () => {
 
 describe("needsYouBar", () => {
   test("drafted answers turn it into Send; before that it takes the human to the questions", () => {
-    expect(needsYouBar(3, 0)).toEqual({ label: "Needs you · 3", action: "focus" });
-    expect(needsYouBar(3, 1)).toEqual({ label: "1 answer ready · Send", action: "send" });
-    expect(needsYouBar(3, 2)).toEqual({ label: "2 answers ready · Send", action: "send" });
-    expect(needsYouBar(0, 0)).toBeNull();
+    expect(needsYouBar(3, 0, 3)).toEqual({ label: "Needs you · 3", action: "focus" });
+    expect(needsYouBar(4, 1, 3)).toEqual({ label: "1/3 answers ready · Send", action: "send" });
+    expect(needsYouBar(3, 2, 3)).toEqual({ label: "2/3 answers ready · Send", action: "send" });
+    expect(needsYouBar(1, 1, 1)).toEqual({ label: "1/1 answer ready · Send", action: "send" });
+    // A reply to a question checked off since still counts, so the total never drops below it.
+    expect(needsYouBar(0, 2, 1)).toEqual({ label: "2/2 answers ready · Send", action: "send" });
+    expect(needsYouBar(0, 0, 0)).toBeNull();
   });
 });

@@ -47,9 +47,11 @@ import HarnessKit
     }
 
     @Test func theBarSendsOnceAnswersAreReady() {
-        #expect(OpenQuestions.bar(count: 2, ready: 0) == .init(label: "Needs you · 2", action: .focus))
-        #expect(OpenQuestions.bar(count: 2, ready: 1) == .init(label: "1 answer ready · Send", action: .send))
-        #expect(OpenQuestions.bar(count: 0, ready: 0) == nil)
+        #expect(OpenQuestions.bar(count: 2, ready: 0, questions: 2) == .init(label: "Needs you · 2", action: .focus))
+        #expect(OpenQuestions.bar(count: 3, ready: 1, questions: 2) == .init(label: "1/2 answers ready · Send", action: .send))
+        #expect(OpenQuestions.bar(count: 1, ready: 1, questions: 1) == .init(label: "1/1 answer ready · Send", action: .send))
+        #expect(OpenQuestions.bar(count: 0, ready: 2, questions: 1) == .init(label: "2/2 answers ready · Send", action: .send))
+        #expect(OpenQuestions.bar(count: 0, ready: 0, questions: 0) == nil)
     }
 
     @Test func theBarFocusesTheFirstOpenQuestionOrElseTheComposer() {

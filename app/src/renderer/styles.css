@@ -728,15 +728,12 @@ ol.md-list {
   list-style: none;
 }
 .md-task-box {
-  margin: 0 6px 0 -18px;
+  margin: 0 6px 0 -20px;
   vertical-align: -2px;
-  accent-color: var(--accent);
-  opacity: 1;
+  color: var(--amber);
 }
 .md-task-box.is-toggled {
-  outline: 2px solid var(--green);
-  outline-offset: 1px;
-  border-radius: 3px;
+  color: var(--green);
 }
 /* An attachment in the text: fitted to the width, opening the lightbox. */
 .md-media {

@@ -717,12 +717,10 @@ add one, they ask the agent, which adds it or says why it isn't a question.
   `taskAnswerField` hook in `MarkdownView`). Both switch as the view is resized or rotated, and the
   answers carry across since they live in the draft.
 - **The panel** (`views/NeedsYouPanel.tsx`, iOS `TicketNeedsYouPanel`) sits at the top of the
-  composer on the Spec tab in the `panel` layout. It shows the blocked ticket's callout first
-  (`BlockedCallout`: the question, a restart time, or a tool approval; it never renders in the spec
-  body), then each unchecked question as plain text with one growing reply box under it (6px
-  apart, and 20px from one question's box to the next question), then the checked ones folded
-  under "N answered". `questionPanel` builds it from the spec and the draft. The list caps its
-  height and scrolls. The spec body keeps read-only checkboxes.
+  composer on the Spec tab in the `panel` layout, when the spec has task items. It shows each
+  unchecked question as plain text with one growing reply box under it (6px apart, and 20px from
+  one question's box to the next question), then the checked ones folded under "N answered".
+  `questionPanel` builds it from the spec and the draft. The list caps its height and scrolls.
 - **Inline.** In the `inline` layout the rendered current spec is the form: the Spec tab passes
   the markdown renderer an answer-field hook (Mac `TaskAnswerScope` in `components/Markdown.tsx`,
   rendering `InlineAnswer`; never for an older revision, the diff or any other markdown), and each
@@ -731,8 +729,13 @@ add one, they ask the agent, which adds it or says why it isn't a question.
   focus while the draft saves and the spec re-renders. Above the composer a one-line bar
   (`needsYouBar`, `NeedsYouBar`) reads "Needs you · N" (the block and the open questions) and
   scrolls to and focuses the first question's box (the message box when only the block waits);
-  once answers are drafted it reads "N answers ready · Send" and sends. A blocked ticket's
-  callout shows under the bar.
+  once answers are drafted it reads "2/3 answers ready · Send" (out of the open questions, never
+  fewer than are ready) and sends.
+- **The block heads the spec.** A blocked ticket's callout (`BlockedCallout`, iOS
+  `TicketBlockedCallout`: the question, a restart time, or a tool approval) renders first in the
+  Spec tab's scrolling body, above the spec text in both layouts, so a long one scrolls with the
+  spec instead of crowding the composer; it's display-only, never part of the spec's text. The
+  answer goes in the composer, and the Needs you count still includes it.
 - **Spec tab only.** The panel, the bar and the answers riding along with a message exist only on
   the Spec tab. On other tabs the composer is a plain message composer: a message sent there
   carries no replies, and the drafted ones stay in their boxes.
@@ -2931,8 +2934,9 @@ that.
   text, a thumbnail is still a 100×100 square. Other titles are ignored. Any of them opens the
   lightbox (Mac) or the full-screen viewer (iOS). The prompt (`system.spec`) and the spec tools'
   descriptions teach agents both forms. A list item opening with `[ ]` or `[x]` is a task item
-  (`ListItem.checked`, marker dropped from its text), drawn as a read-only checkbox in place of the
-  bullet everywhere markdown renders; `specDiff` marks an item whose box changed.
+  (`ListItem.checked`, marker dropped from its text). Since every task item is a question for the
+  human, it's drawn in place of the bullet everywhere markdown renders as an amber outlined circle:
+  a question mark while open, a check once answered (green when a revision toggled it); `specDiff` marks an item whose box changed.
 
 - **Rewriting.** `localImageSources` finds each local src once; `attachment:`, `http(s):`,
   `data:` and `mailto:` srcs are left as written. The files are validated and copied

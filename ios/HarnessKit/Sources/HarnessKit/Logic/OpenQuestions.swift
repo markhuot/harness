@@ -109,8 +109,10 @@ public enum OpenQuestions {
         }
     }
 
-    public static func bar(count: Int, ready: Int) -> Bar? {
-        if ready > 0 { return Bar(label: "\(ready) \(ready == 1 ? "answer" : "answers") ready · Send", action: .send) }
+    /// `questions` is the open questions the ready answers are out of ("2/3 answers ready").
+    public static func bar(count: Int, ready: Int, questions: Int) -> Bar? {
+        let total = max(questions, ready)
+        if ready > 0 { return Bar(label: "\(ready)/\(total) \(total == 1 ? "answer" : "answers") ready · Send", action: .send) }
         if count > 0 { return Bar(label: "Needs you · \(count)", action: .focus) }
         return nil
     }

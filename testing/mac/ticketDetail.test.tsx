@@ -85,15 +85,17 @@ describe("TicketDetail", () => {
     expect(buttons(done).some((b) => b.startsWith("Approve"))).toBe(false);
   });
 
-  test("a blocked ticket has no Unblock: its question shows in the composer's Needs you panel, outside the spec, and a sent message answers it", async () => {
+  test("a blocked ticket has no Unblock: its question shows at the top of the spec, above the spec text, and a sent message answers it", async () => {
     const m = await mount(detail("HARNESS-4"));
     await m.until("the callout", () => all(m.container, "[data-testid=blocked-callout]").length === 1);
     expect(buttons(m).some((b) => b.includes("Unblock"))).toBe(false);
     const callout = all(m.container, "[data-testid=blocked-callout]")[0]!;
     expect(text(callout)).toContain("Postgres or SQLite for the hosted tier?");
-    expect(callout.closest("[data-testid=composer] [data-testid=needs-you]")).not.toBeNull();
-    expect(callout.closest(".spec-body")).toBeNull();
-    expect(all(m.container, "[data-testid=spec-doc]").every((d) => !text(d).includes("Postgres or SQLite"))).toBe(true);
+    // In the spec's scrolling body, before the spec itself, and out of the composer's panel.
+    const body = callout.closest(".spec-body")!;
+    expect(body).not.toBeNull();
+    expect(callout.compareDocumentPosition(all(body, "[data-testid=spec-doc]")[0]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(callout.closest("[data-testid=composer]")).toBeNull();
     const input = all(m.container, "[data-testid=composer] textarea.composer-input").at(-1) as HTMLTextAreaElement;
     expect(input.placeholder).toBe("Answer the block: your message goes to the agent…");
     await type(m, input, "SQLite");
@@ -285,7 +287,7 @@ describe("Needs you: the spec's open questions above the composer", () => {
   const questions = (m: { container: HTMLElement }) => all(m.container, "[data-testid=needs-you-question]");
   const reply = (q: HTMLElement) => all(q, "[data-testid=needs-you-reply]")[0] as HTMLTextAreaElement;
 
-  test("lists each unchecked question with one reply box holding its draft; checked ones fold into N answered; the spec keeps its checkboxes", async () => {
+  test("lists each unchecked question with one reply box holding its draft; checked ones fold into N answered; the spec marks each item open or answered", async () => {
     const m = await mount(detail("HARNESS-1"), { world: withQuestions });
     await m.until("the panel", () => questions(m).length === 2);
     expect(questions(m).map((q) => text(all(q, ".needs-you-q-text")[0]!))).toEqual(["Which database?", "Ship when?"]);
@@ -293,10 +295,9 @@ describe("Needs you: the spec's open questions above the composer", () => {
     expect(questions(m).map((q) => reply(q).value)).toEqual(["Postgres", ""]);
     expect(text(all(m.container, "[data-testid=needs-you-answered] summary")[0]!)).toBe("1 answered");
     expect(text(all(m.container, "[data-testid=needs-you]")[0]!)).toContain("Needs you · 2");
-    // The spec keeps its task items, as read-only checkboxes, and no answer boxes of its own.
+    // The spec keeps its task items, read-only (a question mark or an answered check), and no answer boxes of its own.
     expect(all(m.container, ".spec-doc [data-testid=needs-you-reply]")).toHaveLength(0);
-    const boxes = all(m.container, ".spec-body [data-testid=md-task-box]") as HTMLInputElement[];
-    expect(boxes.map((b) => b.checked)).toEqual([false, true, false]);
+    expect(all(m.container, ".spec-body [data-testid=md-task-box]").map((b) => b.getAttribute("aria-label"))).toEqual(["Question", "Answered", "Question"]);
   });
 
   test("Send posts every open question's reply as one message, and the replies stay in their boxes to send again", async () => {
@@ -411,11 +412,11 @@ describe("Needs you in a narrow pane: answers inline in the spec", () => {
     expect(inline(m).map((q) => box(q).value)).toEqual(["Postgres", ""]);
     // The question under the plan step is inside that step's list, where the agent put it.
     expect(inline(m)[0]!.closest("ol")).not.toBeNull();
-    // Checked items stay plain checked lines.
-    expect((all(m.container, ".spec-doc [data-testid=md-task-box]") as HTMLInputElement[]).filter((b) => b.checked)).toHaveLength(1);
+    // An answered item is a plain line with a check in the question's circle, and no box.
+    expect(all(m.container, ".spec-doc [data-testid=md-task-box]").map((b) => b.getAttribute("aria-label"))).toEqual(["Question", "Answered", "Question"]);
     expect(all(m.container, "[data-testid=needs-you]")).toHaveLength(0);
     // The drafted answer is ready to go.
-    expect(text(bar(m))).toContain("1 answer ready · Send");
+    expect(text(bar(m))).toContain("1/2 answers ready · Send");
   });
 
   test("the bar focuses the first question's box; once answers are drafted it sends them all as one message, and they stay", async () => {
@@ -435,7 +436,7 @@ describe("Needs you in a narrow pane: answers inline in the spec", () => {
     expect(document.activeElement).toBe(box(inline(m)[0]!));
     await type(m, box(inline(m)[0]!), "Postgres");
     await type(m, box(inline(m)[1]!), "Friday");
-    await m.until("the bar sends", () => text(bar(m)).includes("2 answers ready · Send"));
+    await m.until("the bar sends", () => text(bar(m)).includes("2/2 answers ready · Send"));
     await click(m, bar(m)!);
     const posts = m.client.bodies.filter((b) => b.request === "POST /tickets/HARNESS-2/messages").map((b) => b.body);
     expect(posts).toEqual([{ text: "", questionReplies: [{ question: "Which database?", body: "Postgres" }, { question: "Ship when?", body: "Friday" }] }]);
@@ -456,11 +457,12 @@ describe("Needs you in a narrow pane: answers inline in the spec", () => {
     expect(all(m.container, "[data-testid=needs-you-question] [data-testid=needs-you-reply]").map((t) => (t as HTMLTextAreaElement).value)).toEqual(["Postgres", "Friday"]);
   });
 
-  test("a blocked ticket's question shows under the bar, by the composer, not in the spec", async () => {
+  test("a blocked ticket's question shows at the top of the spec, not by the composer", async () => {
     panes = sizedPanes(600, 900);
     const m = await mount(detail("HARNESS-4"));
     await m.until("the callout", () => all(m.container, "[data-testid=blocked-callout]").length === 1);
-    expect(all(m.container, "[data-testid=blocked-callout]")[0]!.closest("[data-testid=composer]")).not.toBeNull();
+    expect(all(m.container, "[data-testid=blocked-callout]")[0]!.closest(".spec-body")).not.toBeNull();
+    expect(all(m.container, "[data-testid=composer] [data-testid=blocked-callout]")).toHaveLength(0);
     expect(text(bar(m))).toContain("Needs you · 1");
     // With no question in the spec to go to, the bar focuses the message box.
     await click(m, bar(m)!);

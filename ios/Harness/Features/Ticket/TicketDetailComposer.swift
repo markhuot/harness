@@ -80,20 +80,16 @@ struct TicketDetailComposer: View {
         VStack(spacing: 4) {
             if tab == .spec {
                 if questions.layout == .panel {
-                    if TicketNeedsYouPanel.shows(ticket, panel) {
+                    if TicketNeedsYouPanel.shows(panel) {
                         TicketNeedsYouPanel(ticket: ticket, panel: panel, draft: draft) { now in
                             draft.focus(now, stored: ticket.messageDraft.optional)
                         }
                         .padding(.bottom, 4)
                     }
                 } else {
-                    if let bar = OpenQuestions.bar(count: TicketNeedsYouPanel.count(ticket, panel), ready: replies.count) {
+                    if let bar = OpenQuestions.bar(count: TicketNeedsYouPanel.count(ticket, panel), ready: replies.count, questions: panel.open.count) {
                         NeedsYouBar(bar: bar) { barTapped(bar) }
                     }
-                    TicketBlockedCallout(ticket: ticket, compact: true)
-                        // Opaque under the callout's tint, as the spec scrolls behind it.
-                        .background(c.bgElev, in: .rect(cornerRadius: 10))
-                        .padding(.bottom, 4)
                 }
             }
             if !outgoing.isEmpty || !uploader.pending.isEmpty {

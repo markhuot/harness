@@ -544,18 +544,15 @@ private struct MarkdownListRow<Content: View>: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            if question {
-                Image(systemName: "questionmark.circle")
+            if question || checked != nil {
+                // Every task item is a question for the human: an open one shows a question mark
+                // in an amber circle, an answered one a check in the same outlined circle.
+                let done = !question && checked == true
+                Image(systemName: done ? "checkmark.circle" : "questionmark.circle")
                     .font(style.font)
-                    .foregroundStyle(style.palette.tone(.amber).fg)
+                    .foregroundStyle(toggled ? style.palette.green : marker ?? style.palette.tone(.amber).fg)
                     .frame(minWidth: 10, alignment: .trailing)
-                    .accessibilityLabel("Question")
-            } else if let checked {
-                Image(systemName: checked ? "checkmark.square.fill" : "square")
-                    .font(style.font)
-                    .foregroundStyle(toggled ? style.palette.green : marker ?? (checked ? style.palette.accent : style.palette.text3))
-                    .frame(minWidth: 10, alignment: .trailing)
-                    .accessibilityLabel(checked ? "Done" : "Not done")
+                    .accessibilityLabel(done ? "Answered" : "Question")
             } else {
                 Text(ordered ? "\(number)." : MarkdownStyle.bullets[depth % MarkdownStyle.bullets.count])
                     .font(style.font)

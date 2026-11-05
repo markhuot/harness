@@ -1,19 +1,18 @@
 // "Needs you" (DESIGN.md "Open questions"): what the ticket waits on the human for, at the top of
 // the composer, on the Spec tab only. In a wide pane (the panel layout, QuestionAnswers.tsx) it's
-// this panel: the blocked ticket's question (BlockedCallout: the question, a restart time or a tool
-// approval) first, then each unchecked task item in the spec as plain text with one growing reply
+// this panel: each unchecked task item in the spec as plain text with one growing reply
 // box under it, then the checked ones folded under "N answered". The replies are part of the
 // message draft: they save as they're typed, go with the composer's Send as one message, and stay
 // in their boxes afterwards, so the human can edit them and send again (a send steers a live run or
 // starts one, like any message). The panel caps its height and scrolls, so the composer stays on
-// screen.
+// screen. A blocked ticket's question isn't here: it heads the spec (SpecTab), where it can scroll,
+// though the count still includes it.
 
 import type { Ticket } from "@harness/shared";
 import type { QuestionPanel } from "@harness/shared/state";
 import { blockedCallout } from "../state/blockedCallout";
 import { Icon } from "../components/Icon";
 import { Markdown } from "../components/Markdown";
-import { BlockedCallout } from "./BlockedCallout";
 import { QuestionReplyField } from "./QuestionAnswers";
 
 /** How many things wait on the human: the block (question, restart or approval) and the open questions. */
@@ -32,8 +31,7 @@ interface PanelProps {
 }
 
 export function NeedsYouPanel({ ticket, panel, onReply, onFocus, onSend }: PanelProps) {
-  const blocked = blockedCallout(ticket).kind !== "none";
-  if (!blocked && !panel.open.length && !panel.answered.length) return null;
+  if (!panel.open.length && !panel.answered.length) return null;
   const count = needsYouCount(ticket, panel);
   return (
     <section className="needs-you" data-testid="needs-you" aria-label="Needs you">
@@ -43,7 +41,6 @@ export function NeedsYouPanel({ ticket, panel, onReply, onFocus, onSend }: Panel
         {panel.open.length > 0 && <span className="muted">Replies go out together when you send</span>}
       </div>
       <div className="needs-you-list">
-        <BlockedCallout ticket={ticket} />
         {panel.open.map((q) => (
           <div key={q.question} className="needs-you-q" data-testid="needs-you-question">
             <div className="needs-you-q-text">

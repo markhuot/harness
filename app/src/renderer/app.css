@@ -2645,9 +2645,6 @@ button.prompt-attachment-row-main:disabled {
   max-height: min(40vh, 360px);
   overflow-y: auto;
 }
-.needs-you .blocked-callout {
-  border: none;
-}
 .needs-you-q {
   display: flex;
   flex-direction: column;
@@ -2703,9 +2700,6 @@ button.prompt-attachment-row-main:disabled {
 }
 .needs-you-bar.is-send strong {
   color: var(--accent);
-}
-.needs-you-bar-block {
-  margin-bottom: 8px;
 }
 .md-task.is-question > .md-task-answer {
   margin: 6px 0 14px;

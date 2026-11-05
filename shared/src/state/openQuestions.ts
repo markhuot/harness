@@ -115,11 +115,14 @@ export interface NeedsYouBar {
 
 /**
  * `count` is everything waiting on the human (the block and the open questions), `ready` the
- * answers a Send would deliver. Once there are answers it sends them; before, it takes the human
+ * answers a Send would deliver, `questions` the open questions they're out of. Once there are answers it sends them; before, it takes the human
  * to the first question. None when nothing waits.
  */
-export function needsYouBar(count: number, ready: number): NeedsYouBar | null {
-  if (ready > 0) return { label: `${ready} ${ready === 1 ? "answer" : "answers"} ready · Send`, action: "send" };
+export function needsYouBar(count: number, ready: number, questions: number): NeedsYouBar | null {
+  // Out of the open questions ("2/3 answers ready"); a reply to a question an agent has since
+  // checked off still goes, so the total never reads below what's ready.
+  const total = Math.max(questions, ready);
+  if (ready > 0) return { label: `${ready}/${total} ${total === 1 ? "answer" : "answers"} ready · Send`, action: "send" };
   if (count > 0) return { label: `Needs you · ${count}`, action: "focus" };
   return null;
 }

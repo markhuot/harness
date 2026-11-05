@@ -2,14 +2,14 @@ import HarnessKit
 import SwiftUI
 
 /// "Needs you" (DESIGN.md "Open questions"): what the ticket waits on the human for, at the top of
-/// the composer on the Spec tab of a large landscape view (OpenQuestions.layout `.panel`). The
-/// blocked ticket's question (TicketBlockedCallout: the question, a restart time or a tool approval)
-/// comes first, then each unchecked task item anywhere in the spec as plain text with one growing
+/// the composer on the Spec tab of a large landscape view (OpenQuestions.layout `.panel`): each
+/// unchecked task item anywhere in the spec as plain text with one growing
 /// answer field 6pt under it and 20pt between questions, then the checked ones folded under "N
 /// answered". The answers are part of the message draft (MessageDraftSync): they save as they're
 /// typed, go with the composer's Send as one message, and stay in their fields afterwards, so the
 /// human can edit them and send again. The panel caps its height and scrolls, so the composer stays
-/// on screen; the spec keeps read-only checkboxes.
+/// on screen. A blocked ticket's question isn't here: it heads the Spec tab (TicketBlockedCallout),
+/// though the count still includes it.
 struct TicketNeedsYouPanel: View {
     let ticket: Ticket
     let panel: OpenQuestions.Panel
@@ -31,7 +31,6 @@ struct TicketNeedsYouPanel: View {
             .foregroundStyle(c.tone(.amber).fg)
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    TicketBlockedCallout(ticket: ticket)
                     ForEach(panel.open) { q in
                         VStack(alignment: .leading, spacing: 6) {
                             MarkdownView(text: q.question, size: 15)
@@ -45,7 +44,7 @@ struct TicketNeedsYouPanel: View {
                             VStack(alignment: .leading, spacing: 6) {
                                 ForEach(panel.answered) { q in
                                     HStack(alignment: .firstTextBaseline, spacing: 6) {
-                                        Image(systemName: "checkmark.square.fill").foregroundStyle(c.text3)
+                                        Image(systemName: "checkmark.circle").foregroundStyle(c.tone(.amber).fg)
                                         MarkdownView(text: q.question, size: 14)
                                     }
                                 }
@@ -74,9 +73,9 @@ struct TicketNeedsYouPanel: View {
         (blocked(ticket) ? 1 : 0) + panel.open.count
     }
 
-    /// Whether there's anything to show at all.
-    static func shows(_ ticket: Ticket, _ panel: OpenQuestions.Panel) -> Bool {
-        blocked(ticket) || !panel.open.isEmpty || !panel.answered.isEmpty
+    /// Whether there are questions to show at all (the block heads the spec instead).
+    static func shows(_ panel: OpenQuestions.Panel) -> Bool {
+        !panel.open.isEmpty || !panel.answered.isEmpty
     }
 
     private static func blocked(_ ticket: Ticket) -> Bool {

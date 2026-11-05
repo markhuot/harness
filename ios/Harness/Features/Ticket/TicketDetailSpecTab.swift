@@ -59,6 +59,7 @@ struct TicketDetailSpecTab: View {
             ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
+                    TicketBlockedCallout(ticket: ticket)
                     if !deps.isEmpty {
                         FlowLayout(spacing: 6) {
                             SectionTitle("Depends on")
@@ -384,21 +385,19 @@ private struct TicketPromptAttachments: View {
     }
 }
 
-/// The blocked ticket's status and question, first in the composer's Needs you panel
-/// (TicketNeedsYouPanel) or under the inline layout's bar, so the human answers the agent where they
-/// type (BlockedCallout decides what shows). Display-only: never part of the spec's text. There's no
-/// Unblock: a message answers the block, and the agent unblocks itself.
+/// The blocked ticket's status and question, at the top of the Spec tab's scrolling content, so it's
+/// the first thing the human reads however long it runs (BlockedCallout decides what shows); the
+/// answer goes in the composer. Display-only: never part of the spec's text. There's no Unblock: a
+/// message answers the block, and the agent unblocks itself.
 struct TicketBlockedCallout: View {
     let ticket: Ticket
-    /// Under the inline bar: clamp a long question sooner, so the composer keeps the screen.
-    var compact = false
 
     @State private var expanded = false
 
     /// A question longer than this many characters (or lines) is clamped until Show all.
-    private var clampChars: Int { compact ? 240 : 600 }
-    private var clampLines: Int { compact ? 4 : 10 }
-    private var clampHeight: CGFloat { compact ? 84 : 170 }
+    private let clampChars = 600
+    private let clampLines = 10
+    private let clampHeight: CGFloat = 170
 
     var body: some View {
         switch BlockedCallout.of(ticket) {
