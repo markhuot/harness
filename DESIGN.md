@@ -1746,6 +1746,19 @@ Code's own prompt asks for bare `file_path:line_number` references; the section 
   CLI still ran the turn that reported the agent, which started a verify agent, and 15s later
   the exit grace stopped both and the ticket was auto-submitted (HARNESS-509).
 
+  From claude 2.1.316 an `init` no longer means the queued notifications were handed over. Each
+  `result` carries the `origin` of its turn: a background agent's report arrives in a `peer`
+  turn (`origin.senderTaskId`), and its `<task-notification>` in a separate `task-notification`
+  turn (`origin.runId`, mapped to the task through `background_tasks_changed`) that is often
+  empty (`num_turns` 0, no model call). The driver clears an unreported task only on the peer
+  result naming it, or on a non-empty task-notification result (a Bash or Monitor task); the
+  init-clears-all rule applies only to a CLI that doesn't tag origins (older than 2.1.316 and no
+  `origin` seen). Each empty turn's result re-arms the handback wait without repeating its
+  status. Before this, ACAMD-146's code agent reported while its logs agent finished; the next
+  init opened an empty task-notification turn that counted the logs agent as heard, its result
+  closed stdin while the logs agent's report turn was starting, and the exit grace killed that
+  turn 15s later (HARNESS-653).
+
   A resumed session whose last process ended with background tasks still running (a submit
   with a dev server up, say) opens differently (claude 2.1.286): the CLI reports those tasks
   `stopped` ("didn't finish before the previous session ended"), then emits an `init` and an

@@ -57,6 +57,23 @@ const DEFAULT_EXIT_GRACE_MS = 15_000;
 const DEFAULT_HANDBACK_WAIT_MS = 30_000;
 /** The task ids in a <task-notification> the CLI hands the agent at a tool boundary */
 const NOTIFIED_TASK = /<task-id>([^<]+)<\/task-id>/g;
+/**
+ * The first claude version seen tagging each result with its turn's `origin` (peer hand-backs
+ * and task-notification turns of their own). 2.1.299 didn't; versions in between weren't checked,
+ * and a result's origin switches the parser over on its own anyway.
+ */
+const ORIGIN_TAGS_SINCE = "2.1.316";
+
+/** Whether dotted version `v` is `min` or newer ("2.1.316" ≥ "2.1.299") */
+export function versionAtLeast(v: string, min: string): boolean {
+  const a = v.split(".").map((n) => parseInt(n, 10));
+  const b = min.split(".").map((n) => parseInt(n, 10));
+  for (let i = 0; i < b.length; i++) {
+    const x = Number.isFinite(a[i]) ? a[i]! : 0;
+    if (x !== b[i]) return x > b[i]!;
+  }
+  return true;
+}
 
 /**
  * Harness tools that finish a run. A turn that called one ends even if background tasks are
@@ -561,9 +578,20 @@ export class StreamJsonParser {
    * Background tasks that finished but whose notification the agent hasn't been handed yet: CLI
    * task id → description. One that finishes mid-turn reaches the agent at its next tool
    * boundary (a replayed <task-notification> message) or, when the turn ends first, in a turn of
-   * its own (its init). Until then the run isn't over (HARNESS-509).
+   * its own. Until then the run isn't over (HARNESS-509).
+   *
+   * Which turn hands it over depends on the CLI. Up to claude 2.1.299 the turn's init did, so an
+   * init clears them all. From 2.1.316 every result names what started its turn (`origin`): a
+   * background agent's report comes in a "peer" turn of its own, and its <task-notification>
+   * in a separate turn that may be empty (num_turns 0, no model call). An init there can be
+   * that empty turn while another agent's report is still queued, so only the result whose
+   * origin names a task clears it (HARNESS-653).
    */
   readonly unreported = new Map<string, string>();
+  /** The CLI tags each result with the origin of its turn (see unreported) */
+  private tagsOrigins = false;
+  /** A background task's run id (what a task-notification origin names) → its CLI task id */
+  private taskOfRun = new Map<string, string>();
   /** CLI task id → the description its task_started gave */
   private taskLabels = new Map<string, string>();
   /** The agent called a tool that finishes the run (FINISHING_TOOLS) */
@@ -690,6 +718,9 @@ export class StreamJsonParser {
         break;
       }
       case "system":
+        if (msg.subtype === "background_tasks_changed" && Array.isArray(msg.tasks)) {
+          for (const t of msg.tasks) if (typeof t?.run_id === "string" && typeof t?.task_id === "string") this.taskOfRun.set(t.run_id, t.task_id);
+        }
         if (msg.subtype === "compact_boundary") {
           const m = msg.compact_metadata;
           events.push({ type: "compacted", before: typeof m?.pre_tokens === "number" ? m.pre_tokens : undefined, after: typeof m?.post_tokens === "number" ? m.post_tokens : undefined });
@@ -749,8 +780,9 @@ export class StreamJsonParser {
           // Every turn of the process starts with an init; report a mode downgrade once.
           const firstInit = !this.sawInit;
           this.sawInit = true;
-          // The turn starts with the notifications queued since the last one.
-          this.unreported.clear();
+          if (typeof msg.claude_code_version === "string" && versionAtLeast(msg.claude_code_version, ORIGIN_TAGS_SINCE)) this.tagsOrigins = true;
+          // Before origin tags, the turn starts with the notifications queued since the last one.
+          if (!this.tagsOrigins) this.unreported.clear();
           noteSession(msg.session_id);
           if (typeof msg.permissionMode === "string") {
             this.initPermissionMode = msg.permissionMode;
@@ -912,6 +944,20 @@ export class StreamJsonParser {
         const message =
           (typeof msg.result === "string" && msg.result.trim()) || errors.join("; ") || (isError ? `claude ended with ${msg.subtype ?? "an error"}` : "");
         this.result = { isError, message, errors };
+        const origin = msg.origin;
+        if (origin && typeof origin === "object") {
+          this.tagsOrigins = true;
+          // A peer turn hands the agent a background agent's report. A task-notification turn
+          // hands over a Bash or Monitor task, unless it was empty (an agent's, whose report
+          // comes in its own peer turn).
+          if (origin.kind === "peer") {
+            const id = str(origin.senderTaskId) ?? str(origin.from);
+            if (id) this.unreported.delete(id);
+          } else if (origin.kind === "task-notification" && typeof origin.runId === "string" && typeof msg.num_turns === "number" && msg.num_turns > 0) {
+            const id = this.taskOfRun.get(origin.runId);
+            if (id) this.unreported.delete(id);
+          }
+        }
         break;
       }
     }
@@ -1250,6 +1296,8 @@ export class ClaudeCodeDriver implements Driver {
     const handbackWaitMs = this.opts.handbackWaitMs ?? DEFAULT_HANDBACK_WAIT_MS;
     /** Closes stdin if the turn that hands the agent its finished tasks never starts */
     let handbackTimer: ReturnType<typeof setTimeout> | null = null;
+    /** The handback wait's status line last shown */
+    let handbackStatus = "";
     const clearHandback = () => {
       if (handbackTimer) clearTimeout(handbackTimer);
       handbackTimer = null;
@@ -1328,13 +1376,19 @@ export class ClaudeCodeDriver implements Driver {
           // the next turn with it, which may start more work (HARNESS-509).
           const waiting = [...parser.runningTasks.values()];
           const unreported = [...parser.unreported.values()];
+          const shownBefore = handbackStatus;
+          handbackStatus = "";
           if (parser.finished || parser.result?.isError) closeStdin();
           else if (req.input?.pending) {
             if (waitTimer) clearTimeout(waitTimer);
             waitTimer = null;
           } else if (!waiting.length && !unreported.length) closeStdin();
           else if (!waiting.length) {
-            events.push({ type: "status", text: `Waiting for the agent to hear that ${unreported.length === 1 ? "a background task" : `${unreported.length} background tasks`} finished (${unreported.join("; ")}).` });
+            // An empty turn in between (a task-notification turn, claude 2.1.316) waits again
+            // without saying so twice.
+            const text = `Waiting for the agent to hear that ${unreported.length === 1 ? "a background task" : `${unreported.length} background tasks`} finished (${unreported.join("; ")}).`;
+            if (text !== shownBefore) events.push({ type: "status", text });
+            handbackStatus = text;
             clearHandback();
             handbackTimer = setTimeout(closeStdin, handbackWaitMs);
             handbackTimer.unref?.();
