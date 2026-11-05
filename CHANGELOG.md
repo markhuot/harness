@@ -18,6 +18,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 - For people working on Harness: the iPhone and iPad apps now build and test with Xcode 27.2 (`/Applications/Xcode-27.2.0.app`), and every shared simulator runs on iOS 27.2 in place of iOS 27.0 plus a Duo-only iOS 27.1. Apple ships 27.2 as two runtimes, one for the iPhones and iPads and one for the iPhone Duo; `bun run sim` puts each device on the one that supports it, and `bun run sim disk` names any other iOS runtime as one to remove. The screen references are re-recorded on 27.2.
 - For people working on Harness: `bun run sim` now puts the shared iPad in Full Screen Apps (the state its screen references are recorded in) whenever it hands the iPad out, so a new iPad simulator no longer fails every iPad screen test with a safe-area mismatch.
 - For people working on Harness: `bun ios/Tools/build.ts device --device <name|udid> --optimized` builds and installs a Release build on a plugged-in phone, still signed for development, so Instruments can profile the app as it really runs.
+- For people working on Harness: the shared protocol always sends `FileView.image` with a file, null for anything that isn't a picture, matching the Swift contract, and the iPhone, iPad and Duo screen tests have reference renders of an image file in the viewer. The screen-test renderer also names the command that puts the iPad back in Full Screen Apps.
 
 ### Fixed
 
