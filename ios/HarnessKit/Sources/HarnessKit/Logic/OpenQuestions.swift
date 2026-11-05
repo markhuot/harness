@@ -1,10 +1,10 @@
 import Foundation
 
 // Port of shared/src/state/openQuestions.ts. A spec's open questions (DESIGN.md "Open questions"):
-// the GFM task items under its "Open questions" heading. Agents write them (`- [ ] question`) and
-// resolve them by moving the answer into the spec and removing the item or checking it off. The
-// ticket screen lists them in the Needs you panel above the composer, where the human replies to
-// several at once; the replies stay after a send, to edit and send again.
+// every GFM task item in it (`- [ ] question`), under any heading or none. Agents write them wherever
+// they fit and resolve them by moving the answer into the spec and removing the item or checking it
+// off. The ticket screen shows each with an answer field, in the Needs you panel above the composer
+// or inline in the spec (NeedsYouLayout); the replies stay after a send, to edit and send again.
 
 public enum OpenQuestions {
     public struct Question: Equatable, Sendable {
@@ -35,13 +35,10 @@ public enum OpenQuestions {
         public static let empty = Panel(open: [], answered: [])
     }
 
-    /// `openQuestions`: the task items under the spec's Open questions heading (any level, any
-    /// case), down to the next heading of the same or a higher level, in order, nested ones
-    /// included. Plain bullets and prose there aren't questions.
+    /// `openQuestions`: every task item in the spec, in document order, nested ones included,
+    /// checked or not. Plain bullets and prose aren't questions, and neither is anything inside a
+    /// code block.
     public static func questions(_ spec: String) -> [Question] {
-        let blocks = Markdown.parseBlocks(spec)
-        guard let start = blocks.firstIndex(where: { if case let .h(_, text) = $0 { isHeading(text) } else { false } }),
-              case let .h(level, _) = blocks[start] else { return [] }
         var out: [Question] = []
         func walk(_ list: [Markdown.Block]) {
             for b in list {
@@ -58,18 +55,8 @@ public enum OpenQuestions {
                 }
             }
         }
-        for b in blocks[(start + 1)...] {
-            if case let .h(l, _) = b, l <= level { break }
-            walk([b])
-        }
+        walk(Markdown.parseBlocks(spec))
         return out
-    }
-
-    /// `/^open questions?\s*:?$/i`
-    private static func isHeading(_ text: String) -> Bool {
-        var t = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if t.hasSuffix(":") { t = String(t.dropLast()).trimmingCharacters(in: .whitespaces) }
-        return t == "open questions" || t == "open question"
     }
 
     /// `pendingQuestionReplies`: the replies worth sending, trimmed, blank ones dropped.

@@ -392,7 +392,7 @@ export interface Ticket {
   messageDraft?: MessageDraft | null;
   /**
    * How many of the spec's open questions are unanswered (DESIGN.md "Open questions"): the unchecked
-   * task items under its Open questions heading, derived from the spec. The board card shows it.
+   * task items anywhere in it, derived from the spec. The board card shows it.
    * Optional so older services and fixtures type-check.
    */
   openQuestionCount?: number;

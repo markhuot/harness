@@ -9,15 +9,14 @@ import HarnessKit
         #expect(items.map(\.checked) == [false, true, true, nil, nil])
     }
 
-    @Test func questionsAreTheTaskItemsUnderTheHeading() {
-        let spec = "## Goal\n- [ ] not one\n\n## Open questions\n\n- [ ] Which DB?\n- [x] Which port?\n- plain bullet\n### Sub\n- [ ] Nested section\n## Status\n- [ ] not one either"
+    @Test func everyTaskItemIsAQuestionInDocumentOrderOutsideCodeBlocks() {
+        let spec = "## Goal\n- [ ] Goal one\n- plain bullet\n\n## Plan\n1. Step\n   - [x] Nested\n\n```\n- [ ] in code\n```\n\n## Open questions\n- [ ] Last"
         #expect(OpenQuestions.questions(spec) == [
-            .init(text: "Which DB?", checked: false),
-            .init(text: "Which port?", checked: true),
-            .init(text: "Nested section", checked: false),
+            .init(text: "Goal one", checked: false),
+            .init(text: "Nested", checked: true),
+            .init(text: "Last", checked: false),
         ])
-        #expect(OpenQuestions.questions("### OPEN QUESTIONS:\n- [ ] a").map(\.text) == ["a"])
-        #expect(OpenQuestions.questions("## Questions\n- [ ] a").isEmpty)
+        #expect(OpenQuestions.questions("No lists here.\n\n- plain").isEmpty)
     }
 
     @Test func thePanelPairsEachQuestionWithItsDraftAndSendsOnlyOpenOnes() {

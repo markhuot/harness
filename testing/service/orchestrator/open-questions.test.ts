@@ -52,6 +52,24 @@ test("replies alone, with no text, are a message; blank replies and no text are 
   expect(h.driver.requests.at(-1)!.prompt).toContain("> Which colour?\n\nRed");
 });
 
+test("a message to a blocked ticket is recorded as the answer and reaches a run that can unblock and is told to", async () => {
+  const h = makeOrchestrator({ tools: undefined });
+  h.driver.script(toolCall("block", { question: "Which colour should it be?" }));
+  const t = await h.orch.createTicket({ projectId: h.project.id, spec: SPEC, skipAgentReview: true });
+  await h.settle();
+  expect(h.ticket(t.key).status).toBe("blocked");
+  const before = h.driver.requests.length;
+  await h.orch.sendMessage(t.key, "Blue.", { fromApp: true });
+  await h.settle();
+  const answered = h.store.activity.listBySession(t.sessionId).filter((e) => e.kind === "answered");
+  expect(answered.map((e) => e.body)).toEqual(["Blue."]);
+  const run = h.driver.requests.slice(before).find((r) => r.prompt.includes("Blue."))!;
+  expect(run.tools.map((x) => x.name)).toContain("unblock");
+  expect(run.prompt).toContain("If this message resolves that, call unblock before you continue");
+  // Nothing unblocks for the agent: the ticket waits until it calls unblock.
+  expect(h.ticket(t.key).status).toBe("blocked");
+});
+
 test("a reply batch to a blocked ticket answers its question", async () => {
   const h = makeOrchestrator({ tools: undefined });
   h.driver.script(toolCall("block", { question: "Which colour should it be?" }));
@@ -81,7 +99,7 @@ test("the draft keeps question replies (blank ones dropped), and a send keeps th
   expect(h.ticket(t.key).messageDraft).toBeNull();
 });
 
-test("openQuestionCount follows the spec: the unchecked task items under Open questions", async () => {
+test("openQuestionCount follows the spec: every unchecked task item, under any heading", async () => {
   const h = makeOrchestrator({ tools: undefined });
   const t = await h.orch.createTicket({ projectId: h.project.id, spec: SPEC, start: false });
   await h.settle();
@@ -89,4 +107,7 @@ test("openQuestionCount follows the spec: the unchecked task items under Open qu
   const spec = h.ticket(t.key).spec.replace("- [ ] Which colour?", "- [x] Which colour?");
   await h.orch.updateTicket(t.key, { spec, baseRevision: h.ticket(t.key).specRevision });
   expect(h.ticket(t.key).openQuestionCount).toBe(1);
+  const elsewhere = "# Add a button\n\n## Plan\n\n1. Draw it\n   - [ ] Which corner?\n\n- [ ] Rounded?\n";
+  await h.orch.updateTicket(t.key, { spec: elsewhere, baseRevision: h.ticket(t.key).specRevision });
+  expect(h.ticket(t.key).openQuestionCount).toBe(2);
 });

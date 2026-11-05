@@ -28,32 +28,24 @@ describe("parseBlocks: task lists", () => {
 });
 
 describe("openQuestions", () => {
-  const spec = (section: string) => `# T\n\n## Goal\n\n- [ ] not a question\n\n## Open questions\n\n${section}\n\n## Later\n\n- [ ] also not one\n`;
-
-  test("the task items under the heading, in order, checked or not", () => {
-    expect(openQuestions(spec("- [ ] Which DB?\n- [x] Which port?\n- [ ] Ship when?"))).toEqual([
-      { text: "Which DB?", checked: false },
+  test("every task item is a question, under any heading or none, in document order", () => {
+    const spec = "- [ ] Before any heading\n\n## Goal\n\n- [ ] In the goal\n- a plain bullet\n\n## Open questions\n\n- [x] Which port?\n\n## Status\n\n- [ ] At the end";
+    expect(openQuestions(spec)).toEqual([
+      { text: "Before any heading", checked: false },
+      { text: "In the goal", checked: false },
       { text: "Which port?", checked: true },
-      { text: "Ship when?", checked: false },
+      { text: "At the end", checked: false },
     ]);
   });
-  test("plain bullets and prose under the heading aren't questions", () => {
-    expect(openQuestions(spec("None.\n\n- a plain bullet"))).toEqual([]);
+  test("nested task items count, at any depth; their plain parents and prose don't", () => {
+    expect(openQuestions("1. Step\n   - Grouping\n     - [ ] a\n   - [x] b\n\nNone.").map((q) => q.text)).toEqual(["a", "b"]);
   });
-  test("the heading matches at any level and case, with or without a colon or plural", () => {
-    expect(openQuestions("### OPEN QUESTIONS:\n- [ ] a")).toEqual([{ text: "a", checked: false }]);
-    expect(openQuestions("# Open question\n- [ ] a")).toEqual([{ text: "a", checked: false }]);
-    expect(openQuestions("## Questions\n- [ ] a")).toEqual([]);
+  test("task items inside a code block aren't questions", () => {
+    expect(openQuestions("```md\n- [ ] example\n```\n- [ ] real")).toEqual([{ text: "real", checked: false }]);
   });
-  test("a deeper heading stays inside the section; a same-level one ends it", () => {
-    expect(openQuestions("## Open questions\n### Design\n- [ ] a\n## Status\n- [ ] b").map((q) => q.text)).toEqual(["a"]);
-  });
-  test("nested task items count; their plain parents don't", () => {
-    expect(openQuestions("## Open questions\n- Grouping\n  - [ ] a\n  - [x] b").map((q) => q.text)).toEqual(["a", "b"]);
-  });
-  test("no heading, no questions; the count is the unchecked ones", () => {
-    expect(openQuestions("# T\n- [ ] a")).toEqual([]);
-    expect(openQuestionCount(spec("- [ ] a\n- [x] b\n- [ ] c"))).toBe(2);
+  test("the count is the unchecked ones", () => {
+    expect(openQuestionCount("## Plan\n- [ ] a\n## Open questions\n- [x] b\n- [ ] c")).toBe(2);
+    expect(openQuestionCount("# T\n- plain")).toBe(0);
   });
 });
 
@@ -115,16 +107,5 @@ describe("questionPanel and sendableQuestionReplies", () => {
       { question: "Ship when?", body: "  " },
     ];
     expect(sendableQuestionReplies(spec, replies)).toEqual([{ question: "Which DB?", body: "PG" }]);
-  });
-});
-
-describe("specDiff: task items", () => {
-  test("checking an item off is an edit carrying both checkboxes", async () => {
-    const { specDiff } = await import("../../../shared/src/state/specDiff");
-    const [list] = specDiff("- [ ] Which DB?\n- [ ] Port?", "- [x] Which DB?\n- [ ] Port?");
-    expect(list!.change).toBe("edit");
-    const items = (list as { block: { items: { change: string; checked?: boolean; wasChecked?: boolean }[] } }).block.items;
-    expect(items[0]).toMatchObject({ change: "edit", checked: true, wasChecked: false });
-    expect(items[1]!.change).toBe("same");
   });
 });

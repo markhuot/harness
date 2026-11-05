@@ -1,9 +1,10 @@
-// A spec's open questions (DESIGN.md "Open questions"): the GFM task items under its "Open
-// questions" heading. Agents write them (`- [ ] question`) and resolve them by moving the answer
-// into the spec and removing the item or checking it off. The apps list them in the panel above the
-// composer, where the human replies to several at once (the replies stay after a send, to edit and
-// send again); the service counts the unchecked ones for
-// the board card (Ticket.openQuestionCount) and composes the message a batch of replies sends.
+// A spec's open questions (DESIGN.md "Open questions"): every GFM task item in it (`- [ ] question`),
+// under any heading or none. Agents write them wherever they fit and resolve them by moving the
+// answer into the spec and removing the item or checking it off; they use task items for nothing
+// else. The apps show them with an answer box, in the panel above the composer or inline in the
+// spec (needsYouLayout), where the human replies to several at once (the replies stay after a send,
+// to edit and send again); the service counts the unchecked ones for the board card
+// (Ticket.openQuestionCount) and composes the message a batch of replies sends.
 
 import type { QuestionReply } from "../protocol";
 import { parseBlocks, type Block } from "./markdown";
@@ -14,18 +15,11 @@ export interface OpenQuestion {
   checked: boolean;
 }
 
-const HEADING = /^open questions?\s*:?$/i;
-
 /**
- * The task items under the spec's Open questions heading (any level, any case), down to the next
- * heading of the same or a higher level, in order, nested ones included. Plain bullets and prose
- * there aren't questions. None when there's no such heading.
+ * Every task item in the spec, in document order, nested ones included, checked or not. Plain
+ * bullets and prose aren't questions, and neither is anything inside a code block.
  */
 export function openQuestions(spec: string): OpenQuestion[] {
-  const blocks = parseBlocks(spec);
-  const start = blocks.findIndex((b) => b.t === "h" && HEADING.test(b.text.trim()));
-  if (start < 0) return [];
-  const level = (blocks[start] as Extract<Block, { t: "h" }>).level;
   const out: OpenQuestion[] = [];
   const walk = (list: Block[]) => {
     for (const b of list) {
@@ -36,11 +30,7 @@ export function openQuestions(spec: string): OpenQuestion[] {
       }
     }
   };
-  for (let i = start + 1; i < blocks.length; i++) {
-    const b = blocks[i]!;
-    if (b.t === "h" && b.level <= level) break;
-    walk([b]);
-  }
+  walk(parseBlocks(spec));
   return out;
 }
 

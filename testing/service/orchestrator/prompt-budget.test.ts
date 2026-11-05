@@ -27,9 +27,9 @@ function measure(kind: "plan" | "work" | "review") {
 }
 
 const LIMITS = {
-  // The Open questions rule (a task list the app shows above the composer) added ~90 tokens to each run block.
-  plan: { system: 1500, run: 2300, tools: 2600 },
-  work: { system: 2500, run: 3220, tools: 4000 },
+  // The questions rule (any task item in the spec is a question for the human) added ~100 tokens to each run block.
+  plan: { system: 1500, run: 2310, tools: 2600 },
+  work: { system: 2500, run: 3230, tools: 4000 },
   review: { system: 1300, run: 1180, tools: 2250 },
 };
 
@@ -73,12 +73,17 @@ test("plan runs write the first full spec and their notes; review runs only add 
   expect(review).not.toContain("`update_notes` { notes }");
 });
 
-test("every run that can edit the spec is told to write Open questions as a task list and how to resolve one", () => {
-  for (const kind of ["plan", "work", "review", "chat"] as const) {
+test("every run that can edit the spec is told any task item is a question and how to resolve one; review runs aren't told to resolve", () => {
+  for (const kind of ["plan", "work", "chat"] as const) {
     const { text, tool } = prompts(kind);
-    expect(text).toContain("Open questions is a task list");
+    expect(text).toContain("anywhere in the spec is a question for the human");
+    expect(text).toContain("use task items for nothing else");
     expect(text).toContain("then remove the item (preferred) or check it off");
-    expect(tool("edit_spec").description).toContain("`- [ ] question` task list");
+    expect(tool("edit_spec").description).toContain("Every `- [ ]` item in the spec is a question");
   }
+  const review = prompts("review");
+  expect(review.text).toContain("a question for the human as a `- [ ]` item");
+  expect(review.text).not.toContain("remove the item (preferred)");
+  expect(review.tool("edit_spec").description).not.toContain("removing the item (preferred)");
   expect(prompts("plan").tool("update_spec").description).toContain("removing the item (preferred)");
 });

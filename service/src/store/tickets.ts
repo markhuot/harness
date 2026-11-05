@@ -364,8 +364,8 @@ export class TicketRepo {
       promptAttachments: fromJson<Attachment[]>(r.prompt_attachments ?? null, []),
       resumeAt: r.resume_at ?? null,
       messageDraft: messageDraftOf(r.message_draft ?? null),
-      // Only a spec with the heading is parsed: most have none, and every listing maps every row.
-      openQuestionCount: /open questions?/i.test(r.spec) ? openQuestionCount(r.spec) : 0,
+      // Only a spec with a task item is parsed: most have none, and every listing maps every row.
+      openQuestionCount: /\[ \]/.test(r.spec) ? openQuestionCount(r.spec) : 0,
       agentNotes: r.agent_notes ?? null,
       position: r.position,
       completedAt: r.completed_at ?? null,

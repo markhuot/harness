@@ -49,9 +49,12 @@ export const updateNotes = defineTool<{ notes: string }>({
   },
 });
 
-/** How the spec's Open questions are written (DESIGN.md "Open questions"), for both spec tools. */
-const OPEN_QUESTIONS =
-  "Open questions: a `- [ ] question` task list; resolve one by putting its answer in the spec, then removing the item (preferred) or checking it.";
+/**
+ * How the spec's questions are written (DESIGN.md "Open questions"), for both spec tools. Review
+ * runs have edit_spec but don't rewrite the spec, so only update_spec says how to resolve one.
+ */
+const OPEN_QUESTIONS = "Every `- [ ]` item in the spec is a question for the human, shown with an answer box: use task items for nothing else.";
+const RESOLVE_QUESTION = "Resolve a question by putting its answer in the spec, then removing the item (preferred) or checking it.";
 
 export const readSpec = defineTool<{ revision?: number }>({
   name: "read_spec",
@@ -100,7 +103,7 @@ Change only what changed: the spec's history keeps the earlier revisions. ${OPEN
 
 export const updateSpec = defineTool<{ spec: string; note: string; base_revision: number; title?: string }>({
   name: "update_spec",
-  description: `Replace the ticket's whole spec with new markdown, as a new revision: mostly for planning, when you write the spec from the brief. Include everything worth keeping, since it replaces the text. For later changes use edit_spec, which changes only the parts that changed. base_revision is the revision you read (the run's context names the current one); a spec that moved on since fails the call with the current revision. Optionally set a clearer ticket title. ${OPEN_QUESTIONS} ${IMAGES}`,
+  description: `Replace the ticket's whole spec with new markdown, as a new revision: mostly for planning, when you write the spec from the brief. Include everything worth keeping, since it replaces the text. For later changes use edit_spec, which changes only the parts that changed. base_revision is the revision you read (the run's context names the current one); a spec that moved on since fails the call with the current revision. Optionally set a clearer ticket title. ${OPEN_QUESTIONS} ${RESOLVE_QUESTION} ${IMAGES}`,
   inputSchema: schema(
     {
       spec: { type: "string", minLength: 1, description: "The complete spec in markdown: Goal, Plan, Status, Open questions (a `- [ ]` task list)." },
