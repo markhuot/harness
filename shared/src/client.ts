@@ -22,6 +22,7 @@ import type {
   Health,
   HumanReviewBody,
   MessageBody,
+  QuestionReply,
   MessageDraftBody,
   ReopenBody,
   UnblockBody,
@@ -277,10 +278,11 @@ export class HarnessClient {
     return this.request<Ticket>("POST", `/tickets/${key}/submit`, body);
   }
   /** The message goes to the agent and the transcript, with any attachments (uploaded first when they aren't on the service's machine). */
-  sendMessage(key: string, text: string, opts: { attachments?: AttachmentInput[] } = {}) {
+  sendMessage(key: string, text: string, opts: { attachments?: AttachmentInput[]; questionReplies?: QuestionReply[] } = {}) {
     const body: MessageBody = {
       text,
       ...(opts.attachments?.length ? { attachments: opts.attachments } : {}),
+      ...(opts.questionReplies?.length ? { questionReplies: opts.questionReplies } : {}),
     };
     return this.request<Ticket>("POST", `/tickets/${key}/messages`, body);
   }

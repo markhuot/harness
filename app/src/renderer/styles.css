@@ -723,6 +723,21 @@ ul.md-list.depth-2 {
 ol.md-list {
   list-style-type: decimal;
 }
+/* A task item (`- [ ]`): its read-only checkbox stands in for the bullet. */
+.md li.md-task {
+  list-style: none;
+}
+.md-task-box {
+  margin: 0 6px 0 -18px;
+  vertical-align: -2px;
+  accent-color: var(--accent);
+  opacity: 1;
+}
+.md-task-box.is-toggled {
+  outline: 2px solid var(--green);
+  outline-offset: 1px;
+  border-radius: 3px;
+}
 /* An attachment in the text: fitted to the width, opening the lightbox. */
 .md-media {
   display: inline-block;

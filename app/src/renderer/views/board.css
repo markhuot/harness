@@ -174,3 +174,12 @@
   height: 15px;
   font-size: 9.5px;
 }
+/* How many open questions in the spec wait on the human (Ticket.openQuestionCount). */
+.card .card-questions {
+  height: 15px;
+  gap: 3px;
+  font-size: 9.5px;
+  color: var(--amber);
+  background: var(--amber-soft);
+  border-color: color-mix(in srgb, var(--amber) 40%, transparent);
+}

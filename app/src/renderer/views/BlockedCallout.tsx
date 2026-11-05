@@ -1,7 +1,8 @@
-// The blocked ticket's status, question and buttons at the top of the Spec tab, so the human can
-// answer the agent without leaving the spec. Display-only: it is drawn above the spec, never part
-// of its text, revisions, diff or Source editor. What it shows comes from state/blockedCallout.ts;
-// its Unblock runs the same action as the header's, through its own runner (and dialog).
+// The blocked ticket's status, question and buttons, first in the composer's Needs you panel
+// (NeedsYouPanel.tsx), so the human answers the agent right where they type. Display-only: it is
+// never part of the spec's text, revisions, diff or Source editor. What it shows comes from
+// state/blockedCallout.ts; its Unblock runs the same action as the header's, through its own runner
+// (and dialog).
 
 import { useState } from "react";
 import type { Ticket } from "@harness/shared";

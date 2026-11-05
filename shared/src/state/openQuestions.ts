@@ -4,7 +4,7 @@
 // composer, where the human replies to several at once; the service counts the unchecked ones for
 // the board card (Ticket.openQuestionCount) and composes the message a batch of replies sends.
 
-import type { QuestionReply } from "../protocol";
+import type { ActivityEntry, QuestionReply } from "../protocol";
 import { parseBlocks, type Block } from "./markdown";
 
 export interface OpenQuestion {
@@ -62,4 +62,59 @@ export function composeQuestionReplies(replies: readonly QuestionReply[] | null 
   const parts = pendingQuestionReplies(replies).map((r) => `> ${r.question.replace(/\n/g, "\n> ")}\n\n${r.body}`);
   if (text.trim()) parts.push(text.trim());
   return parts.join("\n\n");
+}
+
+/** A reply the human already sent under a question (an `answered` Activity entry's meta.questionReplies). */
+export interface SentQuestionReply {
+  body: string;
+  at: number;
+}
+
+/** One question as the panel shows it: its sent replies, oldest first, and the reply being drafted. */
+export interface QuestionThread {
+  question: string;
+  checked: boolean;
+  sent: SentQuestionReply[];
+  draft: string;
+}
+
+export interface QuestionPanel {
+  /** The unchecked questions, in the spec's order */
+  open: QuestionThread[];
+  /** The checked ones, folded into an "N answered" disclosure */
+  answered: QuestionThread[];
+  /**
+   * Drafted replies whose question isn't in the spec anymore (reworded or removed): kept, shown as
+   * "question changed", until they're sent or discarded, so nothing typed is lost.
+   */
+  detached: QuestionReply[];
+}
+
+/**
+ * The panel above the composer (DESIGN.md "Open questions"): the spec's questions, each with what
+ * the human already sent under it (matched by the question's text) and the reply in the draft.
+ */
+export function questionPanel(spec: string, activity: readonly ActivityEntry[], drafts: readonly QuestionReply[]): QuestionPanel {
+  const sent = new Map<string, SentQuestionReply[]>();
+  for (const e of [...activity].sort((a, b) => a.createdAt - b.createdAt)) {
+    if (e.kind !== "answered") continue;
+    for (const r of e.meta.questionReplies ?? []) {
+      const list = sent.get(r.question) ?? [];
+      list.push({ body: r.body, at: e.createdAt });
+      sent.set(r.question, list);
+    }
+  }
+  const questions = openQuestions(spec);
+  const thread = (q: OpenQuestion): QuestionThread => ({
+    question: q.text,
+    checked: q.checked,
+    sent: sent.get(q.text) ?? [],
+    draft: drafts.find((d) => d.question === q.text)?.body ?? "",
+  });
+  const known = new Set(questions.map((q) => q.text));
+  return {
+    open: questions.filter((q) => !q.checked).map(thread),
+    answered: questions.filter((q) => q.checked).map(thread),
+    detached: drafts.filter((d) => !known.has(d.question) && d.body.trim()),
+  };
 }

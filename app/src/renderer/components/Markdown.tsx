@@ -249,10 +249,30 @@ function MdMedia({ media, figure, captioned }: { media: Media; figure?: boolean;
   );
 }
 
-/** A list and the lists nested in its items. Bullets change with depth (• ◦ ▪), see .md-list in styles.css. */
+/**
+ * A task item's checkbox (`- [ ]` / `- [x]`): read-only, since agents own the text it's in.
+ * `was` marks one a revision checked or unchecked.
+ */
+function TaskBox({ checked, was }: { checked: boolean; was?: boolean }) {
+  const toggled = was !== undefined && was !== checked;
+  return (
+    <input
+      type="checkbox"
+      className={`md-task-box ${toggled ? "is-toggled" : ""}`}
+      checked={checked}
+      disabled
+      readOnly
+      aria-label={checked ? "Done" : "Not done"}
+      data-testid="md-task-box"
+    />
+  );
+}
+
+/** A list and the lists nested in its items. Bullets change with depth (• ◦ ▪), see .md-list in styles.css; task items show a checkbox instead. */
 function MdList({ block, depth, tickets }: { block: Extract<Block, { t: "ul" | "ol" }>; depth: number; tickets?: TicketLinks }) {
   const items = block.items.map((it, j) => (
-    <li key={j}>
+    <li key={j} className={it.checked !== undefined ? "md-task" : undefined}>
+      {it.checked !== undefined && <TaskBox checked={it.checked} />}
       {inline(it.text, tickets)}
       {it.children.map((child, k) => (
         <MdBlock key={k} block={child} depth={depth + 1} tickets={tickets} />
@@ -415,7 +435,8 @@ function diffRuns(runs: DiffRun[], tickets?: TicketLinks): ReactNode[] {
 function DiffListItem({ item, depth, tickets }: { item: DiffItem; depth: number; tickets?: TicketLinks }) {
   if (item.change !== "edit")
     return (
-      <li className={item.change === "same" ? undefined : `md-diff-item is-${item.change}`}>
+      <li className={`${item.change === "same" ? "" : `md-diff-item is-${item.change}`} ${item.item.checked !== undefined ? "md-task" : ""}`.trim() || undefined}>
+        {item.item.checked !== undefined && <TaskBox checked={item.item.checked} />}
         {inline(item.item.text, tickets)}
         {item.item.children.map((child, k) => (
           <MdBlock key={k} block={child} depth={depth + 1} tickets={tickets} />
@@ -423,7 +444,8 @@ function DiffListItem({ item, depth, tickets }: { item: DiffItem; depth: number;
       </li>
     );
   return (
-    <li>
+    <li className={item.checked !== undefined ? "md-task" : undefined}>
+      {item.checked !== undefined && <TaskBox checked={item.checked} was={item.wasChecked} />}
       {diffRuns(item.runs, tickets)}
       {item.children.map((child, k) => (
         <MdDiffBlock key={k} diff={child} depth={depth + 1} tickets={tickets} />

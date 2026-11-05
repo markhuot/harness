@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { TicketDetail } from "../../app/src/renderer/views/TicketDetail";
 import { world } from "../world";
-import { all, click, edited, mount, text } from "./render";
+import { all, click, edited, mount, text, type } from "./render";
 
 const detail = (key: string, tab: "spec" | "activity" | "transcript" | "details" | "events" = "spec") => <TicketDetail paneId="p1" ticketKey={key} tab={tab} zoomed={false} />;
 const buttons = (m: { container: HTMLElement }) => all(m.container, "button").map((b) => text(b));
@@ -96,12 +96,13 @@ describe("TicketDetail", () => {
     expect(m.client.requests).toContain("POST /tickets/HARNESS-4/unblock");
   });
 
-  test("a blocked ticket shows its question and Unblock at the top of the Spec, outside the spec text", async () => {
+  test("a blocked ticket shows its question and Unblock first in the composer's Needs you panel, outside the spec", async () => {
     const m = await mount(detail("HARNESS-4"));
     await m.until("the callout", () => all(m.container, "[data-testid=blocked-callout]").length === 1);
     const callout = all(m.container, "[data-testid=blocked-callout]")[0]!;
     expect(text(callout)).toContain("Postgres or SQLite for the hosted tier?");
-    expect(callout.closest(".spec-body")!.firstElementChild).toBe(callout);
+    expect(callout.closest("[data-testid=composer] [data-testid=needs-you]")).not.toBeNull();
+    expect(callout.closest(".spec-body")).toBeNull();
     expect(all(m.container, "[data-testid=spec-doc]").every((d) => !text(d).includes("Postgres or SQLite"))).toBe(true);
     await click(m, all(callout, "[data-testid=blocked-callout-unblock]")[0]!);
     // The dialog opened from the callout, not one an earlier file left in the shared document.
@@ -287,5 +288,63 @@ describe("TicketDetail", () => {
     await m.until("not found", () => text(m.container).includes("NOPE-9 not found"));
     expect(text(m.container)).toContain("It may have been deleted.");
     expect(buttons(m)).not.toContain("Start work");
+  });
+});
+
+describe("Needs you: the spec's open questions above the composer", () => {
+  const SPEC = "# Pick a cache\n\n## Open questions\n\n- [ ] Which database?\n- [x] Which port?\n- [ ] Ship when?\n";
+  /** HARNESS-1 (planning) with open questions in its spec, and one reply already sent under "Which database?". */
+  const withQuestions = edited((w) => {
+    const t = w.tickets.find((x) => x.key === "HARNESS-1")!;
+    t.spec = SPEC;
+    t.openQuestionCount = 2;
+    const d = w.details["HARNESS-1"]!;
+    d.ticket = t;
+    d.activity = [
+      ...d.activity,
+      { id: "a-replied", sessionId: t.sessionId, ticketId: t.id, kind: "answered", author: "human", body: "> Which database?", meta: { questionReplies: [{ question: "Which database?", body: "Postgres, probably" }] }, createdAt: w.now - 60_000 },
+    ];
+  });
+  const questions = (m: { container: HTMLElement }) => all(m.container, "[data-testid=needs-you-question]");
+
+  test("lists each unchecked question with what was sent under it; checked ones fold into N answered; the spec keeps its checkboxes", async () => {
+    const m = await mount(detail("HARNESS-1"), { world: withQuestions });
+    await m.until("the panel", () => questions(m).length === 2);
+    expect(questions(m).map((q) => text(all(q, ".needs-you-q-text")[0]!))).toEqual(["Which database?", "Ship when?"]);
+    expect(text(all(questions(m)[0]!, "[data-testid=needs-you-sent]")[0]!)).toContain("Postgres, probably");
+    expect(all(questions(m)[1]!, "[data-testid=needs-you-sent]")).toHaveLength(0);
+    expect(text(all(m.container, "[data-testid=needs-you-answered] summary")[0]!)).toBe("1 answered");
+    expect(text(all(m.container, "[data-testid=needs-you]")[0]!)).toContain("Needs you · 2");
+    // The Open questions section stays in the spec, as checkboxes.
+    const boxes = all(m.container, ".spec-body [data-testid=md-task-box]") as HTMLInputElement[];
+    expect(boxes.map((b) => b.checked)).toEqual([false, true, false]);
+  });
+
+  test("a reply alone enables Send, which posts the replies as one message and clears them", async () => {
+    const m = await mount(detail("HARNESS-1"), { world: withQuestions });
+    await m.until("the panel", () => questions(m).length === 2);
+    m.client.overrides.set("POST /tickets/HARNESS-1/messages", () => ({ ...withQuestions.details["HARNESS-1"]!.ticket, messageDraft: null }));
+    const send = all(m.container, "[data-testid=composer-send]")[0]!;
+    expect(send.hasAttribute("disabled")).toBe(true);
+    const field = all(questions(m)[1]!, "[data-testid=needs-you-reply]")[0] as HTMLTextAreaElement;
+    await type(m, field, "Next Friday");
+    expect(send.hasAttribute("disabled")).toBe(false);
+    await click(m, send);
+    const sent = m.client.bodies.find((b) => b.request === "POST /tickets/HARNESS-1/messages")!;
+    expect(sent.body).toEqual({ text: "", questionReplies: [{ question: "Ship when?", body: "Next Friday" }] });
+  });
+
+  test("off the Spec tab the panel is a chip counting what needs the human", async () => {
+    const m = await mount(detail("HARNESS-1", "activity"), { world: withQuestions });
+    await m.until("the chip", () => all(m.container, "[data-testid=needs-you-chip]").length === 1);
+    expect(all(m.container, "[data-testid=needs-you]")).toHaveLength(0);
+    expect(text(all(m.container, "[data-testid=needs-you-chip]")[0]!)).toBe("2 questions need you");
+  });
+
+  test("a spec without open questions shows no panel and no chip", async () => {
+    const m = await mount(detail("HARNESS-5"));
+    await m.until("loads", () => text(m.container).includes("Speed up the board"));
+    expect(all(m.container, "[data-testid=needs-you]")).toHaveLength(0);
+    expect(all(m.container, "[data-testid=needs-you-chip]")).toHaveLength(0);
   });
 });

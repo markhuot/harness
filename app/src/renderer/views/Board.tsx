@@ -480,6 +480,15 @@ const TicketCard = memo(function TicketCard({
           </span>
         )}
         <div className="grow" />
+        {!!t.openQuestionCount && (
+          <span
+            className="badge card-questions"
+            data-testid="card-questions"
+            title={t.openQuestionCount === 1 ? "1 open question needs your answer" : `${t.openQuestionCount} open questions need your answer`}
+          >
+            <Icon name="alert" size={10} /> {t.openQuestionCount}
+          </span>
+        )}
         {/* Activity, then the message draft, then the reviews: the review marks sit at the right
             edge, so the spinner coming and going (or a draft being typed) never moves them. */}
         <span className="card-trail">

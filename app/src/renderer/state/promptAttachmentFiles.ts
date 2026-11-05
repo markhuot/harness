@@ -104,6 +104,8 @@ export async function clipboardImageFiles(items: readonly ClipboardItemLike[]): 
 export interface ComposerDraft {
   text: string;
   attachments: number;
+  /** Replies drafted under the spec's open questions (not blank): they send on their own too */
+  replies?: number;
   /** Uploads on their way (they'd be left out of a message sent now) */
   pending: number;
   sending: boolean;
@@ -118,7 +120,7 @@ export interface ComposerDraft {
 export function composerCanSend(d: ComposerDraft): boolean {
   if (d.sending || d.pending > 0) return false;
   if (d.attachments > 0 && d.approvalPending) return false;
-  return !!d.text.trim() || d.attachments > 0;
+  return !!d.text.trim() || d.attachments > 0 || (d.replies ?? 0) > 0;
 }
 
 /** The label and tooltip of an attachment whose file is gone. */

@@ -2616,3 +2616,99 @@ button.prompt-attachment-row-main:disabled {
   position: static;
   margin-top: 6px;
 }
+
+/* Needs you (NeedsYouPanel.tsx): the block and the spec's open questions, at the top of the
+   composer on the Spec tab. Capped and scrolling, so the composer's input stays on screen. */
+.needs-you {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.needs-you-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--amber);
+  font-size: 12px;
+}
+.needs-you-head .muted {
+  margin-left: auto;
+  color: var(--text-3);
+  font-weight: normal;
+}
+.needs-you-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: min(40vh, 360px);
+  overflow-y: auto;
+}
+.needs-you-q {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--amber);
+  border-radius: var(--radius-lg);
+  background: var(--bg);
+  padding: 8px 10px;
+}
+.needs-you-q.is-detached {
+  border-left-color: var(--text-3);
+  align-items: flex-start;
+}
+.needs-you-q.is-answered {
+  border-left-color: var(--green);
+  background: transparent;
+}
+.needs-you-q-text {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  font-weight: 500;
+}
+.needs-you-q-text .md > :last-child {
+  margin-bottom: 0;
+}
+.needs-you-sent {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 10px;
+  border-left: 2px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+.needs-you-sent .md > :last-child {
+  margin-bottom: 0;
+}
+.needs-you-reply.composer-input {
+  min-height: 32px;
+  padding: 6px 9px;
+  max-height: 160px;
+}
+.needs-you-answered > summary {
+  cursor: pointer;
+  color: var(--text-2);
+  font-size: 12px;
+}
+.needs-you-answered[open] {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.needs-you-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 8px;
+  padding: 3px 10px;
+  border: 1px solid color-mix(in srgb, var(--amber) 45%, var(--border));
+  border-radius: 999px;
+  background: var(--amber-soft);
+  color: var(--amber);
+  font-size: 12px;
+  cursor: pointer;
+}

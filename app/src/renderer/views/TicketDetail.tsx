@@ -36,6 +36,9 @@ import {
   TAB_LABEL,
   tabStripTab,
   dependencyStates,
+  pendingQuestionReplies,
+  questionPanel,
+  withQuestionReply,
   ticketByKey,
   visibleTabsWithChanges,
   type TicketTab,
@@ -57,6 +60,7 @@ import { Transcript } from "./Transcript";
 import { BrowserView, type BrowserTear } from "./BrowserView";
 import { TicketDetails } from "./TicketDetails";
 import { SpecTab } from "./SpecTab";
+import { NeedsYouChip, NeedsYouPanel, needsYouCount } from "./NeedsYouPanel";
 import { ActivityTab } from "./ActivityTab";
 import { DraftEditor } from "./DraftEditor";
 import { ApprovalCard } from "./Approval";
@@ -390,6 +394,8 @@ export function TicketDetail({
       <MessageComposer
         ticket={ticket}
         key={ticket.id}
+        tab={tab}
+        onShowSpec={() => setTab("spec")}
         // The Transcript shows what was sent, unless it's torn off (it's on screen there).
         onSent={() => !torn.has("transcript") && setTab(tabAfterSend(tab, true))}
       />
@@ -827,8 +833,8 @@ function composerFor(ticketKey: string): ComposerAnnotate {
  * image again edits its notes in place. Send, at the input's right with its shortcut in it (like
  * New session's Start session), sends the files with their notes.
  */
-export function MessageComposer({ ticket, onSent }: { ticket: Ticket; onSent: () => void }) {
-  const { client, dispatch, toast } = useStore();
+export function MessageComposer({ ticket, onSent, tab, onShowSpec }: { ticket: Ticket; onSent: () => void; tab?: string; onShowSpec?: () => void }) {
+  const { client, dispatch, toast, state } = useStore();
   const act = useAction();
   const [sending, setSending] = useState(false);
   // The blur reads the newest copy, not the one this render saw.
@@ -849,8 +855,12 @@ export function MessageComposer({ ticket, onSent }: { ticket: Ticket; onSent: ()
       }).catch(() => {}),
   });
   useSyncExternalStore(draft.subscribe, () => draft.version);
-  const { text, attachments } = draft.value;
+  const { text, attachments, questionReplies } = draft.value;
   const setText = (t: string) => draft.edit({ text: t });
+  // The spec's open questions and the block, with the replies sent and drafted under each (NeedsYouPanel).
+  const activity = state.activity[ticket.sessionId];
+  const panel = useMemo(() => questionPanel(ticket.spec, activity ?? [], questionReplies), [ticket.spec, activity, questionReplies]);
+  const replies = pendingQuestionReplies(questionReplies);
   // Another device's edit (or its send) shows here, unless this one is being typed in.
   useEffect(() => draft.sync(ticket.messageDraft), [draft, ticket.messageDraft]);
   // Unmounting with the input focused sends no blur: the draft isn't being typed in anymore.
@@ -894,7 +904,7 @@ export function MessageComposer({ ticket, onSent }: { ticket: Ticket; onSent: ()
   const sendTitle = approvalPending && attachments.length ? "Attachments can go once the approval is answered" : "Send";
   // A compact run owns the session: the service refuses messages (409) until it ends.
   const compacting = !!ticket.compacting;
-  const canSend = !compacting && composerCanSend({ text, attachments: attachments.length, pending: attach.pending.length, sending, approvalPending });
+  const canSend = !compacting && composerCanSend({ text, attachments: attachments.length, replies: replies.length, pending: attach.pending.length, sending, approvalPending });
 
   useEffect(() => {
     const el = ref.current;
@@ -916,7 +926,9 @@ export function MessageComposer({ ticket, onSent }: { ticket: Ticket; onSent: ()
     // No draft save may land after the message: the service clears the draft when it goes.
     await draft.beforeSend();
     // Each file carries its notes (Attachment.annotation).
-    const ok = await act(() => client.sendMessage(ticket.key, body, files.length ? { attachments: attachmentInputs(files) } : {}));
+    const ok = await act(() =>
+      client.sendMessage(ticket.key, body, { ...(files.length ? { attachments: attachmentInputs(files) } : {}), ...(replies.length ? { questionReplies: replies } : {}) }),
+    );
     setSending(false);
     if (ok) {
       dispatch({ type: "event", event: { kind: "ticket.upserted", ticket: ok } });
@@ -934,6 +946,18 @@ export function MessageComposer({ ticket, onSent }: { ticket: Ticket; onSent: ()
       data-testid="composer"
       {...attach.dropProps}
     >
+      {tab === "spec" || tab === undefined ? (
+        <NeedsYouPanel
+          ticket={ticket}
+          panel={panel}
+          onReply={(q, b) => draft.edit({ questionReplies: withQuestionReply(draft.value, q, b).questionReplies })}
+          onDiscard={(r) => draft.edit({ questionReplies: withQuestionReply(draft.value, r.question, "").questionReplies })}
+          onFocus={(on) => draft.focus(on, ticketRef.current.messageDraft)}
+          onSend={() => void send()}
+        />
+      ) : (
+        onShowSpec && <NeedsYouChip count={needsYouCount(ticket, panel)} onOpen={onShowSpec} />
+      )}
       <PromptAttachmentList
         items={attachments}
         onRemove={attach.remove}

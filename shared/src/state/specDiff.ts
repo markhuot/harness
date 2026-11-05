@@ -50,11 +50,12 @@ export interface DiffCodeLine {
 
 /**
  * A list item. Unchanged, added and removed items carry the parsed item as is; an edited one (its
- * text or its nested lists changed) carries its text as runs and its nested lists as diffed blocks.
+ * text, its nested lists or its task checkbox changed) carries its text as runs and its nested lists
+ * as diffed blocks, and a task item its checkbox in each revision (ListItem.checked).
  */
 export type DiffItem =
   | { change: "same" | "add" | "del"; item: ListItem }
-  | { change: "edit"; runs: DiffRun[]; children: DiffBlock[] };
+  | { change: "edit"; runs: DiffRun[]; children: DiffBlock[]; checked?: boolean; wasChecked?: boolean };
 
 /** A table body row: the cells as parsed, or (edited) each cell as runs. */
 export type DiffRow = { change: "same" | "add" | "del"; cells: string[] } | { change: "edit"; cells: DiffRun[][] };
@@ -249,7 +250,10 @@ function diffItems(a: ListItem[], b: ListItem[]): DiffItem[] {
     if (o.kind === "same") return { change: "same", item: o.b };
     if (o.kind === "del") return { change: "del", item: o.a };
     if (o.kind === "add") return { change: "add", item: o.b };
-    return { change: "edit", runs: diffText(o.a.text, o.b.text), children: diffBlocks(o.a.children, o.b.children) };
+    const edit: DiffItem = { change: "edit", runs: diffText(o.a.text, o.b.text), children: diffBlocks(o.a.children, o.b.children) };
+    if (o.b.checked !== undefined) edit.checked = o.b.checked;
+    if (o.a.checked !== undefined) edit.wasChecked = o.a.checked;
+    return edit;
   });
 }
 

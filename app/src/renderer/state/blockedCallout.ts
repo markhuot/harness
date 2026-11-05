@@ -1,4 +1,4 @@
-// What the Spec tab shows above the spec for a blocked ticket (views/BlockedCallout.tsx), decided
+// What the composer's Needs you panel shows first for a blocked ticket (views/BlockedCallout.tsx), decided
 // from the ticket alone: its blockedReason, restart time and pending approval, so it needs neither
 // the Activity feed nor a loaded spec. The callout is display-only: it is never part of the spec.
 
