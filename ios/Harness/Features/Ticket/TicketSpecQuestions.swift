@@ -104,7 +104,9 @@ struct NeedsYouBar: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 9)
             .contentShape(.capsule)
-            .glassEffect(.regular, in: .capsule)
+            // Opaque, like the panel: the spec scrolls behind it.
+            .background(c.bgElev, in: .capsule)
+            .shadow(color: .black.opacity(0.12), radius: 8, y: 2)
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("needs-you-bar")

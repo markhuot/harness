@@ -91,6 +91,8 @@ struct TicketDetailComposer: View {
                         NeedsYouBar(bar: bar) { barTapped(bar) }
                     }
                     TicketBlockedCallout(ticket: ticket, compact: true)
+                        // Opaque under the callout's tint, as the spec scrolls behind it.
+                        .background(c.bgElev, in: .rect(cornerRadius: 10))
                         .padding(.bottom, 4)
                 }
             }

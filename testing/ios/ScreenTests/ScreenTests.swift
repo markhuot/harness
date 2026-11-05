@@ -294,13 +294,17 @@ final class ScreenTests: ScreenTestCase {
         XCTAssertEqual(world.transport.unrouted, [])
     }
 
-    /// The iPad in landscape is wide enough for the panel: the Needs you panel above the composer
+    /// A full ticket window on the iPad in landscape (the ticket sheet is never 700pt wide) is large
+    /// enough for the panel: the Needs you panel above the composer
     /// lists the block's question (no Unblock), then each open question with its answer field (one
     /// holding a drafted reply), then the answered one folded away. The spec keeps its checkboxes.
     func testTicketOpenQuestionsPanel() async throws {
         try XCTSkipUnless(ReferenceImages.device == "ipad", "only a large landscape view gets the panel")
         let world = try await questionsWorld(blocked: true, replies: [["question": "Do we keep SQLite for local installs?", "body": "Yes, local stays on SQLite."]])
-        let image = try await render(world, router: ticket("HARNESS-4", .spec), landscape: true) { RootView() }
+        let router = Router(ticket: .ticket(key: "HARNESS-4", tab: .spec))
+        let image = try await render(world, router: router, landscape: true) {
+            RequireStore { TabStack(tab: .board) { RouteScreen(route: .ticket(key: "HARNESS-4", tab: .spec)) } }
+        }
         ReferenceImages.assert(image, named: "ticket-open-questions-panel")
         XCTAssertEqual(world.transport.unrouted, [])
     }
