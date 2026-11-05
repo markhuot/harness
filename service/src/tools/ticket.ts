@@ -49,6 +49,10 @@ export const updateNotes = defineTool<{ notes: string }>({
   },
 });
 
+/** How the spec's Open questions are written (DESIGN.md "Open questions"), for both spec tools. */
+const OPEN_QUESTIONS =
+  "Open questions: a `- [ ] question` task list; resolve one by putting its answer in the spec, then removing the item (preferred) or checking it.";
+
 export const readSpec = defineTool<{ revision?: number }>({
   name: "read_spec",
   description:
@@ -64,7 +68,7 @@ export const editSpec = defineTool<{ base_revision: number; note: string; edits:
   description: `Change parts of the ticket's spec, like Edit: every edit applies or none does, and the result is a new revision. base_revision is the revision you read (read_spec); if the spec has moved on since (a human edited it), the call fails with the current revision, so read it again and redo the edits. Two edit forms:
 * { old_string, new_string, replace_all? }: old_string must match the spec exactly and be unique unless replace_all is true.
 * { start_line, end_line, new_text, expected? }: replace lines start_line-end_line (inclusive, numbered as in base_revision, even after earlier edits in the same call) with new_text; end_line = start_line - 1 inserts before start_line, and new_text "" deletes the lines. expected, when given, must equal those lines' current text.
-Change only what changed: the spec's history keeps the earlier revisions. ${IMAGES}`,
+Change only what changed: the spec's history keeps the earlier revisions. ${OPEN_QUESTIONS} ${IMAGES}`,
   inputSchema: schema(
     {
       base_revision: { type: "integer", minimum: 1, description: "The revision your edits are based on (from read_spec)." },
@@ -96,10 +100,10 @@ Change only what changed: the spec's history keeps the earlier revisions. ${IMAG
 
 export const updateSpec = defineTool<{ spec: string; note: string; base_revision: number; title?: string }>({
   name: "update_spec",
-  description: `Replace the ticket's whole spec with new markdown, as a new revision: mostly for planning, when you write the spec from the brief. Include everything worth keeping, since it replaces the text. For later changes use edit_spec, which changes only the parts that changed. base_revision is the revision you read (the run's context names the current one); a spec that moved on since fails the call with the current revision. Optionally set a clearer ticket title. ${IMAGES}`,
+  description: `Replace the ticket's whole spec with new markdown, as a new revision: mostly for planning, when you write the spec from the brief. Include everything worth keeping, since it replaces the text. For later changes use edit_spec, which changes only the parts that changed. base_revision is the revision you read (the run's context names the current one); a spec that moved on since fails the call with the current revision. Optionally set a clearer ticket title. ${OPEN_QUESTIONS} ${IMAGES}`,
   inputSchema: schema(
     {
-      spec: { type: "string", minLength: 1, description: "The complete spec in markdown: Goal, Plan, Status, Open questions." },
+      spec: { type: "string", minLength: 1, description: "The complete spec in markdown: Goal, Plan, Status, Open questions (a `- [ ]` task list)." },
       note: { type: "string", minLength: 1, description: REVISION_NOTE("Plan drafted: cache the feed per user") },
       base_revision: { type: "integer", minimum: 1, description: "The revision you're replacing (from read_spec or the run's context)." },
       title: { type: "string", minLength: 1, description: "Optional new short ticket title (under ~80 characters)." },

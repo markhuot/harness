@@ -27,9 +27,10 @@ function measure(kind: "plan" | "work" | "review") {
 }
 
 const LIMITS = {
-  plan: { system: 1500, run: 2200, tools: 2550 },
-  work: { system: 2500, run: 3100, tools: 3900 },
-  review: { system: 1300, run: 1100, tools: 2250 },
+  // The Open questions rule (a task list the app shows above the composer) added ~90 tokens to each run block.
+  plan: { system: 1500, run: 2300, tools: 2600 },
+  work: { system: 2500, run: 3220, tools: 4000 },
+  review: { system: 1300, run: 1180, tools: 2250 },
 };
 
 for (const kind of ["plan", "work", "review"] as const) {
@@ -43,7 +44,7 @@ for (const kind of ["plan", "work", "review"] as const) {
 }
 
 // Trimming must not drop a rule an agent acts on: each one stays in the prompt of the run kinds that need it.
-function prompts(kind: "plan" | "work" | "review") {
+function prompts(kind: "plan" | "work" | "review" | "chat") {
   const store = makeStore();
   const project = addProject(store);
   const created = addTicket(store, project, { status: kind === "plan" ? "planning" : "in_progress" });
@@ -70,4 +71,14 @@ test("plan runs write the first full spec and their notes; review runs only add 
   expect(review).toContain("Open questions");
   expect(review).not.toContain("Write it like a product requirements doc");
   expect(review).not.toContain("`update_notes` { notes }");
+});
+
+test("every run that can edit the spec is told to write Open questions as a task list and how to resolve one", () => {
+  for (const kind of ["plan", "work", "review", "chat"] as const) {
+    const { text, tool } = prompts(kind);
+    expect(text).toContain("Open questions is a task list");
+    expect(text).toContain("then remove the item (preferred) or check it off");
+    expect(tool("edit_spec").description).toContain("`- [ ] question` task list");
+  }
+  expect(prompts("plan").tool("update_spec").description).toContain("removing the item (preferred)");
 });
