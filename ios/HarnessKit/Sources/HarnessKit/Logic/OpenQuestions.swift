@@ -83,4 +83,35 @@ public enum OpenQuestions {
         let open = Set(questions(spec).filter { !$0.checked }.map(\.text))
         return pending(replies).filter { open.contains($0.question) }
     }
+
+    /// `needsYouLayout`: where the ticket view answers its questions. The panel above the composer
+    /// needs a landscape view at least `panelMinWidth` × `panelMinHeight`; anything smaller (every
+    /// iPhone, an iPad in portrait or split view) answers inline in the spec, with a one-line bar
+    /// above the composer. The same constants as the TS, so the Mac and iOS apps agree.
+    public enum Layout: Equatable, Sendable { case panel, inline }
+    public static let panelMinWidth: Double = 700
+    public static let panelMinHeight: Double = 600
+
+    public static func layout(width: Double, height: Double) -> Layout {
+        width >= panelMinWidth && height >= panelMinHeight && width > height ? .panel : .inline
+    }
+
+    /// `needsYouBar`: the inline layout's one-line bar. `count` is everything waiting on the human
+    /// (the block and the open questions), `ready` the answers a Send would deliver.
+    public struct Bar: Equatable, Sendable {
+        public enum Action: Equatable, Sendable { case focus, send }
+        public var label: String
+        public var action: Action
+
+        public init(label: String, action: Action) {
+            self.label = label
+            self.action = action
+        }
+    }
+
+    public static func bar(count: Int, ready: Int) -> Bar? {
+        if ready > 0 { return Bar(label: "\(ready) \(ready == 1 ? "answer" : "answers") ready · Send", action: .send) }
+        if count > 0 { return Bar(label: "Needs you · \(count)", action: .focus) }
+        return nil
+    }
 }

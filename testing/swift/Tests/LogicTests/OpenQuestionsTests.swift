@@ -36,4 +36,19 @@ import HarnessKit
         #expect(r == [.init(question: "a", body: "1!"), .init(question: "b", body: "2")])
         #expect(MessageDrafts.withReply(r, question: "a", body: "") == [.init(question: "b", body: "2")])
     }
+
+    @Test func theLayoutFollowsTheViewSizeLikeTheTS() {
+        #expect(OpenQuestions.layout(width: 700, height: 600) == .panel)
+        #expect(OpenQuestions.layout(width: 699, height: 600) == .inline)
+        #expect(OpenQuestions.layout(width: 700, height: 599) == .inline)
+        #expect(OpenQuestions.layout(width: 1032, height: 1376) == .inline)
+        #expect(OpenQuestions.layout(width: 1376, height: 1032) == .panel)
+        #expect(OpenQuestions.layout(width: 430, height: 932) == .inline)
+    }
+
+    @Test func theBarSendsOnceAnswersAreReady() {
+        #expect(OpenQuestions.bar(count: 2, ready: 0) == .init(label: "Needs you · 2", action: .focus))
+        #expect(OpenQuestions.bar(count: 2, ready: 1) == .init(label: "1 answer ready · Send", action: .send))
+        #expect(OpenQuestions.bar(count: 0, ready: 0) == nil)
+    }
 }

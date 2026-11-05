@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { parseBlocks } from "../../../shared/src/state/markdown";
-import { composeQuestionReplies, openQuestionCount, openQuestions, questionPanel, sendableQuestionReplies } from "../../../shared/src/state/openQuestions";
+import { composeQuestionReplies, needsYouBar, needsYouLayout, openQuestionCount, openQuestions, questionPanel, sendableQuestionReplies } from "../../../shared/src/state/openQuestions";
 import { EMPTY_MESSAGE_DRAFT, hasMessageDraft, questionReply, withQuestionReply } from "../../../shared/src/state/messageDrafts";
 
 describe("parseBlocks: task lists", () => {
@@ -107,5 +107,31 @@ describe("questionPanel and sendableQuestionReplies", () => {
       { question: "Ship when?", body: "  " },
     ];
     expect(sendableQuestionReplies(spec, replies)).toEqual([{ question: "Which DB?", body: "PG" }]);
+  });
+});
+
+describe("needsYouLayout", () => {
+  test("the panel needs a landscape view at least 700 wide and 600 tall", () => {
+    expect(needsYouLayout(700, 600)).toBe("panel");
+    expect(needsYouLayout(699, 600)).toBe("inline");
+    expect(needsYouLayout(700, 599)).toBe("inline");
+    expect(needsYouLayout(900, 900)).toBe("inline");
+    expect(needsYouLayout(901, 900)).toBe("panel");
+  });
+  test("iPhones and iPads in portrait go inline; a large iPad in landscape and a full Mac window get the panel", () => {
+    expect(needsYouLayout(932, 430)).toBe("inline"); // iPhone Pro Max landscape: too short
+    expect(needsYouLayout(1032, 1376)).toBe("inline"); // 13" iPad portrait
+    expect(needsYouLayout(1376, 1032)).toBe("panel");
+    expect(needsYouLayout(1180, 820)).toBe("panel");
+    expect(needsYouLayout(1400, 860)).toBe("panel");
+  });
+});
+
+describe("needsYouBar", () => {
+  test("drafted answers turn it into Send; before that it takes the human to the questions", () => {
+    expect(needsYouBar(3, 0)).toEqual({ label: "Needs you · 3", action: "focus" });
+    expect(needsYouBar(3, 1)).toEqual({ label: "1 answer ready · Send", action: "send" });
+    expect(needsYouBar(3, 2)).toEqual({ label: "2 answers ready · Send", action: "send" });
+    expect(needsYouBar(0, 0)).toBeNull();
   });
 });

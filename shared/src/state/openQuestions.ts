@@ -88,3 +88,38 @@ export function sendableQuestionReplies(spec: string, replies: readonly Question
   const open = new Set(openQuestions(spec).filter((q) => !q.checked).map((q) => q.text));
   return pendingQuestionReplies(replies).filter((r) => open.has(r.question));
 }
+
+/**
+ * Where the ticket view answers its questions (DESIGN.md "Open questions"): `panel`, a sticky panel
+ * above the composer, or `inline`, an answer box under each question in the rendered spec with a
+ * one-line bar above the composer. It follows the ticket view's size, not the platform, so the same
+ * size behaves the same on the Mac, iPhone and iPad: the panel needs a landscape view at least this
+ * wide and tall, so it never covers much of the spec. Every iPhone, an iPad in portrait or split
+ * view and a Mac pane squeezed by the board go inline; a full Mac window and a large iPad in
+ * landscape get the panel. Ported to HarnessKit's `NeedsYouLayout`.
+ */
+export type NeedsYouLayout = "panel" | "inline";
+export const NEEDS_YOU_PANEL_MIN_WIDTH = 700;
+export const NEEDS_YOU_PANEL_MIN_HEIGHT = 600;
+
+export function needsYouLayout(width: number, height: number): NeedsYouLayout {
+  return width >= NEEDS_YOU_PANEL_MIN_WIDTH && height >= NEEDS_YOU_PANEL_MIN_HEIGHT && width > height ? "panel" : "inline";
+}
+
+/** The inline layout's one-line bar above the composer: what it reads and what a click does. */
+export interface NeedsYouBar {
+  label: string;
+  /** `focus`: scroll to the first open question and focus its box (the composer when there's none); `send`: send */
+  action: "focus" | "send";
+}
+
+/**
+ * `count` is everything waiting on the human (the block and the open questions), `ready` the
+ * answers a Send would deliver. Once there are answers it sends them; before, it takes the human
+ * to the first question. None when nothing waits.
+ */
+export function needsYouBar(count: number, ready: number): NeedsYouBar | null {
+  if (ready > 0) return { label: `${ready} ${ready === 1 ? "answer" : "answers"} ready · Send`, action: "send" };
+  if (count > 0) return { label: `Needs you · ${count}`, action: "focus" };
+  return null;
+}
