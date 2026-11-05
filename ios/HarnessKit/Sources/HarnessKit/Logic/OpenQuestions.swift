@@ -114,4 +114,21 @@ public enum OpenQuestions {
         if count > 0 { return Bar(label: "Needs you · \(count)", action: .focus) }
         return nil
     }
+
+    /// Where the bar's `.focus` goes: the first open question's answer field in the spec, or the
+    /// composer's field when there's none (a blocked ticket whose spec asks nothing).
+    public enum FocusTarget: Equatable, Sendable {
+        case question(String)
+        case composer
+    }
+
+    public static func focusTarget(spec: String) -> FocusTarget {
+        questions(spec).first { !$0.checked }.map { .question($0.text) } ?? .composer
+    }
+
+    /// The replies a Send from `tab` delivers: only the Spec tab, where they're answered, sends
+    /// them. Elsewhere the composer is a plain message composer and the replies stay drafted.
+    public static func outgoing(spec: String, replies: [QuestionReply], tab: TicketTab) -> [QuestionReply] {
+        tab == .spec ? sendable(spec: spec, replies: replies) : []
+    }
 }

@@ -98,7 +98,7 @@ public enum Format {
     public static let composerPlaceholder: [TicketStatus: String] = [
         .planning: "Refine the plan…",
         .inProgress: "Send a follow-up…",
-        .blocked: "Answer the agent…",
+        .blocked: "Answer the block: your message goes to the agent…",
         .review: "Ask about the work, or ask for a change…",
         .done: "Ask about the finished work…",
     ]

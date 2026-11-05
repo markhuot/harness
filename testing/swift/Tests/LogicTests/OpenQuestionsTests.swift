@@ -51,4 +51,17 @@ import HarnessKit
         #expect(OpenQuestions.bar(count: 2, ready: 1) == .init(label: "1 answer ready · Send", action: .send))
         #expect(OpenQuestions.bar(count: 0, ready: 0) == nil)
     }
+
+    @Test func theBarFocusesTheFirstOpenQuestionOrElseTheComposer() {
+        #expect(OpenQuestions.focusTarget(spec: "- [x] Done?\n\n## Plan\n- [ ] Which DB?\n- [ ] Which port?") == .question("Which DB?"))
+        #expect(OpenQuestions.focusTarget(spec: "## Plan\n- [x] Done?\n- plain item") == .composer)
+        #expect(OpenQuestions.focusTarget(spec: "") == .composer)
+    }
+
+    @Test func onlyASendFromTheSpecTabCarriesTheReplies() {
+        let spec = "## Plan\n- [ ] Which DB?"
+        let replies: [QuestionReply] = [.init(question: "Which DB?", body: "PG")]
+        #expect(OpenQuestions.outgoing(spec: spec, replies: replies, tab: .spec) == replies)
+        #expect(OpenQuestions.outgoing(spec: spec, replies: replies, tab: .transcript) == [])
+    }
 }

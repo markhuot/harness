@@ -240,8 +240,8 @@ public final class HarnessClient: Sendable {
 
     /// `attachments` is only sent when there are some (each with its notes,
     /// AttachmentInput.annotation). The message goes to the agent and shows in the Transcript
-    /// (with its attachments). `questionReplies`, replies under the spec's open questions, go with it
-    /// as one message, and only they are kept in Activity (DESIGN.md "Open questions").
+    /// (with its attachments). `questionReplies`, replies to the spec's open questions (its unchecked
+    /// task items), go with it as one message; nothing of it is kept in Activity (DESIGN.md "Open questions").
     public func sendMessage(
         _ key: String, text: String, attachments: [AttachmentInput] = [], questionReplies: [QuestionReply] = []
     ) async throws -> Ticket {
@@ -256,10 +256,6 @@ public final class HarnessClient: Sendable {
 
     public func humanReview(_ key: String, _ body: HumanReviewBody) async throws -> Ticket {
         try await request("POST", "/tickets/\(key)/review", body: body)
-    }
-
-    public func unblockTicket(_ key: String, _ body: UnblockBody = UnblockBody()) async throws -> Ticket {
-        try await request("POST", "/tickets/\(key)/unblock", body: body)
     }
 
     public func reopenTicket(_ key: String, _ body: ReopenBody) async throws -> Ticket {
