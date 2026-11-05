@@ -6,7 +6,7 @@ afterEach(stopAll);
 
 const SPEC = "# Add a button\n\n## Open questions\n\n- [ ] Which colour?\n- [x] Which page?\n- [ ] Which label?\n";
 
-test("replies to open questions go to the agent as one message, each quoted under its question, and Activity keeps them", async () => {
+test("replies to open questions go to the agent as one message, each quoted under its question", async () => {
   const h = makeOrchestrator({ tools: undefined });
   const t = await h.orch.createTicket({ projectId: h.project.id, spec: SPEC, start: false });
   await h.settle();
@@ -21,18 +21,23 @@ test("replies to open questions go to the agent as one message, each quoted unde
   expect(runs).toHaveLength(1);
   expect(runs[0]!.prompt).toContain("> Which colour?\n\nBlue.\n\n> Which label?\n\nSave\n\nThanks!");
   expect(runs[0]!.prompt).not.toContain("Which page?");
-  const answered = h.store.activity.listBySession(t.sessionId).filter((e) => e.kind === "answered");
-  expect(answered).toHaveLength(1);
-  expect(answered[0]!.meta.questionReplies).toEqual([{ question: "Which colour?", body: "Blue." }, { question: "Which label?", body: "Save" }]);
+  // Like any message, it goes to the agent and the transcript, not to Activity.
+  expect(h.store.activity.listBySession(t.sessionId).filter((e) => e.kind === "answered")).toEqual([]);
 });
 
-test("a typed message without replies still writes nothing to Activity", async () => {
+test("sending the same replies again is another message: it steers or starts a run like typing them would", async () => {
   const h = makeOrchestrator({ tools: undefined });
   const t = await h.orch.createTicket({ projectId: h.project.id, spec: SPEC, start: false });
   await h.settle();
-  await h.orch.sendMessage(t.key, "Just a note", { fromApp: true });
+  const before = h.driver.requests.length;
+  const replies = [{ question: "Which colour?", body: "Blue." }];
+  await h.orch.sendMessage(t.key, "", { fromApp: true, questionReplies: replies });
   await h.settle();
-  expect(h.store.activity.listBySession(t.sessionId).filter((e) => e.kind === "answered")).toEqual([]);
+  await h.orch.sendMessage(t.key, "", { fromApp: true, questionReplies: [{ question: "Which colour?", body: "Blue, the brand one." }] });
+  await h.settle();
+  const prompts = h.driver.requests.slice(before).map((r) => r.prompt);
+  expect(prompts.some((p) => p.includes("> Which colour?\n\nBlue."))).toBe(true);
+  expect(prompts.some((p) => p.includes("> Which colour?\n\nBlue, the brand one."))).toBe(true);
 });
 
 test("replies alone, with no text, are a message; blank replies and no text are refused", async () => {
@@ -47,7 +52,7 @@ test("replies alone, with no text, are a message; blank replies and no text are 
   expect(h.driver.requests.at(-1)!.prompt).toContain("> Which colour?\n\nRed");
 });
 
-test("a reply batch to a blocked ticket answers its question, carrying the replies", async () => {
+test("a reply batch to a blocked ticket answers its question", async () => {
   const h = makeOrchestrator({ tools: undefined });
   h.driver.script(toolCall("block", { question: "Which colour should it be?" }));
   const t = await h.orch.createTicket({ projectId: h.project.id, spec: SPEC, skipAgentReview: true });
@@ -58,18 +63,21 @@ test("a reply batch to a blocked ticket answers its question, carrying the repli
   const answered = h.store.activity.listBySession(t.sessionId).filter((e) => e.kind === "answered");
   expect(answered).toHaveLength(1);
   expect(answered[0]!.meta.answers).toBeDefined();
-  expect(answered[0]!.meta.questionReplies).toEqual([{ question: "Which label?", body: "Save" }]);
+  expect(`${answered[0]!.body}\n${answered[0]!.meta.detail ?? ""}`).toContain("Which label?");
 });
 
-test("the draft keeps question replies (blank ones dropped) and a send clears them", async () => {
+test("the draft keeps question replies (blank ones dropped), and a send keeps the replies it sent but clears the rest", async () => {
   const h = makeOrchestrator({ tools: undefined });
   const t = await h.orch.createTicket({ projectId: h.project.id, spec: SPEC, start: false });
   await h.settle();
   const saved = h.orch.saveMessageDraft(t.key, { text: "", questionReplies: [{ question: "Which colour?", body: "Blue" }, { question: "Which label?", body: "" }], origin: "a" });
   expect(saved.messageDraft).toMatchObject({ text: "", questionReplies: [{ question: "Which colour?", body: "Blue" }] });
   expect(h.orch.saveMessageDraft(t.key, { text: "", questionReplies: [{ question: "Which colour?", body: "" }] }).messageDraft).toBeNull();
-  h.orch.saveMessageDraft(t.key, { text: "", questionReplies: [{ question: "Which colour?", body: "Blue" }] });
-  await h.orch.sendMessage(t.key, "", { fromApp: true, questionReplies: [{ question: "Which colour?", body: "Blue" }] });
+  h.orch.saveMessageDraft(t.key, { text: "and one more thing", questionReplies: [{ question: "Which colour?", body: "Blue" }], origin: "a" });
+  await h.orch.sendMessage(t.key, "and one more thing", { fromApp: true, questionReplies: [{ question: "Which colour?", body: " Blue " }] });
+  expect(h.ticket(t.key).messageDraft).toMatchObject({ text: "", attachments: [], questionReplies: [{ question: "Which colour?", body: "Blue" }], origin: "a" });
+  // A send without replies clears the draft as before.
+  await h.orch.sendMessage(t.key, "hi", { fromApp: true });
   expect(h.ticket(t.key).messageDraft).toBeNull();
 });
 

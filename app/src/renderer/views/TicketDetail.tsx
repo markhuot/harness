@@ -36,7 +36,7 @@ import {
   TAB_LABEL,
   tabStripTab,
   dependencyStates,
-  pendingQuestionReplies,
+  sendableQuestionReplies,
   questionPanel,
   withQuestionReply,
   ticketByKey,
@@ -834,7 +834,7 @@ function composerFor(ticketKey: string): ComposerAnnotate {
  * New session's Start session), sends the files with their notes.
  */
 export function MessageComposer({ ticket, onSent, tab, onShowSpec }: { ticket: Ticket; onSent: () => void; tab?: string; onShowSpec?: () => void }) {
-  const { client, dispatch, toast, state } = useStore();
+  const { client, dispatch, toast } = useStore();
   const act = useAction();
   const [sending, setSending] = useState(false);
   // The blur reads the newest copy, not the one this render saw.
@@ -857,10 +857,10 @@ export function MessageComposer({ ticket, onSent, tab, onShowSpec }: { ticket: T
   useSyncExternalStore(draft.subscribe, () => draft.version);
   const { text, attachments, questionReplies } = draft.value;
   const setText = (t: string) => draft.edit({ text: t });
-  // The spec's open questions and the block, with the replies sent and drafted under each (NeedsYouPanel).
-  const activity = state.activity[ticket.sessionId];
-  const panel = useMemo(() => questionPanel(ticket.spec, activity ?? [], questionReplies), [ticket.spec, activity, questionReplies]);
-  const replies = pendingQuestionReplies(questionReplies);
+  // The spec's open questions and the block, each question with its reply (NeedsYouPanel). The
+  // replies under open questions go with every Send, and stay for the next one.
+  const panel = useMemo(() => questionPanel(ticket.spec, questionReplies), [ticket.spec, questionReplies]);
+  const replies = useMemo(() => sendableQuestionReplies(ticket.spec, questionReplies), [ticket.spec, questionReplies]);
   // Another device's edit (or its send) shows here, unless this one is being typed in.
   useEffect(() => draft.sync(ticket.messageDraft), [draft, ticket.messageDraft]);
   // Unmounting with the input focused sends no blur: the draft isn't being typed in anymore.
@@ -933,7 +933,7 @@ export function MessageComposer({ ticket, onSent, tab, onShowSpec }: { ticket: T
     if (ok) {
       dispatch({ type: "event", event: { kind: "ticket.upserted", ticket: ok } });
       // Only what went: anything attached while it was sending stays for the next message.
-      draft.sent(files);
+      draft.sent(files, replies);
       onSent();
     } else draft.sendFailed();
   };
@@ -951,7 +951,6 @@ export function MessageComposer({ ticket, onSent, tab, onShowSpec }: { ticket: T
           ticket={ticket}
           panel={panel}
           onReply={(q, b) => draft.edit({ questionReplies: withQuestionReply(draft.value, q, b).questionReplies })}
-          onDiscard={(r) => draft.edit({ questionReplies: withQuestionReply(draft.value, r.question, "").questionReplies })}
           onFocus={(on) => draft.focus(on, ticketRef.current.messageDraft)}
           onSend={() => void send()}
         />

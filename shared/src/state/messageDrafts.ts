@@ -27,11 +27,11 @@ export function messageDraftValue(d: MessageDraft | null | undefined): MessageDr
 }
 
 /**
- * The ticket has a message waiting to go (its board card shows a pencil): text that isn't blank,
- * files, or a reply under an open question.
+ * The ticket has a message waiting to go (its board card shows a pencil): text that isn't blank, or
+ * files. Replies under open questions don't count: they stay in the draft after they're sent.
  */
 export function hasMessageDraft(d: MessageDraft | null | undefined): boolean {
-  return !!d && (d.text.trim() !== "" || d.attachments.length > 0 || (d.questionReplies ?? []).some((r) => r.body.trim() !== ""));
+  return !!d && (d.text.trim() !== "" || d.attachments.length > 0);
 }
 
 function sameReplies(a: readonly QuestionReply[], b: readonly QuestionReply[]): boolean {

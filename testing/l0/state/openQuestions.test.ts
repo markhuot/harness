@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { parseBlocks } from "../../../shared/src/state/markdown";
-import { composeQuestionReplies, openQuestionCount, openQuestions, questionPanel } from "../../../shared/src/state/openQuestions";
+import { composeQuestionReplies, openQuestionCount, openQuestions, questionPanel, sendableQuestionReplies } from "../../../shared/src/state/openQuestions";
 import { EMPTY_MESSAGE_DRAFT, hasMessageDraft, questionReply, withQuestionReply } from "../../../shared/src/state/messageDrafts";
 
 describe("parseBlocks: task lists", () => {
@@ -78,10 +78,10 @@ describe("message draft question replies", () => {
     expect(questionReply(v, "b")).toBe("2");
     expect(withQuestionReply(v, "a", "").questionReplies).toEqual([{ question: "b", body: "2" }]);
   });
-  test("a reply alone is a draft worth flagging; a blank one isn't", () => {
+  test("replies alone don't flag a draft on the card: they stay after they're sent", () => {
     const base = { text: "", attachments: [], origin: null, updatedAt: 1 };
-    expect(hasMessageDraft({ ...base, questionReplies: [{ question: "a", body: "x" }] })).toBe(true);
-    expect(hasMessageDraft({ ...base, questionReplies: [{ question: "a", body: " " }] })).toBe(false);
+    expect(hasMessageDraft({ ...base, questionReplies: [{ question: "a", body: "x" }] })).toBe(false);
+    expect(hasMessageDraft({ ...base, text: "hi", questionReplies: [{ question: "a", body: "x" }] })).toBe(true);
   });
 });
 
@@ -96,24 +96,35 @@ describe("specDiff: task items", () => {
   });
 });
 
-describe("questionPanel", () => {
+describe("questionPanel and sendableQuestionReplies", () => {
   const spec = "## Open questions\n- [ ] Which DB?\n- [x] Which port?\n- [ ] Ship when?";
-  const entry = (createdAt: number, kind: string, questionReplies?: { question: string; body: string }[]) =>
-    ({ id: String(createdAt), sessionId: "s", ticketId: "t", kind, author: "human", body: "", meta: questionReplies ? { questionReplies } : {}, createdAt }) as never;
 
-  test("open and answered questions in spec order, each with its sent replies oldest first and its drafted reply", () => {
-    const p = questionPanel(
-      spec,
-      [entry(3, "answered", [{ question: "Which DB?", body: "Postgres 17" }]), entry(1, "answered", [{ question: "Which DB?", body: "Postgres" }, { question: "Which port?", body: "5432" }]), entry(2, "note", [{ question: "Ship when?", body: "x" }])],
-      [{ question: "Ship when?", body: "Friday" }],
-    );
+  test("open and answered questions in spec order, each with its drafted reply", () => {
+    const p = questionPanel(spec, [{ question: "Ship when?", body: "Friday" }]);
     expect(p.open).toEqual([
-      { question: "Which DB?", checked: false, sent: [{ body: "Postgres", at: 1 }, { body: "Postgres 17", at: 3 }], draft: "" },
-      { question: "Ship when?", checked: false, sent: [], draft: "Friday" },
+      { question: "Which DB?", checked: false, draft: "" },
+      { question: "Ship when?", checked: false, draft: "Friday" },
     ]);
-    expect(p.answered.map((q) => [q.question, q.sent.length])).toEqual([["Which port?", 1]]);
+    expect(p.answered.map((q) => q.question)).toEqual(["Which port?"]);
   });
-  test("a drafted reply to a question that's no longer in the spec is detached, not dropped", () => {
-    expect(questionPanel(spec, [], [{ question: "Which database?", body: "PG" }, { question: "Gone", body: " " }]).detached).toEqual([{ question: "Which database?", body: "PG" }]);
+  test("a send carries only non-blank replies under questions still open", () => {
+    const replies = [
+      { question: "Which DB?", body: " PG " },
+      { question: "Which port?", body: "5432" },
+      { question: "Reworded?", body: "yes" },
+      { question: "Ship when?", body: "  " },
+    ];
+    expect(sendableQuestionReplies(spec, replies)).toEqual([{ question: "Which DB?", body: "PG" }]);
+  });
+});
+
+describe("specDiff: task items", () => {
+  test("checking an item off is an edit carrying both checkboxes", async () => {
+    const { specDiff } = await import("../../../shared/src/state/specDiff");
+    const [list] = specDiff("- [ ] Which DB?\n- [ ] Port?", "- [x] Which DB?\n- [ ] Port?");
+    expect(list!.change).toBe("edit");
+    const items = (list as { block: { items: { change: string; checked?: boolean; wasChecked?: boolean }[] } }).block.items;
+    expect(items[0]).toMatchObject({ change: "edit", checked: true, wasChecked: false });
+    expect(items[1]!.change).toBe("same");
   });
 });

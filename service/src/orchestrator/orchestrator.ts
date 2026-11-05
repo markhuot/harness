@@ -2836,10 +2836,13 @@ export class Orchestrator {
    */
   async sendMessage(key: string, text: string, opts: { move?: boolean; attachments?: unknown; questionReplies?: unknown; fromApp?: boolean; author?: ActivityAuthor } = {}): Promise<Ticket> {
     const sent = await this.deliverMessage(key, text, opts);
-    // The human's message went: the draft they wrote it in is used up, on every device. An
-    // agent's message_ticket leaves the human's draft alone.
+    // The human's message went: the draft they wrote it in is used up, on every device, except
+    // the replies under open questions, which stay as sent so the human can edit them and send
+    // again (DESIGN.md "Open questions"). An agent's message_ticket leaves the human's draft alone.
     if (!opts.fromApp || !sent.messageDraft) return sent;
-    const t = this.store.tickets.setMessageDraft(sent.id, null)!;
+    const kept = pendingQuestionReplies(questionRepliesOf(opts.questionReplies));
+    const draft: MessageDraft | null = kept.length ? { text: "", attachments: [], questionReplies: kept, origin: sent.messageDraft.origin, updatedAt: this.now() } : null;
+    const t = this.store.tickets.setMessageDraft(sent.id, draft)!;
     this.bus.emit({ kind: "ticket.upserted", ticket: t });
     return t;
   }
@@ -2899,11 +2902,6 @@ export class Orchestrator {
     if (ticket.kind === "cos") this.cosWakeProject.delete(ticket.id);
     this.notCompleting(ticket, "messaged");
     this.resetRejections(ticket);
-    const author = opts.author ?? "human";
-    // A blocked ticket's reply answers its question; replies to open questions are kept in Activity
-    // (meta.questionReplies), where the apps find what was already said under each question.
-    if (ticket.status === "blocked") this.recordAnswer(ticket, text, author, replies);
-    else if (replies.length) this.addActivityLine(ticket, "answered", author, text, { questionReplies: replies });
     const sent = { text, attachments };
     switch (ticket.status) {
       case "planning":
@@ -2936,6 +2934,7 @@ export class Orchestrator {
         } else await this.chat(ticket, sent);
         break;
       case "blocked":
+        this.recordAnswer(ticket, text, opts.author ?? "human");
         await this.chat(ticket, sent);
         break;
     }
@@ -2943,11 +2942,9 @@ export class Orchestrator {
   }
 
   /** A reply to a blocked ticket, in Activity beside the question it answers, by whoever sent it (what a chief of staff's query_activity reads). */
-  private recordAnswer(ticket: Pick<Ticket, "id" | "sessionId">, reply: string, author: ActivityAuthor, questionReplies: QuestionReply[] = []) {
+  private recordAnswer(ticket: Pick<Ticket, "id" | "sessionId">, reply: string, author: ActivityAuthor) {
     const question = this.store.activity.latestOfKind(ticket.sessionId, "blocked");
-    const meta: ActivityMeta = questionReplies.length ? { questionReplies } : {};
-    if (question && reply.trim()) this.addActivityLine(ticket, "answered", author, reply, { ...meta, answers: question.id });
-    else if (questionReplies.length) this.addActivityLine(ticket, "answered", author, reply, meta);
+    if (question && reply.trim()) this.addActivityLine(ticket, "answered", author, reply, { answers: question.id });
   }
 
   /**

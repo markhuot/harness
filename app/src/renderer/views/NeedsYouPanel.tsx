@@ -1,18 +1,19 @@
 // "Needs you" (DESIGN.md "Open questions"): what the ticket waits on the human for, at the top of
 // the composer. On the Spec tab it's a panel: the blocked ticket's question (BlockedCallout: its
 // Unblock, a restart time or a tool approval) first, then each unchecked task item under the spec's
-// Open questions heading, with the replies already sent under it and a field for the next one, then
-// the checked ones folded under "N answered". The replies are part of the message draft, so they
-// save as they're typed and go with the composer's Send as one message. On other tabs it's a chip
-// that opens the Spec tab. The panel caps its height and scrolls, so the composer stays on screen.
+// Open questions heading as plain text with one growing reply box under it, then the checked ones
+// folded under "N answered". The replies are part of the message draft: they save as they're typed,
+// go with the composer's Send as one message, and stay in their boxes afterwards, so the human can
+// edit them and send again (a send steers a live run or starts one, like any message). On other
+// tabs it's a chip that opens the Spec tab. The panel caps its height and scrolls, so the composer
+// stays on screen.
 
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
-import type { QuestionReply, Ticket } from "@harness/shared";
-import type { QuestionPanel, QuestionThread } from "@harness/shared/state";
+import type { Ticket } from "@harness/shared";
+import type { QuestionPanel } from "@harness/shared/state";
 import { blockedCallout } from "../state/blockedCallout";
 import { Icon } from "../components/Icon";
 import { Markdown } from "../components/Markdown";
-import { relativeTime, useNow } from "../components/bits";
 import { BlockedCallout } from "./BlockedCallout";
 
 /** How many things wait on the human: the block (question, restart or approval) and the open questions. */
@@ -23,18 +24,16 @@ export function needsYouCount(ticket: Ticket, panel: QuestionPanel): number {
 interface PanelProps {
   ticket: Ticket;
   panel: QuestionPanel;
-  /** A reply field changed (empty drops the reply from the draft) */
+  /** A reply box changed (empty drops the reply from the draft) */
   onReply: (question: string, body: string) => void;
-  /** A detached reply was discarded */
-  onDiscard: (reply: QuestionReply) => void;
   onFocus: (focused: boolean) => void;
-  /** ⌘↩ in a reply field sends, like the composer */
+  /** ⌘↩ in a reply box sends, like the composer */
   onSend: () => void;
 }
 
-export function NeedsYouPanel({ ticket, panel, onReply, onDiscard, onFocus, onSend }: PanelProps) {
+export function NeedsYouPanel({ ticket, panel, onReply, onFocus, onSend }: PanelProps) {
   const blocked = blockedCallout(ticket).kind !== "none";
-  if (!blocked && !panel.open.length && !panel.answered.length && !panel.detached.length) return null;
+  if (!blocked && !panel.open.length && !panel.answered.length) return null;
   const count = needsYouCount(ticket, panel);
   return (
     <section className="needs-you" data-testid="needs-you" aria-label="Needs you">
@@ -46,28 +45,19 @@ export function NeedsYouPanel({ ticket, panel, onReply, onDiscard, onFocus, onSe
       <div className="needs-you-list">
         <BlockedCallout ticket={ticket} />
         {panel.open.map((q) => (
-          <Question key={q.question} thread={q} onReply={onReply} onFocus={onFocus} onSend={onSend} />
-        ))}
-        {panel.detached.map((r) => (
-          <div key={r.question} className="needs-you-q is-detached" data-testid="needs-you-detached">
-            <div className="needs-you-q-text muted">
-              <Icon name="alert" size={11} /> Question changed: “{r.question}”
+          <div key={q.question} className="needs-you-q" data-testid="needs-you-question">
+            <div className="needs-you-q-text">
+              <Markdown text={q.question} />
             </div>
-            <ReplyField value={r.body} placeholder="Your reply" onChange={(b) => onReply(r.question, b)} onFocus={onFocus} onSend={onSend} />
-            <button className="btn btn-ghost btn-sm" data-testid="needs-you-discard" onClick={() => onDiscard(r)}>
-              Discard
-            </button>
+            <ReplyField value={q.draft} label={q.question} onChange={(b) => onReply(q.question, b)} onFocus={onFocus} onSend={onSend} />
           </div>
         ))}
         {panel.answered.length > 0 && (
           <details className="needs-you-answered" data-testid="needs-you-answered">
             <summary>{panel.answered.length} answered</summary>
             {panel.answered.map((q) => (
-              <div key={q.question} className="needs-you-q is-answered">
-                <div className="needs-you-q-text">
-                  <Icon name="check" size={11} strokeWidth={3} /> <Markdown text={q.question} />
-                </div>
-                <SentReplies thread={q} />
+              <div key={q.question} className="needs-you-q-text is-answered">
+                <Icon name="check" size={11} strokeWidth={3} /> <Markdown text={q.question} />
               </div>
             ))}
           </details>
@@ -77,52 +67,24 @@ export function NeedsYouPanel({ ticket, panel, onReply, onDiscard, onFocus, onSe
   );
 }
 
-function Question({ thread, onReply, onFocus, onSend }: { thread: QuestionThread } & Pick<PanelProps, "onReply" | "onFocus" | "onSend">) {
-  return (
-    <div className="needs-you-q" data-testid="needs-you-question">
-      <div className="needs-you-q-text">
-        <Markdown text={thread.question} />
-      </div>
-      <SentReplies thread={thread} />
-      <ReplyField
-        value={thread.draft}
-        placeholder={thread.sent.length ? "Add to your reply" : "Reply to this question"}
-        onChange={(b) => onReply(thread.question, b)}
-        onFocus={onFocus}
-        onSend={onSend}
-      />
-    </div>
-  );
-}
-
-function SentReplies({ thread }: { thread: QuestionThread }) {
-  const now = useNow();
-  if (!thread.sent.length) return null;
-  return (
-    <ol className="needs-you-sent" data-testid="needs-you-sent">
-      {thread.sent.map((r, i) => (
-        <li key={i}>
-          <span className="muted">You · {relativeTime(r.at, now)}</span>
-          <Markdown text={r.body} />
-        </li>
-      ))}
-    </ol>
-  );
-}
-
 /**
- * A reply field. Uncontrolled while it has focus (like the composer's input), so a draft saved by
- * another device can't move the caret; it shows the draft's value again on blur.
+ * A question's reply box, growing with its text. Uncontrolled while it has focus (like the
+ * composer's input), so a draft saved by another device can't move the caret; it shows the
+ * draft's value again on blur.
  */
-function ReplyField({ value, placeholder, onChange, onFocus, onSend }: { value: string; placeholder: string; onChange: (v: string) => void } & Pick<PanelProps, "onFocus" | "onSend">) {
+function ReplyField({ value, label, onChange, onFocus, onSend }: { value: string; label: string; onChange: (v: string) => void } & Pick<PanelProps, "onFocus" | "onSend">) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const [focused, setFocused] = useState(false);
-  useEffect(() => {
+  const grow = () => {
     const el = ref.current;
     if (!el) return;
-    if (!focused && el.value !== value) el.value = value;
     el.style.height = "auto";
-    el.style.height = Math.min(el.scrollHeight, 160) + "px";
+    el.style.height = Math.min(el.scrollHeight, 220) + "px";
+  };
+  useEffect(() => {
+    const el = ref.current;
+    if (el && !focused && el.value !== value) el.value = value;
+    grow();
   }, [value, focused]);
   return (
     <textarea
@@ -130,9 +92,10 @@ function ReplyField({ value, placeholder, onChange, onFocus, onSend }: { value: 
       rows={1}
       className="needs-you-reply composer-input"
       data-testid="needs-you-reply"
-      placeholder={placeholder}
+      aria-label={`Reply to: ${label}`}
+      placeholder="Your answer"
       defaultValue={value}
-      onChange={(e) => onChange(e.currentTarget.value)}
+      onChange={(e) => (onChange(e.currentTarget.value), grow())}
       onFocus={() => (setFocused(true), onFocus(true))}
       onBlur={() => (setFocused(false), onFocus(false))}
       onKeyDown={(e: KeyboardEvent<HTMLTextAreaElement>) => {

@@ -829,11 +829,6 @@ export interface ActivityMeta {
   note?: string;
   /** answered: the id of the blocked entry this reply answers */
   answers?: string;
-  /**
-   * answered: the replies to the spec's open questions the message carried (MessageBody.questionReplies),
-   * which the apps list under each question
-   */
-  questionReplies?: QuestionReply[];
   /** submitted: the spec revision the work was submitted at; spec_revised: the revision it records */
   specRevision?: number;
   /**
@@ -2035,8 +2030,9 @@ export interface MessageDraft {
   /** The files waiting to go with it, each with its notes */
   attachments: Attachment[];
   /**
-   * The replies waiting under the spec's open questions, one per question. Optional so older
-   * services and fixtures type-check; the service always sends it.
+   * The replies under the spec's open questions, one per question. A send from an app keeps them
+   * (as sent), so the human can edit them and send again. Optional so older services and fixtures
+   * type-check; the service always sends it.
    */
   questionReplies?: QuestionReply[];
   /**

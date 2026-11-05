@@ -293,26 +293,23 @@ describe("TicketDetail", () => {
 
 describe("Needs you: the spec's open questions above the composer", () => {
   const SPEC = "# Pick a cache\n\n## Open questions\n\n- [ ] Which database?\n- [x] Which port?\n- [ ] Ship when?\n";
-  /** HARNESS-1 (planning) with open questions in its spec, and one reply already sent under "Which database?". */
+  /** HARNESS-1 (planning) with open questions in its spec and a reply drafted under "Which database?". */
   const withQuestions = edited((w) => {
     const t = w.tickets.find((x) => x.key === "HARNESS-1")!;
     t.spec = SPEC;
     t.openQuestionCount = 2;
-    const d = w.details["HARNESS-1"]!;
-    d.ticket = t;
-    d.activity = [
-      ...d.activity,
-      { id: "a-replied", sessionId: t.sessionId, ticketId: t.id, kind: "answered", author: "human", body: "> Which database?", meta: { questionReplies: [{ question: "Which database?", body: "Postgres, probably" }] }, createdAt: w.now - 60_000 },
-    ];
+    t.messageDraft = { text: "", attachments: [], questionReplies: [{ question: "Which database?", body: "Postgres" }], origin: null, updatedAt: w.now };
+    w.details["HARNESS-1"]!.ticket = t;
   });
   const questions = (m: { container: HTMLElement }) => all(m.container, "[data-testid=needs-you-question]");
+  const reply = (q: HTMLElement) => all(q, "[data-testid=needs-you-reply]")[0] as HTMLTextAreaElement;
 
-  test("lists each unchecked question with what was sent under it; checked ones fold into N answered; the spec keeps its checkboxes", async () => {
+  test("lists each unchecked question with one reply box holding its draft; checked ones fold into N answered; the spec keeps its checkboxes", async () => {
     const m = await mount(detail("HARNESS-1"), { world: withQuestions });
     await m.until("the panel", () => questions(m).length === 2);
     expect(questions(m).map((q) => text(all(q, ".needs-you-q-text")[0]!))).toEqual(["Which database?", "Ship when?"]);
-    expect(text(all(questions(m)[0]!, "[data-testid=needs-you-sent]")[0]!)).toContain("Postgres, probably");
-    expect(all(questions(m)[1]!, "[data-testid=needs-you-sent]")).toHaveLength(0);
+    expect(questions(m).map((q) => all(q, "textarea").length)).toEqual([1, 1]);
+    expect(questions(m).map((q) => reply(q).value)).toEqual(["Postgres", ""]);
     expect(text(all(m.container, "[data-testid=needs-you-answered] summary")[0]!)).toBe("1 answered");
     expect(text(all(m.container, "[data-testid=needs-you]")[0]!)).toContain("Needs you · 2");
     // The Open questions section stays in the spec, as checkboxes.
@@ -320,18 +317,33 @@ describe("Needs you: the spec's open questions above the composer", () => {
     expect(boxes.map((b) => b.checked)).toEqual([false, true, false]);
   });
 
-  test("a reply alone enables Send, which posts the replies as one message and clears them", async () => {
+  test("Send posts every open question's reply as one message, and the replies stay in their boxes to send again", async () => {
     const m = await mount(detail("HARNESS-1"), { world: withQuestions });
     await m.until("the panel", () => questions(m).length === 2);
-    m.client.overrides.set("POST /tickets/HARNESS-1/messages", () => ({ ...withQuestions.details["HARNESS-1"]!.ticket, messageDraft: null }));
+    const kept = [{ question: "Which database?", body: "Postgres" }, { question: "Ship when?", body: "Next Friday" }];
+    m.client.overrides.set("POST /tickets/HARNESS-1/messages", () => ({ ...withQuestions.details["HARNESS-1"]!.ticket, messageDraft: { text: "", attachments: [], questionReplies: kept, origin: null, updatedAt: 1 } }));
     const send = all(m.container, "[data-testid=composer-send]")[0]!;
-    expect(send.hasAttribute("disabled")).toBe(true);
-    const field = all(questions(m)[1]!, "[data-testid=needs-you-reply]")[0] as HTMLTextAreaElement;
-    await type(m, field, "Next Friday");
+    await type(m, reply(questions(m)[1]!), "Next Friday");
     expect(send.hasAttribute("disabled")).toBe(false);
     await click(m, send);
-    const sent = m.client.bodies.find((b) => b.request === "POST /tickets/HARNESS-1/messages")!;
-    expect(sent.body).toEqual({ text: "", questionReplies: [{ question: "Ship when?", body: "Next Friday" }] });
+    const posts = () => m.client.bodies.filter((b) => b.request === "POST /tickets/HARNESS-1/messages").map((b) => b.body);
+    expect(posts()).toEqual([{ text: "", questionReplies: kept }]);
+    await m.until("the replies stay", () => questions(m).map((q) => reply(q).value).join("|") === "Postgres|Next Friday");
+    // Send stays on: sending again delivers the same (or edited) replies as another message.
+    expect(send.hasAttribute("disabled")).toBe(false);
+    await click(m, send);
+    expect(posts()).toHaveLength(2);
+  });
+
+  test("a reply under a question the agent has resolved doesn't go out", async () => {
+    const world = edited((w) => {
+      const t = w.tickets.find((x) => x.key === "HARNESS-1")!;
+      t.messageDraft = { ...t.messageDraft!, questionReplies: [{ question: "Which port?", body: "5432" }] };
+      w.details["HARNESS-1"]!.ticket = t;
+    }, withQuestions);
+    const m = await mount(detail("HARNESS-1"), { world });
+    await m.until("the panel", () => questions(m).length === 2);
+    expect(all(m.container, "[data-testid=composer-send]")[0]!.hasAttribute("disabled")).toBe(true);
   });
 
   test("off the Spec tab the panel is a chip counting what needs the human", async () => {

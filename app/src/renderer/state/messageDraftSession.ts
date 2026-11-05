@@ -145,16 +145,22 @@ export class MessageDraftSession {
   }
 
   /**
-   * The message went with `sentFiles`: the service cleared the saved draft. The text goes; files
-   * attached while it was sending stay, and are saved as the new draft.
+   * The message went with `sentFiles` and `sentReplies`: the service cleared the saved draft but for
+   * those replies, which it keeps so they can be edited and sent again. The text goes; the replies
+   * stay as they are here, and files attached while it was sending stay too. Whatever differs
+   * from what the service kept is saved as the new draft.
    */
-  sent(sentFiles: MessageDraftValue["attachments"]) {
+  sent(sentFiles: MessageDraftValue["attachments"], sentReplies: MessageDraftValue["questionReplies"] = []) {
     this.sending = false;
     const rest = this.value.attachments.filter((a) => !sentFiles.includes(a));
-    this.saved = EMPTY_MESSAGE_DRAFT;
-    this.value = EMPTY_MESSAGE_DRAFT;
+    const replies = this.value.questionReplies;
+    this.saved = { ...EMPTY_MESSAGE_DRAFT, questionReplies: sentReplies };
+    this.value = { ...EMPTY_MESSAGE_DRAFT, questionReplies: replies };
     if (rest.length) this.edit({ attachments: rest });
-    else this.changed();
+    else {
+      this.changed();
+      if (!sameMessageDraft(this.value, this.saved)) void this.flush();
+    }
   }
 
   /** The window is going away: send what's waiting now, as a request that outlives the page. */

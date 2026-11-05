@@ -2644,23 +2644,13 @@ button.prompt-attachment-row-main:disabled {
   max-height: min(40vh, 360px);
   overflow-y: auto;
 }
+.needs-you .blocked-callout {
+  border: none;
+}
 .needs-you-q {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--amber);
-  border-radius: var(--radius-lg);
-  background: var(--bg);
-  padding: 8px 10px;
-}
-.needs-you-q.is-detached {
-  border-left-color: var(--text-3);
-  align-items: flex-start;
-}
-.needs-you-q.is-answered {
-  border-left-color: var(--green);
-  background: transparent;
+  gap: 4px;
 }
 .needs-you-q-text {
   display: flex;
@@ -2671,23 +2661,13 @@ button.prompt-attachment-row-main:disabled {
 .needs-you-q-text .md > :last-child {
   margin-bottom: 0;
 }
-.needs-you-sent {
-  list-style: none;
-  margin: 0;
-  padding: 0 0 0 10px;
-  border-left: 2px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 12px;
-}
-.needs-you-sent .md > :last-child {
-  margin-bottom: 0;
+.needs-you-q-text.is-answered {
+  font-weight: normal;
+  color: var(--text-2);
 }
 .needs-you-reply.composer-input {
   min-height: 32px;
   padding: 6px 9px;
-  max-height: 160px;
 }
 .needs-you-answered > summary {
   cursor: pointer;
