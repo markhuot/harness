@@ -65,14 +65,14 @@ struct TicketDetailComposer: View {
 
     var body: some View {
         let empty = TicketDetailLogic.trim(text).isEmpty
-        let writing = focused || !empty || !outgoing.isEmpty || !draft.questionReplies.isEmpty
         let attention = ticket.status == .blocked
         let accepts = TicketDetailLogic.acceptsMessageAttachments(ticket)
-        let replies = OpenQuestions.pending(draft.questionReplies)
+        let replies = OpenQuestions.sendable(spec: ticket.spec, replies: draft.questionReplies)
+        let writing = focused || !empty || !outgoing.isEmpty || !replies.isEmpty
         let canSend = TicketDetailLogic.canSendMessage(text: text, attachments: outgoing.count, uploading: uploader.pending.count,
                                                        sending: sending, approvalPending: !accepts,
                                                        compacting: compacting, replies: replies.count)
-        let panel = OpenQuestions.panel(spec: ticket.spec, activity: store.state.activity[ticket.sessionId] ?? [], drafts: draft.questionReplies)
+        let panel = OpenQuestions.panel(spec: ticket.spec, drafts: draft.questionReplies)
         let needsYou = TicketNeedsYouPanel.count(ticket, panel)
         // On iPhone the panel folds to its chip while the keyboard is up for the message.
         let folded = sizeClass == .compact && focused && !replyFocused && !panelOpened
@@ -175,7 +175,7 @@ struct TicketDetailComposer: View {
     private func send() {
         let body = TicketDetailLogic.trim(text)
         let accepts = TicketDetailLogic.acceptsMessageAttachments(ticket)
-        let replies = OpenQuestions.pending(draft.questionReplies)
+        let replies = OpenQuestions.sendable(spec: ticket.spec, replies: draft.questionReplies)
         guard TicketDetailLogic.canSendMessage(text: text, attachments: outgoing.count, uploading: uploader.pending.count,
                                                sending: sending, approvalPending: !accepts, compacting: compacting,
                                                replies: replies.count) else { return }
@@ -193,7 +193,7 @@ struct TicketDetailComposer: View {
                 haptic(.success)
                 store.dispatch(.tickets([ok]))
                 // Files attached while it was sending stay for the next message.
-                draft.sent(files: files)
+                draft.sent(files: files, replies: replies)
             } else {
                 draft.sendFailed()
             }

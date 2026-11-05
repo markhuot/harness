@@ -4,7 +4,7 @@ import Foundation
 // the GFM task items under its "Open questions" heading. Agents write them (`- [ ] question`) and
 // resolve them by moving the answer into the spec and removing the item or checking it off. The
 // ticket screen lists them in the Needs you panel above the composer, where the human replies to
-// several at once.
+// several at once; the replies stay after a send, to edit and send again.
 
 public enum OpenQuestions {
     public struct Question: Equatable, Sendable {
@@ -18,17 +18,10 @@ public enum OpenQuestions {
         }
     }
 
-    /// A reply the human already sent under a question (an `answered` Activity entry's meta.questionReplies).
-    public struct SentReply: Equatable, Sendable {
-        public var body: String
-        public var at: Timestamp
-    }
-
-    /// One question as the panel shows it: its sent replies, oldest first, and the reply being drafted.
+    /// One question as the panel shows it, with the reply in the draft.
     public struct Thread: Equatable, Sendable, Identifiable {
         public var question: String
         public var checked: Bool
-        public var sent: [SentReply]
         public var draft: String
         public var id: String { question }
     }
@@ -38,10 +31,8 @@ public enum OpenQuestions {
         public var open: [Thread]
         /// The checked ones, folded into an "N answered" disclosure
         public var answered: [Thread]
-        /// Drafted replies whose question isn't in the spec anymore: kept until sent or discarded.
-        public var detached: [QuestionReply]
 
-        public static let empty = Panel(open: [], answered: [], detached: [])
+        public static let empty = Panel(open: [], answered: [])
     }
 
     /// `openQuestions`: the task items under the spec's Open questions heading (any level, any
@@ -88,24 +79,21 @@ public enum OpenQuestions {
         }.filter { !$0.question.isEmpty && !$0.body.isEmpty }
     }
 
-    /// `questionPanel`: the spec's questions, each with what the human already sent under it
-    /// (matched by the question's text) and the reply in the draft.
-    public static func panel(spec: String, activity: [ActivityEntry], drafts: [QuestionReply]) -> Panel {
-        var sent: [String: [SentReply]] = [:]
-        for e in activity.sorted(by: { $0.createdAt < $1.createdAt }) where e.kind == .answered {
-            for r in e.meta.questionReplies ?? [] {
-                sent[r.question, default: []].append(SentReply(body: r.body, at: e.createdAt))
-            }
-        }
+    /// `questionPanel`: the spec's questions, each with its reply in the draft (matched by the
+    /// question's text).
+    public static func panel(spec: String, drafts: [QuestionReply]) -> Panel {
         let qs = questions(spec)
         func thread(_ q: Question) -> Thread {
-            Thread(question: q.text, checked: q.checked, sent: sent[q.text] ?? [], draft: drafts.first { $0.question == q.text }?.body ?? "")
+            Thread(question: q.text, checked: q.checked, draft: drafts.first { $0.question == q.text }?.body ?? "")
         }
-        let known = Set(qs.map(\.text))
-        return Panel(
-            open: qs.filter { !$0.checked }.map(thread),
-            answered: qs.filter(\.checked).map(thread),
-            detached: drafts.filter { !known.contains($0.question) && !$0.body.allSatisfy(\.isWhitespace) }
-        )
+        return Panel(open: qs.filter { !$0.checked }.map(thread), answered: qs.filter(\.checked).map(thread))
+    }
+
+    /// `sendableQuestionReplies`: the replies a Send delivers, the non-blank ones under questions
+    /// still open. Replies stay in the draft after a send, so one under a question the agent has
+    /// since resolved or reworded is kept but no longer goes out.
+    public static func sendable(spec: String, replies: [QuestionReply]) -> [QuestionReply] {
+        let open = Set(questions(spec).filter { !$0.checked }.map(\.text))
+        return pending(replies).filter { open.contains($0.question) }
     }
 }

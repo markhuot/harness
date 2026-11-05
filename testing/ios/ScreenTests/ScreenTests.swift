@@ -255,25 +255,13 @@ final class ScreenTests: ScreenTestCase {
     }
 
     /// HARNESS-4 blocked, with open questions in its spec: the Needs you panel above the composer
-    /// lists the block question, then each open question with what was already sent under it and a
-    /// drafted reply, then the answered one folded away. The spec keeps its checkboxes.
+    /// lists the block question, then each open question with its one reply field (one holding a
+    /// drafted reply), then the answered one folded away. The spec keeps its checkboxes.
     func testTicketOpenQuestions() async throws {
         var json = try WorldJSON.load()
         let spec = "# Choose a storage backend\n\n## Goal\n\nPick where hosted tickets live.\n\n## Open questions\n\n- [ ] Should backups run hourly or nightly?\n- [ ] Do we keep SQLite for local installs?\n- [x] Which region hosts the database?\n"
         let draft: [String: Any] = ["text": "", "attachments": [], "questionReplies": [["question": "Do we keep SQLite for local installs?", "body": "Yes, local stays on SQLite."]], "origin": NSNull(), "updatedAt": json.now]
         json.patch("HARNESS-4", ["spec": spec, "openQuestionCount": 2, "messageDraft": draft])
-        var details = json.root["details"] as? [String: Any] ?? [:]
-        if var detail = details["HARNESS-4"] as? [String: Any], let ticket = detail["ticket"] as? [String: Any] {
-            var activity = detail["activity"] as? [[String: Any]] ?? []
-            activity.append([
-                "id": "act-replied", "sessionId": ticket["sessionId"] ?? "", "ticketId": ticket["id"] ?? "", "kind": "answered", "author": "human",
-                "body": "> Should backups run hourly or nightly?", "createdAt": json.now - 3_600_000,
-                "meta": ["questionReplies": [["question": "Should backups run hourly or nightly?", "body": "Nightly is enough for now."]]],
-            ])
-            detail["activity"] = activity
-            details["HARNESS-4"] = detail
-            json.root["details"] = details
-        }
         let world = await ScreenWorld(json)
         let image = try await render(world, router: ticket("HARNESS-4", .spec)) { RootView() }
         ReferenceImages.assert(image, named: "ticket-open-questions")

@@ -20,21 +20,14 @@ import HarnessKit
         #expect(OpenQuestions.questions("## Questions\n- [ ] a").isEmpty)
     }
 
-    @Test func thePanelThreadsSentRepliesAndDrafts() {
+    @Test func thePanelPairsEachQuestionWithItsDraftAndSendsOnlyOpenOnes() {
         let spec = "## Open questions\n- [ ] Which DB?\n- [x] Which port?"
-        let entry = { (at: Double, replies: [QuestionReply]) in
-            ActivityEntry(id: "\(at)", sessionId: "s", kind: .answered, author: .human, body: "", meta: ActivityMeta(questionReplies: replies), createdAt: at)
-        }
-        let panel = OpenQuestions.panel(
-            spec: spec,
-            activity: [entry(2, [.init(question: "Which DB?", body: "PG 17")]), entry(1, [.init(question: "Which DB?", body: "PG")])],
-            drafts: [.init(question: "Which DB?", body: "and Redis"), .init(question: "Reworded?", body: "yes")]
-        )
+        let drafts: [QuestionReply] = [.init(question: "Which DB?", body: " PG "), .init(question: "Which port?", body: "5432"), .init(question: "Reworded?", body: "yes")]
+        let panel = OpenQuestions.panel(spec: spec, drafts: drafts)
         #expect(panel.open.map(\.question) == ["Which DB?"])
-        #expect(panel.open[0].sent.map(\.body) == ["PG", "PG 17"])
-        #expect(panel.open[0].draft == "and Redis")
+        #expect(panel.open[0].draft == " PG ")
         #expect(panel.answered.map(\.question) == ["Which port?"])
-        #expect(panel.detached == [.init(question: "Reworded?", body: "yes")])
+        #expect(OpenQuestions.sendable(spec: spec, replies: drafts) == [.init(question: "Which DB?", body: "PG")])
     }
 
     @Test func aReplyIsKeptOncePerQuestionAndDroppedWhenEmptied() {

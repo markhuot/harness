@@ -645,14 +645,14 @@ draft ticket (it has no agent yet) answers 409. Its uploads count as referenced,
 sweep keeps them, and they go when the ticket is deleted. Agents never see it: the board tools pick
 their own fields.
 
-A board card shows a pencil while `hasMessageDraft` holds (text that isn't blank, files, or a
-reply under an open question). It sits
+A board card shows a pencil while `hasMessageDraft` holds (text that isn't blank, or files;
+replies under open questions stay after a send, so they don't count). It sits
 in the card's top-right icons, which keep a fixed order: activity (spinner or clock), the pencil,
 then the agent and human review marks, so the marks stay at the right edge when a run starts or
 stops.
 
 `POST /tickets/:key/messages` from an app clears the draft once the message is delivered (a failed
-send keeps it). An agent's `message_ticket` goes through the same delivery but leaves the human's
+send keeps it), all but the question replies the message carried. An agent's `message_ticket` goes through the same delivery but leaves the human's
 draft alone.
 
 A chief of staff's chat uses the same composer on its hidden ticket. Clients hold no ticket for a
@@ -702,22 +702,23 @@ ask the agent, which adds it or says why it isn't a question.
 - **The Needs you panel** (`views/NeedsYouPanel.tsx`, iOS `TicketNeedsYouPanel`) sits at the top
   of the composer on the Spec tab. It shows the blocked ticket's callout first (`BlockedCallout`:
   the question with Unblock, a restart time, or a tool approval; it no longer renders in the spec
-  body), then each unchecked question with the replies already sent under it and a reply field,
-  then the checked ones folded under "N answered". `questionPanel` builds it from the spec, the
-  ticket's Activity and the draft. A drafted reply whose question left the spec stays listed as
-  "Question changed" until it's sent or discarded. The list caps its height and scrolls. On other
-  tabs (and on iPhone while the keyboard is up for the message, unless a reply field has focus) it
-  folds to a "N questions need you" chip that opens it. The Open questions section still renders in
-  the spec body with its checkboxes.
-- **Sending.** Reply fields edit `MessageDraft.questionReplies` (one per question; emptying a field
-  drops it), saved with the rest of the draft. A reply alone enables Send. `POST /tickets/:key/messages`
-  takes `questionReplies`; the service drops blank ones and composes the message
+  body), then each unchecked question as plain text with one growing reply box under it, then the
+  checked ones folded under "N answered". `questionPanel` builds it from the spec and the draft.
+  The list caps its height and scrolls. On other tabs (and on iPhone while the keyboard is up for
+  the message, unless a reply box has focus) it folds to a "N questions need you" chip that opens
+  it. The Open questions section still renders in the spec body with its checkboxes.
+- **Sending.** Reply boxes edit `MessageDraft.questionReplies` (one per question; emptying a box
+  drops it), saved with the rest of the draft. A reply alone enables Send. Send carries
+  `sendableQuestionReplies`: the non-blank replies under questions still open, so one under a
+  question the agent resolved or reworded stays in the draft but no longer goes out.
+  `POST /tickets/:key/messages` takes `questionReplies`, drops blank ones and composes the message
   (`composeQuestionReplies`: each question as a `>` quote with its reply under it, then the typed
-  text) before the usual delivery, so it behaves exactly like a typed message (on a planning
-  ticket it starts or steers a plan run; on a blocked one it answers the block). Unlike a typed
-  message, it writes an `answered` Activity entry whose `meta.questionReplies` holds the replies
-  (on a blocked ticket, the same entry that records the answer to the block). That's where the
-  panel finds what was already sent under each question; the agent's response is in the Transcript.
+  text) before the usual delivery, so it behaves exactly like a typed message: it steers a live
+  run or starts one, answers a block on a blocked ticket, and goes to the Transcript, not Activity.
+  The send clears the draft's text and files but keeps the replies it carried, so they stay in
+  their boxes; the human can edit them and send again, which is simply another message. Nothing
+  records when a reply was sent. `hasMessageDraft` (the card's pencil) ignores replies for that
+  reason.
 
 ### Branches
 

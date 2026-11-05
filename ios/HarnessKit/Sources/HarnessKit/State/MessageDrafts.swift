@@ -34,11 +34,11 @@ public enum MessageDrafts {
     }
 
     /// `hasMessageDraft`: the ticket has a message waiting to go (its board card shows a pencil):
-    /// text that isn't blank, files, or a reply under an open question.
+    /// text that isn't blank, or files. Replies under open questions don't count: they stay in the
+    /// draft after they're sent.
     public static func has(_ d: MessageDraft?) -> Bool {
         guard let d else { return false }
         return !d.text.allSatisfy { $0.isWhitespace } || !d.attachments.isEmpty
-            || (d.questionReplies ?? []).contains { !$0.body.allSatisfy { $0.isWhitespace } }
     }
 
     /// `sameMessageDraft`
@@ -244,13 +244,17 @@ public final class MessageDraftSync {
         Task { await flush() }
     }
 
-    /// The message went with `files`: the service cleared the saved draft. The text goes; files
-    /// attached while it was sending stay, and are saved as the new draft.
-    public func sent(files: [Attachment]) {
+    /// The message went with `files` and `replies`: the service cleared the saved draft but for
+    /// those replies, which it keeps so they can be edited and sent again. The text goes; the
+    /// replies stay as they are here, and files attached while it was sending stay too. Whatever
+    /// differs from what the service kept is saved as the new draft.
+    public func sent(files: [Attachment], replies sentReplies: [QuestionReply] = []) {
         sending = false
         let rest = attachments.list.filter { a in !files.contains { $0.id == a.id && $0.path == a.path } }
-        saved = .empty
-        replace(.empty)
+        let replies = questionReplies
+        saved = MessageDraftValue(questionReplies: sentReplies)
+        replace(MessageDraftValue(questionReplies: replies))
         if !rest.isEmpty { attachments.add(rest) }
+        else if !MessageDrafts.same(value, saved) { schedule() }
     }
 }

@@ -256,7 +256,8 @@ public struct MessageDraft: Codable, Sendable, Equatable {
     public var text: String
     /// The files waiting to go with it, each with its notes
     public var attachments: [Attachment]
-    /// The replies waiting under the spec's open questions, one per question. Absent from older services.
+    /// The replies under the spec's open questions, one per question. A send from an app keeps them
+    /// (as sent), so the human can edit them and send again. Absent from older services.
     public var questionReplies: [QuestionReply]?
     /// The editor that saved it (MessageDraftBody.origin): an editor skips its own saves coming back
     /// and takes only other devices'. null when the saver didn't say.
