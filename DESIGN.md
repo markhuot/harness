@@ -635,7 +635,8 @@ worktree, any other branch means one (`draftBranchPatch`). Base branch shows onl
 ### Message drafts
 
 The message a human is writing to a ticket's agent is saved on the ticket as `Ticket.messageDraft`
-(`{ text, attachments, origin, updatedAt }`, null when there is none), so a reply started on one
+(`{ text, attachments, questionReplies, origin, updatedAt }`, null when there is none; the replies
+are the ones drafted under open questions, see "Open questions"), so a reply started on one
 device can be finished on another. A ticket has one, because each app has one composer per ticket.
 `PUT /tickets/:key/message-draft { text, attachments?, origin? }` replaces it whole; empty text and
 no attachments clear it, and a save that changes nothing emits nothing. It's stored in
@@ -644,7 +645,8 @@ draft ticket (it has no agent yet) answers 409. Its uploads count as referenced,
 sweep keeps them, and they go when the ticket is deleted. Agents never see it: the board tools pick
 their own fields.
 
-A board card shows a pencil while `hasMessageDraft` holds (text that isn't blank, or files). It sits
+A board card shows a pencil while `hasMessageDraft` holds (text that isn't blank, files, or a
+reply under an open question). It sits
 in the card's top-right icons, which keep a fixed order: activity (spinner or clock), the pencil,
 then the agent and human review marks, so the marks stay at the right edge when a run starts or
 stops.
@@ -677,6 +679,45 @@ its own copy of the text and draws its `TextField` in an Equatable child view. A
 cancelled an autocorrection or inline prediction in progress and rewrote the text under the caret.
 Now the field redraws only when its own inputs change, and takes `text` back only when it changes
 to something the field didn't type (a send clearing it, a picked mention, another device's draft).
+
+### Open questions
+
+The decisions an agent needs from the human live in the spec, under its **Open questions**
+heading, as a GFM task list: one `- [ ] question` per item. They're versioned with the spec, so the
+revision history shows each one being resolved. There's no table and no tool for them: agents add,
+answer and remove them with `edit_spec` / `update_spec`. The `system.spec` run-context section
+(every ticket run with the spec tools: plan, work, review, chat) and both spec tools' descriptions
+tell agents the format, to add a question whenever one for the human comes up, and to resolve one
+by moving its answer into the spec, then removing the item (preferred, it keeps specs tidy) or
+checking it off. Nothing resolves on its own, and the human can't check one off; to add one, they
+ask the agent, which adds it or says why it isn't a question.
+
+- **Parsing.** `openQuestions(spec)` (`shared/src/state/openQuestions.ts`, ported to HarnessKit's
+  `OpenQuestions`) finds the first heading reading "Open question(s)" (any level or case, an
+  optional colon) and returns the task items under it, nested ones too, down to the next heading
+  of the same or a higher level. Plain bullets and prose there aren't questions, so older specs
+  show none. A question's identity is its text: rewording it detaches its drafts and sent replies.
+  The service derives `Ticket.openQuestionCount` (the unchecked ones) when it maps a row, parsing
+  only specs that mention the heading; board cards show it as an amber badge.
+- **The Needs you panel** (`views/NeedsYouPanel.tsx`, iOS `TicketNeedsYouPanel`) sits at the top
+  of the composer on the Spec tab. It shows the blocked ticket's callout first (`BlockedCallout`:
+  the question with Unblock, a restart time, or a tool approval; it no longer renders in the spec
+  body), then each unchecked question with the replies already sent under it and a reply field,
+  then the checked ones folded under "N answered". `questionPanel` builds it from the spec, the
+  ticket's Activity and the draft. A drafted reply whose question left the spec stays listed as
+  "Question changed" until it's sent or discarded. The list caps its height and scrolls. On other
+  tabs (and on iPhone while the keyboard is up for the message, unless a reply field has focus) it
+  folds to a "N questions need you" chip that opens it. The Open questions section still renders in
+  the spec body with its checkboxes.
+- **Sending.** Reply fields edit `MessageDraft.questionReplies` (one per question; emptying a field
+  drops it), saved with the rest of the draft. A reply alone enables Send. `POST /tickets/:key/messages`
+  takes `questionReplies`; the service drops blank ones and composes the message
+  (`composeQuestionReplies`: each question as a `>` quote with its reply under it, then the typed
+  text) before the usual delivery, so it behaves exactly like a typed message (on a planning
+  ticket it starts or steers a plan run; on a blocked one it answers the block). Unlike a typed
+  message, it writes an `answered` Activity entry whose `meta.questionReplies` holds the replies
+  (on a blocked ticket, the same entry that records the answer to the block). That's where the
+  panel finds what was already sent under each question; the agent's response is in the Transcript.
 
 ### Branches
 
@@ -2854,7 +2895,9 @@ that.
   text. A thumbnail line right under another joins its row; a blank line starts a new one. Inside
   text, a thumbnail is still a 100×100 square. Other titles are ignored. Any of them opens the
   lightbox (Mac) or the full-screen viewer (iOS). The prompt (`system.spec`) and the spec tools'
-  descriptions teach agents both forms.
+  descriptions teach agents both forms. A list item opening with `[ ]` or `[x]` is a task item
+  (`ListItem.checked`, marker dropped from its text), drawn as a read-only checkbox in place of the
+  bullet everywhere markdown renders; `specDiff` marks an item whose box changed.
 
 - **Rewriting.** `localImageSources` finds each local src once; `attachment:`, `http(s):`,
   `data:` and `mailto:` srcs are left as written. The files are validated and copied

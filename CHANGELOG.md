@@ -9,6 +9,18 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- On the Spec tab, a Needs you panel now sits above the message box on the Mac, iPhone and iPad. It lists the question a blocked ticket is waiting on, then each open question in the spec, with the replies you've already sent under it and a field for your next one. You can answer several questions at once: Send delivers every reply (plus anything typed in the message box) as one message, each reply quoted under its question, and the agent's answer shows in the Transcript. Replies save as you type, so you can start them on the Mac and finish on your phone. Questions the agent has checked off fold under "N answered". On other tabs, a "2 questions need you" chip takes you back to the panel, and on iPhone the panel folds to that chip while the keyboard is up.
+- Board cards show how many open questions a ticket's spec has waiting on you.
+- Task lists (`- [ ]` and `- [x]`) now show as checkboxes wherever the apps render markdown: the spec, notes, Activity and the Transcript. The spec's revision diff marks an item that was checked off.
+
+### Changed
+
+- A blocked ticket's question now shows at the top of the Needs you panel instead of in a callout above the spec. Answering it and the Unblock button work as before.
+- Agents in every run that can edit the spec (planning, work, review and chat) now write the spec's Open questions as a task list, one question per item, and add questions as they come up. To resolve one, the agent moves the answer into the Goal or Plan and then removes the question or checks it off, so the spec's revision history shows each decision being made.
+- For people working on Harness: the token limits in `prompt-budget.test.ts` grew by about 90 tokens per run to make room for the open-questions rule in each run's prompt.
+
 ## [app-20261105.1103](https://github.com/markhuot/harness/releases/tag/app-20261105.1103) - 2026-11-05
 
 ### Added
