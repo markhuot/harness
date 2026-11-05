@@ -708,10 +708,14 @@ add one, they ask the agent, which adds it or says why it isn't a question.
   platform: `needsYouLayout(width, height)` (ported as `OpenQuestions.layout`, same constants) is
   `panel` for a landscape view at least 700 × 600 and `inline` otherwise. So every iPhone, an iPad
   in portrait or split view and a Mac ticket pane beside the board answer inline; a zoomed Mac pane
-  or a large window, and a large iPad in landscape, get the panel. The Mac measures the ticket pane
-  with a `ResizeObserver` (`useNeedsYouLayout`, `views/QuestionAnswers.tsx`; unmeasured, and with
-  the Spec tab torn off, it's the panel), iOS the detail view's geometry; both switch as the view is
-  resized or rotated, and the answers carry across since they live in the draft.
+  or a large window, and an iPad ticket window in landscape, get the panel. The iPad's ticket
+  sheet is a form sheet under 700pt wide even in landscape, so every sheet answers inline. The Mac
+  measures the ticket pane with a `ResizeObserver` (`useNeedsYouLayout`, `views/QuestionAnswers.tsx`;
+  unmeasured, and with the Spec tab torn off, it's the panel); iOS measures the whole ticket view,
+  ignoring the keyboard so typing an answer never flips the layout, into a `SpecQuestions` object
+  the Spec tab and the composer share (`Features/Ticket/TicketSpecQuestions.swift`, with the
+  `taskAnswerField` hook in `MarkdownView`). Both switch as the view is resized or rotated, and the
+  answers carry across since they live in the draft.
 - **The panel** (`views/NeedsYouPanel.tsx`, iOS `TicketNeedsYouPanel`) sits at the top of the
   composer on the Spec tab in the `panel` layout. It shows the blocked ticket's callout first
   (`BlockedCallout`: the question, a restart time, or a tool approval; it never renders in the spec
