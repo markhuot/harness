@@ -265,9 +265,6 @@ struct TicketDetailHero: View {
                     .disabled(!item.enabled)
                 approveMenu(choices).disabled(!item.enabled)
             }
-        case .unblock:
-            HButton(item.action.title, icon: "play", variant: .primary, small: true, fullWidth: false, haptic: nil) { run(item.action) }
-                .disabled(!item.enabled)
         case .reopen:
             HButton(item.action.title, icon: "refresh", small: true, fullWidth: false) { run(item.action) }
                 .disabled(!item.enabled)

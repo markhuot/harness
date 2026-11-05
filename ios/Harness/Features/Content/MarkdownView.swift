@@ -495,14 +495,32 @@ private struct MarkdownListView: View {
     let depth: Int
     let style: MarkdownStyle
 
+    /// The Spec tab's inline answers: a field under each unchecked task item, keyed by its text.
+    @Environment(\.taskAnswerField) private var answerField
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             ForEach(items.indices, id: \.self) { j in
+                let question = items[j].checked == false ? items[j].text.trimmingCharacters(in: .whitespacesAndNewlines) : ""
+                if let answerField, !question.isEmpty {
+                    // A question: its text with the answer field under it, no checkbox to tick.
+                    MarkdownListRow(ordered: ordered, number: start + j, depth: depth, style: style, question: true) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            MarkdownRichText(text: items[j].text, style: style)
+                            answerField.make(question)
+                        }
+                        .padding(.bottom, 10)
+                        ForEach(items[j].children.indices, id: \.self) { k in
+                            MarkdownBlockView(block: items[j].children[k], style: style, depth: depth + 1)
+                        }
+                    }
+                } else {
                 MarkdownListRow(ordered: ordered, number: start + j, depth: depth, style: style, checked: items[j].checked) {
                     MarkdownRichText(text: items[j].text, style: style)
                     ForEach(items[j].children.indices, id: \.self) { k in
                         MarkdownBlockView(block: items[j].children[k], style: style, depth: depth + 1)
                     }
+                }
                 }
             }
         }
@@ -512,7 +530,7 @@ private struct MarkdownListView: View {
 /// One list item: its marker (a bullet by depth, or its number) beside its content. `marker`
 /// overrides the marker's color (Show changes: green for an added item, red for a removed one).
 /// A task item (`checked` set) shows a read-only checkbox instead; `toggled` marks one a revision
-/// checked or unchecked.
+/// checked or unchecked. A `question` (an unchecked task item answered inline) shows a question mark.
 private struct MarkdownListRow<Content: View>: View {
     let ordered: Bool
     let number: Int
@@ -521,11 +539,18 @@ private struct MarkdownListRow<Content: View>: View {
     var marker: Color?
     var checked: Bool?
     var toggled = false
+    var question = false
     @ViewBuilder let content: Content
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            if let checked {
+            if question {
+                Image(systemName: "questionmark.circle")
+                    .font(style.font)
+                    .foregroundStyle(style.palette.tone(.amber).fg)
+                    .frame(minWidth: 10, alignment: .trailing)
+                    .accessibilityLabel("Question")
+            } else if let checked {
                 Image(systemName: checked ? "checkmark.square.fill" : "square")
                     .font(style.font)
                     .foregroundStyle(toggled ? style.palette.green : marker ?? (checked ? style.palette.accent : style.palette.text3))

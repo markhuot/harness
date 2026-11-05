@@ -155,6 +155,9 @@ private struct TicketDetailBody: View {
     /// The spec's media (the detail's attachments), refetched when a new revision may show more.
     @State private var specAttachments: [Attachment]?
     @State private var relay = TicketDetailRelay()
+    /// The open questions' layout for this view's size and the bar's focus requests, shared by the
+    /// Spec tab and the composer.
+    @State private var questions = SpecQuestions()
     @Environment(\.shortcutTargets) private var shortcutTargets
 
     /// What has to change for the spec's media to load again.
@@ -196,6 +199,7 @@ private struct TicketDetailBody: View {
                     .environment(\.annotationSink, relay.sink(outgoing: outgoing, uploader: uploader))
                     .environment(\.openAnnotator, relay.annotatorOpener)
                     .environment(\.specAttachments, specAttachments)
+                    .environment(\.specQuestions, questions)
                     .modifier(PagerSlide(hero: hero))
             }
             .zIndex(1)
@@ -214,8 +218,18 @@ private struct TicketDetailBody: View {
         // A plain safe-area inset: it insets the scroll content and rides the keyboard, with no
         // scroll-edge blur or background behind the composer (safeAreaBar adds both).
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            TicketDetailComposer(ticket: ticket, tab: shown, draft: draft, uploader: uploader, focusRequest: focusComposer, onTab: onTab).id(ticket.id)
+            TicketDetailComposer(ticket: ticket, tab: shown, draft: draft, uploader: uploader, questions: questions, focusRequest: focusComposer, onTab: onTab).id(ticket.id)
             .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: { readComposerTop($0) }
+        }
+        // The whole ticket view's size picks where open questions are answered (OpenQuestions.layout),
+        // again on rotation and resize. The keyboard doesn't count, so typing an answer never
+        // switches the layout under the field.
+        .background {
+            Color.clear
+                .ignoresSafeArea(.keyboard)
+                .onGeometryChange(for: OpenQuestions.Layout.self) {
+                    OpenQuestions.layout(width: Double($0.size.width), height: Double($0.size.height))
+                } action: { questions.layout = $0 }
         }
         // ⇧⌘] and ⇧⌘[ step through the tabs, round the ends, as on the desktop.
         // ⇧⌘] and ⇧⌘[ (the window's WindowShortcuts) step this screen's tabs while it's the one showing.
