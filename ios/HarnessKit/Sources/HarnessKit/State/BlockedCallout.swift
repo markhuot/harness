@@ -6,8 +6,8 @@ import Foundation
 /// rules in state/blockedCallout.ts.
 public enum BlockedCallout: Equatable, Sendable {
     case none
-    /// Waiting on the human's answer. `unblock` is whether the Unblock button applies (the header's gate).
-    case question(String, unblock: Bool)
+    /// Waiting on the human's answer, which a message gives; the agent unblocks itself.
+    case question(String)
     /// A usage limit: restarts by itself at `at`; `reason` is the run's error.
     case restart(at: Timestamp, reason: String)
     /// A tool waits on an allow or deny.
@@ -18,6 +18,6 @@ public enum BlockedCallout: Equatable, Sendable {
         let reason = (ticket.blockedReason ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         if let approval = ticket.pendingApproval { return .approval(approval) }
         if let at = Conductor.restartsAt(ticket) { return .restart(at: at, reason: reason) }
-        return .question(reason, unblock: TicketActions.canUnblock(ticket))
+        return .question(reason)
     }
 }

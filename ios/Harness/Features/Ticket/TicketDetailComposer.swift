@@ -13,9 +13,14 @@ import SwiftUI
 /// image already there gets them), and the field takes focus so the human can say why; images in
 /// the list open full screen with Annotate, which edits their notes in place.
 ///
-/// On the Spec tab the Needs you panel (TicketNeedsYouPanel) sits on top: the block and the spec's
-/// open questions, each with a reply field whose text goes with the next Send. Elsewhere, and on
-/// iPhone while the keyboard is up for the message, it's a chip that opens it.
+/// On the Spec tab it answers what the ticket needs from the human (DESIGN.md "Open questions"), as
+/// the ticket view's size decides (SpecQuestions.layout). A large landscape view puts the Needs you
+/// panel (TicketNeedsYouPanel) on top: the block, then the spec's open questions, each with an answer
+/// field. Anything smaller answers each question inline in the spec, with a one-line bar here
+/// (NeedsYouBar: to the first question, or Send once answers are ready) and the block's question
+/// under it. Either way Send delivers the drafted answers with the message, and they stay drafted
+/// afterwards. On every other tab it's a plain message composer: nothing about questions shows, and
+/// a send carries no answers. A blocked ticket has no Unblock: a message answers the block.
 ///
 /// The text and files are the ticket's message draft (DESIGN.md "Message drafts", MessageDraftSync):
 /// saved to the service as they're typed, so the message can be finished on another device, and
@@ -27,6 +32,8 @@ struct TicketDetailComposer: View {
     /// The message being written: its text and the files going with it
     let draft: MessageDraftSync
     let uploader: PromptAttachmentUploader
+    /// The open questions' layout and the bar's focus requests (TicketDetailBody's)
+    let questions: SpecQuestions
     /// Focus the field each time this changes (an annotated image just joined the message)
     var focusRequest = 0
     /// Shows a tab of the ticket: the Transcript once a message went through
@@ -40,11 +47,8 @@ struct TicketDetailComposer: View {
     @Environment(DockedSheetInset.self) private var dockInset: DockedSheetInset?
     @State private var sending = false
     @State private var focused = false
-    /// A reply field in the Needs you panel has focus
-    @State private var replyFocused = false
-    /// The chip was tapped while the keyboard was up on iPhone: show the whole panel anyway
-    @State private var panelOpened = false
-    @Environment(\.horizontalSizeClass) private var sizeClass
+    /// The bar's Needs you with no open question to go to: focus the field.
+    @State private var barFocus = 0
 
     @Environment(\.sheetFront) private var sheetFront
     @Environment(\.sheetResting) private var sheetResting
@@ -67,29 +71,29 @@ struct TicketDetailComposer: View {
         let empty = TicketDetailLogic.trim(text).isEmpty
         let attention = ticket.status == .blocked
         let accepts = TicketDetailLogic.acceptsMessageAttachments(ticket)
-        let replies = OpenQuestions.sendable(spec: ticket.spec, replies: draft.questionReplies)
+        let replies = OpenQuestions.outgoing(spec: ticket.spec, replies: draft.questionReplies, tab: tab)
         let writing = focused || !empty || !outgoing.isEmpty || !replies.isEmpty
         let canSend = TicketDetailLogic.canSendMessage(text: text, attachments: outgoing.count, uploading: uploader.pending.count,
                                                        sending: sending, approvalPending: !accepts,
                                                        compacting: compacting, replies: replies.count)
         let panel = OpenQuestions.panel(spec: ticket.spec, drafts: draft.questionReplies)
-        let needsYou = TicketNeedsYouPanel.count(ticket, panel)
-        // On iPhone the panel folds to its chip while the keyboard is up for the message.
-        let folded = sizeClass == .compact && focused && !replyFocused && !panelOpened
         VStack(spacing: 4) {
-            if tab == .spec && !folded && TicketNeedsYouPanel.shows(ticket, panel) {
-                TicketNeedsYouPanel(ticket: ticket, panel: panel, draft: draft) { now in
-                    replyFocused = now
-                    draft.focus(now, stored: ticket.messageDraft.optional)
-                }
-                .padding(.bottom, 4)
-            } else if needsYou > 0 {
-                HStack {
-                    NeedsYouChip(count: needsYou) {
-                        if tab != .spec { onTab(.spec) }
-                        panelOpened = true
+            if tab == .spec {
+                if questions.layout == .panel {
+                    if TicketNeedsYouPanel.shows(ticket, panel) {
+                        TicketNeedsYouPanel(ticket: ticket, panel: panel, draft: draft) { now in
+                            draft.focus(now, stored: ticket.messageDraft.optional)
+                        }
+                        .padding(.bottom, 4)
                     }
-                    Spacer(minLength: 0)
+                } else {
+                    if let bar = OpenQuestions.bar(count: TicketNeedsYouPanel.count(ticket, panel), ready: replies.count) {
+                        NeedsYouBar(bar: bar) { barTapped(bar) }
+                    }
+                    TicketBlockedCallout(ticket: ticket, compact: true)
+                        // Opaque under the callout's tint, as the spec scrolls behind it.
+                        .background(c.bgElev, in: .rect(cornerRadius: 10))
+                        .padding(.bottom, 4)
                 }
             }
             if !outgoing.isEmpty || !uploader.pending.isEmpty {
@@ -119,7 +123,7 @@ struct TicketDetailComposer: View {
                                   fieldBox: MentionFieldBox(border: attention ? c.red : nil, cornerRadius: 22,
                                                             padding: EdgeInsets(top: 11, leading: 16, bottom: 11, trailing: 16),
                                                             glass: true),
-                                  focusRequest: focusRequest,
+                                  focusRequest: focusRequest + barFocus,
                                   onSubmit: { send() })
                 }
                 ComposerSendButton(sending: sending, active: writing && !compacting, disabled: !canSend, hint: sendHint(empty: empty, accepts: accepts)) { send() }
@@ -136,7 +140,6 @@ struct TicketDetailComposer: View {
         // bottom row still sits where a one-line field would, so 44 holds.
         .concentricBottomPadding(barHeight: DockMetrics.barHeight, raised: focused, horizontal: 12, bottom: 8)
         .animation(.snappy, value: focused)
-        .onChange(of: focused) { _, now in if !now { panelOpened = false } }
         // Another device's edit (or its send) shows here, unless this one is being typed in.
         .onChange(of: ticket.messageDraft.optional, initial: true) { _, saved in draft.sync(saved) }
         .onAppear { draft.onError = { _ in haptic(.error) } }
@@ -165,6 +168,20 @@ struct TicketDetailComposer: View {
         .accessibilityIdentifier("composer-compacting")
     }
 
+    /// The inline bar: Send, or the first open question's answer field (the composer's own field
+    /// when the spec asks nothing, as for a block alone).
+    private func barTapped(_ bar: OpenQuestions.Bar) {
+        switch bar.action {
+        case .send:
+            send()
+        case .focus:
+            switch OpenQuestions.focusTarget(spec: ticket.spec) {
+            case let .question(q): questions.focus(q)
+            case .composer: barFocus += 1
+            }
+        }
+    }
+
     /// Why Send ignores a tap (VoiceOver's hint).
     private func sendHint(empty: Bool, accepts: Bool) -> String {
         if !uploader.pending.isEmpty { return "Wait for the attachments to upload" }
@@ -175,7 +192,7 @@ struct TicketDetailComposer: View {
     private func send() {
         let body = TicketDetailLogic.trim(text)
         let accepts = TicketDetailLogic.acceptsMessageAttachments(ticket)
-        let replies = OpenQuestions.sendable(spec: ticket.spec, replies: draft.questionReplies)
+        let replies = OpenQuestions.outgoing(spec: ticket.spec, replies: draft.questionReplies, tab: tab)
         guard TicketDetailLogic.canSendMessage(text: text, attachments: outgoing.count, uploading: uploader.pending.count,
                                                sending: sending, approvalPending: !accepts, compacting: compacting,
                                                replies: replies.count) else { return }

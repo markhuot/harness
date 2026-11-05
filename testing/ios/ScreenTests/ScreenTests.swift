@@ -249,22 +249,63 @@ final class ScreenTests: ScreenTestCase {
         try await screen("ticket-transcript", router: ticket("HARNESS-5", .transcript)) { RootView() }
     }
 
-    /// HARNESS-4: blocked on a question for the human, no restart time: the Unblock button shows.
+    /// HARNESS-4: blocked on a question for the human, no restart time, and a spec that asks
+    /// nothing: the bar reads "Needs you · 1" with the block's question under it, no Unblock, and the
+    /// composer's placeholder says a message answers the block.
     func testTicketBlocked() async throws {
         try await screen("ticket-blocked", router: ticket("HARNESS-4", .spec)) { RootView() }
     }
 
-    /// HARNESS-4 blocked, with open questions in its spec: the Needs you panel above the composer
-    /// lists the block question, then each open question with its one reply field (one holding a
-    /// drafted reply), then the answered one folded away. The spec keeps its checkboxes.
-    func testTicketOpenQuestions() async throws {
+    /// A spec asking questions mid-spec (under Plan) and under Open questions, one already checked.
+    private static let questionsSpec = "# Choose a storage backend\n\n## Goal\n\nPick where hosted tickets live.\n\n## Plan\n\nMove the tickets to Postgres, then decide:\n\n- [ ] Should backups run hourly or nightly?\n- [ ] Do we keep SQLite for local installs?\n\n## Open questions\n\n- [ ] Which region hosts the database?\n- [x] Do we need read replicas?\n"
+
+    /// HARNESS-4 at work, its spec asking three questions, with `replies` drafted.
+    private func questionsWorld(blocked: Bool = false, replies: [[String: String]] = []) async throws -> ScreenWorld {
         var json = try WorldJSON.load()
-        let spec = "# Choose a storage backend\n\n## Goal\n\nPick where hosted tickets live.\n\n## Open questions\n\n- [ ] Should backups run hourly or nightly?\n- [ ] Do we keep SQLite for local installs?\n- [x] Which region hosts the database?\n"
-        let draft: [String: Any] = ["text": "", "attachments": [], "questionReplies": [["question": "Do we keep SQLite for local installs?", "body": "Yes, local stays on SQLite."]], "origin": NSNull(), "updatedAt": json.now]
-        json.patch("HARNESS-4", ["spec": spec, "openQuestionCount": 2, "messageDraft": draft])
-        let world = await ScreenWorld(json)
+        let draft: [String: Any] = ["text": "", "attachments": [], "questionReplies": replies, "origin": NSNull(), "updatedAt": json.now]
+        var patch: [String: Any] = ["spec": Self.questionsSpec, "openQuestionCount": 3, "messageDraft": draft]
+        if !blocked {
+            patch["status"] = "in_progress"
+            patch["blockedReason"] = NSNull()
+        }
+        json.patch("HARNESS-4", patch)
+        return await ScreenWorld(json)
+    }
+
+    /// The inline layout (every iPhone, an iPad in portrait): each open question in the spec, mid-spec
+    /// included, shows its text with an answer field under it, the checked one stays a checked line,
+    /// and the bar above the composer reads "Needs you · 3".
+    func testTicketOpenQuestions() async throws {
+        let world = try await questionsWorld()
         let image = try await render(world, router: ticket("HARNESS-4", .spec)) { RootView() }
         ReferenceImages.assert(image, named: "ticket-open-questions")
+        XCTAssertEqual(world.transport.unrouted, [])
+    }
+
+    /// Two answers drafted inline: they show in their fields and the bar becomes "2 answers ready · Send".
+    func testTicketOpenQuestionsAnswered() async throws {
+        try XCTSkipIf(ReferenceImages.device == "ipad", "the inline layout is the iPhone's; the iPad's portrait render is ticket-open-questions")
+        let world = try await questionsWorld(replies: [
+            ["question": "Should backups run hourly or nightly?", "body": "Nightly is enough."],
+            ["question": "Do we keep SQLite for local installs?", "body": "Yes, local stays on SQLite."],
+        ])
+        let image = try await render(world, router: ticket("HARNESS-4", .spec)) { RootView() }
+        ReferenceImages.assert(image, named: "ticket-open-questions-answered")
+        XCTAssertEqual(world.transport.unrouted, [])
+    }
+
+    /// A full ticket window on the iPad in landscape (the ticket sheet is never 700pt wide) is large
+    /// enough for the panel: the Needs you panel above the composer
+    /// lists the block's question (no Unblock), then each open question with its answer field (one
+    /// holding a drafted reply), then the answered one folded away. The spec keeps its checkboxes.
+    func testTicketOpenQuestionsPanel() async throws {
+        try XCTSkipUnless(ReferenceImages.device == "ipad", "only a large landscape view gets the panel")
+        let world = try await questionsWorld(blocked: true, replies: [["question": "Do we keep SQLite for local installs?", "body": "Yes, local stays on SQLite."]])
+        let router = Router(ticket: .ticket(key: "HARNESS-4", tab: .spec))
+        let image = try await render(world, router: router, landscape: true) {
+            RequireStore { TabStack(tab: .board) { RouteScreen(route: .ticket(key: "HARNESS-4", tab: .spec)) } }
+        }
+        ReferenceImages.assert(image, named: "ticket-open-questions-panel")
         XCTAssertEqual(world.transport.unrouted, [])
     }
 

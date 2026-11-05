@@ -16,12 +16,30 @@ struct TicketDetailSpecTab: View {
     @Environment(BoardStore.self) private var store
     @Environment(Router.self) private var router
     @Environment(\.palette) private var c
+    /// The ticket screen's open questions: in the inline layout each one gets its answer field here.
+    @Environment(\.specQuestions) private var questions
     @State private var scrubber = SpecScrubber()
     @State private var showChanges = false
     @State private var rendered = true
     @State private var failed: String?
     /// Why the revision Show changes compares with couldn't load
     @State private var previousFailed: String?
+
+    /// In the inline layout, the answer field under each open question of the current spec (never
+    /// the revision diff), editing the reply in the message draft that the composer's Send delivers.
+    private var answerField: TaskAnswerField? {
+        guard let questions, questions.layout == .inline else { return nil }
+        let draft = store.messageDraft(for: ticket)
+        let stored = ticket.messageDraft.optional
+        return TaskAnswerField { question in
+            AnyView(
+                QuestionAnswerField(question: question, draft: draft,
+                                    onFocus: { draft.focus($0, stored: stored) },
+                                    requests: questions, identifier: "spec-answer")
+                    .id(SpecQuestions.anchor(question))
+            )
+        }
+    }
 
     var body: some View {
         let state = store.state
@@ -38,6 +56,7 @@ struct TicketDetailSpecTab: View {
             if source, let body {
                 SpecSourceView(text: body)
             } else {
+            ScrollViewReader { proxy in
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     if !deps.isEmpty {
@@ -73,6 +92,7 @@ struct TicketDetailSpecTab: View {
                                 .padding(.top, 20)
                         } else {
                             MarkdownView(text: body, size: 16, lineHeight: 1.5, headingSpace: 2, annotatable: true)
+                                .environment(\.taskAnswerField, answerField)
                         }
                     } else {
                         Spinner().frame(maxWidth: .infinity).padding(30)
@@ -88,6 +108,12 @@ struct TicketDetailSpecTab: View {
             }
             .scrollDismissesKeyboard(.interactively)
             .ticketHeroScroll()
+            // The bar's Needs you: bring the question's answer field into view (it focuses itself).
+            .onChange(of: questions?.focusRequest) { _, request in
+                guard let request else { return }
+                withAnimation(.snappy) { proxy.scrollTo(SpecQuestions.anchor(request.question), anchor: .center) }
+            }
+            }
             }
         }
         // The revision list: once, and again when a revision it doesn't have shows up.
@@ -358,21 +384,21 @@ private struct TicketPromptAttachments: View {
     }
 }
 
-/// The blocked ticket's status, question and buttons, first in the composer's Needs you panel
-/// (TicketNeedsYouPanel), so the human answers the agent where they type (BlockedCallout decides
-/// what shows). Display-only: never part of the spec's text. Unblock runs the header's action, through the
-/// tab's own runner and its notes sheet.
+/// The blocked ticket's status and question, first in the composer's Needs you panel
+/// (TicketNeedsYouPanel) or under the inline layout's bar, so the human answers the agent where they
+/// type (BlockedCallout decides what shows). Display-only: never part of the spec's text. There's no
+/// Unblock: a message answers the block, and the agent unblocks itself.
 struct TicketBlockedCallout: View {
     let ticket: Ticket
+    /// Under the inline bar: clamp a long question sooner, so the composer keeps the screen.
+    var compact = false
 
-    @Environment(BoardStore.self) private var store
-    @Environment(Actions.self) private var actions
     @State private var expanded = false
-    @State private var runner = TicketActionRunner()
 
     /// A question longer than this many characters (or lines) is clamped until Show all.
-    private static let clampChars = 600
-    private static let clampLines = 10
+    private var clampChars: Int { compact ? 240 : 600 }
+    private var clampLines: Int { compact ? 4 : 10 }
+    private var clampHeight: CGFloat { compact ? 84 : 170 }
 
     var body: some View {
         switch BlockedCallout.of(ticket) {
@@ -389,27 +415,20 @@ struct TicketBlockedCallout: View {
                 }
             }
             .accessibilityIdentifier("blocked-callout")
-        case .question(let text, let unblock):
+        case .question(let text):
             Callout(tone: .amber, icon: "alert", title: "Blocked · waiting on your answer") {
                 VStack(alignment: .leading, spacing: 8) {
                     if !text.isEmpty { question(text) }
-                    if unblock {
-                        HButton("Unblock", icon: "play", variant: .primary, small: true, fullWidth: false, haptic: nil) {
-                            runner.run(.unblock, ticket: ticket, api: store.api, actions: actions)
-                        }
-                        .disabled(ticket.compacting == true)
-                    }
                 }
             }
             .accessibilityIdentifier("blocked-callout")
-            .modifier(TicketActionHost(runner: runner))
         }
     }
 
     @ViewBuilder private func question(_ text: String) -> some View {
-        let long = text.count > Self.clampChars || text.split(separator: "\n", omittingEmptySubsequences: false).count > Self.clampLines
+        let long = text.count > clampChars || text.split(separator: "\n", omittingEmptySubsequences: false).count > clampLines
         MarkdownView(text: text, size: 15)
-            .frame(maxHeight: long && !expanded ? 170 : nil, alignment: .top)
+            .frame(maxHeight: long && !expanded ? clampHeight : nil, alignment: .top)
             .clipped()
         if long {
             Button(expanded ? "Show less" : "Show all") { expanded.toggle() }

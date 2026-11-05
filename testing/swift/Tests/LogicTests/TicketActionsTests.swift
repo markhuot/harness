@@ -18,20 +18,12 @@ private func primary(_ t: Ticket) -> [TicketAction] {
 }
 
 @Suite struct TicketActionsTests {
-    @Test func aBlockedTicketWaitingOnTheHumanOffersUnblock() {
-        #expect(primary(ticket(.blocked)) == [.unblock])
-    }
-
-    @Test func aRestartTimeARunOrAToolApprovalHidesUnblock() {
+    /// A message answers the block and the agent unblocks itself, so a blocked ticket has no button.
+    @Test func aBlockedTicketOffersNoPrimaryAction() {
+        #expect(primary(ticket(.blocked)).isEmpty)
         #expect(primary(ticket(.blocked, resumeAt: 123)).isEmpty)
-        #expect(primary(ticket(.blocked, busy: true)).isEmpty)
         let approval = PendingApproval(id: "a", runId: "r", toolName: "Bash", input: .null, requestedAt: 0)
         #expect(primary(ticket(.blocked, pending: approval)).isEmpty)
-    }
-
-    @Test func compactingTurnsUnblockOff() {
-        let set = TicketActions.set(for: ticket(.blocked, compacting: true), project: nil, parent: nil, deps: [], settingsBaseBranch: nil)
-        #expect(set.primary == [TicketActionItem(.unblock, enabled: false)])
     }
 
     @Test func aPlanningTicketThatStartsByItselfOffersCancelAutoStart() {
@@ -94,13 +86,13 @@ private func primary(_ t: Ticket) -> [TicketAction] {
         #expect(BlockedCallout.of(blocked(draft: true)) == .none)
     }
 
-    @Test func aBlockWaitingOnTheHumanShowsTheTrimmedQuestionWithUnblock() {
-        #expect(BlockedCallout.of(blocked()) == .question("Postgres or SQLite?", unblock: true))
-        #expect(BlockedCallout.of(blocked(nil)) == .question("", unblock: true))
+    @Test func aBlockWaitingOnTheHumanShowsTheTrimmedQuestion() {
+        #expect(BlockedCallout.of(blocked()) == .question("Postgres or SQLite?"))
+        #expect(BlockedCallout.of(blocked(nil)) == .question(""))
     }
 
-    @Test func aRunGoingHidesUnblockButKeepsTheQuestion() {
-        #expect(BlockedCallout.of(blocked(busy: true)) == .question("Postgres or SQLite?", unblock: false))
+    @Test func aRunGoingKeepsTheQuestion() {
+        #expect(BlockedCallout.of(blocked(busy: true)) == .question("Postgres or SQLite?"))
     }
 
     @Test func aRestartTimeShowsWhenItRestartsAndNoUnblock() {

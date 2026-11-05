@@ -16,8 +16,6 @@ public enum TicketAction: Equatable, Sendable {
     /// one approving without an action. `managedReason` is set when a conductor approves in the
     /// human's place (the item is then disabled).
     case approve(title: String, primary: Approve.Request, choices: [Approve.MenuChoice], managedReason: String?)
-    /// Unblock a blocked ticket the human has to answer (no restart time, no run, no tool approval).
-    case unblock
     case requestChanges
     case reopen
     /// "Run agent review" / "Re-run agent review".
@@ -34,7 +32,6 @@ public enum TicketAction: Equatable, Sendable {
         switch self {
         case let .start(approvePlan): approvePlan ? "Approve plan" : "Start work"
         case let .approve(title, _, _, _): title
-        case .unblock: "Unblock"
         case .requestChanges: "Request changes"
         case .reopen: "Re-open"
         case let .rerunAgentReview(title): title
@@ -80,11 +77,6 @@ public struct TicketActionSet: Equatable, Sendable {
 }
 
 public enum TicketActions {
-    /// A block that waits on the human: no restart time, no run going, no tool approval to answer.
-    public static func canUnblock(_ ticket: Ticket) -> Bool {
-        ticket.status == .blocked && ticket.draft != true && Conductor.restartsAt(ticket) == nil && !ticket.busy && ticket.pendingApproval == nil
-    }
-
     /// What `ticket` offers now. `deps` are its dependencies' states, `parent` its parent ticket
     /// (a managing conductor), `settingsBaseBranch` the app's base branch setting.
     public static func set(for ticket: Ticket, project: Project?, parent: Ticket?, deps: [DepState], settingsBaseBranch: String?) -> TicketActionSet {
@@ -100,10 +92,8 @@ public enum TicketActions {
             primary.append(TicketActionItem(.start(approvePlan: start == .approve), enabled: !compacting))
         }
 
-        // A block that waits on the human: no restart time, no run going, no tool approval to answer.
-        if canUnblock(ticket) {
-            primary.append(TicketActionItem(.unblock, enabled: !compacting))
-        }
+        // A block waiting on the human has no action here: a message answers it, and the agent
+        // unblocks itself.
 
         // Approving lands the work once both reviews pass; there's no separate Complete step. A
         // conductor's child keeps its (turned off) Approve once approved: the conductor lands it.

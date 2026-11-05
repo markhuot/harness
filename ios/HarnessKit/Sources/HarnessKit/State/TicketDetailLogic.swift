@@ -109,8 +109,8 @@ public enum TicketDetailLogic {
 
     // MARK: Composer
 
-    /// The composer's placeholder: what a message does in the ticket's state ("Answer the agent…",
-    /// "Send a follow-up…").
+    /// The composer's placeholder: what a message does in the ticket's state ("Answer the block: your
+    /// message goes to the agent…" while blocked, since a message answers it; "Send a follow-up…").
     public static func composerPlaceholder(_ t: Ticket) -> String {
         if t.compacting == true { return "Compacting…" }
         return Format.composerPlaceholder[t.status] ?? "Message the agent…"
