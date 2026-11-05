@@ -21,10 +21,23 @@ export type Block =
   /** Lines holding only `![alt](attachment:<id> "thumb")` images: a row of small thumbnails. */
   | { t: "thumbs"; items: Media[] };
 
-/** A list item: its text (continuation lines joined with spaces) and the lists nested under it. */
+/**
+ * A list item: its text (continuation lines joined with spaces) and the lists nested under it.
+ * `checked` is set on a GFM task item (`- [ ] text` false, `- [x] text` true), whose marker isn't
+ * part of `text`; plain items leave it out.
+ */
 export interface ListItem {
   text: string;
   children: Block[];
+  checked?: boolean;
+}
+
+const TASK = /^\[([ xX])\]\s+(\S.*)$/;
+
+/** The item a list marker's text starts: a task item when it opens with `[ ]` or `[x]`. */
+function listItem(text: string): ListItem {
+  const task = TASK.exec(text);
+  return task ? { text: task[2]!, children: [], checked: task[1] !== " " } : { text, children: [] };
 }
 
 /**
@@ -138,7 +151,7 @@ function parseList(lines: string[], start: number, outer: number): { block: Bloc
   const first = LIST_ITEM.exec(lines[start]!)!;
   const indent = indentOf(lines[start]!);
   const ordered = /\d/.test(first[1]!);
-  const items: ListItem[] = [{ text: first[2]!, children: [] }];
+  const items: ListItem[] = [listItem(first[2]!)];
   const last = () => items[items.length - 1]!;
   const inside = outer ? indent + 2 : 2;
   /** Whether a blank line came before this one, inside the current item. */
@@ -162,7 +175,7 @@ function parseList(lines: string[], start: number, outer: number): { block: Bloc
       gap = false;
     } else if (li) {
       if (at < outer || /\d/.test(li[1]!) !== ordered) break;
-      items.push({ text: li[2]!, children: [] });
+      items.push(listItem(li[2]!));
       i++;
       gap = false;
     } else if (at >= inside) {

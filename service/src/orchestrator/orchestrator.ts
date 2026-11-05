@@ -66,7 +66,7 @@ import type {
 import { mapPaneRefs, type PaneArrangeResult, type PaneOp, type TerminalInfo } from "@harness/shared";
 import { LABEL_COLORS, MAX_LABEL_NAME_LENGTH, isLabelColor, labelKey, normalizeLabelName, normalizeLabelNames, type LabelInfo, type UpdateLabelBody } from "@harness/shared";
 import type { MacRequests } from "../api/mac-requests";
-import type { BaseBranchSource, BranchInfo, CompletionAction, PhaseChoice, MessageDraft, MessageDraftBody, PlanUsageReport, PromptEntry, SessionActionBody } from "@harness/shared";
+import type { BaseBranchSource, BranchInfo, CompletionAction, PhaseChoice, MessageDraft, MessageDraftBody, PlanUsageReport, PromptEntry, QuestionReply, SessionActionBody } from "@harness/shared";
 import {
   checkProjectKey,
   COMPLETION_ACTIONS,
@@ -153,7 +153,7 @@ import { RemoteIdError, truncateMiddle } from "../tools/util";
 import type { BrowserService } from "../browser/types";
 import type { HarnessPaths } from "../config";
 import { GATED_TOOL_NAMES, runCanBlock, stopBrowserJobs, toolsForRun } from "../tools/index";
-import { isTask, positionForDrop } from "@harness/shared/state";
+import { composeQuestionReplies, isTask, pendingQuestionReplies, positionForDrop } from "@harness/shared/state";
 import * as prompts from "./prompts";
 import { PROMPTS, promptTemplateError } from "./prompt-templates";
 import { toOutput, WatcherRunner, type WatcherOutput } from "./watchers";
@@ -2834,7 +2834,7 @@ export class Orchestrator {
    * review ticket back to in progress, or re-opens a done one, before the run starts. Today's apps
    * move a ticket with Request changes and Re-open instead.
    */
-  async sendMessage(key: string, text: string, opts: { move?: boolean; attachments?: unknown; fromApp?: boolean; author?: ActivityAuthor } = {}): Promise<Ticket> {
+  async sendMessage(key: string, text: string, opts: { move?: boolean; attachments?: unknown; questionReplies?: unknown; fromApp?: boolean; author?: ActivityAuthor } = {}): Promise<Ticket> {
     const sent = await this.deliverMessage(key, text, opts);
     // The human's message went: the draft they wrote it in is used up, on every device. An
     // agent's message_ticket leaves the human's draft alone.
@@ -2861,20 +2861,30 @@ export class Orchestrator {
     const text = body.text ?? "";
     const attachments = body.attachments === undefined || body.attachments === null ? [] : this.resolveAttachments(body.attachments, previous?.attachments ?? []);
     const origin = body.origin || null;
-    const next: MessageDraft | null = text || attachments.length ? { text, attachments, origin, updatedAt: this.now() } : null;
+    // Blank replies aren't kept: clearing a reply field drops its question from the draft.
+    const questionReplies = questionRepliesOf(body.questionReplies).filter((r) => r.body.trim());
+    const next: MessageDraft | null = text || attachments.length || questionReplies.length ? { text, attachments, questionReplies, origin, updatedAt: this.now() } : null;
     const same =
       next === null
         ? previous === null
-        : previous !== null && previous.text === next.text && previous.origin === next.origin && canonicalJson(previous.attachments) === canonicalJson(next.attachments);
+        : previous !== null &&
+          previous.text === next.text &&
+          previous.origin === next.origin &&
+          canonicalJson(previous.attachments) === canonicalJson(next.attachments) &&
+          canonicalJson(previous.questionReplies ?? []) === canonicalJson(questionReplies);
     if (same) return ticket;
     const t = this.store.tickets.setMessageDraft(ticket.id, next)!;
     this.bus.emit({ kind: "ticket.upserted", ticket: t });
     return t;
   }
 
-  private async deliverMessage(key: string, text: string, opts: { move?: boolean; attachments?: unknown; author?: ActivityAuthor }): Promise<Ticket> {
+  private async deliverMessage(key: string, text: string, opts: { move?: boolean; attachments?: unknown; questionReplies?: unknown; author?: ActivityAuthor }): Promise<Ticket> {
     if (text !== undefined && typeof text !== "string") throw badRequest("text must be a string");
     text = text ?? "";
+    // Replies to the spec's open questions (DESIGN.md "Open questions") go as one message: each
+    // question quoted with its reply under it, then the typed text. From here on it's a typed message.
+    const replies = pendingQuestionReplies(questionRepliesOf(opts.questionReplies));
+    if (replies.length) text = composeQuestionReplies(replies, text);
     const ticket = this.requireTicket(key);
     const attachments = opts.attachments === undefined || opts.attachments === null ? [] : this.resolveAttachments(opts.attachments);
     if (!text.trim() && !attachments.length) throw badRequest("text is required");
@@ -2889,6 +2899,11 @@ export class Orchestrator {
     if (ticket.kind === "cos") this.cosWakeProject.delete(ticket.id);
     this.notCompleting(ticket, "messaged");
     this.resetRejections(ticket);
+    const author = opts.author ?? "human";
+    // A blocked ticket's reply answers its question; replies to open questions are kept in Activity
+    // (meta.questionReplies), where the apps find what was already said under each question.
+    if (ticket.status === "blocked") this.recordAnswer(ticket, text, author, replies);
+    else if (replies.length) this.addActivityLine(ticket, "answered", author, text, { questionReplies: replies });
     const sent = { text, attachments };
     switch (ticket.status) {
       case "planning":
@@ -2921,7 +2936,6 @@ export class Orchestrator {
         } else await this.chat(ticket, sent);
         break;
       case "blocked":
-        this.recordAnswer(ticket, text, opts.author ?? "human");
         await this.chat(ticket, sent);
         break;
     }
@@ -2929,9 +2943,11 @@ export class Orchestrator {
   }
 
   /** A reply to a blocked ticket, in Activity beside the question it answers, by whoever sent it (what a chief of staff's query_activity reads). */
-  private recordAnswer(ticket: Pick<Ticket, "id" | "sessionId">, reply: string, author: ActivityAuthor) {
+  private recordAnswer(ticket: Pick<Ticket, "id" | "sessionId">, reply: string, author: ActivityAuthor, questionReplies: QuestionReply[] = []) {
     const question = this.store.activity.latestOfKind(ticket.sessionId, "blocked");
-    if (question && reply.trim()) this.addActivityLine(ticket, "answered", author, reply, { answers: question.id });
+    const meta: ActivityMeta = questionReplies.length ? { questionReplies } : {};
+    if (question && reply.trim()) this.addActivityLine(ticket, "answered", author, reply, { ...meta, answers: question.id });
+    else if (questionReplies.length) this.addActivityLine(ticket, "answered", author, reply, meta);
   }
 
   /**
@@ -6815,3 +6831,26 @@ export function tokensLabel(n: number): string {
 }
 
 export { HarnessError };
+
+/** At most this many question replies go in one message or draft. */
+const MAX_QUESTION_REPLIES = 100;
+/** And each question or reply is at most this long. */
+const MAX_QUESTION_REPLY_LENGTH = 20_000;
+
+/** MessageBody.questionReplies / MessageDraftBody.questionReplies as sent, checked (none when absent). */
+export function questionRepliesOf(value: unknown): QuestionReply[] {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) throw badRequest("questionReplies must be an array");
+  if (value.length > MAX_QUESTION_REPLIES) throw badRequest(`questionReplies takes at most ${MAX_QUESTION_REPLIES} replies`);
+  return value.map((r) => {
+    const ok =
+      r &&
+      typeof r === "object" &&
+      typeof r.question === "string" &&
+      typeof r.body === "string" &&
+      r.question.length <= MAX_QUESTION_REPLY_LENGTH &&
+      r.body.length <= MAX_QUESTION_REPLY_LENGTH;
+    if (!ok) throw badRequest(`each question reply needs a question and a body, strings of at most ${MAX_QUESTION_REPLY_LENGTH} characters`);
+    return { question: r.question as string, body: r.body as string };
+  });
+}

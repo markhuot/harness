@@ -1,6 +1,7 @@
 import type { Database } from "bun:sqlite";
 import type { CompletionAction, ExternalRef, MessageDraft, PendingApproval, PermissionMode, PhaseModels, Attachment, PullRequestLink, ReviewState, Ticket, TicketKind, TicketPage, TicketStatus } from "@harness/shared";
 import { isCompletionAction, resolvePhaseChoice } from "@harness/shared";
+import { openQuestionCount } from "@harness/shared/state";
 import { hasSearchIndex } from "../db";
 import { type ParsedSearch, labelKey, parseSearchQuery } from "@harness/shared";
 import { clampLimit, decodeCursor, DEFAULT_PAGE_LIMIT, DEFAULT_SEARCH_LIMIT, encodeCursor, ftsQuery, keyCandidate, likePattern, searchTerms } from "./search";
@@ -362,7 +363,9 @@ export class TicketRepo {
       draft: bool(r.draft ?? 0),
       promptAttachments: fromJson<Attachment[]>(r.prompt_attachments ?? null, []),
       resumeAt: r.resume_at ?? null,
-      messageDraft: fromJson<MessageDraft | null>(r.message_draft ?? null, null),
+      messageDraft: messageDraftOf(r.message_draft ?? null),
+      // Only a spec with the heading is parsed: most have none, and every listing maps every row.
+      openQuestionCount: /open questions?/i.test(r.spec) ? openQuestionCount(r.spec) : 0,
       agentNotes: r.agent_notes ?? null,
       position: r.position,
       completedAt: r.completed_at ?? null,
@@ -828,4 +831,10 @@ export class TicketRepo {
     }[];
     return rows.map((r) => ({ id: r.id, toolName: r.tool_name, input: JSON.parse(r.input) }));
   }
+}
+
+/** The saved draft, with the replies older drafts were saved without. */
+function messageDraftOf(json: string | null): MessageDraft | null {
+  const d = fromJson<MessageDraft | null>(json, null);
+  return d ? { ...d, questionReplies: d.questionReplies ?? [] } : null;
 }

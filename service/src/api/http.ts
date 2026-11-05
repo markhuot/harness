@@ -322,7 +322,7 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
     // Older apps still send `log`; messages go to the transcript only, so it's ignored. They may
     // also send `move` (their composer's switch, since removed), which still moves the ticket.
     const b = await body();
-    return o.sendMessage(params.key!, b?.text, { move: b?.move === true, attachments: b?.attachments, fromApp: true });
+    return o.sendMessage(params.key!, b?.text, { move: b?.move === true, attachments: b?.attachments, questionReplies: b?.questionReplies, fromApp: true });
   });
   add("PUT", "/tickets/:key/message-draft", async ({ params, body }) => o.saveMessageDraft(params.key!, await body()));
   add("POST", "/tickets/:key/review", async ({ params, body }) => {

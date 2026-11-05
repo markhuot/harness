@@ -1,0 +1,65 @@
+// A spec's open questions (DESIGN.md "Open questions"): the GFM task items under its "Open
+// questions" heading. Agents write them (`- [ ] question`) and resolve them by moving the answer
+// into the spec and removing the item or checking it off. The apps list them in the panel above the
+// composer, where the human replies to several at once; the service counts the unchecked ones for
+// the board card (Ticket.openQuestionCount) and composes the message a batch of replies sends.
+
+import type { QuestionReply } from "../protocol";
+import { parseBlocks, type Block } from "./markdown";
+
+export interface OpenQuestion {
+  /** The item's text, as written: also the question's identity (replies and drafts match on it). */
+  text: string;
+  checked: boolean;
+}
+
+const HEADING = /^open questions?\s*:?$/i;
+
+/**
+ * The task items under the spec's Open questions heading (any level, any case), down to the next
+ * heading of the same or a higher level, in order, nested ones included. Plain bullets and prose
+ * there aren't questions. None when there's no such heading.
+ */
+export function openQuestions(spec: string): OpenQuestion[] {
+  const blocks = parseBlocks(spec);
+  const start = blocks.findIndex((b) => b.t === "h" && HEADING.test(b.text.trim()));
+  if (start < 0) return [];
+  const level = (blocks[start] as Extract<Block, { t: "h" }>).level;
+  const out: OpenQuestion[] = [];
+  const walk = (list: Block[]) => {
+    for (const b of list) {
+      if (b.t !== "ul" && b.t !== "ol") continue;
+      for (const it of b.items) {
+        if (it.checked !== undefined && it.text.trim()) out.push({ text: it.text.trim(), checked: it.checked });
+        walk(it.children);
+      }
+    }
+  };
+  for (let i = start + 1; i < blocks.length; i++) {
+    const b = blocks[i]!;
+    if (b.t === "h" && b.level <= level) break;
+    walk([b]);
+  }
+  return out;
+}
+
+/** How many of the spec's open questions are still unchecked. */
+export function openQuestionCount(spec: string): number {
+  return openQuestions(spec).filter((q) => !q.checked).length;
+}
+
+/** The replies worth sending: each with a question and a body that isn't blank, trimmed, in order. */
+export function pendingQuestionReplies(replies: readonly QuestionReply[] | null | undefined): QuestionReply[] {
+  return (replies ?? []).map((r) => ({ question: r.question.trim(), body: r.body.trim() })).filter((r) => r.question && r.body);
+}
+
+/**
+ * The message a batch of question replies sends: each question quoted with its reply under it, in
+ * order, then the rest of what the human typed. Blank replies are dropped; with none left it's the
+ * typed text alone.
+ */
+export function composeQuestionReplies(replies: readonly QuestionReply[] | null | undefined, text: string): string {
+  const parts = pendingQuestionReplies(replies).map((r) => `> ${r.question.replace(/\n/g, "\n> ")}\n\n${r.body}`);
+  if (text.trim()) parts.push(text.trim());
+  return parts.join("\n\n");
+}

@@ -8,34 +8,61 @@
 //   • never over edits that haven't gone out yet;
 // otherwise, the saved copy (another device's edit, or its send clearing it) is shown.
 
-import type { Attachment, MessageDraft, MessageDraftBody } from "../protocol";
+import type { Attachment, MessageDraft, MessageDraftBody, QuestionReply } from "../protocol";
 import { attachmentInputs, sameAttachments } from "./promptAttachments";
 
 /** What a composer shows and saves. */
 export interface MessageDraftValue {
   text: string;
   attachments: Attachment[];
+  /** Replies under the spec's open questions (DESIGN.md "Open questions"), one per question */
+  questionReplies: QuestionReply[];
 }
 
-export const EMPTY_MESSAGE_DRAFT: MessageDraftValue = { text: "", attachments: [] };
+export const EMPTY_MESSAGE_DRAFT: MessageDraftValue = { text: "", attachments: [], questionReplies: [] };
 
 /** The saved draft as a composer shows it (none: empty). */
 export function messageDraftValue(d: MessageDraft | null | undefined): MessageDraftValue {
-  return d ? { text: d.text, attachments: d.attachments } : EMPTY_MESSAGE_DRAFT;
+  return d ? { text: d.text, attachments: d.attachments, questionReplies: d.questionReplies ?? [] } : EMPTY_MESSAGE_DRAFT;
 }
 
-/** The ticket has a message waiting to go (its board card shows a pencil): text that isn't blank, or files. */
+/**
+ * The ticket has a message waiting to go (its board card shows a pencil): text that isn't blank,
+ * files, or a reply under an open question.
+ */
 export function hasMessageDraft(d: MessageDraft | null | undefined): boolean {
-  return !!d && (d.text.trim() !== "" || d.attachments.length > 0);
+  return !!d && (d.text.trim() !== "" || d.attachments.length > 0 || (d.questionReplies ?? []).some((r) => r.body.trim() !== ""));
+}
+
+function sameReplies(a: readonly QuestionReply[], b: readonly QuestionReply[]): boolean {
+  return a.length === b.length && a.every((r, i) => r.question === b[i]!.question && r.body === b[i]!.body);
 }
 
 export function sameMessageDraft(a: MessageDraftValue, b: MessageDraftValue): boolean {
-  return a.text === b.text && sameAttachments(a.attachments, b.attachments);
+  return a.text === b.text && sameAttachments(a.attachments, b.attachments) && sameReplies(a.questionReplies, b.questionReplies);
 }
 
 /** The PUT that saves `v` from the editor `origin` (empty clears the saved draft). */
 export function messageDraftBody(v: MessageDraftValue, origin: string): MessageDraftBody {
-  return { text: v.text, attachments: attachmentInputs(v.attachments), origin };
+  return { text: v.text, attachments: attachmentInputs(v.attachments), questionReplies: v.questionReplies, origin };
+}
+
+/** The draft's reply under `question` ("" when there's none). */
+export function questionReply(v: MessageDraftValue, question: string): string {
+  return v.questionReplies.find((r) => r.question === question)?.body ?? "";
+}
+
+/**
+ * `v` with its reply under `question` set to `body`: added at the end when new, dropped when
+ * `body` is empty, so the draft keeps one entry per question.
+ */
+export function withQuestionReply(v: MessageDraftValue, question: string, body: string): MessageDraftValue {
+  const rest = v.questionReplies.filter((r) => r.question !== question);
+  const at = v.questionReplies.findIndex((r) => r.question === question);
+  if (!body) return { ...v, questionReplies: rest };
+  const next = [...rest];
+  next.splice(at < 0 ? next.length : at, 0, { question, body });
+  return { ...v, questionReplies: next };
 }
 
 export interface AdoptMessageDraftInput {

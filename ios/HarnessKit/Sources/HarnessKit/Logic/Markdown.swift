@@ -19,13 +19,23 @@ public enum Markdown {
     }
 
     /// A list item: its text (continuation lines joined with spaces) and the lists nested under it.
+    /// `checked` is set on a GFM task item (`- [ ] text` false, `- [x] text` true), whose marker
+    /// isn't part of `text`; plain items leave it nil.
     public struct ListItem: Codable, Equatable, Sendable {
         public var text: String
         public var children: [Block]
+        public var checked: Bool?
 
-        public init(text: String, children: [Block] = []) {
+        public init(text: String, children: [Block] = [], checked: Bool? = nil) {
             self.text = text
             self.children = children
+            self.checked = checked
+        }
+
+        /// The item a list marker's text starts: a task item when it opens with `[ ]` or `[x]`.
+        static func parse(_ text: String) -> ListItem {
+            guard let task = Pattern.task.exec(text) else { return ListItem(text: text) }
+            return ListItem(text: task[2]!, checked: task[1] != " ")
         }
     }
 
@@ -345,7 +355,7 @@ public enum Markdown {
         let first = Pattern.listItem.exec(lines[start])!
         let indent = indentOf(lines[start])
         let ordered = hasDigit(first[1]!)
-        var items = [ListItem(text: first[2]!)]
+        var items = [ListItem.parse(first[2]!)]
         let inside = outer > 0 ? indent + 2 : 2
         /// Whether a blank line came before this one, inside the current item.
         var gap = false
@@ -368,7 +378,7 @@ public enum Markdown {
                 gap = false
             } else if let li {
                 if at < outer || hasDigit(li[1]!) != ordered { break }
-                items.append(ListItem(text: li[2]!))
+                items.append(ListItem.parse(li[2]!))
                 i += 1
                 gap = false
             } else if at >= inside {
@@ -718,6 +728,8 @@ public enum Markdown {
         static let rule = Pattern("^\(s)*(-{3,}|\\*{3,})\(s)*\\z")
         /// `/^\s*([-*+]|\d+[.)])\s+(.*)$/`
         static let listItem = Pattern("^\(s)*([-*+]|[0-9]+[.)])\(s)+(\(dot)*)\\z")
+        /// TASK: `/^\[([ xX])\]\s+(\S.*)$/`
+        static let task = Pattern("^\\[([ xX])\\]\(s)+(\(notS)\(dot)*)\\z")
         /// `/^\s{2,}\S/`
         static let continuation = Pattern("^\(s){2,}\(notS)")
         /// `/^>\s?/` (no g flag, but it's anchored, so it can match only once)

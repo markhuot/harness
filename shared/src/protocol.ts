@@ -391,6 +391,12 @@ export interface Ticket {
    */
   messageDraft?: MessageDraft | null;
   /**
+   * How many of the spec's open questions are unanswered (DESIGN.md "Open questions"): the unchecked
+   * task items under its Open questions heading, derived from the spec. The board card shows it.
+   * Optional so older services and fixtures type-check.
+   */
+  openQuestionCount?: number;
+  /**
    * The ticket's agent notes (DESIGN.md "Driver state"): a markdown document agents write with
    * update_notes for the agents after them (where things live, gotchas, what's half done). Every
    * run on the ticket reads them; the apps show them read-only. null until one is written.
@@ -823,6 +829,11 @@ export interface ActivityMeta {
   note?: string;
   /** answered: the id of the blocked entry this reply answers */
   answers?: string;
+  /**
+   * answered: the replies to the spec's open questions the message carried (MessageBody.questionReplies),
+   * which the apps list under each question
+   */
+  questionReplies?: QuestionReply[];
   /** submitted: the spec revision the work was submitted at; spec_revised: the revision it records */
   specRevision?: number;
   /**
@@ -2001,6 +2012,18 @@ export interface MessageBody {
    * message then answers it as a deny).
    */
   attachments?: AttachmentInput[];
+  /**
+   * Replies to the spec's open questions (DESIGN.md "Open questions"), sent with `text` as one
+   * message: the agent gets each question quoted with its reply under it, then the text. Blank
+   * replies are dropped. `text` may be empty when there's at least one reply.
+   */
+  questionReplies?: QuestionReply[];
+}
+
+/** A reply the human wrote under one of the spec's open questions, which it names by its text. */
+export interface QuestionReply {
+  question: string;
+  body: string;
 }
 
 /**
@@ -2011,6 +2034,11 @@ export interface MessageDraft {
   text: string;
   /** The files waiting to go with it, each with its notes */
   attachments: Attachment[];
+  /**
+   * The replies waiting under the spec's open questions, one per question. Optional so older
+   * services and fixtures type-check; the service always sends it.
+   */
+  questionReplies?: QuestionReply[];
   /**
    * The editor that saved it (MessageDraftBody.origin): an editor skips its own saves coming back
    * and takes only other devices'. null when the saver didn't say.
@@ -2028,6 +2056,8 @@ export interface MessageDraftBody {
   text: string;
   /** At most MAX_PROMPT_ATTACHMENTS, as MessageBody.attachments takes them */
   attachments?: AttachmentInput[];
+  /** The replies drafted under open questions (MessageDraft.questionReplies); blank ones aren't kept */
+  questionReplies?: QuestionReply[];
   /** An id for the editor saving it, unique per open editor (MessageDraft.origin) */
   origin?: string;
 }
