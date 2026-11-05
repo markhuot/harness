@@ -84,7 +84,7 @@ export const tildify = (path: string) => path.replace(/^\/Users\/[^/]+/, "~");
 export const COMPOSER_PLACEHOLDER: Record<TicketStatus, string> = {
   planning: "Refine the plan…",
   in_progress: "Send a follow-up…",
-  blocked: "Answer the agent…",
+  blocked: "Answer the block: your message goes to the agent…",
   review: "Ask about the work, or ask for a change…",
   done: "Ask about the finished work…",
 };

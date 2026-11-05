@@ -2618,7 +2618,8 @@ button.prompt-attachment-row-main:disabled {
 }
 
 /* Needs you (NeedsYouPanel.tsx): the block and the spec's open questions, at the top of the
-   composer on the Spec tab. Capped and scrolling, so the composer's input stays on screen. */
+   composer on the Spec tab in a wide pane. Capped and scrolling, so the composer's input stays on
+   screen. A question sits 6px over its box and 20px under the box before it. */
 .needs-you {
   display: flex;
   flex-direction: column;
@@ -2640,7 +2641,7 @@ button.prompt-attachment-row-main:disabled {
 .needs-you-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 20px;
   max-height: min(40vh, 360px);
   overflow-y: auto;
 }
@@ -2650,7 +2651,7 @@ button.prompt-attachment-row-main:disabled {
 .needs-you-q {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 .needs-you-q-text {
   display: flex;
@@ -2679,16 +2680,33 @@ button.prompt-attachment-row-main:disabled {
   flex-direction: column;
   gap: 6px;
 }
-.needs-you-chip {
-  display: inline-flex;
+/* The inline layout (QuestionAnswers.tsx): a one-line bar above the composer, and each question's
+   box under it in the rendered spec. */
+.needs-you-bar {
+  display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
+  width: 100%;
   margin-bottom: 8px;
-  padding: 3px 10px;
-  border: 1px solid color-mix(in srgb, var(--amber) 45%, var(--border));
-  border-radius: 999px;
-  background: var(--amber-soft);
+  padding: 2px 0;
+  border: 0;
+  background: none;
   color: var(--amber);
+  font: inherit;
   font-size: 12px;
+  text-align: left;
   cursor: pointer;
+}
+.needs-you-bar .muted {
+  margin-left: auto;
+  color: var(--text-3);
+}
+.needs-you-bar.is-send strong {
+  color: var(--accent);
+}
+.needs-you-bar-block {
+  margin-bottom: 8px;
+}
+.md-task.is-question > .md-task-answer {
+  margin: 6px 0 14px;
 }

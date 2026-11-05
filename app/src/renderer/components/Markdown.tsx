@@ -268,17 +268,34 @@ function TaskBox({ checked, was }: { checked: boolean; was?: boolean }) {
   );
 }
 
+/**
+ * The answer box under each unchecked task item (a question for the human, DESIGN.md "Open
+ * questions"), for the one rendering that answers them: the Spec tab's current spec in a narrow
+ * pane (views/QuestionAnswers.tsx). Everywhere else task items are plain read-only checkboxes.
+ */
+const TaskAnswerContext = createContext<((question: string) => ReactNode) | null>(null);
+
+export function TaskAnswerScope({ render, children }: { render: ((question: string) => ReactNode) | null; children: ReactNode }) {
+  return <TaskAnswerContext.Provider value={render}>{children}</TaskAnswerContext.Provider>;
+}
+
 /** A list and the lists nested in its items. Bullets change with depth (• ◦ ▪), see .md-list in styles.css; task items show a checkbox instead. */
 function MdList({ block, depth, tickets }: { block: Extract<Block, { t: "ul" | "ol" }>; depth: number; tickets?: TicketLinks }) {
-  const items = block.items.map((it, j) => (
-    <li key={j} className={it.checked !== undefined ? "md-task" : undefined}>
-      {it.checked !== undefined && <TaskBox checked={it.checked} />}
-      {inline(it.text, tickets)}
-      {it.children.map((child, k) => (
-        <MdBlock key={k} block={child} depth={depth + 1} tickets={tickets} />
-      ))}
-    </li>
-  ));
+  const answer = useContext(TaskAnswerContext);
+  const items = block.items.map((it, j) => {
+    // A question keeps its row (and its box's focus) by its text, not its place in the list.
+    const question = answer && it.checked === false && it.text.trim() ? it.text.trim() : null;
+    return (
+      <li key={question ? `q:${question}` : j} className={question ? "md-task is-question" : it.checked !== undefined ? "md-task" : undefined} data-testid={question ? "spec-question" : undefined}>
+        {it.checked !== undefined && <TaskBox checked={it.checked} />}
+        {inline(it.text, tickets)}
+        {question && <div className="md-task-answer">{answer!(question)}</div>}
+        {it.children.map((child, k) => (
+          <MdBlock key={k} block={child} depth={depth + 1} tickets={tickets} />
+        ))}
+      </li>
+    );
+  });
   const className = `md-list depth-${depth % 3}`;
   return block.t === "ol" ? (
     <ol className={className} start={block.start}>

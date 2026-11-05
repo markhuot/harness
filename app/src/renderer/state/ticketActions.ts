@@ -10,7 +10,7 @@ import { conductorManagedReason, managingConductor, reviewPassed, type Ticket } 
 import { autoStartWaitingOn, startLabel, startState, type DepState } from "@harness/shared/state";
 import { landCommands, landMenu, type LandChoice, type LandMenu } from "./approveMenu";
 
-export type TicketActionId = "start" | "unblock" | "approve" | "requestChanges" | "reopen" | "rerunReview" | "markDone" | "cancelRun" | "cancelStart" | "withdrawApproval" | "delete";
+export type TicketActionId = "start" | "approve" | "requestChanges" | "reopen" | "rerunReview" | "markDone" | "cancelRun" | "cancelStart" | "withdrawApproval" | "delete";
 
 export interface TicketAction {
   id: TicketActionId;
@@ -42,11 +42,6 @@ export interface TicketActionContext {
   deps: DepState[];
 }
 
-/** A block that waits on the human: no restart time, no run going, no tool approval to answer. */
-export function canUnblock(ticket: Ticket): boolean {
-  return ticket.status === "blocked" && !ticket.draft && !ticket.resumeAt && !ticket.busy && !ticket.pendingApproval;
-}
-
 export function ticketActions(ticket: Ticket, ctx: TicketActionContext): TicketActionSet {
   // A draft isn't launched: it offers nothing here (its card offers Discard).
   if (ticket.draft) return { primary: [], more: [], enabled: [] };
@@ -57,11 +52,6 @@ export function ticketActions(ticket: Ticket, ctx: TicketActionContext): TicketA
 
   const start = startState(ticket, ctx.deps);
   if (start === "start" || start === "approve") primary.push({ id: "start", label: startLabel(start), enabled: !compacting });
-
-  // A block that waits on the human: no restart time, no run going, no tool approval to answer.
-  if (canUnblock(ticket)) {
-    primary.push({ id: "unblock", label: "Unblock", enabled: !compacting });
-  }
 
   // Approving lands the work once both reviews pass; there's no separate Complete step. A
   // conductor's child keeps its (turned off) Approve once approved: the conductor lands it.

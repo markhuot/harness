@@ -1,14 +1,13 @@
-// The blocked ticket's status, question and buttons, first in the composer's Needs you panel
-// (NeedsYouPanel.tsx), so the human answers the agent right where they type. Display-only: it is
-// never part of the spec's text, revisions, diff or Source editor. What it shows comes from
-// state/blockedCallout.ts; its Unblock runs the same action as the header's, through its own runner
-// (and dialog).
+// The blocked ticket's status and question, first under the composer's Needs you heading (the panel
+// or the inline layout's bar, NeedsYouPanel.tsx), so the human answers the agent right where they
+// type: a sent message is the answer, and the agent unblocks itself. Display-only: it is never part
+// of the spec's text, revisions, diff or Source editor. What it shows comes from
+// state/blockedCallout.ts.
 
 import { useState } from "react";
 import type { Ticket } from "@harness/shared";
 import { restartTitle } from "@harness/shared/state";
 import { blockedCallout } from "../state/blockedCallout";
-import { useTicketActionRunner } from "../components/TicketActionHost";
 import { Icon } from "../components/Icon";
 import { Markdown } from "../components/Markdown";
 import { ApprovalCard } from "./Approval";
@@ -18,7 +17,6 @@ const CLAMP_CHARS = 600;
 const CLAMP_LINES = 10;
 
 export function BlockedCallout({ ticket }: { ticket: Ticket }) {
-  const runner = useTicketActionRunner();
   const callout = blockedCallout(ticket);
   if (callout.kind === "none") return null;
   if (callout.kind === "approval") return <ApprovalCard key={callout.approval.id} ticket={ticket} approval={callout.approval} />;
@@ -32,14 +30,6 @@ export function BlockedCallout({ ticket }: { ticket: Ticket }) {
       </div>
       {reason && <ClampedMarkdown key={reason} text={reason} />}
       {at && <span className="muted" title={restartTitle(at)}>{restartTitle(at)}</span>}
-      {callout.kind === "question" && callout.unblock && (
-        <div className="blocked-callout-actions">
-          <button className="btn btn-primary" data-testid="blocked-callout-unblock" disabled={!!ticket.compacting} onClick={() => runner.run(ticket, { id: "unblock" })}>
-            <Icon name="play" /> Unblock
-          </button>
-        </div>
-      )}
-      {runner.modals}
     </section>
   );
 }

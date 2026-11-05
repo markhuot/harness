@@ -9,16 +9,13 @@ describe("blockedCallout", () => {
     expect(blockedCallout(makeTicket({ status: "in_progress", blockedReason: "stale" }))).toEqual({ kind: "none" });
     expect(blockedCallout(blocked({ draft: true }))).toEqual({ kind: "none" });
   });
-  test("a block waiting on the human shows the trimmed question and offers Unblock", () => {
-    expect(blockedCallout(blocked())).toEqual({ kind: "question", question: "Postgres or SQLite?", unblock: true });
+  test("a block waiting on the human shows the trimmed question", () => {
+    expect(blockedCallout(blocked())).toEqual({ kind: "question", question: "Postgres or SQLite?" });
   });
-  test("a block with no reason still shows, with Unblock", () => {
-    expect(blockedCallout(blocked({ blockedReason: null }))).toEqual({ kind: "question", question: "", unblock: true });
+  test("a block with no reason still shows", () => {
+    expect(blockedCallout(blocked({ blockedReason: null }))).toEqual({ kind: "question", question: "" });
   });
-  test("a block while a run is going shows the question without Unblock", () => {
-    expect(blockedCallout(blocked({ busy: true }))).toMatchObject({ kind: "question", unblock: false });
-  });
-  test("a restart time shows when it restarts, with the run's error, and no Unblock", () => {
+  test("a restart time shows when it restarts, with the run's error", () => {
     expect(blockedCallout(blocked({ resumeAt: 5000, blockedReason: "Usage limit reached" }))).toEqual({ kind: "restart", at: 5000, reason: "Usage limit reached" });
   });
   test("a pending approval wins over the reason and the restart time", () => {

@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type MouseEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import { LabelPickerModal } from "../components/Labels";
-import { conductorManagedReason, isConductor, keyLabel, managingConductor, MAX_PROMPT_ATTACHMENTS, resolveBaseBranch, type Attachment, type RelatedTicket, type RemoteKeyMatches, type Ticket } from "@harness/shared";
+import { conductorManagedReason, isConductor, keyLabel, managingConductor, MAX_PROMPT_ATTACHMENTS, resolveBaseBranch, type Attachment, type QuestionReply, type RelatedTicket, type RemoteKeyMatches, type Ticket } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
-import { messageDraftSession, unloadMessageDrafts } from "../state/messageDraftSession";
+import { unloadMessageDrafts } from "../state/messageDraftSession";
 import {
   AGENTS_LIVE_LABEL,
   annotateAttachment,
@@ -39,6 +39,8 @@ import {
   sendableQuestionReplies,
   questionPanel,
   withQuestionReply,
+  needsYouBar,
+  type NeedsYouLayout,
   ticketByKey,
   visibleTabsWithChanges,
   type TicketTab,
@@ -60,7 +62,10 @@ import { Transcript } from "./Transcript";
 import { BrowserView, type BrowserTear } from "./BrowserView";
 import { TicketDetails } from "./TicketDetails";
 import { SpecTab } from "./SpecTab";
-import { NeedsYouChip, NeedsYouPanel, needsYouCount } from "./NeedsYouPanel";
+import { NeedsYouPanel, needsYouCount } from "./NeedsYouPanel";
+import { focusFirstQuestion, InlineAnswer, NeedsYouBar, useMessageDraft, useNeedsYouLayout } from "./QuestionAnswers";
+import { BlockedCallout } from "./BlockedCallout";
+import { blockedCallout } from "../state/blockedCallout";
 import { ActivityTab } from "./ActivityTab";
 import { DraftEditor } from "./DraftEditor";
 import { ApprovalCard } from "./Approval";
@@ -248,6 +253,8 @@ export function TicketDetail({
   // order; the scroll keys move whichever scroller the current tab has.
   const owner = `ticket:${paneId}`;
   const asideRef = useRef<HTMLElement>(null);
+  // The size this pane answers the spec's questions at (QuestionAnswers.tsx).
+  const measuredLayout = useNeedsYouLayout(asideRef);
   const subagents = ticket ? subagentsOf(state, ticket.sessionId) : null;
   // Changes is built in (ChangesTab.tsx), after Browser and ahead of Details; the git plugin's own
   // tab never shows, and a saved "plugin:git:changes" opens the built-in one.
@@ -322,6 +329,13 @@ export function TicketDetail({
   const agentsRunning = subagents?.some((a) => a.status === "running") ?? false;
   // The tab shown, when it's torn off: its body is a placeholder with the way back.
   const tornShown = torn.get(tornId({ tab }));
+  // A narrow pane answers the spec's questions inline (QuestionAnswers.tsx): a box under each one in
+  // the Spec tab, bound to the message draft. A torn-off Spec isn't in this pane, so it's the panel.
+  const layout: NeedsYouLayout = tornShown ? "panel" : measuredLayout;
+  const answers =
+    layout === "inline" && tab === "spec"
+      ? (question: string) => <InlineAnswer ticket={ticket} question={question} onSend={() => ticketComposers.get(ticket.key)?.send()} />
+      : null;
   const back = (id: string) => returnTabPane(boardScope, ticket.key, id);
   const tabDrag = (t: TicketTab): TabDrag => ({ kind: "tab", ticketKey: ticket.key, tab: t });
 
@@ -388,6 +402,7 @@ export function TicketDetail({
             specAttachments={specAttachments}
             setTab={setTab}
             browser={{ tear: { ticketKey: ticket.key, scope, boardScope, paneId, torn } }}
+            answers={answers}
           />
         )}
       </div>
@@ -395,7 +410,7 @@ export function TicketDetail({
         ticket={ticket}
         key={ticket.id}
         tab={tab}
-        onShowSpec={() => setTab("spec")}
+        layout={layout}
         // The Transcript shows what was sent, unless it's torn off (it's on screen there).
         onSent={() => !torn.has("transcript") && setTab(tabAfterSend(tab, true))}
       />
@@ -426,6 +441,7 @@ export function TicketTabBody({
   specAttachments,
   setTab,
   browser,
+  answers,
 }: {
   ticket: Ticket;
   tab: TicketTab;
@@ -436,6 +452,8 @@ export function TicketTabBody({
   specAttachments: Attachment[] | undefined;
   setTab: (t: TicketTab) => void;
   browser: BrowserOpts;
+  /** The answer box under each open question in the Spec tab (the ticket pane's inline layout) */
+  answers?: ((question: string) => ReactNode) | null;
 }) {
   const { state } = useStore();
   const wantPlugin = parsePluginTab(normalizeChangesTab(requested));
@@ -450,7 +468,7 @@ export function TicketTabBody({
     <AnnotateScope onAdd={(a) => composerFor(ticket.key).add(a)} annotationOf={(a) => ticketComposers.get(ticket.key)?.annotationOf(a)}>
     <SpecAttachmentsScope attachments={specAttachments}>
     <FileLinkScope ticketKey={ticket.key} projectId={ticket.projectId}>
-      {tab === "spec" && <SpecTab key={ticket.id} ticket={ticket} />}
+      {tab === "spec" && <SpecTab key={ticket.id} ticket={ticket} answers={answers} />}
       {tab === "activity" && <ActivityTab ticket={ticket} />}
       {tab === "children" && <ChildrenTab ticket={ticket} />}
       {tab === "transcript" && <Transcript sessionId={ticket.sessionId} onOpenSubagent={openSubagent} emptyHint="The agent's conversation will stream in here." />}
@@ -627,11 +645,6 @@ function DetailHeader({
               <Icon name="clock" /> Working…
             </button>
           )}
-          {set.primary.filter((a) => a.id === "unblock").map((a) => (
-            <button key={a.id} className="btn btn-primary" data-testid="unblock" disabled={!a.enabled} onClick={() => run(a)}>
-              <Icon name="play" /> {a.label}
-            </button>
-          ))}
           {set.primary.filter((a) => a.id === "reopen").map((a) => (
             <button key={a.id} className="btn" disabled={!a.enabled} onClick={() => run(a)}>
               <Icon name="refresh" /> {a.label}
@@ -667,7 +680,6 @@ function DetailHeader({
 /** The More menu's icons. */
 const MORE_ICONS: Record<TicketActionId, IconName> = {
   start: "play",
-  unblock: "play",
   approve: "check",
   requestChanges: "edit",
   reopen: "refresh",
@@ -736,7 +748,6 @@ export function useTicketActions(owner: string, ticket: Ticket, onDeleted: () =>
     "ticket.cancelStart": fromPalette("ticket.cancelStart"),
     "ticket.withdrawApproval": fromPalette("ticket.withdrawApproval"),
     "ticket.markDone": fromPalette("ticket.markDone"),
-    "ticket.unblock": fromPalette("ticket.unblock"),
     "ticket.reopen": fromPalette("ticket.reopen"),
     "ticket.addLabel": labelsEditable && (() => setLabelPicker("add")),
     "ticket.removeLabel": labelsEditable && !!ticket.labels?.length && (() => setLabelPicker("remove")),
@@ -804,6 +815,8 @@ function RemoteIdPane({ paneId, owner, matches, onClose }: { paneId: string; own
 interface ComposerAnnotate {
   add: (a: AnnotatedAttachment) => void;
   annotationOf: (a: Attachment) => Attachment["annotation"];
+  /** Send what's in the composer (⌘↩ in a question's answer box in the spec) */
+  send: () => void;
 }
 
 /**
@@ -811,6 +824,7 @@ interface ComposerAnnotate {
  * and Annotate from any of its tabs adds to it.
  */
 const ticketComposers = new Map<string, ComposerAnnotate>();
+const NO_REPLIES: QuestionReply[] = [];
 
 // A reload or the window closing mid-debounce: every message draft sends what it hasn't yet, as a
 // keepalive request (it outlives the page). pagehide covers what beforeunload misses.
@@ -833,8 +847,8 @@ function composerFor(ticketKey: string): ComposerAnnotate {
  * image again edits its notes in place. Send, at the input's right with its shortcut in it (like
  * New session's Start session), sends the files with their notes.
  */
-export function MessageComposer({ ticket, onSent, tab, onShowSpec }: { ticket: Ticket; onSent: () => void; tab?: string; onShowSpec?: () => void }) {
-  const { client, dispatch, toast } = useStore();
+export function MessageComposer({ ticket, onSent, tab, layout = "panel" }: { ticket: Ticket; onSent: () => void; tab?: string; layout?: NeedsYouLayout }) {
+  const { client, dispatch } = useStore();
   const act = useAction();
   const [sending, setSending] = useState(false);
   // The blur reads the newest copy, not the one this render saw.
@@ -842,25 +856,17 @@ export function MessageComposer({ ticket, onSent, tab, onShowSpec }: { ticket: T
   ticketRef.current = ticket;
   // The text and files live in the ticket's message draft session (state/messageDraftSession.ts):
   // saved to the service as they're typed, and kept across remounts.
-  const draft = messageDraftSession(ticket, {
-    save: (key, body) => client.saveMessageDraft(key, body),
-    upsert: (t) => dispatch({ type: "event", event: { kind: "ticket.upserted", ticket: t } }),
-    error: (m) => toast(m, "error"),
-    keepalive: (path, body) =>
-      void fetch(client.baseUrl + path, {
-        method: "PUT",
-        keepalive: true,
-        headers: { authorization: `Bearer ${client.token}`, "content-type": "application/json" },
-        body: JSON.stringify(body),
-      }).catch(() => {}),
-  });
+  const draft = useMessageDraft(ticket);
   useSyncExternalStore(draft.subscribe, () => draft.version);
   const { text, attachments, questionReplies } = draft.value;
   const setText = (t: string) => draft.edit({ text: t });
-  // The spec's open questions and the block, each question with its reply (NeedsYouPanel). The
-  // replies under open questions go with every Send, and stay for the next one.
+  // The spec's open questions and the block, each question with its reply (NeedsYouPanel). Only on
+  // the Spec tab: there the replies under open questions go with every Send, and stay for the next
+  // one; a message from another tab goes without them, and they stay drafted.
+  const onSpec = tab === "spec" || tab === undefined;
   const panel = useMemo(() => questionPanel(ticket.spec, questionReplies), [ticket.spec, questionReplies]);
-  const replies = useMemo(() => sendableQuestionReplies(ticket.spec, questionReplies), [ticket.spec, questionReplies]);
+  const sendable = useMemo(() => sendableQuestionReplies(ticket.spec, questionReplies), [ticket.spec, questionReplies]);
+  const replies = onSpec ? sendable : NO_REPLIES;
   // Another device's edit (or its send) shows here, unless this one is being typed in.
   useEffect(() => draft.sync(ticket.messageDraft), [draft, ticket.messageDraft]);
   // Unmounting with the input focused sends no blur: the draft isn't being typed in anymore.
@@ -885,11 +891,11 @@ export function MessageComposer({ ticket, onSent, tab, onShowSpec }: { ticket: T
     // Before the annotator closes, so the focus stays here: the human writes why.
     ref.current?.focus();
   };
-  const annotateRef = useRef<ComposerAnnotate | null>(null);
+  const annotateRef = useRef<Omit<ComposerAnnotate, "send"> | null>(null);
   annotateRef.current = { add: annotate, annotationOf: (a) => waitingAnnotation(listRef.current, a) };
   // This window's composer for the ticket while it's mounted (in its pane).
   useEffect(() => {
-    const entry: ComposerAnnotate = { add: (a) => annotateRef.current!.add(a), annotationOf: (a) => annotateRef.current!.annotationOf(a) };
+    const entry: ComposerAnnotate = { add: (a) => annotateRef.current!.add(a), annotationOf: (a) => annotateRef.current!.annotationOf(a), send: () => void sendRef.current() };
     ticketComposers.set(ticket.key, entry);
     return () => {
       if (ticketComposers.get(ticket.key) === entry) ticketComposers.delete(ticket.key);
@@ -938,6 +944,16 @@ export function MessageComposer({ ticket, onSent, tab, onShowSpec }: { ticket: T
     } else draft.sendFailed();
   };
 
+  const sendRef = useRef(send);
+  sendRef.current = send;
+  // The inline layout's bar: "Needs you · N" takes the human to the first question in the spec (or
+  // this input, when only the block waits); "N answers ready · Send" sends.
+  const bar = onSpec && layout === "inline" ? needsYouBar(needsYouCount(ticket, panel), replies.length) : null;
+  const onBar = () => {
+    if (bar?.action === "send") return void send();
+    if (!focusFirstQuestion(ref.current?.closest(".detail"))) ref.current?.focus();
+  };
+
   // Its own Annotate scope: a waiting image's lightbox annotates it here (outside the tabs' scope).
   return (
     <AnnotateScope onAdd={annotate} annotationOf={(a) => waitingAnnotation(listRef.current, a)}>
@@ -946,7 +962,7 @@ export function MessageComposer({ ticket, onSent, tab, onShowSpec }: { ticket: T
       data-testid="composer"
       {...attach.dropProps}
     >
-      {tab === "spec" || tab === undefined ? (
+      {onSpec && layout === "panel" && (
         <NeedsYouPanel
           ticket={ticket}
           panel={panel}
@@ -954,8 +970,12 @@ export function MessageComposer({ ticket, onSent, tab, onShowSpec }: { ticket: T
           onFocus={(on) => draft.focus(on, ticketRef.current.messageDraft)}
           onSend={() => void send()}
         />
-      ) : (
-        onShowSpec && <NeedsYouChip count={needsYouCount(ticket, panel)} onOpen={onShowSpec} />
+      )}
+      {bar && <NeedsYouBar bar={bar} onClick={onBar} disabled={bar.action === "send" && !canSend} />}
+      {onSpec && layout === "inline" && blockedCallout(ticket).kind !== "none" && (
+        <div className="needs-you-bar-block">
+          <BlockedCallout ticket={ticket} />
+        </div>
       )}
       <PromptAttachmentList
         items={attachments}

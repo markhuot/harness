@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { TicketDetail } from "../../app/src/renderer/views/TicketDetail";
 import { world } from "../world";
 import { all, click, edited, mount, text, type } from "./render";
@@ -85,29 +85,21 @@ describe("TicketDetail", () => {
     expect(buttons(done).some((b) => b.startsWith("Approve"))).toBe(false);
   });
 
-  test("a blocked ticket offers Unblock; its dialog sends the notes, which are optional", async () => {
-    const m = await mount(detail("HARNESS-4"));
-    await m.until("loads", () => text(m.container).includes("Choose a storage backend"));
-    expect(buttons(m)).toContain("Unblock");
-    await click(m, all(m.container, "button").find((b) => text(b) === "Unblock")!);
-    const dialog = all(document.body, ".modal-foot button").find((b) => text(b).startsWith("Unblock"))!;
-    expect(dialog.hasAttribute("disabled")).toBe(false);
-    await click(m, dialog);
-    expect(m.client.requests).toContain("POST /tickets/HARNESS-4/unblock");
-  });
-
-  test("a blocked ticket shows its question and Unblock first in the composer's Needs you panel, outside the spec", async () => {
+  test("a blocked ticket has no Unblock: its question shows in the composer's Needs you panel, outside the spec, and a sent message answers it", async () => {
     const m = await mount(detail("HARNESS-4"));
     await m.until("the callout", () => all(m.container, "[data-testid=blocked-callout]").length === 1);
+    expect(buttons(m).some((b) => b.includes("Unblock"))).toBe(false);
     const callout = all(m.container, "[data-testid=blocked-callout]")[0]!;
     expect(text(callout)).toContain("Postgres or SQLite for the hosted tier?");
     expect(callout.closest("[data-testid=composer] [data-testid=needs-you]")).not.toBeNull();
     expect(callout.closest(".spec-body")).toBeNull();
     expect(all(m.container, "[data-testid=spec-doc]").every((d) => !text(d).includes("Postgres or SQLite"))).toBe(true);
-    await click(m, all(callout, "[data-testid=blocked-callout-unblock]")[0]!);
-    // The dialog opened from the callout, not one an earlier file left in the shared document.
-    await click(m, all(document.body, ".modal-foot button").filter((b) => text(b).startsWith("Unblock")).at(-1)!);
-    expect(m.client.requests).toContain("POST /tickets/HARNESS-4/unblock");
+    const input = all(m.container, "[data-testid=composer] textarea.composer-input").at(-1) as HTMLTextAreaElement;
+    expect(input.placeholder).toBe("Answer the block: your message goes to the agent…");
+    await type(m, input, "SQLite");
+    await click(m, all(m.container, "[data-testid=composer-send]")[0]!);
+    expect(m.client.bodies.filter((b) => b.request === "POST /tickets/HARNESS-4/messages").map((b) => b.body)).toEqual([{ text: "SQLite" }]);
+    expect(m.client.requests.some((r) => r.includes("/unblock"))).toBe(false);
   });
 
   test("the callout is absent unless blocked, and a long question is clamped until Show all", async () => {
@@ -124,23 +116,11 @@ describe("TicketDetail", () => {
     expect(all(m.container, ".blocked-callout-body.is-clamped")).toHaveLength(0);
   });
 
-  test("a restart time shows in the callout with no Unblock button of its own", async () => {
+  test("a restart time shows in the callout", async () => {
     const m = await mount(detail("HARNESS-4"), { world: edited((w) => void (w.tickets.find((t) => t.key === "HARNESS-4")!.resumeAt = world.now + 60_000)) });
     await m.until("the callout", () => all(m.container, "[data-testid=blocked-callout]").length === 1);
     expect(all(m.container, "[data-testid=blocked-callout]")[0]!.getAttribute("data-kind")).toBe("restart");
-    expect(all(m.container, "[data-testid=blocked-callout-unblock]")).toHaveLength(0);
-  });
-
-  test("a blocked ticket with a restart time or a pending approval offers no Unblock", async () => {
-    const timed = await mount(detail("HARNESS-4"), { world: edited((w) => void (w.tickets.find((t) => t.key === "HARNESS-4")!.resumeAt = world.now + 60_000)) });
-    await timed.until("loads", () => text(timed.container).includes("Choose a storage backend"));
-    expect(buttons(timed)).not.toContain("Unblock");
-    expect(all(timed.container, "[data-testid=restart-waiting]")).toHaveLength(1);
-    timed.unmount();
-
-    const approval = await mount(detail("WEB-2"));
-    await approval.until("the approval", () => text(approval.container).includes("The agent wants to use Bash"));
-    expect(buttons(approval)).not.toContain("Unblock");
+    expect(all(m.container, "[data-testid=restart-waiting]")).toHaveLength(1);
   });
 
   test("an approved review shows what it waits on instead of an empty row", async () => {
@@ -292,7 +272,8 @@ describe("TicketDetail", () => {
 });
 
 describe("Needs you: the spec's open questions above the composer", () => {
-  const SPEC = "# Pick a cache\n\n## Open questions\n\n- [ ] Which database?\n- [x] Which port?\n- [ ] Ship when?\n";
+  // A question beside the plan step it affects counts as much as one under Open questions.
+  const SPEC = "# Pick a cache\n\n## Plan\n\n1. Pick the store\n   - [ ] Which database?\n\n## Open questions\n\n- [x] Which port?\n- [ ] Ship when?\n";
   /** HARNESS-1 (planning) with open questions in its spec and a reply drafted under "Which database?". */
   const withQuestions = edited((w) => {
     const t = w.tickets.find((x) => x.key === "HARNESS-1")!;
@@ -312,7 +293,8 @@ describe("Needs you: the spec's open questions above the composer", () => {
     expect(questions(m).map((q) => reply(q).value)).toEqual(["Postgres", ""]);
     expect(text(all(m.container, "[data-testid=needs-you-answered] summary")[0]!)).toBe("1 answered");
     expect(text(all(m.container, "[data-testid=needs-you]")[0]!)).toContain("Needs you · 2");
-    // The Open questions section stays in the spec, as checkboxes.
+    // The spec keeps its task items, as read-only checkboxes, and no answer boxes of its own.
+    expect(all(m.container, ".spec-doc [data-testid=needs-you-reply]")).toHaveLength(0);
     const boxes = all(m.container, ".spec-body [data-testid=md-task-box]") as HTMLInputElement[];
     expect(boxes.map((b) => b.checked)).toEqual([false, true, false]);
   });
@@ -346,17 +328,142 @@ describe("Needs you: the spec's open questions above the composer", () => {
     expect(all(m.container, "[data-testid=composer-send]")[0]!.hasAttribute("disabled")).toBe(true);
   });
 
-  test("off the Spec tab the panel is a chip counting what needs the human", async () => {
+  test("off the Spec tab there's no Needs you, and a message goes without the drafted answers, which stay", async () => {
     const m = await mount(detail("HARNESS-1", "activity"), { world: withQuestions });
-    await m.until("the chip", () => all(m.container, "[data-testid=needs-you-chip]").length === 1);
+    await m.until("loads", () => all(m.container, "[data-testid=composer-send]").length === 1);
     expect(all(m.container, "[data-testid=needs-you]")).toHaveLength(0);
-    expect(text(all(m.container, "[data-testid=needs-you-chip]")[0]!)).toBe("2 questions need you");
+    expect(all(m.container, "[data-testid=needs-you-bar]")).toHaveLength(0);
+    expect(text(all(m.container, "[data-testid=composer]")[0]!)).not.toContain("Needs you");
+    // The drafted answer alone doesn't make a message here.
+    expect(all(m.container, "[data-testid=composer-send]")[0]!.hasAttribute("disabled")).toBe(true);
+    await type(m, all(m.container, "[data-testid=composer] textarea.composer-input").at(-1) as HTMLTextAreaElement, "Quick question first");
+    await click(m, all(m.container, "[data-testid=composer-send]")[0]!);
+    expect(m.client.bodies.filter((b) => b.request === "POST /tickets/HARNESS-1/messages").map((b) => b.body)).toEqual([{ text: "Quick question first" }]);
   });
 
   test("a spec without open questions shows no panel and no chip", async () => {
     const m = await mount(detail("HARNESS-5"));
     await m.until("loads", () => text(m.container).includes("Speed up the board"));
     expect(all(m.container, "[data-testid=needs-you]")).toHaveLength(0);
-    expect(all(m.container, "[data-testid=needs-you-chip]")).toHaveLength(0);
+    expect(all(m.container, "[data-testid=needs-you-bar]")).toHaveLength(0);
+  });
+});
+
+/**
+ * Gives every ticket pane (.detail) a size and a ResizeObserver the test drives, the way the window
+ * sizes it in the app; `resize` changes the size and tells the observers.
+ */
+function sizedPanes(width: number, height: number) {
+  const size = { width, height };
+  const proto = HTMLElement.prototype;
+  const rect = proto.getBoundingClientRect;
+  const RO = globalThis.ResizeObserver;
+  const observers = new Set<{ cb: ResizeObserverCallback }>();
+  proto.getBoundingClientRect = function (this: HTMLElement) {
+    if (!this.classList.contains("detail")) return rect.call(this);
+    return { x: 0, y: 0, left: 0, top: 0, right: size.width, bottom: size.height, width: size.width, height: size.height, toJSON: () => ({}) } as DOMRect;
+  };
+  globalThis.ResizeObserver = class {
+    cb: ResizeObserverCallback;
+    constructor(cb: ResizeObserverCallback) {
+      this.cb = cb;
+      observers.add(this);
+    }
+    observe() {}
+    unobserve() {}
+    disconnect() {
+      observers.delete(this);
+    }
+  } as unknown as typeof ResizeObserver;
+  return {
+    resize(w: number, h: number) {
+      size.width = w;
+      size.height = h;
+      for (const o of observers) o.cb([], o as unknown as ResizeObserver);
+    },
+    restore() {
+      proto.getBoundingClientRect = rect;
+      globalThis.ResizeObserver = RO;
+    },
+  };
+}
+
+describe("Needs you in a narrow pane: answers inline in the spec", () => {
+  const SPEC = "# Pick a cache\n\n## Plan\n\n1. Pick the store\n   - [ ] Which database?\n\n## Open questions\n\n- [x] Which port?\n- [ ] Ship when?\n";
+  const withQuestions = edited((w) => {
+    const t = w.tickets.find((x) => x.key === "HARNESS-1")!;
+    t.spec = SPEC;
+    t.openQuestionCount = 2;
+    t.messageDraft = { text: "", attachments: [], questionReplies: [{ question: "Which database?", body: "Postgres" }], origin: null, updatedAt: w.now };
+    w.details["HARNESS-1"]!.ticket = t;
+  });
+  const inline = (m: { container: HTMLElement }) => all(m.container, ".spec-doc [data-testid=spec-question]");
+  const box = (q: HTMLElement) => all(q, "[data-testid=needs-you-reply]")[0] as HTMLTextAreaElement;
+  const bar = (m: { container: HTMLElement }) => all(m.container, "[data-testid=needs-you-bar]")[0];
+  let panes: ReturnType<typeof sizedPanes>;
+  afterEach(() => panes.restore());
+
+  test("each open question gets its box where it sits in the spec; the composer has a one-line bar, not the panel", async () => {
+    panes = sizedPanes(600, 900);
+    const m = await mount(detail("HARNESS-1"), { world: withQuestions });
+    await m.until("the inline boxes", () => inline(m).length === 2);
+    expect(inline(m).map((q) => q.dataset.question ?? box(q).dataset.question)).toEqual(["Which database?", "Ship when?"]);
+    expect(inline(m).map((q) => box(q).value)).toEqual(["Postgres", ""]);
+    // The question under the plan step is inside that step's list, where the agent put it.
+    expect(inline(m)[0]!.closest("ol")).not.toBeNull();
+    // Checked items stay plain checked lines.
+    expect((all(m.container, ".spec-doc [data-testid=md-task-box]") as HTMLInputElement[]).filter((b) => b.checked)).toHaveLength(1);
+    expect(all(m.container, "[data-testid=needs-you]")).toHaveLength(0);
+    // The drafted answer is ready to go.
+    expect(text(bar(m))).toContain("1 answer ready · Send");
+  });
+
+  test("the bar focuses the first question's box; once answers are drafted it sends them all as one message, and they stay", async () => {
+    panes = sizedPanes(600, 900);
+    // A ticket with nothing drafted (each ticket's draft session outlives a mount, like the app's).
+    const world = edited((w) => {
+      const t = w.tickets.find((x) => x.key === "HARNESS-2")!;
+      t.spec = SPEC;
+      t.messageDraft = null;
+      w.details["HARNESS-2"]!.ticket = t;
+    });
+    const m = await mount(detail("HARNESS-2"), { world });
+    await m.until("the inline boxes", () => inline(m).length === 2);
+    expect(bar(m)!.dataset.action).toBe("focus");
+    expect(text(bar(m))).toContain("Needs you · 2");
+    await click(m, bar(m)!);
+    expect(document.activeElement).toBe(box(inline(m)[0]!));
+    await type(m, box(inline(m)[0]!), "Postgres");
+    await type(m, box(inline(m)[1]!), "Friday");
+    await m.until("the bar sends", () => text(bar(m)).includes("2 answers ready · Send"));
+    await click(m, bar(m)!);
+    const posts = m.client.bodies.filter((b) => b.request === "POST /tickets/HARNESS-2/messages").map((b) => b.body);
+    expect(posts).toEqual([{ text: "", questionReplies: [{ question: "Which database?", body: "Postgres" }, { question: "Ship when?", body: "Friday" }] }]);
+    expect(inline(m).map((q) => box(q).value)).toEqual(["Postgres", "Friday"]);
+  });
+
+  test("resizing the pane across the threshold switches between the inline form and the panel, keeping the answers", async () => {
+    panes = sizedPanes(1200, 800);
+    const m = await mount(detail("HARNESS-1"), { world: withQuestions });
+    await m.until("the panel", () => all(m.container, "[data-testid=needs-you-question]").length === 2);
+    expect(inline(m)).toHaveLength(0);
+    await m.settle(() => panes.resize(640, 800));
+    await m.until("inline", () => inline(m).length === 2);
+    expect(all(m.container, "[data-testid=needs-you]")).toHaveLength(0);
+    await type(m, box(inline(m)[1]!), "Friday");
+    await m.settle(() => panes.resize(1200, 800));
+    await m.until("the panel again", () => all(m.container, "[data-testid=needs-you-question]").length === 2);
+    expect(all(m.container, "[data-testid=needs-you-question] [data-testid=needs-you-reply]").map((t) => (t as HTMLTextAreaElement).value)).toEqual(["Postgres", "Friday"]);
+  });
+
+  test("a blocked ticket's question shows under the bar, by the composer, not in the spec", async () => {
+    panes = sizedPanes(600, 900);
+    const m = await mount(detail("HARNESS-4"));
+    await m.until("the callout", () => all(m.container, "[data-testid=blocked-callout]").length === 1);
+    expect(all(m.container, "[data-testid=blocked-callout]")[0]!.closest("[data-testid=composer]")).not.toBeNull();
+    expect(text(bar(m))).toContain("Needs you · 1");
+    // With no question in the spec to go to, the bar focuses the message box.
+    await click(m, bar(m)!);
+    expect((document.activeElement as HTMLElement).classList.contains("composer-input")).toBe(true);
   });
 });

@@ -6,13 +6,13 @@
 // dragged or scrolled to scrub through them. Source is the raw markdown in the file editor, read-only
 // (the spec is edited in Details); it opens Rendered.
 
-import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type RefObject } from "react";
+import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode, type RefObject } from "react";
 import { SPEC_WRAP_KEY, viewMenu, type SpecRevisionInfo, type Ticket } from "@harness/shared";
 import { depChipTitle, dependencyStates, diffUnchanged, specBody, specDiff } from "@harness/shared/state";
 import { useStore } from "../state/store";
 import { FOLLOW_LATEST, revisionAt, scrubTo, segmentTone, shownRevision, wheelScrub, type SpecHistory } from "../state/specHistory";
 import { Icon } from "../components/Icon";
-import { Markdown, MarkdownDiff } from "../components/Markdown";
+import { Markdown, MarkdownDiff, TaskAnswerScope } from "../components/Markdown";
 import { MenuButton, relativeTime, TicketKey, useNow } from "../components/bits";
 import { ViewMenuItems } from "../components/ViewMenuItems";
 import { ChunkBoundary, retryableLazy } from "../components/lazyRetry";
@@ -26,7 +26,11 @@ const noop = () => {};
 
 import { PromptAttachmentList } from "../components/PromptAttachments";
 
-export function SpecTab({ ticket }: { ticket: Ticket }) {
+/**
+ * `answers` renders the answer box under each open question in the current spec (the narrow pane's
+ * inline layout, views/QuestionAnswers.tsx); without it task items are read-only checkboxes.
+ */
+export function SpecTab({ ticket, answers }: { ticket: Ticket; answers?: ((question: string) => ReactNode) | null }) {
   const { state, client, dispatch, epoch } = useStore();
   const now = useNow();
   const latest = ticket.specRevision ?? 1;
@@ -152,7 +156,10 @@ export function SpecTab({ ticket }: { ticket: Ticket }) {
           </section>
         ) : body.trim() ? (
           <section className="spec-doc" data-testid="spec-doc">
-            <Markdown text={body} />
+            {/* Only the current spec answers its questions; an older revision is read-only. */}
+            <TaskAnswerScope render={shown === latest ? (answers ?? null) : null}>
+              <Markdown text={body} />
+            </TaskAnswerScope>
           </section>
         ) : (
           <div className="empty">
