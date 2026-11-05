@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261105.1103](https://github.com/markhuot/harness/releases/tag/app-20261105.1103) - 2026-11-05
+
 ### Added
 
 - Image files (png, jpg, gif, webp, avif, bmp and ico) now show as pictures in the Mac file pane and the iPhone and iPad file viewer, with their dimensions and size, instead of saying "Binary file". That covers a `harness://file/` link an agent posts to a screenshot and the Open File palette alike. Images up to 50 MB are drawn; SVG files still open as text so you can edit them.
