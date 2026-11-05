@@ -493,7 +493,7 @@ Status and notes as claims to verify. Two spec problems are grounds for `request
 acceptance-criteria changes since the baseline that the human's messages, review notes or re-open
 notes didn't ask for (moved goalposts; `system.spec` has agents write those requests into the Goal), and a Status that doesn't match the work. Missing proof is also grounds, never a nit: a behaviour change without a test, a user-visible change without a screenshot in Status, or a Status that admits verification was skipped. The reviewer runs the tests and typecheck itself. Notes cover one round, and their first line
 must state the outcome on its own ("Approved, with three open questions in the spec."), since that's
-all Activity shows. Review runs get `read_spec` and `edit_spec`, to record findings (an open
+all Activity shows. Review runs get `read_spec` and `edit_spec`, to record findings (a `- [ ]`
 question for the human, a follow-up) under the spec's Open questions; `update_spec` is refused, and
 the Goal, Plan and Status stay the author's. `get_ticket` has the full Activity and each
 attachment's path. When the run's model differs from the Adviser phase's (see "Per-phase
@@ -636,7 +636,7 @@ worktree, any other branch means one (`draftBranchPatch`). Base branch shows onl
 
 The message a human is writing to a ticket's agent is saved on the ticket as `Ticket.messageDraft`
 (`{ text, attachments, questionReplies, origin, updatedAt }`, null when there is none; the replies
-are the ones drafted under open questions, see "Open questions"), so a reply started on one
+are the answers drafted under the spec's questions, see "Open questions"), so a reply started on one
 device can be finished on another. A ticket has one, because each app has one composer per ticket.
 `PUT /tickets/:key/message-draft { text, attachments?, origin? }` replaces it whole; empty text and
 no attachments clear it, and a save that changes nothing emits nothing. It's stored in
@@ -682,34 +682,64 @@ to something the field didn't type (a send clearing it, a picked mention, anothe
 
 ### Open questions
 
-The decisions an agent needs from the human live in the spec, under its **Open questions**
-heading, as a GFM task list: one `- [ ] question` per item. They're versioned with the spec, so the
-revision history shows each one being resolved. There's no table and no tool for them: agents add,
-answer and remove them with `edit_spec` / `update_spec`. The `system.spec` run-context section
-(every ticket run with the spec tools: plan, work, review, chat) and both spec tools' descriptions
-tell agents the format, to add a question whenever one for the human comes up, and to resolve one
-by moving its answer into the spec, then removing the item (preferred, it keeps specs tidy) or
-checking it off. Nothing resolves on its own, and the human can't check one off; to add one, they
-ask the agent, which adds it or says why it isn't a question.
+The decisions an agent needs from the human live in the spec as GFM task items: every unchecked
+`- [ ] question` in it, under any heading or none, is a question for the human. Agents put them
+where they fit (beside the plan step they affect, or under an Open questions heading) and use task
+items for nothing else: acceptance criteria and work checklists are plain bullets. They're
+versioned with the spec, so the revision history shows each one being resolved. There's no table
+and no tool for them: agents add, answer and remove them with `edit_spec` / `update_spec`. The
+`system.spec` run-context section and both spec tools' descriptions tell agents that any task item
+is a question shown with an answer box; the runs that can edit the spec (plan, work, chat) are also
+told to add one whenever a question comes up and to resolve one by moving its answer into the spec,
+then removing the item (preferred, it keeps specs tidy) or checking it off. A review run, which
+doesn't rewrite the spec, may only add a question; only `update_spec` (which review runs don't get)
+carries the resolve sentence. Nothing resolves on its own, and the human can't check one off; to
+add one, they ask the agent, which adds it or says why it isn't a question.
 
 - **Parsing.** `openQuestions(spec)` (`shared/src/state/openQuestions.ts`, ported to HarnessKit's
-  `OpenQuestions`) finds the first heading reading "Open question(s)" (any level or case, an
-  optional colon) and returns the task items under it, nested ones too, down to the next heading
-  of the same or a higher level. Plain bullets and prose there aren't questions, so older specs
-  show none. A question's identity is its text: rewording it detaches its drafts and sent replies.
-  The service derives `Ticket.openQuestionCount` (the unchecked ones) when it maps a row, parsing
-  only specs that mention the heading; board cards show it as an amber badge.
-- **The Needs you panel** (`views/NeedsYouPanel.tsx`, iOS `TicketNeedsYouPanel`) sits at the top
-  of the composer on the Spec tab. It shows the blocked ticket's callout first (`BlockedCallout`:
-  the question with Unblock, a restart time, or a tool approval; it no longer renders in the spec
-  body), then each unchecked question as plain text with one growing reply box under it, then the
-  checked ones folded under "N answered". `questionPanel` builds it from the spec and the draft.
-  The list caps its height and scrolls. On other tabs (and on iPhone while the keyboard is up for
-  the message, unless a reply box has focus) it folds to a "N questions need you" chip that opens
-  it. The Open questions section still renders in the spec body with its checkboxes.
+  `OpenQuestions`) returns every task item in the spec, checked or not, in document order, nested
+  ones too; plain bullets, prose and anything inside a code block aren't questions. A question's
+  identity is its text: rewording it leaves the answer drafted under the old wording in the draft,
+  where it no longer shows or sends. The service derives `Ticket.openQuestionCount` (the unchecked
+  ones) when it maps a row, parsing only specs that contain `[ ]`; board cards show it as an amber
+  badge. Specs written before this rule may use task items as checklists, and those show as
+  questions until an agent rewrites them.
+- **Layout by size.** Where the questions are answered follows the ticket view's size, not the
+  platform: `needsYouLayout(width, height)` (ported as `OpenQuestions.layout`, same constants) is
+  `panel` for a landscape view at least 700 × 600 and `inline` otherwise. So every iPhone, an iPad
+  in portrait or split view and a Mac ticket pane beside the board answer inline; a zoomed Mac pane
+  or a large window, and a large iPad in landscape, get the panel. The Mac measures the ticket pane
+  with a `ResizeObserver` (`useNeedsYouLayout`, `views/QuestionAnswers.tsx`; unmeasured, and with
+  the Spec tab torn off, it's the panel), iOS the detail view's geometry; both switch as the view is
+  resized or rotated, and the answers carry across since they live in the draft.
+- **The panel** (`views/NeedsYouPanel.tsx`, iOS `TicketNeedsYouPanel`) sits at the top of the
+  composer on the Spec tab in the `panel` layout. It shows the blocked ticket's callout first
+  (`BlockedCallout`: the question, a restart time, or a tool approval; it never renders in the spec
+  body), then each unchecked question as plain text with one growing reply box under it (6px
+  apart, and 20px from one question's box to the next question), then the checked ones folded
+  under "N answered". `questionPanel` builds it from the spec and the draft. The list caps its
+  height and scrolls. The spec body keeps read-only checkboxes.
+- **Inline.** In the `inline` layout the rendered current spec is the form: the Spec tab passes
+  the markdown renderer an answer-field hook (Mac `TaskAnswerScope` in `components/Markdown.tsx`,
+  rendering `InlineAnswer`; never for an older revision, the diff or any other markdown), and each
+  unchecked task item renders its question with a growing answer box under it, where it sits;
+  checked items stay plain checked lines. A question's row is keyed by its text, so its box keeps
+  focus while the draft saves and the spec re-renders. Above the composer a one-line bar
+  (`needsYouBar`, `NeedsYouBar`) reads "Needs you · N" (the block and the open questions) and
+  scrolls to and focuses the first question's box (the message box when only the block waits);
+  once answers are drafted it reads "N answers ready · Send" and sends. A blocked ticket's
+  callout shows under the bar.
+- **Spec tab only.** The panel, the bar and the answers riding along with a message exist only on
+  the Spec tab. On other tabs the composer is a plain message composer: a message sent there
+  carries no replies, and the drafted ones stay in their boxes.
+- **Blocked tickets.** There's no Unblock button or dialog in the apps. The human answers a block
+  by sending a message, which the service records as the answer (an `answered` Activity entry)
+  and hands to a chat run whose prompt says to call `unblock` once the message resolves the
+  question; the ticket stays blocked until the agent does. `POST /tickets/:key/unblock` stays for
+  API callers.
 - **Sending.** Reply boxes edit `MessageDraft.questionReplies` (one per question; emptying a box
-  drops it), saved with the rest of the draft. A reply alone enables Send. Send carries
-  `sendableQuestionReplies`: the non-blank replies under questions still open, so one under a
+  drops it), saved with the rest of the draft. On the Spec tab a reply alone enables Send. Send
+  carries `sendableQuestionReplies`: the non-blank replies under questions still open, so one under a
   question the agent resolved or reworded stays in the draft but no longer goes out.
   `POST /tickets/:key/messages` takes `questionReplies`, drops blank ones and composes the message
   (`composeQuestionReplies`: each question as a `>` quote with its reply under it, then the typed

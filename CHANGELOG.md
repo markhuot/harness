@@ -11,15 +11,21 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Added
 
-- On the Spec tab, a Needs you panel now sits above the message box on the Mac, iPhone and iPad. It lists the question a blocked ticket is waiting on, then each open question in the spec with one answer box under it. You can answer several questions at once: Send delivers every answer (plus anything typed in the message box) as one message, each answer quoted under its question, and the agent's reply shows in the Transcript. Your answers stay in their boxes after you send, so you can edit them and send again, which steers the running agent or starts a new run just as typing a message would. Answers save as you type, so you can start them on the Mac and finish on your phone. Questions the agent has checked off fold under "N answered". On other tabs, a "2 questions need you" chip takes you back to the panel, and on iPhone the panel folds to that chip while the keyboard is up.
+- Every unchecked task item (`- [ ]`) in a spec is a question for you, and you answer it right on the Spec tab, on the Mac, iPhone and iPad. When the ticket view is wide (a zoomed Mac pane or a big window, or a large iPad in landscape), a Needs you panel above the message box lists the question a blocked ticket is waiting on, then each open question with one answer box under it, well spaced so each question stands apart. When the view is narrow (every iPhone, an iPad in portrait, or a Mac ticket pane beside the board), each question gets its answer box right where it sits in the spec, and a one-line "Needs you · 2" bar above the message box takes you to the first one; once you've typed answers it reads "2 answers ready · Send". Resizing the window or rotating the iPad switches between the two and keeps what you typed.
+- Send on the Spec tab delivers every answer (plus anything typed in the message box) as one message, each answer quoted under its question, and the agent's reply shows in the Transcript. Your answers stay in their boxes after you send, so you can edit them and send again, which steers the running agent or starts a new run just as typing a message would. Answers save as you type, so you can start them on the Mac and finish on your phone. Questions the agent has checked off fold under "N answered".
 - Board cards show how many open questions a ticket's spec has waiting on you.
 - Task lists (`- [ ]` and `- [x]`) now show as checkboxes wherever the apps render markdown: the spec, notes, Activity and the Transcript. The spec's revision diff marks an item that was checked off.
 
 ### Changed
 
-- A blocked ticket's question now shows at the top of the Needs you panel instead of in a callout above the spec. Answering it and the Unblock button work as before.
-- Agents in every run that can edit the spec (planning, work, review and chat) now write the spec's Open questions as a task list, one question per item, and add questions as they come up. To resolve one, the agent moves the answer into the Goal or Plan and then removes the question or checks it off, so the spec's revision history shows each decision being made.
-- For people working on Harness: the token limits in `prompt-budget.test.ts` grew by about 90 tokens per run to make room for the open-questions rule in each run's prompt.
+- A blocked ticket's question now shows by the message box under the Needs you heading, instead of in a callout above the spec. You answer it by sending a message; the agent unblocks the ticket itself once your message answers its question.
+- Needs you shows only on the Spec tab. On other tabs the message box is a plain one: a message you send from the Transcript or Activity goes without your drafted answers, which stay in their boxes.
+- Agents now treat every `- [ ]` item in the spec as a question for you and use task items for nothing else, writing acceptance criteria and checklists as plain bullets. Agents in planning, work and chat runs add questions as they come up, next to what they affect or under Open questions. To resolve one, the agent moves the answer into the Goal or Plan and then removes the question or checks it off, so the spec's revision history shows each decision being made. Review runs may add a question but aren't told to resolve them, since they don't rewrite the spec.
+- For people working on Harness: the token limits in `prompt-budget.test.ts` grew by about 100 tokens per run to make room for the questions rule in each run's prompt.
+
+### Removed
+
+- The Unblock button (in the ticket header, in the blocked callout and in the ⌘K palette) and its dialog are gone from the Mac, iPhone and iPad apps, and so is the "questions need you" chip on tabs other than the Spec tab. Send a message to answer a blocked ticket.
 
 ## [app-20261105.1103](https://github.com/markhuot/harness/releases/tag/app-20261105.1103) - 2026-11-05
 
