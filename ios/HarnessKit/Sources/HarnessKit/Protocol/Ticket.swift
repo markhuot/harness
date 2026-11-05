@@ -115,6 +115,10 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
     /// "Message drafts") so it can be finished on another device. null when there is none; sending
     /// a message from an app clears it. Absent from older services.
     public var messageDraft: Patch<MessageDraft>
+    /// How many of the spec's open questions are unanswered (DESIGN.md "Open questions"): the
+    /// unchecked task items under its Open questions heading, derived from the spec. The board card
+    /// shows it. Absent from older services.
+    public var openQuestionCount: Int?
     /// Why the ticket is blocked (question for the human), when status = blocked
     @Nullable public var blockedReason: String?
     /// When a blocked ticket restarts on its own (ms): a run that stopped on a usage limit naming its
@@ -158,7 +162,7 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
         branch: String? = nil, requestedBranch: Patch<String> = .absent, baseBranch: Patch<String> = .absent,
         useWorktree: Patch<Bool> = .absent, skipAgentReview: Bool? = nil, skipHumanReview: Bool? = nil,
         completionAction: Patch<CompletionAction> = .absent, completionInstructions: Patch<String> = .absent,
-        pullRequestUrl: Patch<String> = .absent, pullRequests: [PullRequestLink] = [], hasChanges: Patch<Bool> = .absent, draft: Bool? = nil, promptAttachments: [Attachment]? = nil, messageDraft: Patch<MessageDraft> = .absent, blockedReason: String? = nil, resumeAt: Patch<Timestamp> = .absent, busy: Bool = false,
+        pullRequestUrl: Patch<String> = .absent, pullRequests: [PullRequestLink] = [], hasChanges: Patch<Bool> = .absent, draft: Bool? = nil, promptAttachments: [Attachment]? = nil, messageDraft: Patch<MessageDraft> = .absent, openQuestionCount: Int? = nil, blockedReason: String? = nil, resumeAt: Patch<Timestamp> = .absent, busy: Bool = false,
         compacting: Bool? = nil, completing: Bool? = nil, context: Patch<ContextUsage> = .absent,
         pendingApproval: PendingApproval? = nil, allowedTools: [String] = [], permissionMode: PermissionMode? = nil,
         model: String? = nil, position: Double = 0, completedAt: Patch<Timestamp> = .absent,
@@ -202,6 +206,7 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
         self.draft = draft
         self.promptAttachments = promptAttachments
         self.messageDraft = messageDraft
+        self.openQuestionCount = openQuestionCount
         self.blockedReason = blockedReason
         self.resumeAt = resumeAt
         self.busy = busy
@@ -234,21 +239,35 @@ public struct PullRequestLink: Codable, Sendable, Equatable {
     }
 }
 
+/// A reply the human wrote under one of the spec's open questions, which it names by its text.
+public struct QuestionReply: Codable, Sendable, Equatable, Hashable {
+    public var question: String
+    public var body: String
+
+    public init(question: String, body: String) {
+        self.question = question
+        self.body = body
+    }
+}
+
 /// A ticket's unsent message (Ticket.messageDraft, DESIGN.md "Message drafts"): one per ticket,
 /// the same one in every app.
 public struct MessageDraft: Codable, Sendable, Equatable {
     public var text: String
     /// The files waiting to go with it, each with its notes
     public var attachments: [Attachment]
+    /// The replies waiting under the spec's open questions, one per question. Absent from older services.
+    public var questionReplies: [QuestionReply]?
     /// The editor that saved it (MessageDraftBody.origin): an editor skips its own saves coming back
     /// and takes only other devices'. null when the saver didn't say.
     @Nullable public var origin: String?
     /// When it was saved (ms)
     public var updatedAt: Timestamp
 
-    public init(text: String, attachments: [Attachment] = [], origin: String?, updatedAt: Timestamp) {
+    public init(text: String, attachments: [Attachment] = [], questionReplies: [QuestionReply]? = nil, origin: String?, updatedAt: Timestamp) {
         self.text = text
         self.attachments = attachments
+        self.questionReplies = questionReplies
         self.origin = origin
         self.updatedAt = updatedAt
     }

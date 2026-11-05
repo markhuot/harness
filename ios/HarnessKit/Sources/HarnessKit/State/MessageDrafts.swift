@@ -15,10 +15,13 @@ import Observation
 public struct MessageDraftValue: Codable, Sendable, Equatable {
     public var text: String
     public var attachments: [Attachment]
+    /// Replies under the spec's open questions (DESIGN.md "Open questions"), one per question
+    public var questionReplies: [QuestionReply]
 
-    public init(text: String = "", attachments: [Attachment] = []) {
+    public init(text: String = "", attachments: [Attachment] = [], questionReplies: [QuestionReply] = []) {
         self.text = text
         self.attachments = attachments
+        self.questionReplies = questionReplies
     }
 
     public static let empty = MessageDraftValue()
@@ -27,24 +30,37 @@ public struct MessageDraftValue: Codable, Sendable, Equatable {
 public enum MessageDrafts {
     /// `messageDraftValue`: the saved draft as a composer shows it (none: empty).
     public static func value(_ d: MessageDraft?) -> MessageDraftValue {
-        d.map { MessageDraftValue(text: $0.text, attachments: $0.attachments) } ?? .empty
+        d.map { MessageDraftValue(text: $0.text, attachments: $0.attachments, questionReplies: $0.questionReplies ?? []) } ?? .empty
     }
 
     /// `hasMessageDraft`: the ticket has a message waiting to go (its board card shows a pencil):
-    /// text that isn't blank, or files.
+    /// text that isn't blank, files, or a reply under an open question.
     public static func has(_ d: MessageDraft?) -> Bool {
         guard let d else { return false }
         return !d.text.allSatisfy { $0.isWhitespace } || !d.attachments.isEmpty
+            || (d.questionReplies ?? []).contains { !$0.body.allSatisfy { $0.isWhitespace } }
     }
 
     /// `sameMessageDraft`
     public static func same(_ a: MessageDraftValue, _ b: MessageDraftValue) -> Bool {
         a.text.unicodeScalars.elementsEqual(b.text.unicodeScalars) && PromptAttachments.same(a.attachments, b.attachments)
+            && a.questionReplies == b.questionReplies
     }
 
     /// `messageDraftBody`: the PUT that saves `v` from the editor `origin` (empty clears it).
     public static func body(_ v: MessageDraftValue, origin: String) -> MessageDraftBody {
-        MessageDraftBody(text: v.text, attachments: PromptAttachments.inputs(v.attachments), origin: origin)
+        MessageDraftBody(text: v.text, attachments: PromptAttachments.inputs(v.attachments), questionReplies: v.questionReplies, origin: origin)
+    }
+
+    /// `withQuestionReply`: `replies` with the one under `question` set to `body`, added at the end
+    /// when new and dropped when `body` is empty, so there's one per question.
+    public static func withReply(_ replies: [QuestionReply], question: String, body: String) -> [QuestionReply] {
+        var next = replies
+        let at = next.firstIndex { $0.question == question }
+        if let at { next.remove(at: at) }
+        guard !body.isEmpty else { return next }
+        next.insert(QuestionReply(question: question, body: body), at: at ?? next.count)
+        return next
     }
 
     /// `adoptMessageDraft`: what the editor should show instead of `shown` now that the store has
@@ -78,6 +94,8 @@ public enum MessageDraftError: Error, Equatable, Sendable, LocalizedError {
 public final class MessageDraftSync {
     /// The message's text, as the composer shows it
     public private(set) var text: String
+    /// The replies under the spec's open questions (the Needs you panel)
+    public private(set) var questionReplies: [QuestionReply]
     /// The files waiting to go with it
     public let attachments: MessageAttachments
     /// This composer's origin: its own saves coming back are skipped.
@@ -112,6 +130,7 @@ public final class MessageDraftSync {
         let start = MessageDrafts.value(stored)
         self.key = key
         self.text = start.text
+        self.questionReplies = start.questionReplies
         self.attachments = MessageAttachments(start.attachments)
         self.origin = origin
         self.save = save
@@ -125,7 +144,7 @@ public final class MessageDraftSync {
     }
 
     /// What the composer shows: the text and the files.
-    public var value: MessageDraftValue { MessageDraftValue(text: text, attachments: attachments.list) }
+    public var value: MessageDraftValue { MessageDraftValue(text: text, attachments: attachments.list, questionReplies: questionReplies) }
 
     /// Edits the service doesn't have yet.
     public var dirty: Bool { timer != nil || inflight != nil || !MessageDrafts.same(value, saved) }
@@ -134,6 +153,14 @@ public final class MessageDraftSync {
     public func setText(_ next: String) {
         guard !next.unicodeScalars.elementsEqual(text.unicodeScalars) else { return }
         text = next
+        schedule()
+    }
+
+    /// The human wrote under an open question (empty drops the reply).
+    public func setReply(_ body: String, to question: String) {
+        let next = MessageDrafts.withReply(questionReplies, question: question, body: body)
+        guard next != questionReplies else { return }
+        questionReplies = next
         schedule()
     }
 
@@ -163,6 +190,7 @@ public final class MessageDraftSync {
 
     private func replace(_ next: MessageDraftValue) {
         text = next.text
+        questionReplies = next.questionReplies
         attachments.replace(next.attachments)
     }
 

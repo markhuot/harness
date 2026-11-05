@@ -498,7 +498,7 @@ private struct MarkdownListView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             ForEach(items.indices, id: \.self) { j in
-                MarkdownListRow(ordered: ordered, number: start + j, depth: depth, style: style) {
+                MarkdownListRow(ordered: ordered, number: start + j, depth: depth, style: style, checked: items[j].checked) {
                     MarkdownRichText(text: items[j].text, style: style)
                     ForEach(items[j].children.indices, id: \.self) { k in
                         MarkdownBlockView(block: items[j].children[k], style: style, depth: depth + 1)
@@ -511,21 +511,33 @@ private struct MarkdownListView: View {
 
 /// One list item: its marker (a bullet by depth, or its number) beside its content. `marker`
 /// overrides the marker's color (Show changes: green for an added item, red for a removed one).
+/// A task item (`checked` set) shows a read-only checkbox instead; `toggled` marks one a revision
+/// checked or unchecked.
 private struct MarkdownListRow<Content: View>: View {
     let ordered: Bool
     let number: Int
     let depth: Int
     let style: MarkdownStyle
     var marker: Color?
+    var checked: Bool?
+    var toggled = false
     @ViewBuilder let content: Content
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(ordered ? "\(number)." : MarkdownStyle.bullets[depth % MarkdownStyle.bullets.count])
-                .font(style.font)
-                .foregroundStyle(marker ?? style.palette.text3)
-                .frame(minWidth: ordered ? 18 : 10, alignment: .trailing)
-                .accessibilityHidden(!ordered)
+            if let checked {
+                Image(systemName: checked ? "checkmark.square.fill" : "square")
+                    .font(style.font)
+                    .foregroundStyle(toggled ? style.palette.green : marker ?? (checked ? style.palette.accent : style.palette.text3))
+                    .frame(minWidth: 10, alignment: .trailing)
+                    .accessibilityLabel(checked ? "Done" : "Not done")
+            } else {
+                Text(ordered ? "\(number)." : MarkdownStyle.bullets[depth % MarkdownStyle.bullets.count])
+                    .font(style.font)
+                    .foregroundStyle(marker ?? style.palette.text3)
+                    .frame(minWidth: ordered ? 18 : 10, alignment: .trailing)
+                    .accessibilityHidden(!ordered)
+            }
             VStack(alignment: .leading, spacing: 4) { content }
         }
         .padding(.trailing, 4)
@@ -787,15 +799,16 @@ private struct MarkdownDiffListView: View {
                 case let .plain(change, item):
                     let s = change == .del ? style.struck : style
                     MarkdownListRow(ordered: ordered, number: start + j, depth: depth, style: style,
-                                    marker: change == .add ? c.green : change == .del ? c.red : nil) {
+                                    marker: change == .add ? c.green : change == .del ? c.red : nil, checked: item.checked) {
                         MarkdownRichText(text: item.text, style: s)
                         ForEach(item.children.indices, id: \.self) { k in
                             MarkdownBlockView(block: item.children[k], style: s, depth: depth + 1)
                         }
                     }
                     .background(change == .add ? c.greenSoft : change == .del ? c.redSoft : .clear, in: .rect(cornerRadius: 3))
-                case let .edit(runs, children):
-                    MarkdownListRow(ordered: ordered, number: start + j, depth: depth, style: style) {
+                case let .edit(runs, children, checked, wasChecked):
+                    MarkdownListRow(ordered: ordered, number: start + j, depth: depth, style: style,
+                                    checked: checked, toggled: wasChecked != nil && checked != wasChecked) {
                         MarkdownDiffRichText(runs: runs, style: style)
                         ForEach(children.indices, id: \.self) { k in
                             MarkdownDiffBlockView(diff: children[k], style: style, depth: depth + 1)

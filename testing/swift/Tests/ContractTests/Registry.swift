@@ -93,6 +93,7 @@ let codecs: [String: Codec] = [
         "Phase": .codable(Phase.self),
         "PhaseChoice": .codable(PhaseChoice.self),
         "PhaseModels": .codable(PhaseModels.self),
+        "QuestionReply": .codable(QuestionReply.self),
         "PhaseModelsPatch": .codable(PhaseModelsPatch.self),
         "PlanUsageReport": .codable(PlanUsageReport.self),
         "PlanWindow": .codable(PlanWindow.self),

@@ -88,6 +88,12 @@ struct BoardTicketCard: View {
                 }
                 Spacer(minLength: 0)
                 if draft { Badge("Draft", icon: "edit") }
+                // The spec's open questions waiting on the human (Ticket.openQuestionCount).
+                if let n = t.openQuestionCount, n > 0 {
+                    Badge("\(n)", tone: .amber, icon: "alert")
+                        .accessibilityLabel(n == 1 ? "1 open question" : "\(n) open questions")
+                        .accessibilityIdentifier("card-questions")
+                }
                 // Activity, then the message draft, then the reviews: the review marks sit at the
                 // trailing edge, so the spinner coming and going (or a draft being typed) never
                 // moves them.

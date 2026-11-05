@@ -128,10 +128,11 @@ public enum TicketDetailLogic {
     /// send is in flight, and no attachment would go with a message that answers a waiting tool
     /// approval (the service refuses that).
     /// While the ticket's session compacts the service refuses messages, so Send is off.
-    public static func canSendMessage(text: String, attachments: Int, uploading: Int, sending: Bool, approvalPending: Bool, compacting: Bool = false) -> Bool {
+    /// `replies` counts the non-blank replies under open questions, which send on their own too.
+    public static func canSendMessage(text: String, attachments: Int, uploading: Int, sending: Bool, approvalPending: Bool, compacting: Bool = false, replies: Int = 0) -> Bool {
         guard !sending, !compacting, uploading == 0 else { return false }
         if attachments > 0 { return !approvalPending }
-        return !trim(text).isEmpty
+        return !trim(text).isEmpty || replies > 0
     }
 
     /// "1 ticket waiting on you" / "3 tickets waiting on you".

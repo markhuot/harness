@@ -36,12 +36,10 @@ struct TicketDetailSpecTab: View {
         VStack(spacing: 0) {
             SpecHistoryBar(ticket: ticket, scrubber: $scrubber, showChanges: $showChanges, rendered: $rendered, menu: menu, latest: latest)
             if source, let body {
-                TicketBlockedCallout(ticket: ticket).padding([.horizontal, .top], 14)
                 SpecSourceView(text: body)
             } else {
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
-                    TicketBlockedCallout(ticket: ticket)
                     if !deps.isEmpty {
                         FlowLayout(spacing: 6) {
                             SectionTitle("Depends on")
@@ -360,9 +358,9 @@ private struct TicketPromptAttachments: View {
     }
 }
 
-/// The blocked ticket's status, question and buttons at the top of the Spec tab, so the human can
-/// answer the agent without leaving the spec (BlockedCallout decides what shows). Display-only:
-/// drawn above the spec, never part of its text. Unblock runs the header's action, through the
+/// The blocked ticket's status, question and buttons, first in the composer's Needs you panel
+/// (TicketNeedsYouPanel), so the human answers the agent where they type (BlockedCallout decides
+/// what shows). Display-only: never part of the spec's text. Unblock runs the header's action, through the
 /// tab's own runner and its notes sheet.
 struct TicketBlockedCallout: View {
     let ticket: Ticket

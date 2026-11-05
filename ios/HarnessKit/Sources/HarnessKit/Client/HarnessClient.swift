@@ -240,11 +240,12 @@ public final class HarnessClient: Sendable {
 
     /// `attachments` is only sent when there are some (each with its notes,
     /// AttachmentInput.annotation). The message goes to the agent and shows in the Transcript
-    /// (with its attachments); it never goes into Activity.
+    /// (with its attachments). `questionReplies`, replies under the spec's open questions, go with it
+    /// as one message, and only they are kept in Activity (DESIGN.md "Open questions").
     public func sendMessage(
-        _ key: String, text: String, attachments: [AttachmentInput] = []
+        _ key: String, text: String, attachments: [AttachmentInput] = [], questionReplies: [QuestionReply] = []
     ) async throws -> Ticket {
-        let body = MessageBody(text: text, attachments: attachments.isEmpty ? nil : attachments)
+        let body = MessageBody(text: text, attachments: attachments.isEmpty ? nil : attachments, questionReplies: questionReplies.isEmpty ? nil : questionReplies)
         return try await request("POST", "/tickets/\(key)/messages", body: body)
     }
 

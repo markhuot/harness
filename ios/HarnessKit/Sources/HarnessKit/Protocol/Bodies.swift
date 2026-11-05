@@ -339,12 +339,15 @@ public struct MessageDraftBody: Codable, Sendable, Equatable {
     public var text: String
     /// At most maxPromptAttachments, as MessageBody.attachments takes them
     public var attachments: [AttachmentInput]?
+    /// The replies drafted under open questions (MessageDraft.questionReplies); blank ones aren't kept
+    public var questionReplies: [QuestionReply]?
     /// An id for the editor saving it, unique per open editor (MessageDraft.origin)
     public var origin: String?
 
-    public init(text: String, attachments: [AttachmentInput]? = nil, origin: String? = nil) {
+    public init(text: String, attachments: [AttachmentInput]? = nil, questionReplies: [QuestionReply]? = nil, origin: String? = nil) {
         self.text = text
         self.attachments = attachments
+        self.questionReplies = questionReplies
         self.origin = origin
     }
 }
@@ -358,10 +361,15 @@ public struct MessageBody: Codable, Sendable, Equatable {
     /// The agent gets their paths, and images inline. Not allowed while a tool approval waits (a
     /// message then answers it as a deny).
     public var attachments: [AttachmentInput]?
+    /// Replies to the spec's open questions (DESIGN.md "Open questions"), sent with `text` as one
+    /// message: the agent gets each question quoted with its reply under it, then the text. Blank
+    /// replies are dropped. `text` may be empty when there's at least one reply.
+    public var questionReplies: [QuestionReply]?
 
-    public init(text: String, attachments: [AttachmentInput]? = nil) {
+    public init(text: String, attachments: [AttachmentInput]? = nil, questionReplies: [QuestionReply]? = nil) {
         self.text = text
         self.attachments = attachments
+        self.questionReplies = questionReplies
     }
 }
 
