@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261106.1205](https://github.com/markhuot/harness/releases/tag/app-20261106.1205) - 2026-11-06
+
 ### Added
 
 - Every unchecked task item (`- [ ]`) in a spec is a question for you, and you answer it right on the Spec tab, on the Mac, iPhone and iPad. When the ticket view is wide (a zoomed Mac pane or a big window, or an iPad ticket window in landscape), a Needs you panel above the message box lists each open question with one answer box under it, well spaced so each question stands apart. When the view is narrow (every iPhone, an iPad in portrait or a ticket opened as a sheet, or a Mac ticket pane beside the board), each question gets its answer box right where it sits in the spec, and a one-line "Needs you · 2" bar above the message box takes you to the first one; once you've typed answers it reads "2/3 answers ready · Send". The question a blocked ticket is waiting on shows at the top of the spec, where a long one scrolls with it, and you answer it in the message box. Resizing the window or rotating the iPad switches between the two and keeps what you typed.
