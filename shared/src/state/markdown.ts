@@ -23,19 +23,24 @@ export type Block =
 
 /**
  * A list item: its text (continuation lines joined with spaces) and the lists nested under it.
- * `checked` is set on a GFM task item (`- [ ] text` false, `- [x] text` true), whose marker isn't
- * part of `text`; plain items leave it out.
+ * `checked` is set on a GFM task item (`- [ ] text` false, `- [x] text` true) and on a question
+ * for the human (`- ( ) text` open, `- (x) text` answered; DESIGN.md "Open questions"), which also
+ * sets `question`. The marker isn't part of `text`; plain items leave both out.
  */
 export interface ListItem {
   text: string;
   children: Block[];
   checked?: boolean;
+  question?: true;
 }
 
 const TASK = /^\[([ xX])\]\s+(\S.*)$/;
+const QUESTION = /^\(([ xX])\)\s+(\S.*)$/;
 
-/** The item a list marker's text starts: a task item when it opens with `[ ]` or `[x]`. */
+/** The item a list marker's text starts: a task item when it opens with `[ ]` or `[x]`, a question with `( )` or `(x)`. */
 function listItem(text: string): ListItem {
+  const question = QUESTION.exec(text);
+  if (question) return { text: question[2]!, children: [], checked: question[1] !== " ", question: true };
   const task = TASK.exec(text);
   return task ? { text: task[2]!, children: [], checked: task[1] !== " " } : { text, children: [] };
 }

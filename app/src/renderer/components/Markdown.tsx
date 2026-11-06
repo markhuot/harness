@@ -250,13 +250,27 @@ function MdMedia({ media, figure, captioned }: { media: Media; figure?: boolean;
 }
 
 /**
- * A task item's checkbox (`- [ ]` / `- [x]`): read-only, since agents own the text it's in.
- * `was` marks one a revision checked or unchecked.
+ * A task item's checkbox (`- [ ]` / `- [x]`) or a question's circle (`- ( )` / `- (x)`, DESIGN.md
+ * "Open questions"): read-only, since agents own the text it's in. `was` marks one a revision
+ * checked, answered or reopened.
  */
-function TaskBox({ checked, was }: { checked: boolean; was?: boolean }) {
+function TaskBox({ checked, question, was }: { checked: boolean; question?: boolean; was?: boolean }) {
   const toggled = was !== undefined && was !== checked;
-  // Every task item is a question for the human: an open one is a question mark in an amber
-  // circle, an answered one a check in the same outlined circle (matching the iPhone app).
+  if (!question)
+    return (
+      <input
+        type="checkbox"
+        className={`md-task-box is-checklist ${toggled ? "is-toggled" : ""}`}
+        checked={checked}
+        disabled
+        readOnly
+        aria-label={checked ? "Done" : "Not done"}
+        data-testid="md-task-box"
+        data-checked={checked}
+      />
+    );
+  // A question for the human: an open one is a question mark in an amber circle, an answered one
+  // a check in the same outlined circle (matching the iPhone app).
   return (
     <svg
       className={`md-task-box ${checked ? "is-done" : "is-open"} ${toggled ? "is-toggled" : ""}`}
@@ -280,9 +294,9 @@ function TaskBox({ checked, was }: { checked: boolean; was?: boolean }) {
 }
 
 /**
- * The answer box under each unchecked task item (a question for the human, DESIGN.md "Open
- * questions"), for the one rendering that answers them: the Spec tab's current spec in a narrow
- * pane (views/QuestionAnswers.tsx). Everywhere else task items are plain read-only checkboxes.
+ * The answer box under each open question item (`- ( )`, DESIGN.md "Open questions"), for the one
+ * rendering that answers them: the Spec tab's current spec in a narrow pane
+ * (views/QuestionAnswers.tsx). Everywhere else a question shows only its circle.
  */
 const TaskAnswerContext = createContext<((question: string) => ReactNode) | null>(null);
 
@@ -290,15 +304,15 @@ export function TaskAnswerScope({ render, children }: { render: ((question: stri
   return <TaskAnswerContext.Provider value={render}>{children}</TaskAnswerContext.Provider>;
 }
 
-/** A list and the lists nested in its items. Bullets change with depth (• ◦ ▪), see .md-list in styles.css; task items show a checkbox instead. */
+/** A list and the lists nested in its items. Bullets change with depth (• ◦ ▪), see .md-list in styles.css; task items show a checkbox and questions a circle instead. */
 function MdList({ block, depth, tickets }: { block: Extract<Block, { t: "ul" | "ol" }>; depth: number; tickets?: TicketLinks }) {
   const answer = useContext(TaskAnswerContext);
   const items = block.items.map((it, j) => {
     // A question keeps its row (and its box's focus) by its text, not its place in the list.
-    const question = answer && it.checked === false && it.text.trim() ? it.text.trim() : null;
+    const question = answer && it.question && it.checked === false && it.text.trim() ? it.text.trim() : null;
     return (
       <li key={question ? `q:${question}` : j} className={question ? "md-task is-question" : it.checked !== undefined ? "md-task" : undefined} data-testid={question ? "spec-question" : undefined}>
-        {it.checked !== undefined && <TaskBox checked={it.checked} />}
+        {it.checked !== undefined && <TaskBox checked={it.checked} question={it.question} />}
         {inline(it.text, tickets)}
         {question && <div className="md-task-answer">{answer!(question)}</div>}
         {it.children.map((child, k) => (
@@ -464,7 +478,7 @@ function DiffListItem({ item, depth, tickets }: { item: DiffItem; depth: number;
   if (item.change !== "edit")
     return (
       <li className={`${item.change === "same" ? "" : `md-diff-item is-${item.change}`} ${item.item.checked !== undefined ? "md-task" : ""}`.trim() || undefined}>
-        {item.item.checked !== undefined && <TaskBox checked={item.item.checked} />}
+        {item.item.checked !== undefined && <TaskBox checked={item.item.checked} question={item.item.question} />}
         {inline(item.item.text, tickets)}
         {item.item.children.map((child, k) => (
           <MdBlock key={k} block={child} depth={depth + 1} tickets={tickets} />
@@ -473,7 +487,7 @@ function DiffListItem({ item, depth, tickets }: { item: DiffItem; depth: number;
     );
   return (
     <li className={item.checked !== undefined ? "md-task" : undefined}>
-      {item.checked !== undefined && <TaskBox checked={item.checked} was={item.wasChecked} />}
+      {item.checked !== undefined && <TaskBox checked={item.checked} question={item.question} was={item.wasChecked} />}
       {diffRuns(item.runs, tickets)}
       {item.children.map((child, k) => (
         <MdDiffBlock key={k} diff={child} depth={depth + 1} tickets={tickets} />

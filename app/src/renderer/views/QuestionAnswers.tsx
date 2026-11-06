@@ -1,5 +1,5 @@
-// Answering the spec's questions (DESIGN.md "Open questions"): every unchecked task item in the
-// spec is one, answered in a growing box bound to the ticket's message draft by the question's
+// Answering the spec's questions (DESIGN.md "Open questions"): every open question item (`- ( )`)
+// in the spec is one, answered in a growing box bound to the ticket's message draft by the question's
 // text. Where the boxes sit follows the ticket pane's size (needsYouLayout): a wide pane lists them
 // in the Needs you panel above the composer (NeedsYouPanel.tsx); a narrow one puts each box under
 // its question in the rendered spec (InlineAnswer, through Markdown's TaskAnswerScope) and the

@@ -493,7 +493,7 @@ Status and notes as claims to verify. Two spec problems are grounds for `request
 acceptance-criteria changes since the baseline that the human's messages, review notes or re-open
 notes didn't ask for (moved goalposts; `system.spec` has agents write those requests into the Goal), and a Status that doesn't match the work. Missing proof is also grounds, never a nit: a behaviour change without a test, a user-visible change without a screenshot in Status, or a Status that admits verification was skipped. The reviewer runs the tests and typecheck itself. Notes cover one round, and their first line
 must state the outcome on its own ("Approved, with three open questions in the spec."), since that's
-all Activity shows. Review runs get `read_spec` and `edit_spec`, to record findings (a `- [ ]`
+all Activity shows. Review runs get `read_spec` and `edit_spec`, to record findings (a `- ( )`
 question for the human, a follow-up) under the spec's Open questions; `update_spec` is refused, and
 the Goal, Plan and Status stay the author's. `get_ticket` has the full Activity and each
 attachment's path. When the run's model differs from the Adviser phase's (see "Per-phase
@@ -682,28 +682,39 @@ to something the field didn't type (a send clearing it, a picked mention, anothe
 
 ### Open questions
 
-The decisions an agent needs from the human live in the spec as GFM task items: every unchecked
-`- [ ] question` in it, under any heading or none, is a question for the human. Agents put them
-where they fit (beside the plan step they affect, or under an Open questions heading) and use task
-items for nothing else: acceptance criteria and work checklists are plain bullets. They're
-versioned with the spec, so the revision history shows each one being resolved. There's no table
-and no tool for them: agents add, answer and remove them with `edit_spec` / `update_spec`. The
-`system.spec` run-context section and both spec tools' descriptions tell agents that any task item
-is a question shown with an answer box; the runs that can edit the spec (plan, work, chat) are also
-told to add one whenever a question comes up and to resolve one by moving its answer into the spec,
-then removing the item (preferred, it keeps specs tidy) or checking it off. A review run, which
-doesn't rewrite the spec, may only add a question; only `update_spec` (which review runs don't get)
-carries the resolve sentence. Nothing resolves on its own, and the human can't check one off; to
-add one, they ask the agent, which adds it or says why it isn't a question.
+The decisions an agent needs from the human live in the spec as question items: every
+`- ( ) question` in it (parentheses, not brackets), under any heading or none, is an open question
+for the human, and `- (x) question` is one marked answered. Agents put them where they fit (beside
+the plan step they affect, or under an Open questions heading). GFM task items (`- [ ]`, `- [x]`)
+are ordinary checklists, never questions: agents reach for task lists to track work, so reusing
+them for questions turned plan checklists into a wall of questions. Questions are versioned with
+the spec, so the revision history shows each one being resolved. There's no table and no tool for
+them: agents add, answer and remove them with `edit_spec` / `update_spec`. The `system.spec`
+run-context section and both spec tools' descriptions teach the `- ( )` form and that task items
+aren't questions; the runs that can edit the spec (plan, work, chat) are also told to add one
+whenever a question comes up and to resolve one by moving its answer into the spec, then removing
+the item (preferred, it keeps specs tidy), rewording it if part stays open, or marking it `- (x)`.
+A review run, which doesn't rewrite the spec, may only add a question; only `update_spec` (which
+review runs don't get) carries the resolve sentence. Nothing resolves on its own, and the human
+can't mark one answered; to add one, they ask the agent, which adds it or says why it isn't a
+question.
+
+- **Answers reach the agent with a reminder.** A message that answers open questions quotes each
+  one (`composeQuestionReplies`). Whenever an agent run's message quotes an open question of the
+  spec on a line of its own (`questionsAnsweredBy`), the service appends a Harness note to the
+  agent's copy, in a queued run's prompt or a steered message alike, telling it to update the spec
+  now: put each answer where it belongs, then remove, reword or mark the item `- (x)`. The
+  transcript keeps only the human's words, like the blocked-ticket note beside it.
 
 - **Parsing.** `openQuestions(spec)` (`shared/src/state/openQuestions.ts`, ported to HarnessKit's
-  `OpenQuestions`) returns every task item in the spec, checked or not, in document order, nested
-  ones too; plain bullets, prose and anything inside a code block aren't questions. A question's
+  `OpenQuestions`) returns every question item in the spec, open or answered, in document order,
+  nested ones too; plain bullets, task items, prose and anything inside a code block aren't
+  questions. A question's
   identity is its text: rewording it leaves the answer drafted under the old wording in the draft,
-  where it no longer shows or sends. The service derives `Ticket.openQuestionCount` (the unchecked
-  ones) when it maps a row, parsing only specs that contain `[ ]`; board cards show it as an amber
-  badge. Specs written before this rule may use task items as checklists, and those show as
-  questions until an agent rewrites them.
+  where it no longer shows or sends. The service derives `Ticket.openQuestionCount` (the open
+  ones) when it maps a row, parsing only specs that contain `( )`; board cards show it as an amber
+  badge. Specs written while task items were questions show those as plain checkboxes, with no
+  answer box, until an agent rewrites them as `- ( )`.
 - **Layout by size.** Where the questions are answered follows the ticket view's size, not the
   platform: `needsYouLayout(width, height)` (ported as `OpenQuestions.layout`, same constants) is
   `panel` for a landscape view at least 700 × 600 and `inline` otherwise. So every iPhone, an iPad
@@ -717,15 +728,15 @@ add one, they ask the agent, which adds it or says why it isn't a question.
   `taskAnswerField` hook in `MarkdownView`). Both switch as the view is resized or rotated, and the
   answers carry across since they live in the draft.
 - **The panel** (`views/NeedsYouPanel.tsx`, iOS `TicketNeedsYouPanel`) sits at the top of the
-  composer on the Spec tab in the `panel` layout, when the spec has task items. It shows each
-  unchecked question as plain text with one growing reply box under it (6px apart, and 20px from
-  one question's box to the next question), then the checked ones folded under "N answered".
+  composer on the Spec tab in the `panel` layout, when the spec has questions. It shows each
+  open question as plain text with one growing reply box under it (6px apart, and 20px from
+  one question's box to the next question), then the answered ones folded under "N answered".
   `questionPanel` builds it from the spec and the draft. The list caps its height and scrolls.
 - **Inline.** In the `inline` layout the rendered current spec is the form: the Spec tab passes
   the markdown renderer an answer-field hook (Mac `TaskAnswerScope` in `components/Markdown.tsx`,
   rendering `InlineAnswer`; never for an older revision, the diff or any other markdown), and each
-  unchecked task item renders its question with a growing answer box under it, where it sits;
-  checked items stay plain checked lines. A question's row is keyed by its text, so its box keeps
+  open question item renders its question with a growing answer box under it, where it sits;
+  answered ones stay plain lines with a check in their circle. A question's row is keyed by its text, so its box keeps
   focus while the draft saves and the spec re-renders. Above the composer a one-line bar
   (`needsYouBar`, `NeedsYouBar`) reads "Needs you · N" (the block and the open questions) and
   scrolls to and focuses the first question's box (the message box when only the block waits);
@@ -2934,9 +2945,11 @@ that.
   text, a thumbnail is still a 100×100 square. Other titles are ignored. Any of them opens the
   lightbox (Mac) or the full-screen viewer (iOS). The prompt (`system.spec`) and the spec tools'
   descriptions teach agents both forms. A list item opening with `[ ]` or `[x]` is a task item
-  (`ListItem.checked`, marker dropped from its text). Since every task item is a question for the
-  human, it's drawn in place of the bullet everywhere markdown renders as an amber outlined circle:
-  a question mark while open, a check once answered (green when a revision toggled it); `specDiff` marks an item whose box changed.
+  (`ListItem.checked`, marker dropped from its text), drawn in place of the bullet as a read-only
+  checkbox. One opening with `( )` or `(x)` is a question for the human (`ListItem.question` too),
+  drawn as an amber outlined circle: a question mark while open, a check once answered. Either
+  box turns green when a revision toggled it; `specDiff` marks an item whose box changed, comparing
+  boxes only when the item was the same kind in both revisions.
 
 - **Rewriting.** `localImageSources` finds each local src once; `attachment:`, `http(s):`,
   `data:` and `mailto:` srcs are left as written. The files are validated and copied

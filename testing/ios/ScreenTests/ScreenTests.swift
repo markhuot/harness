@@ -256,8 +256,9 @@ final class ScreenTests: ScreenTestCase {
         try await screen("ticket-blocked", router: ticket("HARNESS-4", .spec)) { RootView() }
     }
 
-    /// A spec asking questions mid-spec (under Plan) and under Open questions, one already checked.
-    private static let questionsSpec = "# Choose a storage backend\n\n## Goal\n\nPick where hosted tickets live.\n\n## Plan\n\nMove the tickets to Postgres, then decide:\n\n- [ ] Should backups run hourly or nightly?\n- [ ] Do we keep SQLite for local installs?\n\n## Open questions\n\n- [ ] Which region hosts the database?\n- [x] Do we need read replicas?\n"
+    /// A spec asking questions (`- ( )`) mid-spec (under Plan) and under Open questions, one already
+    /// answered (`- (x)`), beside a task checklist (`- [ ]`) whose items are plain checkboxes, not questions.
+    private static let questionsSpec = "# Choose a storage backend\n\n## Goal\n\nPick where hosted tickets live.\n\n## Plan\n\n- [x] Copy the tickets to Postgres\n- [ ] Point the service at it\n\nThen decide:\n\n- ( ) Should backups run hourly or nightly?\n- ( ) Do we keep SQLite for local installs?\n\n## Open questions\n\n- ( ) Which region hosts the database?\n- (x) Do we need read replicas?\n"
 
     /// HARNESS-4 at work, its spec asking three questions, with `replies` drafted.
     private func questionsWorld(blocked: Bool = false, replies: [[String: String]] = []) async throws -> ScreenWorld {
@@ -274,7 +275,7 @@ final class ScreenTests: ScreenTestCase {
 
     /// The inline layout (every iPhone, an iPad in portrait): each open question in the spec, mid-spec
     /// included, shows its text with an answer field under it, the answered one keeps a check in an amber circle,
-    /// and the bar above the composer reads "Needs you · 3".
+    /// the Plan's task items are plain checkboxes with no field, and the bar above the composer reads "Needs you · 3".
     func testTicketOpenQuestions() async throws {
         let world = try await questionsWorld()
         let image = try await render(world, router: ticket("HARNESS-4", .spec)) { RootView() }

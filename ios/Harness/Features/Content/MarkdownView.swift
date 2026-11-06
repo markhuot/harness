@@ -495,16 +495,16 @@ private struct MarkdownListView: View {
     let depth: Int
     let style: MarkdownStyle
 
-    /// The Spec tab's inline answers: a field under each unchecked task item, keyed by its text.
+    /// The Spec tab's inline answers: a field under each open question item (`- ( )`), keyed by its text.
     @Environment(\.taskAnswerField) private var answerField
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             ForEach(items.indices, id: \.self) { j in
-                let question = items[j].checked == false ? items[j].text.trimmingCharacters(in: .whitespacesAndNewlines) : ""
+                let question = items[j].isQuestion && items[j].checked == false ? items[j].text.trimmingCharacters(in: .whitespacesAndNewlines) : ""
                 if let answerField, !question.isEmpty {
-                    // A question: its text with the answer field under it, no checkbox to tick.
-                    MarkdownListRow(ordered: ordered, number: start + j, depth: depth, style: style, question: true) {
+                    // A question: its text with the answer field under it.
+                    MarkdownListRow(ordered: ordered, number: start + j, depth: depth, style: style, checked: false, question: true) {
                         VStack(alignment: .leading, spacing: 6) {
                             MarkdownRichText(text: items[j].text, style: style)
                             answerField.make(question)
@@ -515,7 +515,7 @@ private struct MarkdownListView: View {
                         }
                     }
                 } else {
-                MarkdownListRow(ordered: ordered, number: start + j, depth: depth, style: style, checked: items[j].checked) {
+                MarkdownListRow(ordered: ordered, number: start + j, depth: depth, style: style, checked: items[j].checked, question: items[j].isQuestion) {
                     MarkdownRichText(text: items[j].text, style: style)
                     ForEach(items[j].children.indices, id: \.self) { k in
                         MarkdownBlockView(block: items[j].children[k], style: style, depth: depth + 1)
@@ -529,8 +529,8 @@ private struct MarkdownListView: View {
 
 /// One list item: its marker (a bullet by depth, or its number) beside its content. `marker`
 /// overrides the marker's color (Show changes: green for an added item, red for a removed one).
-/// A task item (`checked` set) shows a read-only checkbox instead; `toggled` marks one a revision
-/// checked or unchecked. A `question` (an unchecked task item answered inline) shows a question mark.
+/// A task item (`checked` set) shows a read-only checkbox instead, and a `question` item (`- ( )`,
+/// `- (x)`) a circle; `toggled` marks one a revision checked, answered or reopened.
 private struct MarkdownListRow<Content: View>: View {
     let ordered: Bool
     let number: Int
@@ -544,15 +544,22 @@ private struct MarkdownListRow<Content: View>: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            if question || checked != nil {
-                // Every task item is a question for the human: an open one shows a question mark
-                // in an amber circle, an answered one a check in the same outlined circle.
-                let done = !question && checked == true
+            if question {
+                // A question for the human: an open one shows a question mark in an amber circle,
+                // an answered one a check in the same outlined circle.
+                let done = checked == true
                 Image(systemName: done ? "checkmark.circle" : "questionmark.circle")
                     .font(style.font)
                     .foregroundStyle(toggled ? style.palette.green : marker ?? style.palette.tone(.amber).fg)
                     .frame(minWidth: 10, alignment: .trailing)
                     .accessibilityLabel(done ? "Answered" : "Question")
+            } else if let checked {
+                // A task item: a plain read-only checkbox.
+                Image(systemName: checked ? "checkmark.square.fill" : "square")
+                    .font(style.font)
+                    .foregroundStyle(toggled ? style.palette.green : marker ?? (checked ? style.palette.accent : style.palette.text3))
+                    .frame(minWidth: 10, alignment: .trailing)
+                    .accessibilityLabel(checked ? "Done" : "Not done")
             } else {
                 Text(ordered ? "\(number)." : MarkdownStyle.bullets[depth % MarkdownStyle.bullets.count])
                     .font(style.font)
@@ -821,16 +828,16 @@ private struct MarkdownDiffListView: View {
                 case let .plain(change, item):
                     let s = change == .del ? style.struck : style
                     MarkdownListRow(ordered: ordered, number: start + j, depth: depth, style: style,
-                                    marker: change == .add ? c.green : change == .del ? c.red : nil, checked: item.checked) {
+                                    marker: change == .add ? c.green : change == .del ? c.red : nil, checked: item.checked, question: item.isQuestion) {
                         MarkdownRichText(text: item.text, style: s)
                         ForEach(item.children.indices, id: \.self) { k in
                             MarkdownBlockView(block: item.children[k], style: s, depth: depth + 1)
                         }
                     }
                     .background(change == .add ? c.greenSoft : change == .del ? c.redSoft : .clear, in: .rect(cornerRadius: 3))
-                case let .edit(runs, children, checked, wasChecked):
+                case let .edit(runs, children, checked, wasChecked, question):
                     MarkdownListRow(ordered: ordered, number: start + j, depth: depth, style: style,
-                                    checked: checked, toggled: wasChecked != nil && checked != wasChecked) {
+                                    checked: checked, toggled: wasChecked != nil && checked != wasChecked, question: question == true) {
                         MarkdownDiffRichText(runs: runs, style: style)
                         ForEach(children.indices, id: \.self) { k in
                             MarkdownDiffBlockView(diff: children[k], style: style, depth: depth + 1)

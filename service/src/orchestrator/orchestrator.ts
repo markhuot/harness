@@ -153,7 +153,7 @@ import { RemoteIdError, truncateMiddle } from "../tools/util";
 import type { BrowserService } from "../browser/types";
 import type { HarnessPaths } from "../config";
 import { GATED_TOOL_NAMES, runCanBlock, stopBrowserJobs, toolsForRun } from "../tools/index";
-import { composeQuestionReplies, isTask, pendingQuestionReplies, positionForDrop } from "@harness/shared/state";
+import { composeQuestionReplies, isTask, pendingQuestionReplies, questionsAnsweredBy, positionForDrop } from "@harness/shared/state";
 import * as prompts from "./prompts";
 import { PROMPTS, promptTemplateError } from "./prompt-templates";
 import { toOutput, WatcherRunner, type WatcherOutput } from "./watchers";
@@ -2981,6 +2981,18 @@ export class Orchestrator {
   }
 
   /**
+   * What the agent reads with a human's message that answers open questions in the spec (the
+   * transcript shows only the message): resolve each in the spec (DESIGN.md "Open questions").
+   */
+  private answersNote(t: Ticket | null, message: string): string {
+    if (!t) return "";
+    const answered = questionsAnsweredBy(t.spec, message);
+    if (!answered.length) return "";
+    const which = answered.length === 1 ? "one of the spec's open questions" : `${answered.length} of the spec's open questions`;
+    return `\n\n[Harness note: this message answers ${which} (quoted above). Update the spec now: put each answer where it belongs, then remove its \`- ( )\` item (preferred), reword it if the answer leaves part of it open, or mark it answered as \`- (x)\`.]`;
+  }
+
+  /**
    * What the agent reads with a human's message to a blocked ticket (the transcript shows only the
    * message): the ticket's question, and when to unblock.
    */
@@ -3050,7 +3062,8 @@ export class Orchestrator {
       const withFiles = MENTION_RUN_KINDS.has(kind) && active.cwd ? await this.withMentions(sessionId, active.run.id, text, active.cwd) : text;
       const attached = this.withAttachments(sessionId, active.run.id, attachments);
       const ticketId = this.store.sessions.get(sessionId)?.ticketId;
-      const prompt = withFiles + this.blockedNote(ticketId ? this.store.tickets.get(ticketId) : null) + (attached?.block ?? "");
+      const ticket = ticketId ? this.store.tickets.get(ticketId) : null;
+      const prompt = withFiles + this.blockedNote(ticket) + this.answersNote(ticket, text) + (attached?.block ?? "");
       if (input.push(prompt, message, attached?.images)) return active.run.id;
       // The run stopped taking input while the mentions were read.
       const run = this.enqueueRun(sessionId, kind, text, undefined, { skipTranscript: true, attachments });
@@ -6276,8 +6289,9 @@ ${numberLines(r.body)}`;
         const attached = MENTION_RUN_KINDS.has(run.kind) ? this.withAttachments(session.id, run.id, [...(ticket && firstRun ? (ticket.promptAttachments ?? []) : []), ...(run.attachments ?? [])]) : null;
         const missing = gone && ticket && !(run.kind === "chat" && this.worktreeBlocked(ticket)) ? await this.missingWorktreeNote(ticket, run.kind, cwd, project) : "";
         if (missing) this.appendStatus(session.id, run.id, `Worktree missing: running from ${cwd}`);
-        // The transcript keeps the human's words; the agent also reads when to unblock.
-        const prompt = (run.kind === "chat" ? withFiles + this.blockedNote(ticket) : withFiles) + missing + (attached?.block ?? "");
+        // The transcript keeps the human's words; the agent also reads when to unblock and to resolve the questions they answered.
+        const answers = MENTION_RUN_KINDS.has(run.kind) ? this.answersNote(ticket, run.prompt) : "";
+        const prompt = (run.kind === "chat" ? withFiles + this.blockedNote(ticket) : withFiles) + answers + missing + (attached?.block ?? "");
         active.cwd = cwd;
         if (ticket) await this.refreshBaseBranch(ticket, project);
         // The system prompt holds only what's stable for the session; what changes per run goes

@@ -1,9 +1,9 @@
 import Foundation
 
 // Port of shared/src/state/openQuestions.ts. A spec's open questions (DESIGN.md "Open questions"):
-// every GFM task item in it (`- [ ] question`), under any heading or none. Agents write them wherever
-// they fit and resolve them by moving the answer into the spec and removing the item or checking it
-// off. The ticket screen shows each with an answer field, in the Needs you panel above the composer
+// every question item in it (`- ( ) question`, `- (x) question` once answered), under any heading or
+// none. Agents write them wherever they fit and resolve them by moving the answer into the spec and
+// removing the item, rewording it or marking it `(x)`. Task items (`- [ ]`) are plain checklists. The ticket screen shows each with an answer field, in the Needs you panel above the composer
 // or inline in the spec (NeedsYouLayout); the replies stay after a send, to edit and send again.
 
 public enum OpenQuestions {
@@ -35,9 +35,9 @@ public enum OpenQuestions {
         public static let empty = Panel(open: [], answered: [])
     }
 
-    /// `openQuestions`: every task item in the spec, in document order, nested ones included,
-    /// checked or not. Plain bullets and prose aren't questions, and neither is anything inside a
-    /// code block.
+    /// `openQuestions`: every question item (`- ( )`, `- (x)`) in the spec, in document order,
+    /// nested ones included, answered or not. Plain bullets, task items and prose aren't
+    /// questions, and neither is anything inside a code block.
     public static func questions(_ spec: String) -> [Question] {
         var out: [Question] = []
         func walk(_ list: [Markdown.Block]) {
@@ -50,7 +50,7 @@ public enum OpenQuestions {
                 }
                 for it in items {
                     let text = it.text.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if let checked = it.checked, !text.isEmpty { out.append(Question(text: text, checked: checked)) }
+                    if it.isQuestion, let checked = it.checked, !text.isEmpty { out.append(Question(text: text, checked: checked)) }
                     walk(it.children)
                 }
             }

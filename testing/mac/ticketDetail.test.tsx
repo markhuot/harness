@@ -275,7 +275,7 @@ describe("TicketDetail", () => {
 
 describe("Needs you: the spec's open questions above the composer", () => {
   // A question beside the plan step it affects counts as much as one under Open questions.
-  const SPEC = "# Pick a cache\n\n## Plan\n\n1. Pick the store\n   - [ ] Which database?\n\n## Open questions\n\n- [x] Which port?\n- [ ] Ship when?\n";
+  const SPEC = "# Pick a cache\n\n## Plan\n\n1. Pick the store\n   - ( ) Which database?\n   - [ ] Benchmark it\n\n## Open questions\n\n- (x) Which port?\n- ( ) Ship when?\n";
   /** HARNESS-1 (planning) with open questions in its spec and a reply drafted under "Which database?". */
   const withQuestions = edited((w) => {
     const t = w.tickets.find((x) => x.key === "HARNESS-1")!;
@@ -295,9 +295,9 @@ describe("Needs you: the spec's open questions above the composer", () => {
     expect(questions(m).map((q) => reply(q).value)).toEqual(["Postgres", ""]);
     expect(text(all(m.container, "[data-testid=needs-you-answered] summary")[0]!)).toBe("1 answered");
     expect(text(all(m.container, "[data-testid=needs-you]")[0]!)).toContain("Needs you · 2");
-    // The spec keeps its task items, read-only (a question mark or an answered check), and no answer boxes of its own.
+    // The spec keeps its questions read-only (a question mark or an answered check) with no answer boxes of its own; a task item is a plain checkbox, not a question.
     expect(all(m.container, ".spec-doc [data-testid=needs-you-reply]")).toHaveLength(0);
-    expect(all(m.container, ".spec-body [data-testid=md-task-box]").map((b) => b.getAttribute("aria-label"))).toEqual(["Question", "Answered", "Question"]);
+    expect(all(m.container, ".spec-body [data-testid=md-task-box]").map((b) => b.getAttribute("aria-label"))).toEqual(["Question", "Not done", "Answered", "Question"]);
   });
 
   test("Send posts every open question's reply as one message, and the replies stay in their boxes to send again", async () => {
@@ -390,7 +390,7 @@ function sizedPanes(width: number, height: number) {
 }
 
 describe("Needs you in a narrow pane: answers inline in the spec", () => {
-  const SPEC = "# Pick a cache\n\n## Plan\n\n1. Pick the store\n   - [ ] Which database?\n\n## Open questions\n\n- [x] Which port?\n- [ ] Ship when?\n";
+  const SPEC = "# Pick a cache\n\n## Plan\n\n1. Pick the store\n   - ( ) Which database?\n   - [ ] Benchmark it\n\n## Open questions\n\n- (x) Which port?\n- ( ) Ship when?\n";
   const withQuestions = edited((w) => {
     const t = w.tickets.find((x) => x.key === "HARNESS-1")!;
     t.spec = SPEC;
@@ -412,8 +412,8 @@ describe("Needs you in a narrow pane: answers inline in the spec", () => {
     expect(inline(m).map((q) => box(q).value)).toEqual(["Postgres", ""]);
     // The question under the plan step is inside that step's list, where the agent put it.
     expect(inline(m)[0]!.closest("ol")).not.toBeNull();
-    // An answered item is a plain line with a check in the question's circle, and no box.
-    expect(all(m.container, ".spec-doc [data-testid=md-task-box]").map((b) => b.getAttribute("aria-label"))).toEqual(["Question", "Answered", "Question"]);
+    // An answered item is a plain line with a check in the question's circle, and no box; the task item is a checkbox with no box either.
+    expect(all(m.container, ".spec-doc [data-testid=md-task-box]").map((b) => b.getAttribute("aria-label"))).toEqual(["Question", "Not done", "Answered", "Question"]);
     expect(all(m.container, "[data-testid=needs-you]")).toHaveLength(0);
     // The drafted answer is ready to go.
     expect(text(bar(m))).toContain("1/2 answers ready · Send");

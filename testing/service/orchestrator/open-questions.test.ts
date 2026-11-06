@@ -1,10 +1,11 @@
 import { afterEach, expect, test } from "bun:test";
-import { toolCall } from "../fake-driver";
+import { FakeDriver, gate, replyScript, toolCall } from "../fake-driver";
 import { makeOrchestrator, stopAll } from "../orchestrator-harness";
 
 afterEach(stopAll);
 
-const SPEC = "# Add a button\n\n## Open questions\n\n- [ ] Which colour?\n- [x] Which page?\n- [ ] Which label?\n";
+const SPEC = "# Add a button\n\n## Plan\n\n- [ ] Draw it\n\n## Open questions\n\n- ( ) Which colour?\n- (x) Which page?\n- ( ) Which label?\n";
+const NOTE = "[Harness note: this message answers";
 
 test("replies to open questions go to the agent as one message, each quoted under its question", async () => {
   const h = makeOrchestrator({ tools: undefined });
@@ -21,8 +22,54 @@ test("replies to open questions go to the agent as one message, each quoted unde
   expect(runs).toHaveLength(1);
   expect(runs[0]!.prompt).toContain("> Which colour?\n\nBlue.\n\n> Which label?\n\nSave\n\nThanks!");
   expect(runs[0]!.prompt).not.toContain("Which page?");
+  // The agent is told to resolve both in the spec; the transcript keeps only the human's words.
+  expect(runs[0]!.prompt).toContain(`${NOTE} 2 of the spec's open questions (quoted above). Update the spec now`);
+  expect(runs[0]!.prompt).toContain("mark it answered as `- (x)`");
+  const said = h.store.transcript.list(t.sessionId).map((e) => (e.content.type === "text" ? e.content.text : ""));
+  expect(said.some((x) => x.includes("> Which colour?"))).toBe(true);
+  expect(said.some((x) => x.includes(NOTE))).toBe(false);
   // Like any message, it goes to the agent and the transcript, not to Activity.
   expect(h.store.activity.listBySession(t.sessionId).filter((e) => e.kind === "answered")).toEqual([]);
+});
+
+test("a message that answers no open question carries no note to resolve one", async () => {
+  const h = makeOrchestrator({ tools: undefined });
+  const t = await h.orch.createTicket({ projectId: h.project.id, spec: SPEC, start: false });
+  await h.settle();
+  const before = h.driver.requests.length;
+  await h.orch.sendMessage(t.key, "Looks good, carry on.", { fromApp: true });
+  // Quoting an already answered question isn't answering an open one.
+  await h.orch.sendMessage(t.key, "", { fromApp: true, questionReplies: [{ question: "Which page?", body: "Home" }] });
+  await h.settle();
+  const prompts = h.driver.requests.slice(before).map((r) => r.prompt);
+  expect(prompts.length).toBeGreaterThan(0);
+  expect(prompts.some((p) => p.includes(NOTE))).toBe(false);
+});
+
+test("replies steered into a live run carry the note too", async () => {
+  const steering = new FakeDriver({ supportsSteering: true });
+  const h = makeOrchestrator({ driver: steering, tools: undefined });
+  const seen: string[] = [];
+  const take = gate();
+  steering.script([
+    {
+      run: async (req) => {
+        if (!req.input!.pending) await new Promise<void>((resolve) => req.input!.onPush(resolve));
+        for (const m of req.input!.take()) {
+          seen.push(m.text);
+          req.input!.delivered(m.id);
+        }
+        take.open();
+      },
+    },
+    { wait: take },
+    ...replyScript("done"),
+  ]);
+  const t = await h.orch.createTicket({ projectId: h.project.id, spec: SPEC, start: false });
+  await steering.runStarted();
+  await h.orch.sendMessage(t.key, "", { fromApp: true, questionReplies: [{ question: "Which label?", body: "Save" }] });
+  await h.settle();
+  expect(seen.find((x) => x.includes("> Which label?"))).toContain(`${NOTE} one of the spec's open questions`);
 });
 
 test("sending the same replies again is another message: it steers or starts a run like typing them would", async () => {
@@ -99,15 +146,15 @@ test("the draft keeps question replies (blank ones dropped), and a send keeps th
   expect(h.ticket(t.key).messageDraft).toBeNull();
 });
 
-test("openQuestionCount follows the spec: every unchecked task item, under any heading", async () => {
+test("openQuestionCount follows the spec: every open question item, under any heading, and no task item", async () => {
   const h = makeOrchestrator({ tools: undefined });
   const t = await h.orch.createTicket({ projectId: h.project.id, spec: SPEC, start: false });
   await h.settle();
   expect(h.ticket(t.key).openQuestionCount).toBe(2);
-  const spec = h.ticket(t.key).spec.replace("- [ ] Which colour?", "- [x] Which colour?");
+  const spec = h.ticket(t.key).spec.replace("- ( ) Which colour?", "- (x) Which colour?");
   await h.orch.updateTicket(t.key, { spec, baseRevision: h.ticket(t.key).specRevision });
   expect(h.ticket(t.key).openQuestionCount).toBe(1);
-  const elsewhere = "# Add a button\n\n## Plan\n\n1. Draw it\n   - [ ] Which corner?\n\n- [ ] Rounded?\n";
+  const elsewhere = "# Add a button\n\n## Plan\n\n1. Draw it\n   - ( ) Which corner?\n   - [ ] Pick the icon\n\n- ( ) Rounded?\n";
   await h.orch.updateTicket(t.key, { spec: elsewhere, baseRevision: h.ticket(t.key).specRevision });
   expect(h.ticket(t.key).openQuestionCount).toBe(2);
 });

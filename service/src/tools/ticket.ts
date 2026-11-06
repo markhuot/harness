@@ -53,8 +53,8 @@ export const updateNotes = defineTool<{ notes: string }>({
  * How the spec's questions are written (DESIGN.md "Open questions"), for both spec tools. Review
  * runs have edit_spec but don't rewrite the spec, so only update_spec says how to resolve one.
  */
-const OPEN_QUESTIONS = "Every `- [ ]` item in the spec is a question for the human, shown with an answer box: use task items for nothing else.";
-const RESOLVE_QUESTION = "Resolve a question by putting its answer in the spec, then removing the item (preferred) or checking it.";
+const OPEN_QUESTIONS = "A question for the human is a `- ( )` item (parentheses, not brackets), shown with an answer box; `- [ ]` task items are plain checklists, never questions.";
+const RESOLVE_QUESTION = "Resolve an answered question by putting its answer in the spec, then removing the item (preferred), rewording it or marking it `- (x)`.";
 
 export const readSpec = defineTool<{ revision?: number }>({
   name: "read_spec",
@@ -106,7 +106,7 @@ export const updateSpec = defineTool<{ spec: string; note: string; base_revision
   description: `Replace the ticket's whole spec with new markdown, as a new revision: mostly for planning, when you write the spec from the brief. Include everything worth keeping, since it replaces the text. For later changes use edit_spec, which changes only the parts that changed. base_revision is the revision you read (the run's context names the current one); a spec that moved on since fails the call with the current revision. Optionally set a clearer ticket title. ${OPEN_QUESTIONS} ${RESOLVE_QUESTION} ${IMAGES}`,
   inputSchema: schema(
     {
-      spec: { type: "string", minLength: 1, description: "The complete spec in markdown: Goal, Plan, Status, Open questions (a `- [ ]` task list)." },
+      spec: { type: "string", minLength: 1, description: "The complete spec in markdown: Goal, Plan, Status, Open questions (a list of `- ( )` question items)." },
       note: { type: "string", minLength: 1, description: REVISION_NOTE("Plan drafted: cache the feed per user") },
       base_revision: { type: "integer", minimum: 1, description: "The revision you're replacing (from read_spec or the run's context)." },
       title: { type: "string", minLength: 1, description: "Optional new short ticket title (under ~80 characters)." },

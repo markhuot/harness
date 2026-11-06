@@ -1,7 +1,7 @@
 // "Needs you" (DESIGN.md "Open questions"): what the ticket waits on the human for, at the top of
 // the composer, on the Spec tab only. In a wide pane (the panel layout, QuestionAnswers.tsx) it's
-// this panel: each unchecked task item in the spec as plain text with one growing reply
-// box under it, then the checked ones folded under "N answered". The replies are part of the
+// this panel: each open question item (`- ( )`) in the spec as plain text with one growing reply
+// box under it, then the answered ones (`- (x)`) folded under "N answered". The replies are part of the
 // message draft: they save as they're typed, go with the composer's Send as one message, and stay
 // in their boxes afterwards, so the human can edit them and send again (a send steers a live run or
 // starts one, like any message). The panel caps its height and scrolls, so the composer stays on

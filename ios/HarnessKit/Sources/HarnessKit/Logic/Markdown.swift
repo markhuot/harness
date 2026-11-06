@@ -19,21 +19,30 @@ public enum Markdown {
     }
 
     /// A list item: its text (continuation lines joined with spaces) and the lists nested under it.
-    /// `checked` is set on a GFM task item (`- [ ] text` false, `- [x] text` true), whose marker
-    /// isn't part of `text`; plain items leave it nil.
+    /// `checked` is set on a GFM task item (`- [ ] text` false, `- [x] text` true) and on a
+    /// question for the human (`- ( ) text` open, `- (x) text` answered; DESIGN.md "Open
+    /// questions"), which also sets `question` to true. The marker isn't part of `text`; plain
+    /// items leave both nil.
     public struct ListItem: Codable, Equatable, Sendable {
         public var text: String
         public var children: [Block]
         public var checked: Bool?
+        public var question: Bool?
 
-        public init(text: String, children: [Block] = [], checked: Bool? = nil) {
+        public init(text: String, children: [Block] = [], checked: Bool? = nil, question: Bool? = nil) {
             self.text = text
             self.children = children
             self.checked = checked
+            self.question = question
         }
 
-        /// The item a list marker's text starts: a task item when it opens with `[ ]` or `[x]`.
+        /// Whether it's a question for the human (`- ( )` or `- (x)`), not a task item.
+        public var isQuestion: Bool { question == true }
+
+        /// The item a list marker's text starts: a task item when it opens with `[ ]` or `[x]`, a
+        /// question with `( )` or `(x)`.
         static func parse(_ text: String) -> ListItem {
+            if let q = Pattern.question.exec(text) { return ListItem(text: q[2]!, checked: q[1] != " ", question: true) }
             guard let task = Pattern.task.exec(text) else { return ListItem(text: text) }
             return ListItem(text: task[2]!, checked: task[1] != " ")
         }
@@ -730,6 +739,8 @@ public enum Markdown {
         static let listItem = Pattern("^\(s)*([-*+]|[0-9]+[.)])\(s)+(\(dot)*)\\z")
         /// TASK: `/^\[([ xX])\]\s+(\S.*)$/`
         static let task = Pattern("^\\[([ xX])\\]\(s)+(\(notS)\(dot)*)\\z")
+        /// QUESTION: `/^\(([ xX])\)\s+(\S.*)$/`
+        static let question = Pattern("^\\(([ xX])\\)\(s)+(\(notS)\(dot)*)\\z")
         /// `/^\s{2,}\S/`
         static let continuation = Pattern("^\(s){2,}\(notS)")
         /// `/^>\s?/` (no g flag, but it's anchored, so it can match only once)

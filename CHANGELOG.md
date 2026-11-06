@@ -9,6 +9,11 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Changed
+
+- Questions for you in a spec are now written `- ( ) Which database?` (parentheses), and an answered one `- (x)`. Only these get an answer box, count on the board card and show in Needs you. Task lists (`- [ ]`) are back to being ordinary checklists: agents kept using them to track work, which turned plan steps into questions. The apps draw a task item as a plain read-only checkbox again, and a question as the amber circle (a question mark while open, a check once answered). Specs written with `- [ ]` questions show those as checkboxes until an agent rewrites them.
+- Agents are told to write each question as `- ( )` and that `- [ ]` task items are never questions. When you send answers to a spec's questions, the agent also gets a note (not shown in your Transcript) to update the spec right away: move each answer where it belongs, then remove the question, reword it if part is still open, or mark it `- (x)`.
+
 ## [app-20261106.1205](https://github.com/markhuot/harness/releases/tag/app-20261106.1205) - 2026-11-06
 
 ### Added

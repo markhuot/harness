@@ -29,7 +29,7 @@ final class SpecQuestions {
     static func anchor(_ question: String) -> String { "spec-question:\(question)" }
 }
 
-/// What MarkdownView puts under each unchecked task item: the answer field for the item's text
+/// What MarkdownView puts under each open question item (`- ( )`): the answer field for the item's text
 /// (its question). Only the Spec tab's current spec sets one, in the inline layout.
 struct TaskAnswerField: Sendable {
     let make: @MainActor @Sendable (String) -> AnyView
@@ -37,10 +37,10 @@ struct TaskAnswerField: Sendable {
 
 extension EnvironmentValues {
     /// The ticket screen's open questions; nil outside it (a pinned tab window), where the spec
-    /// shows plain checkboxes.
+    /// shows only the questions' circles.
     @Entry var specQuestions: SpecQuestions?
-    /// An answer field under each unchecked task item of a rendered markdown (MarkdownListView);
-    /// nil renders read-only checkboxes.
+    /// An answer field under each open question item of a rendered markdown (MarkdownListView);
+    /// nil renders only their circles.
     @Entry var taskAnswerField: TaskAnswerField?
 }
 

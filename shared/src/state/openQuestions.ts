@@ -1,9 +1,10 @@
-// A spec's open questions (DESIGN.md "Open questions"): every GFM task item in it (`- [ ] question`),
-// under any heading or none. Agents write them wherever they fit and resolve them by moving the
-// answer into the spec and removing the item or checking it off; they use task items for nothing
-// else. The apps show them with an answer box, in the panel above the composer or inline in the
-// spec (needsYouLayout), where the human replies to several at once (the replies stay after a send,
-// to edit and send again); the service counts the unchecked ones for the board card
+// A spec's open questions (DESIGN.md "Open questions"): every question item in it (`- ( ) question`,
+// `- (x) question` once answered), under any heading or none. Agents write them wherever they fit
+// and resolve them by moving the answer into the spec and removing the item, rewording it or
+// marking it `(x)`. GFM task items (`- [ ]`) are ordinary checklists, not questions. The apps show
+// them with an answer box, in the panel above the composer or inline in the spec (needsYouLayout),
+// where the human replies to several at once (the replies stay after a send, to edit and send
+// again); the service counts the open ones for the board card
 // (Ticket.openQuestionCount) and composes the message a batch of replies sends.
 
 import type { QuestionReply } from "../protocol";
@@ -16,8 +17,8 @@ export interface OpenQuestion {
 }
 
 /**
- * Every task item in the spec, in document order, nested ones included, checked or not. Plain
- * bullets and prose aren't questions, and neither is anything inside a code block.
+ * Every question item in the spec, in document order, nested ones included, answered or not.
+ * Plain bullets, task items and prose aren't questions, and neither is anything inside a code block.
  */
 export function openQuestions(spec: string): OpenQuestion[] {
   const out: OpenQuestion[] = [];
@@ -25,7 +26,7 @@ export function openQuestions(spec: string): OpenQuestion[] {
     for (const b of list) {
       if (b.t !== "ul" && b.t !== "ol") continue;
       for (const it of b.items) {
-        if (it.checked !== undefined && it.text.trim()) out.push({ text: it.text.trim(), checked: it.checked });
+        if (it.question && it.text.trim()) out.push({ text: it.text.trim(), checked: it.checked === true });
         walk(it.children);
       }
     }
@@ -34,7 +35,7 @@ export function openQuestions(spec: string): OpenQuestion[] {
   return out;
 }
 
-/** How many of the spec's open questions are still unchecked. */
+/** How many of the spec's questions are still open (`- ( )`). */
 export function openQuestionCount(spec: string): number {
   return openQuestions(spec).filter((q) => !q.checked).length;
 }
@@ -53,6 +54,16 @@ export function composeQuestionReplies(replies: readonly QuestionReply[] | null 
   const parts = pendingQuestionReplies(replies).map((r) => `> ${r.question.replace(/\n/g, "\n> ")}\n\n${r.body}`);
   if (text.trim()) parts.push(text.trim());
   return parts.join("\n\n");
+}
+
+/**
+ * The spec's open questions a message answers: the ones it quotes on a line of their own, as
+ * composeQuestionReplies writes them. The service adds a note to the agent's copy of such a
+ * message telling it to resolve them in the spec.
+ */
+export function questionsAnsweredBy(spec: string, message: string): string[] {
+  const quoted = new Set(message.split("\n").filter((l) => l.startsWith("> ")).map((l) => l.slice(2).trim()));
+  return openQuestions(spec).filter((q) => !q.checked && quoted.has(q.text)).map((q) => q.text);
 }
 
 /** One question as the panel shows it, with the reply in the draft. */

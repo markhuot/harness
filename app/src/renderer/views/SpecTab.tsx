@@ -29,7 +29,7 @@ import { PromptAttachmentList } from "../components/PromptAttachments";
 
 /**
  * `answers` renders the answer box under each open question in the current spec (the narrow pane's
- * inline layout, views/QuestionAnswers.tsx); without it task items are read-only checkboxes.
+ * inline layout, views/QuestionAnswers.tsx); without it questions show only their circle.
  */
 export function SpecTab({ ticket, answers }: { ticket: Ticket; answers?: ((question: string) => ReactNode) | null }) {
   const { state, client, dispatch, epoch } = useStore();

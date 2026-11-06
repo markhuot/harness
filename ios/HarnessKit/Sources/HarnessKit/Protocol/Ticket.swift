@@ -116,7 +116,7 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
     /// a message from an app clears it. Absent from older services.
     public var messageDraft: Patch<MessageDraft>
     /// How many of the spec's open questions are unanswered (DESIGN.md "Open questions"): the
-    /// unchecked task items anywhere in it, derived from the spec. The board card
+    /// open question items (`- ( )`) anywhere in it, derived from the spec. The board card
     /// shows it. Absent from older services.
     public var openQuestionCount: Int?
     /// Why the ticket is blocked (question for the human), when status = blocked

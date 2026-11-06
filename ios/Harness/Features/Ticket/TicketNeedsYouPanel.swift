@@ -3,8 +3,8 @@ import SwiftUI
 
 /// "Needs you" (DESIGN.md "Open questions"): what the ticket waits on the human for, at the top of
 /// the composer on the Spec tab of a large landscape view (OpenQuestions.layout `.panel`): each
-/// unchecked task item anywhere in the spec as plain text with one growing
-/// answer field 6pt under it and 20pt between questions, then the checked ones folded under "N
+/// open question item (`- ( )`) anywhere in the spec as plain text with one growing
+/// answer field 6pt under it and 20pt between questions, then the answered ones folded under "N
 /// answered". The answers are part of the message draft (MessageDraftSync): they save as they're
 /// typed, go with the composer's Send as one message, and stay in their fields afterwards, so the
 /// human can edit them and send again. The panel caps its height and scrolls, so the composer stays

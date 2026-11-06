@@ -43,12 +43,13 @@ public enum MarkdownDiff {
 
     /// A list item: unchanged, added or removed as parsed, or edited (its text, nested lists or
     /// task checkbox changed) with its text as runs, its nested lists as diffed blocks, and a task
-    /// item's checkbox in each revision (ListItem.checked).
+    /// item's or question's box in each revision (ListItem.checked), the earlier one only when the
+    /// item was the same kind then.
     public enum Item: Encodable, Equatable, Sendable {
         case plain(Change, Markdown.ListItem)
-        case edit(runs: [Run], children: [DiffBlock], checked: Bool? = nil, wasChecked: Bool? = nil)
+        case edit(runs: [Run], children: [DiffBlock], checked: Bool? = nil, wasChecked: Bool? = nil, question: Bool? = nil)
 
-        private enum CodingKeys: String, CodingKey { case change, item, runs, children, checked, wasChecked }
+        private enum CodingKeys: String, CodingKey { case change, item, runs, children, checked, wasChecked, question }
 
         public func encode(to encoder: Encoder) throws {
             var c = encoder.container(keyedBy: CodingKeys.self)
@@ -56,12 +57,13 @@ public enum MarkdownDiff {
             case let .plain(change, item):
                 try c.encode(change, forKey: .change)
                 try c.encode(item, forKey: .item)
-            case let .edit(runs, children, checked, wasChecked):
+            case let .edit(runs, children, checked, wasChecked, question):
                 try c.encode("edit", forKey: .change)
                 try c.encode(runs, forKey: .runs)
                 try c.encode(children, forKey: .children)
                 try c.encodeIfPresent(checked, forKey: .checked)
                 try c.encodeIfPresent(wasChecked, forKey: .wasChecked)
+                try c.encodeIfPresent(question, forKey: .question)
             }
         }
     }
@@ -449,7 +451,7 @@ public enum MarkdownDiff {
             case let .same(_, y): .plain(.same, y)
             case let .del(x): .plain(.del, x)
             case let .add(y): .plain(.add, y)
-            case let .pair(x, y, _): .edit(runs: diffText(x.text, y.text), children: diffBlocks(x.children, y.children), checked: y.checked, wasChecked: x.checked)
+            case let .pair(x, y, _): .edit(runs: diffText(x.text, y.text), children: diffBlocks(x.children, y.children), checked: y.checked, wasChecked: x.isQuestion == y.isQuestion ? x.checked : nil, question: y.question)
             }
         }
     }

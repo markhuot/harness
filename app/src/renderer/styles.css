@@ -723,7 +723,7 @@ ul.md-list.depth-2 {
 ol.md-list {
   list-style-type: decimal;
 }
-/* A task item (`- [ ]`): its read-only checkbox stands in for the bullet. */
+/* A task item (`- [ ]`) or question (`- ( )`): its read-only checkbox or amber circle stands in for the bullet. */
 .md li.md-task {
   list-style: none;
 }
@@ -734,6 +734,16 @@ ol.md-list {
 }
 .md-task-box.is-toggled {
   color: var(--green);
+}
+.md-task-box.is-checklist {
+  margin-left: -18px;
+  accent-color: var(--accent);
+  opacity: 1;
+}
+.md-task-box.is-checklist.is-toggled {
+  outline: 2px solid var(--green);
+  outline-offset: 1px;
+  border-radius: 3px;
 }
 /* An attachment in the text: fitted to the width, opening the lightbox. */
 .md-media {

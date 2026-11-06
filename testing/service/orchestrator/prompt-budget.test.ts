@@ -73,16 +73,16 @@ test("plan runs write the first full spec and their notes; review runs only add 
   expect(review).not.toContain("`update_notes` { notes }");
 });
 
-test("every run that can edit the spec is told any task item is a question and how to resolve one; review runs aren't told to resolve", () => {
+test("every run that can edit the spec is told a `- ( )` item is a question and how to resolve one; review runs aren't told to resolve", () => {
   for (const kind of ["plan", "work", "chat"] as const) {
     const { text, tool } = prompts(kind);
-    expect(text).toContain("anywhere in the spec is a question for the human");
-    expect(text).toContain("use task items for nothing else");
-    expect(text).toContain("then remove the item (preferred) or check it off");
-    expect(tool("edit_spec").description).toContain("Every `- [ ]` item in the spec is a question");
+    expect(text).toContain("Write each question for the human as `- ( ) Which database?`");
+    expect(text).toContain("Task items (`- [ ]`) are plain checklists, never questions");
+    expect(text).toContain("then remove the item (preferred), reword it if part stays open, or mark it `- (x)`");
+    expect(tool("edit_spec").description).toContain("A question for the human is a `- ( )` item");
   }
   const review = prompts("review");
-  expect(review.text).toContain("a question for the human as a `- [ ]` item");
+  expect(review.text).toContain("a question for the human as a `- ( )` item");
   expect(review.text).not.toContain("remove the item (preferred)");
   expect(review.tool("edit_spec").description).not.toContain("removing the item (preferred)");
   expect(prompts("plan").tool("update_spec").description).toContain("removing the item (preferred)");

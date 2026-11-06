@@ -1,35 +1,49 @@
 import { describe, expect, test } from "bun:test";
 import { parseBlocks } from "../../../shared/src/state/markdown";
-import { composeQuestionReplies, needsYouBar, needsYouLayout, openQuestionCount, openQuestions, questionPanel, sendableQuestionReplies } from "../../../shared/src/state/openQuestions";
+import { composeQuestionReplies, needsYouBar, needsYouLayout, openQuestionCount, openQuestions, questionPanel, questionsAnsweredBy, sendableQuestionReplies } from "../../../shared/src/state/openQuestions";
 import { EMPTY_MESSAGE_DRAFT, hasMessageDraft, questionReply, withQuestionReply } from "../../../shared/src/state/messageDrafts";
 
-describe("parseBlocks: task lists", () => {
-  test("[ ] and [x]/[X] open a task item, whose marker leaves the text", () => {
-    expect(parseBlocks("- [ ] a\n- [x] b\n* [X] c")).toEqual([
+describe("parseBlocks: task and question items", () => {
+  test("[ ] and [x]/[X] open a task item, ( ) and (x)/(X) a question, and the marker leaves the text", () => {
+    expect(parseBlocks("- [ ] a\n- [x] b\n* [X] c\n- ( ) d\n- (x) e\n+ (X) f")).toEqual([
       {
         t: "ul",
         items: [
           { text: "a", children: [], checked: false },
           { text: "b", children: [], checked: true },
           { text: "c", children: [], checked: true },
+          { text: "d", children: [], checked: false, question: true },
+          { text: "e", children: [], checked: true, question: true },
+          { text: "f", children: [], checked: true, question: true },
         ],
       },
     ]);
   });
-  test("plain items carry no checked; brackets without a space after, or with nothing after, are text", () => {
-    expect(parseBlocks("- a\n- [ ]\n- [x]b\n- [link](https://x.y)")).toEqual([
-      { t: "ul", items: [{ text: "a", children: [] }, { text: "[ ]", children: [] }, { text: "[x]b", children: [] }, { text: "[link](https://x.y)", children: [] }] },
+  test("plain items carry no checked; markers without a space after, or with nothing after, are text", () => {
+    expect(parseBlocks("- a\n- [ ]\n- [x]b\n- [link](https://x.y)\n- ( )\n- (x)b\n- (see below) c")).toEqual([
+      {
+        t: "ul",
+        items: [
+          { text: "a", children: [] },
+          { text: "[ ]", children: [] },
+          { text: "[x]b", children: [] },
+          { text: "[link](https://x.y)", children: [] },
+          { text: "( )", children: [] },
+          { text: "(x)b", children: [] },
+          { text: "(see below) c", children: [] },
+        ],
+      },
     ]);
   });
-  test("numbered and nested items can be tasks too", () => {
-    const [ol] = parseBlocks("1. [x] a\n   - [ ] b");
-    expect(ol).toEqual({ t: "ol", start: 1, items: [{ text: "a", checked: true, children: [{ t: "ul", items: [{ text: "b", children: [], checked: false }] }] }] });
+  test("numbered and nested items can be tasks and questions too", () => {
+    const [ol] = parseBlocks("1. [x] a\n   - ( ) b");
+    expect(ol).toEqual({ t: "ol", start: 1, items: [{ text: "a", checked: true, children: [{ t: "ul", items: [{ text: "b", children: [], checked: false, question: true }] }] }] });
   });
 });
 
 describe("openQuestions", () => {
-  test("every task item is a question, under any heading or none, in document order", () => {
-    const spec = "- [ ] Before any heading\n\n## Goal\n\n- [ ] In the goal\n- a plain bullet\n\n## Open questions\n\n- [x] Which port?\n\n## Status\n\n- [ ] At the end";
+  test("every question item is a question, under any heading or none, in document order", () => {
+    const spec = "- ( ) Before any heading\n\n## Goal\n\n- ( ) In the goal\n- a plain bullet\n\n## Open questions\n\n- (x) Which port?\n\n## Status\n\n- ( ) At the end";
     expect(openQuestions(spec)).toEqual([
       { text: "Before any heading", checked: false },
       { text: "In the goal", checked: false },
@@ -37,15 +51,32 @@ describe("openQuestions", () => {
       { text: "At the end", checked: false },
     ]);
   });
-  test("nested task items count, at any depth; their plain parents and prose don't", () => {
-    expect(openQuestions("1. Step\n   - Grouping\n     - [ ] a\n   - [x] b\n\nNone.").map((q) => q.text)).toEqual(["a", "b"]);
+  test("task items are checklists, not questions, checked or not", () => {
+    expect(openQuestions("## Plan\n- [ ] Write the migration\n- [x] Add the column\n\n## Open questions\n- ( ) Which DB?")).toEqual([{ text: "Which DB?", checked: false }]);
+    expect(openQuestionCount("- [ ] a\n- [ ] b")).toBe(0);
   });
-  test("task items inside a code block aren't questions", () => {
-    expect(openQuestions("```md\n- [ ] example\n```\n- [ ] real")).toEqual([{ text: "real", checked: false }]);
+  test("nested question items count, at any depth; their plain parents and prose don't", () => {
+    expect(openQuestions("1. Step\n   - Grouping\n     - ( ) a\n   - (x) b\n\nNone.").map((q) => q.text)).toEqual(["a", "b"]);
   });
-  test("the count is the unchecked ones", () => {
-    expect(openQuestionCount("## Plan\n- [ ] a\n## Open questions\n- [x] b\n- [ ] c")).toBe(2);
+  test("question items inside a code block aren't questions", () => {
+    expect(openQuestions("```md\n- ( ) example\n```\n- ( ) real")).toEqual([{ text: "real", checked: false }]);
+  });
+  test("the count is the open ones", () => {
+    expect(openQuestionCount("## Plan\n- ( ) a\n## Open questions\n- (x) b\n- ( ) c")).toBe(2);
     expect(openQuestionCount("# T\n- plain")).toBe(0);
+  });
+});
+
+describe("questionsAnsweredBy", () => {
+  const spec = "## Open questions\n- ( ) Which DB?\n- (x) Which port?\n- ( ) Ship when?";
+  test("the open questions a composed reply quotes, in spec order", () => {
+    const message = composeQuestionReplies([{ question: "Ship when?", body: "Friday" }, { question: "Which DB?", body: "PG" }], "thanks");
+    expect(questionsAnsweredBy(spec, message)).toEqual(["Which DB?", "Ship when?"]);
+  });
+  test("answered questions, unquoted mentions and plain messages answer nothing", () => {
+    expect(questionsAnsweredBy(spec, "> Which port?\n\n5432")).toEqual([]);
+    expect(questionsAnsweredBy(spec, "What about Which DB? > Ship when?")).toEqual([]);
+    expect(questionsAnsweredBy(spec, "Looks good")).toEqual([]);
   });
 });
 
@@ -77,19 +108,29 @@ describe("message draft question replies", () => {
   });
 });
 
-describe("specDiff: task items", () => {
-  test("checking an item off is an edit carrying both checkboxes", async () => {
+describe("specDiff: task and question items", () => {
+  test("checking an item off is an edit carrying both boxes", async () => {
     const { specDiff } = await import("../../../shared/src/state/specDiff");
     const [list] = specDiff("- [ ] Which DB?\n- [ ] Port?", "- [x] Which DB?\n- [ ] Port?");
     expect(list!.change).toBe("edit");
-    const items = (list as { block: { items: { change: string; checked?: boolean; wasChecked?: boolean }[] } }).block.items;
-    expect(items[0]).toMatchObject({ change: "edit", checked: true, wasChecked: false });
+    const items = (list as { block: { items: { change: string; checked?: boolean; wasChecked?: boolean; question?: true }[] } }).block.items;
+    expect(items[0]).toEqual(expect.objectContaining({ change: "edit", checked: true, wasChecked: false }));
+    expect(items[0]!.question).toBeUndefined();
     expect(items[1]!.change).toBe("same");
+  });
+  test("answering a question keeps it a question; a task turned question has no earlier box to compare", async () => {
+    const { specDiff } = await import("../../../shared/src/state/specDiff");
+    const [answered] = specDiff("- ( ) Which DB?", "- (x) Which DB?");
+    expect((answered as { block: { items: unknown[] } }).block.items[0]).toMatchObject({ change: "edit", checked: true, wasChecked: false, question: true });
+    const [converted] = specDiff("- [x] Which DB?", "- ( ) Which DB?");
+    const item = (converted as { block: { items: { wasChecked?: boolean; question?: true }[] } }).block.items[0]!;
+    expect(item).toMatchObject({ question: true });
+    expect(item.wasChecked).toBeUndefined();
   });
 });
 
 describe("questionPanel and sendableQuestionReplies", () => {
-  const spec = "## Open questions\n- [ ] Which DB?\n- [x] Which port?\n- [ ] Ship when?";
+  const spec = "## Open questions\n- ( ) Which DB?\n- (x) Which port?\n- ( ) Ship when?";
 
   test("open and answered questions in spec order, each with its drafted reply", () => {
     const p = questionPanel(spec, [{ question: "Ship when?", body: "Friday" }]);
