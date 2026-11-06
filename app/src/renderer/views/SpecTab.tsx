@@ -4,7 +4,8 @@
 // that revision changed from the one before it: MarkdownDiff, added text green, removed text red and
 // struck through, in place), and along its bottom edge a timeline with one segment per revision,
 // dragged or scrolled to scrub through them. Source is the raw markdown in the file editor, read-only
-// (the spec is edited in Details); it opens Rendered.
+// (the spec is edited in Details); it opens Rendered. Copy spec puts the revision on show on the
+// clipboard as rendered HTML and as its markdown (state/clipboard.ts).
 
 import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type ReactNode, type RefObject } from "react";
 import { SPEC_WRAP_KEY, viewMenu, type SpecRevisionInfo, type Ticket } from "@harness/shared";
@@ -18,6 +19,7 @@ import { MenuButton, relativeTime, TicketKey, useNow } from "../components/bits"
 import { ViewMenuItems } from "../components/ViewMenuItems";
 import { ChunkBoundary, retryableLazy } from "../components/lazyRetry";
 import { setWrapped, useWrapped } from "../state/viewPrefs";
+import { copyMarkdown } from "../state/clipboard";
 import "./file.css";
 
 // The editor loads only when Source is chosen, so the Spec tab stays light.
@@ -99,15 +101,20 @@ export function SpecTab({ ticket, answers }: { ticket: Ticket; answers?: ((quest
             )}
           >
             {(closeMenu) => (
-              <ViewMenuItems
-                menu={menu}
-                wrap={wrap}
-                onRendered={(on) => (setRendered(on), on || setShowChanges(false))}
-                onWrap={(on) => setWrapped(SPEC_WRAP_KEY, on)}
-                showChanges={showChanges}
-                onShowChanges={setShowChanges}
-                onDone={closeMenu}
-              />
+              <>
+                <ViewMenuItems
+                  menu={menu}
+                  wrap={wrap}
+                  onRendered={(on) => (setRendered(on), on || setShowChanges(false))}
+                  onWrap={(on) => setWrapped(SPEC_WRAP_KEY, on)}
+                  showChanges={showChanges}
+                  onShowChanges={setShowChanges}
+                  onDone={closeMenu}
+                />
+                <button role="menuitem" data-testid="spec-copy" disabled={body === undefined} onClick={() => (closeMenu(), body !== undefined && void copyMarkdown(body).catch(() => {}))}>
+                  <Icon name="copy" /> Copy spec
+                </button>
+              </>
             )}
           </MenuButton>
         </div>

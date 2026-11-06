@@ -125,4 +125,27 @@ describe("spec tab view menu", () => {
     expect(item("view-source")!.disabled).toBe(true);
     expect(item("view-wrap")!.disabled).toBe(true);
   });
+
+  test("Copy spec puts the spec on the clipboard as rendered HTML and as its markdown", async () => {
+    const ticket = world.tickets.find((t) => t.key === "HARNESS-5")!;
+    const written: ClipboardItem[] = [];
+    const original = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { write: async (items: ClipboardItem[]) => void written.push(...items), writeText: async () => {} } });
+    try {
+      const m = await mount(<SpecTab ticket={ticket} />);
+      await m.until("the spec", () => !!m.container.querySelector("[data-testid=spec-doc]"));
+      await openMenu(m, '[data-testid="spec-more"]');
+      await click(m, item("spec-copy")!);
+      await m.until("the clipboard write", () => written.length === 1);
+      const read = async (type: string) => (await written[0]!.getType(type)).text();
+      expect(await read("text/plain")).toBe(ticket.spec);
+      expect(await read("text/html")).toBe(
+        "<h1>Goal</h1><p>Speed up the board&#39;s first load.</p><h1>Plan</h1><ul><li>Read the code</li><li>Change it</li></ul><h1>Status</h1><p>Not started</p>",
+      );
+      expect(item("spec-copy")).toBeNull(); // the menu closed
+    } finally {
+      if (original) Object.defineProperty(navigator, "clipboard", original);
+      else delete (navigator as { clipboard?: unknown }).clipboard;
+    }
+  });
 });
