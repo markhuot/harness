@@ -9,6 +9,10 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- The Spec tab's "…" menu has Copy spec, on the Mac, iPhone and iPad. It copies the revision on show as formatted text and as its markdown at once: a normal paste into Mail, Notes or Docs keeps the headings, lists, tables and bold, while Paste and Match Style (or a terminal or code editor) gets the markdown. Attachments, ticket keys and file links paste as their text.
+
 ### Changed
 
 - Questions for you in a spec are now written `- ( ) Which database?` (parentheses), and an answered one `- (x)`. Only these get an answer box, count on the board card and show in Needs you. Task lists (`- [ ]`) are back to being ordinary checklists: agents kept using them to track work, which turned plan steps into questions. The apps draw a task item as a plain read-only checkbox again, and a question as the amber circle (a question mark while open, a check once answered). Specs written with `- [ ]` questions show those as checkboxes until an agent rewrites them.

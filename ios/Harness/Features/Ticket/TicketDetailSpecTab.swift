@@ -1,13 +1,15 @@
 import HarnessKit
 import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
 
 /// The Spec tab, where a ticket opens: the ticket's living spec (markdown with nested lists and
 /// inline images), what it depends on, the files attached to its prompt, and a history bar over it. The bar scrubs through the spec's
 /// revisions with the timeline along its bottom edge (loaded as they're needed), tags the approved plan, and follows the newest
 /// revision as it lands unless the user has scrubbed back (SpecScrubber). The bar's "…" menu holds
-/// Source / Rendered, Wrap lines (source only) and Show changes, which keeps the rendered spec and marks what
-/// the shown revision changed from the one before it, in place (MarkdownView with `previous`).
+/// Source / Rendered, Wrap lines (source only), Show changes, which keeps the rendered spec and marks what
+/// the shown revision changed from the one before it, in place (MarkdownView with `previous`), and
+/// Copy spec (SpecClipboard).
 /// Source is the raw markdown in the file editor, read-only (the spec is edited in Details); the tab
 /// opens Rendered.
 struct TicketDetailSpecTab: View {
@@ -223,6 +225,12 @@ private struct SpecHistoryBar: View {
                 setWrap: { WrapSettings.shared.set(ViewOptions.specWrapKey, $0) },
                 showChanges: showChanges,
                 setShowChanges: { showChanges = $0 })
+            Divider()
+            let body = store.state.specBody(ticket.id, rev: rev)
+            Button("Copy spec", systemImage: "doc.on.doc") {
+                if let body { SpecClipboard.copy(body) }
+            }
+            .disabled(body == nil)
         } label: {
             Image(systemName: "ellipsis.circle")
                 .font(.system(size: 17))
@@ -231,6 +239,26 @@ private struct SpecHistoryBar: View {
                 .contentShape(.rect)
         }
         .accessibilityLabel("More")
+    }
+}
+
+/// Copy spec: the shown revision on the pasteboard as one item in three flavours, so a paste into
+/// Notes or Mail keeps the formatting and a plain-text field gets the markdown. HTML is
+/// Markdown.html (the Mac app's copy writes the same), RTF is that HTML read by UIKit (for apps that
+/// take attributed text but not HTML), and plain text is the markdown itself.
+enum SpecClipboard {
+    static func copy(_ markdown: String) {
+        let html = Markdown.html(markdown)
+        var item: [String: Any] = [UTType.html.identifier: html, UTType.utf8PlainText.identifier: markdown]
+        if let rtf = rtf(html) { item[UTType.rtf.identifier] = rtf }
+        UIPasteboard.general.setItems([item])
+    }
+
+    private static func rtf(_ html: String) -> Data? {
+        guard let data = "<meta charset=\"utf-8\">\(html)".data(using: .utf8),
+              let text = try? NSAttributedString(data: data, options: [.documentType: NSAttributedString.DocumentType.html, .characterEncoding: String.Encoding.utf8.rawValue], documentAttributes: nil)
+        else { return nil }
+        return try? text.data(from: NSRange(location: 0, length: text.length), documentAttributes: [.documentType: NSAttributedString.DocumentType.rtf])
     }
 }
 
