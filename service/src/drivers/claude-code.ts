@@ -500,9 +500,10 @@ const ASYNC_LAUNCH = /^\s*Async agent launched/i;
 /**
  * A result for a call that keeps running in the background (claude 2.1.284): Bash's "Command
  * running in background with ID: …" or "…was moved to the background (ID: …)", and Monitor's
- * "Monitor started (task …".
+ * "Monitor started (task …". The notice can follow the output the command printed before a timeout
+ * moved it to the background, so it matches at the start of any line (HARNESS-660).
  */
-const IN_BACKGROUND = /^\s*(Command (running in background|did not complete .* moved to the background)|Monitor started)/i;
+const IN_BACKGROUND = /^\s*(Command (running in background|did not complete .* moved to the background)|Monitor started)/im;
 /** Where a background task's output goes, from its tool result ("Output is being written to: …") */
 const OUTPUT_PATH = /Output is being written to: (\S+?\.output)\b/;
 /** The task id in a Monitor's result ("Monitor started (task bm, …") */
@@ -879,7 +880,9 @@ export class StreamJsonParser {
           // A long foreground call is a task too; its result finishes it unless the call went
           // to the background (run_in_background, a Bash timeout, an async or resumed agent).
           const task = this.taskCalls.get(callId);
-          const inBackground = (task !== undefined && this.backgrounded.has(task)) || ASYNC_LAUNCH.test(text) || IN_BACKGROUND.test(text);
+          // The CLI's structured result names the task a timed-out call moved to the background.
+          const movedToBackground = typeof msg.tool_use_result?.backgroundTaskId === "string";
+          const inBackground = (task !== undefined && this.backgrounded.has(task)) || movedToBackground || ASYNC_LAUNCH.test(text) || IN_BACKGROUND.test(text);
           if (task && !subagentId && !inBackground) this.runningTasks.delete(task);
           if (task && !subagentId && inBackground) this.backgrounded.add(task);
           if (!subagentId && !block.is_error && UNFINISHING_TOOLS.has(name)) this.finished = false;
@@ -887,7 +890,7 @@ export class StreamJsonParser {
           if (!subagentId && block.is_error && FINISHING_TOOLS.has(name)) this.finished = false;
           const path = OUTPUT_PATH.exec(text)?.[1];
           if (path) this.tasksDir ??= dirname(path);
-          if (!subagentId && !block.is_error && TASK_TOOLS[name] && IN_BACKGROUND.test(text)) {
+          if (!subagentId && !block.is_error && TASK_TOOLS[name] && (movedToBackground || IN_BACKGROUND.test(text))) {
             const monitorTask = MONITOR_TASK.exec(text)?.[1] ?? task;
             this.reportTask(callId, events, path ?? (TASK_TOOLS[name] === "monitor" && monitorTask ? this.outputPathFor(monitorTask) : undefined));
           }

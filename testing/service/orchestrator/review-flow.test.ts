@@ -35,6 +35,15 @@ test("a review that requests changes sends the notes back to a new work run, and
   expect(activity(h, t)).toContain("changes_requested/agent: Changes requested: the label is wrong.");
 });
 
+test("a review that ends without a decision says so in Activity and leaves the agent review pending", async () => {
+  const h = makeOrchestrator({ tools: undefined });
+  h.driver.script(submit(), replyScript("The Mac tests are still running in the background."));
+  const t = await h.orch.createTicket({ projectId: h.project.id, spec: "Add a button" });
+  await h.settle();
+  expect(h.ticket(t.key)).toMatchObject({ status: "review", agentReview: "pending" });
+  expect(activity(h, t)).toContain("failed/system: Agent review ended without a decision. Re-run agent review to try again.");
+});
+
 test("submitting without saying the spec is up to date is refused with what to do, and nothing moves", async () => {
   const h = makeOrchestrator({ tools: undefined });
   let result = "";

@@ -90,6 +90,37 @@ test("a result's origin switches to per-task handover even when the init gave no
   expect(unreported(p)).toEqual(["b"]);
 });
 
+// HARNESS-659's review: a foreground Bash call ran past its 600s timeout and the CLI moved it to the
+// background, after the output it had printed so far. Read as a finished foreground call, the
+// turn's end closed stdin and the exit grace killed the tests 15s later, with no review decision.
+const bashCall = (call: string) => ({ type: "assistant", message: { id: `m-${call}`, content: [{ type: "tool_use", id: call, name: "Bash", input: { command: "bun run testing mac", timeout: 900000 } }] } });
+const bashResult = (call: string, text: string, toolUseResult?: Record<string, unknown>) => ({
+  type: "user",
+  message: { content: [{ type: "tool_result", tool_use_id: call, content: text, is_error: false }] },
+  ...(toolUseResult ? { tool_use_result: toolUseResult } : {}),
+});
+const foregroundStarted = (taskId: string, call: string) => ({ ...started(taskId, call, "Mac tests", "local_bash"), is_backgrounded: false });
+const timedOut =
+  "$ bun testing/run.ts l0\nL0 passes [5.0s]\nCommand did not complete within its 600s timeout and was moved to the background (ID: b27). Output is being written to: /tmp/tasks/b27.output. You will be notified when it completes.";
+
+test("a foreground Bash call moved to the background after printing output keeps the run waiting on it", () => {
+  const p = new StreamJsonParser();
+  for (const m of [init("2.1.319"), bashCall("c1"), foregroundStarted("b27", "c1"), bashResult("c1", timedOut)]) p.handle(m);
+  expect([...p.runningTasks.keys()]).toEqual(["b27"]);
+});
+
+test("the structured result's backgroundTaskId marks a call as moved to the background whatever its text says", () => {
+  const p = new StreamJsonParser();
+  for (const m of [init("2.1.319"), bashCall("c1"), foregroundStarted("b27", "c1"), bashResult("c1", "partial output", { backgroundTaskId: "b27", timedOutAfterMs: 600000 })]) p.handle(m);
+  expect([...p.runningTasks.keys()]).toEqual(["b27"]);
+});
+
+test("a foreground Bash call that finishes ends its task, even when its output mentions the background", () => {
+  const p = new StreamJsonParser();
+  for (const m of [init("2.1.319"), bashCall("c1"), foregroundStarted("b1", "c1"), bashResult("c1", "grep found: moved to the background\ndone")]) p.handle(m);
+  expect([...p.runningTasks.keys()]).toEqual([]);
+});
+
 test("versionAtLeast compares dotted versions numerically", () => {
   expect(versionAtLeast("2.1.316", "2.1.316")).toBe(true);
   expect(versionAtLeast("2.1.1000", "2.1.316")).toBe(true);

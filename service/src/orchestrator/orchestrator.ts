@@ -6647,7 +6647,11 @@ ${numberLines(r.body)}`;
         this.transition(ticket, "done", { blockedReason: null }, "Completed");
         break;
       case "review":
-        if (!active.decided && ticket.status === "review") this.appendStatus(session.id, run.id, "Agent review ended without a decision");
+        if (!active.decided && ticket.status === "review") {
+          this.appendStatus(session.id, run.id, "Agent review ended without a decision");
+          // Like a failed review: the ticket would otherwise sit with the agent review pending and no word why.
+          this.addActivityLine(ticket, "failed", "system", "Agent review ended without a decision. Re-run agent review to try again.");
+        }
         break;
     }
   }
