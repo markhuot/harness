@@ -2750,7 +2750,8 @@ button.prompt-attachment-row-main:disabled {
 /* Full screen: the page over the whole window, with its own bar. */
 .overlay.embed-full {
   align-items: stretch;
-  padding: 16px;
+  /* Clear of the title bar's traffic lights and sidebar toggle. */
+  padding: 44px 16px 16px;
   background: rgb(0 0 0 / 0.78);
 }
 .overlay.embed-full .modal {
