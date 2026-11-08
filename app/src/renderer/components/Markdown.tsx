@@ -14,6 +14,11 @@
 // parser turns remote and file images into links, so nothing here loads a URL an agent wrote. Each
 // one is the ticket's own Attachment record (SpecAttachmentsScope: TicketDetail.attachments), so
 // annotating it adds that attachment, by its id, to the message being written.
+//
+// `[text](attachment:<id>)` alone on its line embeds the attachment when the ticket's record says
+// it's a page (an HTML file or folder bundle; Embed.tsx), captioned with `text`; inside a line it's
+// a link that opens the page full screen. For any other attachment, or one the ticket doesn't list,
+// it's just `text`.
 
 import { createContext, Fragment, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import { parseFileLink, resolveFileRelative, type AttachmentKind, type Attachment } from "@harness/shared";
@@ -37,6 +42,7 @@ import { useLinkStore } from "../state/store";
 import { mediaAttachment } from "../state/promptAttachmentFiles";
 import { Lightbox, Missing } from "./Attachments";
 import { DiffCodeBlock, FencedCode } from "./Code";
+import { EmbedScopeProvider, PageEmbed, PageLink } from "./Embed";
 import { Icon } from "./Icon";
 import { PaneContext, PaneScopeContext, useOpenTicket } from "./paneContext";
 
@@ -47,6 +53,20 @@ const SpecAttachmentsContext = createContext<readonly Attachment[] | undefined>(
 /** The ticket's spec media (TicketDetail.attachments) that `attachment:<id>` in the Markdown below refers to. */
 export function SpecAttachmentsScope({ attachments, children }: { attachments: readonly Attachment[] | undefined; children: ReactNode }) {
   return <SpecAttachmentsContext.Provider value={attachments}>{children}</SpecAttachmentsContext.Provider>;
+}
+
+/** Whether the ticket's spec attachments list `id` as a page (an HTML file or folder bundle to embed). */
+function useIsPage(id: string): boolean {
+  const known = useContext(SpecAttachmentsContext);
+  return known?.find((a) => a.id === id)?.kind === "page";
+}
+
+function AttachToken({ id, text }: { id: string; text: string }) {
+  return useIsPage(id) ? <PageLink id={id} text={text} /> : <>{text}</>;
+}
+
+function AttachBlock({ id, text }: { id: string; text: string }) {
+  return useIsPage(id) ? <PageEmbed id={id} text={text} /> : <p>{text}</p>;
 }
 
 /** How ticket keys (FOO-12) render: linked to the ticket when it can be opened, else plain text. */
@@ -137,6 +157,8 @@ function inlineToken(tok: InlineToken, k: number, tickets?: TicketLinks, onLink?
       return <em key={k}>{tok.text}</em>;
     case "img":
       return <MdMedia key={k} media={tok} />;
+    case "attach":
+      return <AttachToken key={k} id={tok.id} text={tok.text} />;
     case "link":
       if (!onLink) return <MdLink key={k} url={tok.url}>{tok.text}</MdLink>;
       return (
@@ -400,6 +422,8 @@ function MdBlock({ block: b, depth = 0, tickets }: { block: Block; depth?: numbe
       );
     case "hr":
       return <hr />;
+    case "attach":
+      return <AttachBlock id={b.id} text={b.text} />;
   }
 }
 
@@ -431,7 +455,9 @@ function MarkdownFrame({ media, className, children }: { media: Media[]; classNa
   );
   return (
     <MediaScopeContext.Provider value={scope}>
-      <div className={`md selectable ${className ?? ""}`}>{children}</div>
+      <EmbedScopeProvider>
+        <div className={`md selectable ${className ?? ""}`}>{children}</div>
+      </EmbedScopeProvider>
       {open !== null && list.length > 0 && (
         <Lightbox list={list} index={Math.min(open, list.length - 1)} onIndex={setOpen} onClose={() => setOpen(null)} annotate={(a) => ({ attachment: a })} />
       )}

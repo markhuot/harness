@@ -2719,7 +2719,9 @@ export class Orchestrator {
     // Its spec media go with it (their rows cascade), even when another ticket's message sent one
     // on by id: there it becomes a missing file, like a moved "file". Copying it would keep a
     // deleted ticket's screenshots around for good.
-    const files = this.store.attachments.listByTicket(ticket.id).map((a) => a.path);
+    const owned = this.store.attachments.listByTicket(ticket.id);
+    const files = owned.filter((a) => a.kind !== "page").map((a) => a.path);
+    const pages = owned.filter((a) => a.kind === "page").map((a) => a.path);
     // Its uploads, except any another ticket still uses (by id, or by path from an older list).
     const still = this.referencedAttachments(ticket);
     const stillUsed = new Set(uploadDirs(this.paths.uploadsDir, [...still.paths].map((path) => ({ path, source: "upload" as const }))));
@@ -2733,6 +2735,7 @@ export class Orchestrator {
       this.store.attachments.delete(goneIds);
     });
     removeAttachmentFiles(files);
+    removePages(this.paths.attachmentsDir, pages);
     removeUploadDirs(uploads);
     rmSync(join(this.paths.scratchDir, ticket.sessionId), { recursive: true, force: true });
     this.bus.emit({ kind: "ticket.deleted", id: ticket.id });
@@ -3810,7 +3813,7 @@ ${numberLines(r.body)}`;
       for (const { page } of pages) storedPages.push(storePage(this.paths.attachmentsDir, page));
     } catch (err) {
       removeAttachmentFiles(stored.map((a) => a.path));
-      removePages(storedPages.map((a) => a.path));
+      removePages(this.paths.attachmentsDir, storedPages.map((a) => a.path));
       throw err;
     }
     let body = rewriteImageSources(w.body, new Map(sources.map((src, i) => [src, stored[i]!.id])));
@@ -3824,7 +3827,7 @@ ${numberLines(r.body)}`;
       });
     } catch (err) {
       removeAttachmentFiles(stored.map((a) => a.path));
-      removePages(storedPages.map((a) => a.path));
+      removePages(this.paths.attachmentsDir, storedPages.map((a) => a.path));
       if (err instanceof HarnessError && err.status === 409) throw new Error(this.staleSpecMessage(this.store.tickets.get(t.id) ?? t, w.baseRevision));
       throw err;
     }

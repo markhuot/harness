@@ -28,9 +28,10 @@ function measure(kind: "plan" | "work" | "review") {
 
 const LIMITS = {
   // The questions rule (any task item in the spec is a question for the human) added ~100 tokens to each run block.
-  plan: { system: 1500, run: 2310, tools: 2600 },
-  work: { system: 2500, run: 3230, tools: 4000 },
-  review: { system: 1300, run: 1180, tools: 2250 },
+  // Embedded pages added ~55 tokens to the spec guidance in each run block and ~70 to each of update_spec and edit_spec.
+  plan: { system: 1500, run: 2370, tools: 2740 },
+  work: { system: 2500, run: 3290, tools: 4140 },
+  review: { system: 1300, run: 1180, tools: 2280 },
 };
 
 for (const kind of ["plan", "work", "review"] as const) {

@@ -126,9 +126,9 @@ export function storePage(dir: string, p: PreparedPage): Attachment {
   return { id: p.id, path: home, name: p.name, source: "spec", kind: "page", mimeType: PAGE_MIME, size: p.size };
 }
 
-/** Best-effort removal of stored pages' folders. */
-export function removePages(paths: string[]) {
-  for (const p of paths) rmSync(p, { recursive: true, force: true });
+/** Best-effort removal of stored pages' folders; only folders directly inside `dir`, the attachments folder, are touched. */
+export function removePages(dir: string, paths: string[]) {
+  for (const p of paths) if (resolve(p, "..") === resolve(dir)) rmSync(p, { recursive: true, force: true });
 }
 
 /** A stored page's manifest, or null when it's missing or unreadable. */

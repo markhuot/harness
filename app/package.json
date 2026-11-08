@@ -13,6 +13,7 @@
     "install-app:bundled": "bun run package && bun scripts/sign-mac.ts --local && bun scripts/install-app.ts",
     "icon": "bun scripts/icon.ts",
     "typecheck": "tsc --noEmit -p .",
+    "check:embeds": "bun scripts/check-embeds.ts",
     "sign-mac": "bun scripts/sign-mac.ts"
   },
   "dependencies": {

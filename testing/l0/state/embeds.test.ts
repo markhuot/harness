@@ -1,7 +1,8 @@
 import { expect, test } from "bun:test";
-import { EMBED_DEFAULT_HEIGHT, EMBED_MAX_HEIGHT, embedSizeAfter, initialEmbedSize, type EmbedSize } from "../../../shared/src/state/embeds";
+import { EMBED_DEFAULT_HEIGHT, EMBED_MAX_HEIGHT, EMBED_TRACKING_MS, embedSizeAfter, initialEmbedSize, type EmbedSize } from "../../../shared/src/state/embeds";
 
-const after = (reports: unknown[], from: EmbedSize = initialEmbedSize()) => reports.reduce<EmbedSize>((s, r) => embedSizeAfter(s, r), from);
+/** The size after each report in turn, `gap` ms apart (a page answering its own resize comes within a frame). */
+const after = (reports: unknown[], gap = 16, from: EmbedSize = initialEmbedSize()) => reports.reduce<EmbedSize>((s, r, i) => embedSizeAfter(s, r, 1000 + i * gap), from);
 
 test("an embed starts at the default height and follows the page up and down", () => {
   expect(initialEmbedSize().height).toBe(EMBED_DEFAULT_HEIGHT);
@@ -22,10 +23,15 @@ test("a page that grows by the same step again and again is tracking its frame: 
   expect(s.locked).toBe(true);
   expect(s.height).toBe(408);
   // Once locked, nothing moves it.
-  expect(embedSizeAfter(s, 100).height).toBe(408);
+  expect(embedSizeAfter(s, 100, 99_999).height).toBe(408);
 });
 
 test("a page that grows in uneven steps (a chart loading, a node expanding) keeps being followed", () => {
   const s = after([400, 450, 470, 900, 1300, 1310]);
   expect(s).toMatchObject({ height: 1310, locked: false });
+});
+
+test("a page that adds same-height rows over time (a log, a streaming list) keeps being followed", () => {
+  const s = after([380, 400, 420, 440, 460, 480, 500, 520], EMBED_TRACKING_MS + 50);
+  expect(s).toMatchObject({ height: 520, locked: false });
 });

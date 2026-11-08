@@ -118,6 +118,8 @@ export interface HarnessBridge {
   showContextMenu(items: ContextMenuItem[]): Promise<string | null>;
   /** `viaKey`: the item's shortcut was pressed rather than the item clicked. */
   onMenu(cb: (cmd: MenuCommand, viaKey: boolean) => void): () => void;
+  /** Escape was pressed anywhere in the window, an embedded page's frame included (which keeps its keys from the page). */
+  onEmbedEscape?(cb: () => void): () => void;
   /** App appearance. getTheme is synchronous so the renderer can apply it before first paint. */
   getTheme(): ThemeState;
   /** Change the appearance and/or the light / dark theme picks (a bare preference still works) */

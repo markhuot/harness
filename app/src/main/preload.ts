@@ -38,6 +38,11 @@ const bridge: HarnessBridge = {
     ipcRenderer.on("menu", listener);
     return () => ipcRenderer.removeListener("menu", listener);
   },
+  onEmbedEscape: (cb) => {
+    const listener = () => cb();
+    ipcRenderer.on("embed:escape", listener);
+    return () => ipcRenderer.removeListener("embed:escape", listener);
+  },
   getTheme: () => ipcRenderer.sendSync("harness:getThemeSync") as ThemeState,
   setTheme: (patch) => ipcRenderer.invoke("harness:setTheme", patch),
   onThemeChange: (cb) => {
