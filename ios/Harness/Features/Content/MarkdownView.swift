@@ -121,8 +121,6 @@ struct MarkdownView: View {
     private func mediaScope(_ media: [Markdown.Media]) -> MarkdownMediaScope {
         MarkdownMediaScope(
             kind: kind,
-            page: isPage,
-            openPage: openPage,
             learn: { id, k in learned[id] = k },
             open: { id in
                 guard let i = media.firstIndex(where: { $0.id == id }) else { return }
@@ -130,7 +128,9 @@ struct MarkdownView: View {
                 var t = Transaction()
                 t.disablesAnimations = true
                 withTransaction(t) { open = AttachmentViewerStart(index: i) }
-            }
+            },
+            page: isPage,
+            openPage: openPage
         )
     }
 
