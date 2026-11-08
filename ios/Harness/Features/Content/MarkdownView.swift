@@ -11,7 +11,10 @@ import SwiftUI
 /// full-screen viewer, paging through every attachment in the text; the parser turns remote and file
 /// images into links, so nothing an agent wrote gets fetched. Each one is the ticket's own
 /// Attachment record (`\.specAttachments`, TicketDetail.attachments), so annotating it adds that
-/// attachment, by its id, to the message being written.
+/// attachment, by its id, to the message being written. `[caption](attachment:<id>)` alone on its
+/// line, when the ticket's record says the attachment is a page, is an embedded web page with a
+/// full-screen button (MarkdownEmbedView); inside a sentence it's a link that opens the page full
+/// screen. Any other attachment shows as its link text.
 ///
 /// `size` is the body text size and `lineHeight` its line height as a multiple of it; `color` overrides the text color (nil = palette text). File links
 /// resolve against `linkContext` when it names a ticket or project, else the nearest
@@ -41,6 +44,8 @@ struct MarkdownView: View {
     @Environment(\.annotationSink) private var sink
     @Environment(\.specAttachments) private var known
     @State private var open: AttachmentViewerStart?
+    /// The page shown full screen (an embed's button, or an inline link to a page).
+    @State private var page: EmbedTarget?
     /// Attachments that failed to load as an image and turned out to be videos.
     @State private var learned: [String: AttachmentKind] = [:]
 
@@ -70,7 +75,12 @@ struct MarkdownView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .tint(c.accentText)
-        .modifier(ContentLinkHandling(override: linkContext))
+        .modifier(ContentLinkHandling(override: linkContext, openPage: openPage))
+        .background {
+            Color.clear.fullScreenCover(item: $page) { target in
+                EmbedFullScreen(target: target) { page = nil }
+            }
+        }
         .fullScreenCover(item: $open) { start in
             AttachmentViewer(attachments: media.map(attachment), start: start.index,
                              annotate: annotatable ? sink.map { sink in { a, image in sink.request(.existing(a), image: image) } } : nil) {
@@ -98,9 +108,21 @@ struct MarkdownView: View {
         return a
     }
 
+    /// Whether attachment `id` is a page the ticket holds (an HTML file or folder bundle).
+    private func isPage(_ id: String) -> Bool {
+        known?.contains { $0.id == id && $0.kind == .page } ?? false
+    }
+
+    private func openPage(_ id: String, _ caption: String) {
+        guard isPage(id) else { return }
+        page = EmbedTarget(id: id, caption: caption)
+    }
+
     private func mediaScope(_ media: [Markdown.Media]) -> MarkdownMediaScope {
         MarkdownMediaScope(
             kind: kind,
+            page: isPage,
+            openPage: openPage,
             learn: { id, k in learned[id] = k },
             open: { id in
                 guard let i = media.firstIndex(where: { $0.id == id }) else { return }
@@ -298,6 +320,10 @@ struct MarkdownStyle {
             run = AttributedString(text ?? key)
             run.font = base
             if linkable(key) { run.link = ContentLinkURL.ticket(key) }
+        case let .attach(text, id):
+            run = AttributedString(text)
+            run.font = base
+            if media.page(id) { run.link = ContentLinkURL.page(id, caption: text) }
         case let .img(m):
             run = AttributedString(m.alt)
             run.font = base
@@ -370,6 +396,10 @@ struct MarkdownMediaScope {
     let kind: (Markdown.Media) -> AttachmentKind
     let learn: (String, AttachmentKind) -> Void
     let open: (String) -> Void
+    /// Whether an attachment id is a page, which embeds (a block) or opens full screen (a link).
+    let page: (String) -> Bool
+    /// Opens a page full screen, titled with its caption.
+    let openPage: (String, String) -> Void
 }
 
 /// Inline text cut at its attachments (MarkdownStyle.runs).
@@ -459,6 +489,12 @@ private struct MarkdownBlockView: View {
             }, style: style)
         case .hr:
             HairlineRule(color: c.border).padding(.vertical, 4)
+        case let .attach(text, id):
+            if style.media.page(id) {
+                MarkdownEmbedView(id: id, caption: text, style: style)
+            } else {
+                style.paragraph(AttributedString(text))
+            }
         }
     }
 }
