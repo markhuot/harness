@@ -56,7 +56,7 @@ describe("page attachments in markdown", () => {
     const full = document.querySelector<HTMLIFrameElement>("[data-testid=embed-full-frame]");
     expect(full?.getAttribute("src")).toBe(`harness-embed://${PAGE}/`);
     expect(full?.getAttribute("sandbox")).toBe("allow-scripts allow-popups");
-    await m.settle(() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+    await m.settle(() => void document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
     expect(document.querySelector("[data-testid=embed-full-frame]")).toBeNull();
   });
 
