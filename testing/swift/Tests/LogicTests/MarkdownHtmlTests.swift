@@ -33,4 +33,9 @@ import HarnessKit
         #expect(Markdown.html("![After](attachment:a.png)\n\n![Before](attachment:b.png \"thumb\") ![](attachment:c.png \"thumb\")\n\n![](attachment:d.png)")
             == "<p><em>After</em></p><p><em>Before</em></p>")
     }
+
+    @Test func attachmentLinksBecomeTheirText() {
+        #expect(Markdown.html("[Flame graph](attachment:a1)\n\nsee [the <graph>](attachment:b1)")
+            == "<p><em>Flame graph</em></p><p>see the &lt;graph&gt;</p>")
+    }
 }

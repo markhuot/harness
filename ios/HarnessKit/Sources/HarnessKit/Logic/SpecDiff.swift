@@ -303,7 +303,7 @@ public enum MarkdownDiff {
     /// A text-bearing token's text.
     private static func text(_ t: Markdown.InlineToken) -> String {
         switch t {
-        case let .text(s), let .code(s), let .strong(s), let .em(s), let .link(s, _): s
+        case let .text(s), let .code(s), let .strong(s), let .em(s), let .link(s, _), let .attach(s, _): s
         case .ticket, .img: ""
         }
     }
@@ -316,6 +316,7 @@ public enum MarkdownDiff {
         case .strong: .strong(s)
         case .em: .em(s)
         case let .link(_, url): .link(text: s, url: url)
+        case let .attach(_, id): .attach(text: s, id: id)
         case .ticket, .img: t
         }
     }
@@ -327,6 +328,7 @@ public enum MarkdownDiff {
         case .strong: "strong"
         case .em: "em"
         case let .link(_, url): "link \(url)"
+        case let .attach(_, id): "attach \(id)"
         case .ticket: "ticket"
         case .img: "img"
         }

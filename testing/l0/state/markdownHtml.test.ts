@@ -35,4 +35,7 @@ describe("markdownToHtml", () => {
       "<p><em>After</em></p><p><em>Before</em></p>",
     );
   });
+  test("attachment links become their text, on their own line or inside one", () => {
+    expect(markdownToHtml("[Flame graph](attachment:a1)\n\nsee [the <graph>](attachment:b1)")).toBe("<p><em>Flame graph</em></p><p>see the &lt;graph&gt;</p>");
+  });
 });

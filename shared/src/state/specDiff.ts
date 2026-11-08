@@ -165,7 +165,7 @@ type Unit = InlineToken;
 const WHOLE = new Set(["ticket", "img"]);
 
 function styleKey(t: InlineToken): string {
-  return t.t === "link" ? `link ${t.url}` : t.t;
+  return t.t === "link" ? `link ${t.url}` : t.t === "attach" ? `attach ${t.id}` : t.t;
 }
 
 function unitKey(u: Unit): string {

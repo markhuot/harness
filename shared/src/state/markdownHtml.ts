@@ -4,7 +4,7 @@
 // use (parseBlocks / inlineTokens), with every piece of text escaped, so the output carries no markup
 // the source didn't ask for. The iOS app has a port: HarnessKit's Markdown.html.
 //
-// What only Harness can show becomes text: an attachment is its alt text in italics (its URL needs
+// What only Harness can show becomes text: an attachment is its alt text (or an attachment link's text) in italics (its URL needs
 // the service and a token), a ticket key is its label, a file link (`harness://file/…`) is its label;
 // only http(s) links stay links. A task item or question leads with ☐ (open) or ☑ (done).
 
@@ -33,6 +33,8 @@ function inline(text: string): string {
           return /^https?:/.test(tok.url) ? `<a href="${escapeHtml(tok.url)}">${escapeHtml(tok.text)}</a>` : escapeHtml(tok.text);
         case "ticket":
           return escapeHtml(tok.text ?? tok.key);
+        case "attach":
+          return escapeHtml(tok.text);
         case "img":
           return tok.alt ? `<em>${escapeHtml(tok.alt)}</em>` : "";
       }
@@ -75,6 +77,8 @@ function block(b: Block): string {
     }
     case "img":
       return b.alt ? `<p><em>${escapeHtml(b.alt)}</em></p>` : "";
+    case "attach":
+      return `<p><em>${escapeHtml(b.text)}</em></p>`;
     case "thumbs": {
       const alts = b.items.map((m) => m.alt).filter(Boolean);
       return alts.length ? `<p>${alts.map((a) => `<em>${escapeHtml(a)}</em>`).join(" ")}</p>` : "";

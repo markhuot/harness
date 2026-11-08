@@ -81,6 +81,9 @@ public enum Markdown {
         case img(Media)
         /// Lines holding only `![alt](attachment:<id> "thumb")` images: a row of small thumbnails.
         case thumbs([Media])
+        /// A `[text](attachment:<id>)` link alone on its line. Renderers embed it when the attachment is a
+        /// page (an HTML file or folder bundle), captioned with `text`, and otherwise show the line as text.
+        case attach(text: String, id: String)
 
         private enum CodingKeys: String, CodingKey { case t, text, level, items, start, lang, align, header, rows, alt, id, video, thumb }
 
@@ -103,6 +106,7 @@ public enum Markdown {
             case "hr": self = .hr
             case "img": self = .img(try Media(from: decoder))
             case "thumbs": self = .thumbs(try c.decode([Media].self, forKey: .items))
+            case "attach": self = .attach(text: try c.decode(String.self, forKey: .text), id: try c.decode(String.self, forKey: .id))
             default: throw DecodingError.dataCorruptedError(forKey: .t, in: c, debugDescription: "Unknown block \(t)")
             }
         }
@@ -144,6 +148,10 @@ public enum Markdown {
             case let .thumbs(items):
                 try c.encode("thumbs", forKey: .t)
                 try c.encode(items, forKey: .items)
+            case let .attach(text, id):
+                try c.encode("attach", forKey: .t)
+                try c.encode(text, forKey: .text)
+                try c.encode(id, forKey: .id)
             }
         }
     }
@@ -157,9 +165,12 @@ public enum Markdown {
         case em(String)
         case link(text: String, url: String)
         case ticket(key: String, text: String? = nil)
+        /// `[text](attachment:<id>)` inside a line: renderers link a page attachment (it opens full
+        /// screen) and show other attachments as `text`.
+        case attach(text: String, id: String)
         case img(Media)
 
-        private enum CodingKeys: String, CodingKey { case t, text, url, key }
+        private enum CodingKeys: String, CodingKey { case t, text, url, key, id }
 
         public init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -171,6 +182,7 @@ public enum Markdown {
             case "em": self = .em(try c.decode(String.self, forKey: .text))
             case "link": self = .link(text: try c.decode(String.self, forKey: .text), url: try c.decode(String.self, forKey: .url))
             case "ticket": self = .ticket(key: try c.decode(String.self, forKey: .key), text: try c.decodeIfPresent(String.self, forKey: .text))
+            case "attach": self = .attach(text: try c.decode(String.self, forKey: .text), id: try c.decode(String.self, forKey: .id))
             case "img": self = .img(try Media(from: decoder))
             default: throw DecodingError.dataCorruptedError(forKey: .t, in: c, debugDescription: "Unknown inline token \(t)")
             }
@@ -199,6 +211,10 @@ public enum Markdown {
                 try c.encode("ticket", forKey: .t)
                 try c.encode(key, forKey: .key)
                 try c.encodeIfPresent(text, forKey: .text)
+            case let .attach(text, id):
+                try c.encode("attach", forKey: .t)
+                try c.encode(text, forKey: .text)
+                try c.encode(id, forKey: .id)
             case let .img(m):
                 try c.encode("img", forKey: .t)
                 try m.encode(to: encoder)
@@ -276,6 +292,11 @@ public enum Markdown {
                 blocks.append(.img(media))
                 continue
             }
+            if let attach = Pattern.attachLine.exec(line) {
+                flush()
+                blocks.append(.attach(text: attach[1]!, id: attach[2]!))
+                continue
+            }
             if Pattern.listItem.test(line) {
                 flush()
                 let list = parseList(lines, start: i, outer: 0)
@@ -331,11 +352,11 @@ public enum Markdown {
     }
 
     /// Whether `lines[i]` opens a block that isn't a paragraph, list or fence: a heading, rule, quote,
-    /// image or table.
+    /// image, attachment link or table.
     private static func startsBlock(_ lines: [String], _ i: Int) -> Bool {
         let line = lines[i]
         let t = JSCompat.trim(line)
-        if Pattern.heading.test(t) || Pattern.rule.test(t) || t.unicodeScalars.first == ">" || thumbLine(line) != nil { return true }
+        if Pattern.heading.test(t) || Pattern.rule.test(t) || t.unicodeScalars.first == ">" || thumbLine(line) != nil || Pattern.attachLine.test(line) { return true }
         if let img = Pattern.imageLine.exec(line), case .img = image(alt: img[1]!, src: img[2]!, title: img[3]) { return true }
         if includesPipe(t), i + 1 < lines.count, let align = delimiterRow(lines[i + 1]) { return splitRow(line).count == align.count }
         return false
@@ -447,8 +468,8 @@ public enum Markdown {
     }
 
     /// Inline markup of one line. [label](x) is a link when x is http(s) or a file link (`harness://file/…`,
-    /// or a path with no scheme; see parseFileLink); other targets (javascript:, data:, anchors) keep only
-    /// the label. Bare URLs are autolinked only for http(s).
+    /// or a path with no scheme; see parseFileLink), and an "attach" token when x is `attachment:<id>`;
+    /// other targets (javascript:, data:, anchors) keep only the label. Bare URLs are autolinked only for http(s).
     /// An UPPERCASE-NN word is a "ticket" token; renderers link it only when it names a ticket they
     /// can open (ticketLinkable), so "UTF-8" or "SHA-256" stay plain text.
     /// [label](KEY), whose target is a whole ticket key (`[RFAWC-726](RFACOM-2)`: a remote ID labelling
@@ -476,6 +497,8 @@ public enum Markdown {
                 let label = mm[1]!, url = mm[2]!
                 if Pattern.ticketKey.test(url) {
                     out.append(.ticket(key: url, text: label))
+                } else if let a = Pattern.attachmentSrc.exec(url) {
+                    out.append(.attach(text: label, id: a[1]!))
                 } else {
                     out.append(Pattern.httpScheme.test(url) || FileLinks.parseFileLink(url) != nil ? .link(text: label, url: url) : .text(label))
                 }
@@ -499,7 +522,7 @@ public enum Markdown {
         let parts = inlineTokens(inner)
         let linked = parts.contains { p in
             switch p {
-            case .link: true
+            case .link, .attach: true
             case let .ticket(_, text): text != nil
             default: false
             }
@@ -552,7 +575,7 @@ public enum Markdown {
                     }
                 case let .table(_, header, rows):
                     for row in [header] + rows { row.forEach(text) }
-                case .code, .hr: break
+                case .code, .hr, .attach: break
                 }
             }
         }
@@ -747,6 +770,8 @@ public enum Markdown {
         static let quotePrefix = Pattern("^>\(s)?")
         /// `/^\s*!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)\s*$/`
         static let imageLine = Pattern("^\(s)*!\\[([^\\]]*)\\]\\(([^)\(ws)]+)(?:\(s)+\"([^\"]*)\")?\\)\(s)*\\z")
+        /// ATTACH_LINE: `/^\s*\[([^\]]+)\]\(attachment:([A-Za-z0-9][A-Za-z0-9._-]*)\)\s*$/`
+        static let attachLine = Pattern("^\(s)*\\[([^\\]]+)\\]\\(attachment:([A-Za-z0-9][A-Za-z0-9._-]*)\\)\(s)*\\z")
         /// IMAGE_PARTS: `/^!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)$/`
         static let imageParts = Pattern("^!\\[([^\\]]*)\\]\\(([^)\(ws)]+)(?:\(s)+\"([^\"]*)\")?\\)\\z")
         /// THUMB_TITLE: `/^\s*thumb(nail)?\s*$/i`

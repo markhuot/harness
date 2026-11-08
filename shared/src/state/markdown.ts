@@ -19,7 +19,12 @@ export type Block =
   /** An `![alt](attachment:<id>)` alone on its line: a full-width figure, captioned with its alt text. */
   | ({ t: "img" } & Media)
   /** Lines holding only `![alt](attachment:<id> "thumb")` images: a row of small thumbnails. */
-  | { t: "thumbs"; items: Media[] };
+  | { t: "thumbs"; items: Media[] }
+  /**
+   * A `[text](attachment:<id>)` link alone on its line. Renderers embed it when the attachment is a
+   * page (an HTML file or folder bundle), captioned with `text`, and otherwise show the line as text.
+   */
+  | { t: "attach"; text: string; id: string };
 
 /**
  * A list item: its text (continuation lines joined with spaces) and the lists nested under it.
@@ -96,6 +101,7 @@ function delimiterRow(line: string): Align[] | null {
 
 const LIST_ITEM = /^\s*([-*+]|\d+[.)])\s+(.*)$/;
 const IMAGE_LINE = /^\s*!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)\s*$/;
+const ATTACH_LINE = /^\s*\[([^\]]+)\]\(attachment:([A-Za-z0-9][A-Za-z0-9._-]*)\)\s*$/;
 
 /** Columns of a line's leading whitespace: a tab counts as 4, any other `\s` character as 1. */
 function indentOf(line: string): number {
@@ -131,11 +137,11 @@ function parseFence(lines: string[], start: number, fence: RegExpExecArray): { b
   return { block: { t: "code", lang: fence[2] ?? "", text: body.join("\n") }, end: Math.min(i, lines.length - 1) };
 }
 
-/** Whether `lines[i]` opens a block that isn't a paragraph, list or fence: a heading, rule, quote, image or table. */
+/** Whether `lines[i]` opens a block that isn't a paragraph, list or fence: a heading, rule, quote, image, attachment link or table. */
 function startsBlock(lines: string[], i: number): boolean {
   const line = lines[i]!;
   const t = line.trim();
-  if (/^#{1,4}\s+/.test(t) || /^(-{3,}|\*{3,})$/.test(t) || t.startsWith(">") || thumbLine(line)) return true;
+  if (/^#{1,4}\s+/.test(t) || /^(-{3,}|\*{3,})$/.test(t) || t.startsWith(">") || thumbLine(line) || ATTACH_LINE.test(line)) return true;
   const img = IMAGE_LINE.exec(line);
   if (img && image(img[1]!, img[2]!, img[3]).t === "img") return true;
   const align = t.includes("|") && i + 1 < lines.length ? delimiterRow(lines[i + 1]!) : null;
@@ -282,6 +288,12 @@ export function parseBlocks(src: string): Block[] {
       blocks.push(media);
       continue;
     }
+    const attach = ATTACH_LINE.exec(line);
+    if (attach) {
+      flush();
+      blocks.push({ t: "attach", text: attach[1]!, id: attach[2]! });
+      continue;
+    }
     if (LIST_ITEM.test(line)) {
       flush();
       const list = parseList(lines, i, 0);
@@ -309,6 +321,8 @@ export type InlineToken =
   | { t: "em"; text: string }
   | { t: "link"; text: string; url: string }
   | { t: "ticket"; key: string; text?: string }
+  /** `[text](attachment:<id>)` inside a line: renderers link a page attachment (it opens full screen) and show other attachments as `text`. */
+  | { t: "attach"; text: string; id: string }
   | ({ t: "img" } & Media);
 
 /** A ticket key, as a whole string: the bare-word pattern INLINE uses, anchored. */
@@ -343,14 +357,14 @@ function image(alt: string, src: string, title?: string): InlineToken {
  */
 function emphasis(t: "strong" | "em", inner: string): InlineToken[] {
   const parts = inlineTokens(inner);
-  if (!parts.some((p) => p.t === "link" || (p.t === "ticket" && p.text !== undefined))) return [{ t, text: inner }];
+  if (!parts.some((p) => p.t === "link" || p.t === "attach" || (p.t === "ticket" && p.text !== undefined))) return [{ t, text: inner }];
   return parts.map((p) => (p.t === "text" ? { t, text: p.text } : p));
 }
 
 /**
  * Inline markup of one line. [label](x) is a link when x is http(s) or a file link (`harness://file/…`,
- * or a path with no scheme; see parseFileLink); other targets (javascript:, data:, anchors) keep only
- * the label. Bare URLs are autolinked only for http(s).
+ * or a path with no scheme; see parseFileLink), and an "attach" token when x is `attachment:<id>`;
+ * other targets (javascript:, data:, anchors) keep only the label. Bare URLs are autolinked only for http(s).
  * An UPPERCASE-NN word is a "ticket" token; renderers link it only when it names a ticket they
  * can open (ticketLinkable), so "UTF-8" or "SHA-256" stay plain text.
  * [label](KEY), whose target is a whole ticket key (`[RFAWC-726](RFACOM-2)`: a remote ID labelling
@@ -371,7 +385,9 @@ export function inlineTokens(text: string): InlineToken[] {
     else if (m[4]) {
       const mm = /^\[([^\]]+)\]\(([^)\s]+)\)$/.exec(s)!;
       const [, label, url] = mm as unknown as [string, string, string];
+      const attach = ATTACHMENT_SRC.exec(url);
       if (TICKET_KEY.test(url)) out.push({ t: "ticket", key: url, text: label });
+      else if (attach) out.push({ t: "attach", text: label, id: attach[1]! });
       else out.push(/^https?:/.test(url) || parseFileLink(url) ? { t: "link", text: label, url } : { t: "text", text: label });
     } else if (m[5]) out.push({ t: "link", text: s, url: s });
     else if (m[6]) out.push({ t: "ticket", key: s });

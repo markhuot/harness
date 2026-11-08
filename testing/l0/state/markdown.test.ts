@@ -177,6 +177,36 @@ describe("parseBlocks: media", () => {
   });
 });
 
+describe("parseBlocks: attachment links", () => {
+  test("a link to an attachment alone on its line is an attach block captioned by its text", () => {
+    expect(parseBlocks("intro\n  [Flame graph](attachment:ab12)  \nafter")).toEqual([
+      { t: "p", text: "intro" },
+      { t: "attach", text: "Flame graph", id: "ab12" },
+      { t: "p", text: "after" },
+    ]);
+  });
+  test("a link with other text on its line, an https or file link alone, and an id that could escape stay paragraphs", () => {
+    for (const md of ["see [graph](attachment:ab12)", "[site](https://x.dev/a.html)", "[a.html](harness://file/a.html)", "[x](attachment:../etc)", "[x](attachment:.x)"]) {
+      expect(parseBlocks(md)[0]!.t).toBe("p");
+    }
+  });
+  test("under a list item it is the item's child, not item text", () => {
+    const [list] = parseBlocks("- item\n  [Report](attachment:r1)");
+    expect(list).toEqual({ t: "ul", items: [{ text: "item", children: [{ t: "attach", text: "Report", id: "r1" }] }] });
+  });
+  test("inside a line it is an attach token, also inside emphasis", () => {
+    expect(inlineTokens("open [the graph](attachment:ab12) now")).toEqual([
+      { t: "text", text: "open " },
+      { t: "attach", text: "the graph", id: "ab12" },
+      { t: "text", text: " now" },
+    ]);
+    expect(inlineTokens("**see [g](attachment:a1)**")).toEqual([{ t: "strong", text: "see " }, { t: "attach", text: "g", id: "a1" }]);
+  });
+  test("attachment links aren't media", () => {
+    expect(mediaIn(parseBlocks("[g](attachment:a1)\n\ntext [h](attachment:b1)"))).toEqual([]);
+  });
+});
+
 describe("inlineTokens", () => {
   test("plain text is one token; empty is none", () => {
     expect(inlineTokens("hello")).toEqual([{ t: "text", text: "hello" }]);
