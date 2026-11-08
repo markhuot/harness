@@ -3002,6 +3002,62 @@ that.
   the Activity tab next to the Spec tab (the children of HARNESS-194 implement them).
   `shared/src/state/attachments.ts` keeps the lightbox stepping helper.
 
+### Embedded pages
+
+A spec can show interactive content inline (a flame graph, a chart, a small report site) as a
+**page attachment**: kind `page`, one HTML file or a folder with an `index.html` and its assets.
+Specs stay Markdown. A plain link to a page alone on its line, `[Flame graph](attachment:<id>)`,
+embeds it; the same link inside a sentence opens it full screen. Where an app can't embed it (an old
+build, the clipboard HTML), the line reads as its link text.
+
+- **Parsing.** `parseBlocks` (and HarnessKit's port) turns a line holding only
+  `[text](attachment:<id>)` into an `attach` block, and `inlineTokens` turns such a link inside a
+  line into an `attach` token. The parser doesn't know what the attachment is: the renderers look
+  up the id in `TicketDetail.attachments` and embed only a `page`; any other attachment shows as
+  its text.
+- **Writing.** `agentSpecWrite` runs every link target outside code (`linkTargets` in
+  `service/src/spec.ts`) through `preparePage` (`service/src/pages.ts`): a local `.html` file, or a
+  folder holding an `index.html`, is a page. A missing `.html` file, a folder written with a
+  trailing slash but no `index.html`, or a page outside the agent's checkout (after resolving
+  symlinks) fails the whole write before anything is stored. Other targets (`https:`,
+  `harness://file/`, anchors, ordinary files and folders) are left alone. Each page is copied to
+  `$HARNESS_HOME/attachments/<id>/site/` beside a `manifest.json` (`{ entry, files: { path:
+  contentType } }`), skipping dotfiles, dot-folders and symlinks, with no size or file-count limit,
+  and the link becomes `attachment:<id>`. Deleting the ticket removes the folder.
+- **Serving.** `GET /embeds/:id/*path` takes the bearer token only (never `?token=`). It serves a
+  file only when the manifest lists it (an empty path is the entry), with its content type,
+  `X-Content-Type-Options: nosniff`, `Access-Control-Allow-Origin: *` (the embed's origin is
+  opaque) and Range. Every `text/html` response gets `SIZING_SCRIPT` right after `<head>` (else
+  `<html>`, else first), before the page's own scripts: a `ResizeObserver` that posts the content
+  height, at most once a frame, to `webkit.messageHandlers.harnessEmbed` on iOS or
+  `parent.postMessage({ harnessEmbedHeight })` on the Mac.
+- **Hosts.** Each app loads `harness-embed://<id>/` and answers the scheme natively by fetching
+  `/embeds/<id>/…` with the connection's token, so the web view never holds the token or the
+  service address, and iOS reuses its paired connection. The Mac shows it in an
+  `<iframe sandbox="allow-scripts allow-popups">` (no same origin, top navigation, downloads or
+  modals) and accepts a height message only from that frame's own `contentWindow`; iOS uses a
+  `WKWebView` per embed with a non-persistent data store, loaded near the screen and released far
+  from it, interactive after a tap. Both size the embed with `embedSizeAfter`
+  (`shared/src/state/embeds.ts`, HarnessKit `EmbedSize`): 360 until the page reports, then its
+  height up to 5000, and a page that grows by the same step four times in a row, each within 250 ms
+  of the embed's last resize (a `100vh` layout tracking its frame), stops being followed and
+  scrolls inside. Same-height rows added over time keep growing the embed. A frame may open the
+  system browser at most 3 times in 10 seconds (`externalOpenAllowed`), so a looping page can't
+  open tabs without end. Every embed has a full-screen view.
+- **Appearance.** The app never styles the page; Settings → Appearance reaches it only through
+  `prefers-color-scheme`. The Mac frame has no background of its own and inherits the app's
+  `color-scheme`, so a page declaring `color-scheme: light dark` draws on the app's surface and one
+  declaring nothing gets Chromium's opaque white canvas. iOS's `WKWebView` is opaque and follows the
+  app's `preferredColorScheme`, so WebKit draws its light or dark canvas by the page's own
+  `color-scheme` (a transparent web view would leave an undeclared page's black text on a dark app).
+  The agent instructions ask for pages that support both.
+- **Trust.** Network access is not restricted: an embed can reach any host, local and private
+  addresses included, the same trust as a linked page. What it can't reach is the app, the parent
+  page, device permissions, or the service API: `allowedOrigin()` accepts `Origin: null` (the
+  `file://` renderer sends it, and so does a sandboxed frame), so the bearer token is the API's
+  only lock. `testing/service-api/auth.test.ts` lists every route matched before the router's
+  bearer check, with how each guards itself, and fails when one is added without being listed.
+
 **Paging and search.** Big projects make the Done column long, so boards load
 `GET /tickets?status=` with every status except done and page done separately. `TicketPage` is
 `{ tickets, nextCursor, total }`: `total` counts everything matching the filter, and

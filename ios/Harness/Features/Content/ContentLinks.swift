@@ -32,10 +32,13 @@ enum ContentLinkURL {
 
     static func link(_ raw: String) -> URL? { make("link", raw) }
     static func ticket(_ key: String) -> URL? { make("ticket", key) }
+    /// A page attachment (an inline `[caption](attachment:<id>)`), opened full screen.
+    static func page(_ id: String, caption: String) -> URL? { make("page", id, caption: caption) }
 
     enum Target: Equatable {
         case link(String)
         case ticket(String)
+        case page(id: String, caption: String)
     }
 
     static func target(_ url: URL) -> Target? {
@@ -44,15 +47,16 @@ enum ContentLinkURL {
         switch c.host {
         case "link": return .link(v)
         case "ticket": return .ticket(v)
+        case "page": return .page(id: v, caption: c.queryItems?.first(where: { $0.name == "c" })?.value ?? v)
         default: return nil
         }
     }
 
-    private static func make(_ kind: String, _ value: String) -> URL? {
+    private static func make(_ kind: String, _ value: String, caption: String? = nil) -> URL? {
         var c = URLComponents()
         c.scheme = scheme
         c.host = kind
-        c.queryItems = [URLQueryItem(name: "v", value: value)]
+        c.queryItems = [URLQueryItem(name: "v", value: value)] + (caption.map { [URLQueryItem(name: "c", value: $0)] } ?? [])
         return c.url
     }
 }
@@ -61,6 +65,8 @@ enum ContentLinkURL {
 struct ContentLinkOpener {
     let context: FileLinkContext
     let router: Router
+    /// Opens a page attachment full screen (the markdown that knows the ticket's pages); nil: nothing to open.
+    var openPage: ((String, String) -> Void)?
 
     /// A link that can't be opened plays the error haptic.
     @MainActor
@@ -98,6 +104,7 @@ struct ContentLinkOpener {
             switch ContentLinkURL.target(url) {
             case let .link(raw): open(raw)
             case let .ticket(key): openTicket(key)
+            case let .page(id, caption): openPage?(id, caption)
             case nil: return .systemAction
             }
             return .handled
@@ -108,13 +115,14 @@ struct ContentLinkOpener {
 /// Applies the link opener for the nearest scope (or `override` when it names a root) to Text links.
 struct ContentLinkHandling: ViewModifier {
     var override: FileLinkContext
+    var openPage: ((String, String) -> Void)?
 
     @Environment(\.fileLinkContext) private var scope
     @Environment(Router.self) private var router
 
     func body(content: Content) -> some View {
         let named = override.ticketKey != nil || override.projectId != nil
-        let opener = ContentLinkOpener(context: named ? override : scope, router: router)
+        let opener = ContentLinkOpener(context: named ? override : scope, router: router, openPage: openPage)
         content.environment(\.openURL, opener.action)
     }
 }

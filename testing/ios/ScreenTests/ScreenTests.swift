@@ -330,6 +330,26 @@ final class ScreenTests: ScreenTestCase {
         XCTAssertEqual(nested.transport.unrouted, [])
     }
 
+    /// HARNESS-5 with a spec embedding a page: the embed's caption bar and full-screen button over the
+    /// placeholder a snapshot draws for the web view, an inline link to the page, and a line linking
+    /// a plain file, which stays its text.
+    func testTicketSpecEmbed() async throws {
+        var json = try WorldJSON.load()
+        json.patch("HARNESS-5", ["spec": "# Status\n\nThe checkout request's profile, captured on staging:\n\n[Flame graph of the checkout request](attachment:page-flame)\n\nOpen the [flame graph](attachment:page-flame) full screen to expand a frame, or read the [build log](attachment:file-log).\n\n[Build log](attachment:file-log)\n\nThe slowest frame is the price lookup."])
+        var details = json.root["details"] as? [String: Any] ?? [:]
+        var detail = details["HARNESS-5"] as? [String: Any] ?? [:]
+        detail["attachments"] = [
+            ["id": "page-flame", "path": "/attachments/page-flame", "name": "profile.html", "source": "spec", "kind": "page", "mimeType": "text/html", "size": 48211],
+            ["id": "file-log", "path": "/attachments/file-log/build.log", "name": "build.log", "source": "spec", "kind": "file", "mimeType": "text/plain", "size": 912],
+        ]
+        details["HARNESS-5"] = detail
+        json.root["details"] = details
+        let embed = await ScreenWorld(json)
+        let image = try await render(embed, router: ticket("HARNESS-5", .spec)) { RootView() }
+        ReferenceImages.assert(image, named: "ticket-spec-embed")
+        XCTAssertEqual(embed.transport.unrouted, [])
+    }
+
     /// HARNESS-8: a conductor, with its two children on the Tickets tab.
     func testTicketChildren() async throws {
         try await screen("ticket-children", router: ticket("HARNESS-8", .children)) { RootView() }

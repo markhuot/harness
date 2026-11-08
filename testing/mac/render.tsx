@@ -5,7 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { StoreProvider } from "../../app/src/renderer/state/store";
 import { FakeClient } from "./fakeClient";
 import { NOW, world as defaultWorld, type World } from "../world";
-import { setNow } from "./setup";
+import { setAfterEach, setNow } from "./setup";
 
 export interface Mounted {
   client: FakeClient;
@@ -76,8 +76,11 @@ export async function mount(view: ReactNode, opts: { world?: World; hash?: strin
   return m;
 }
 
-import { afterEach, jest } from "bun:test";
-afterEach(async () => {
+import { jest } from "bun:test";
+// Unmounts what each test mounted. The preload (setup.ts) calls it after every test of every file:
+// an afterEach registered here would bind only to the first file that imports this module, since a
+// module loads once per bun process, and later files would leak views and open menus into each other.
+setAfterEach(async () => {
   for (const m of mounted.splice(0)) {
     await m.settle();
     m.unmount();

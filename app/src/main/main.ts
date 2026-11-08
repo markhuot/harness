@@ -2,7 +2,7 @@
 // Agents run in the service, which is the app's child unless Settings → Service → Start at login
 // handed it to launchd: then quitting the app leaves them running.
 
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, Notification, powerMonitor, pushNotifications, screen, shell, type MenuItemConstructorOptions } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, nativeTheme, Notification, powerMonitor, protocol, pushNotifications, screen, session, shell, type MenuItemConstructorOptions } from "electron";
 import { execFile, spawn } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir, hostname } from "node:os";
@@ -12,6 +12,7 @@ import { apnsEnvironment, loadDeviceId, PushRegistrar, ticketKeyFromDelivered, t
 import { routeForLink, WIDGET_RELOAD_HELPER, widgetGroupDir, widgetHost, WidgetReloader, writeWidgetHost } from "./widgets";
 import { AwayState } from "./awayState";
 import { reloadToken, ServiceManager, type LoginItemAgent } from "./service";
+import { EMBED_SCHEME, embedFailurePage, embedRequestHeaders, embedResponseHeaders, embedUpstream, externalOpenAllowed, frameNavigation, opensExternally, permissionAllowed } from "./embeds";
 import type { ContextMenuItem, ConnectionResult, MenuCommand, PickDirectoryOptions, PopoutOpenOptions, ThemePatch, ThemeState } from "./types";
 import { commandGoesToMain, parsePopoutOptions, POPOUT_MIN, popoutBounds } from "./popouts";
 import { COMMAND_BY_ID, commandAccelerator } from "../renderer/state/keys";
@@ -319,17 +320,31 @@ const webPreferences = (): Electron.WebPreferences => ({
   spellcheck: true,
 });
 
-/** External links open in the default browser; a window itself never navigates away. */
+/**
+ * External links open in the default browser; a window itself never navigates away, and an embedded
+ * page (embeds.ts) stays on its own files. The window-open handler sees every frame's popups,
+ * an embed's included, so none opens a window in the app.
+ */
 function keepInApp(win: BrowserWindow) {
+  // When frames last opened the system browser, so a looping page can't open tabs without end.
+  const opened: number[] = [];
+  const openOutside = (url: string) => {
+    if (opensExternally(url) && externalOpenAllowed(opened, Date.now())) void shell.openExternal(url);
+  };
   win.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:\/\//.test(url)) void shell.openExternal(url);
+    openOutside(url);
     return { action: "deny" };
   });
-  win.webContents.on("will-navigate", (e, url) => {
-    if (!url.startsWith("file://")) {
-      e.preventDefault();
-      if (/^https?:\/\//.test(url)) void shell.openExternal(url);
-    }
+  win.webContents.on("will-frame-navigate", (e) => {
+    const frameUrl = e.frame?.url ?? "";
+    if (frameNavigation({ isMainFrame: e.isMainFrame, frameUrl, url: e.url }) === "allow") return;
+    e.preventDefault();
+    openOutside(e.url);
+  });
+  // Escape closes a full-screen embed (Embed.tsx), but a key pressed inside the embed's
+  // frame never reaches the app's page; pass it on, and the page decides whether it's its to take.
+  win.webContents.on("before-input-event", (_e, input) => {
+    if (input.type === "keyDown" && input.key === "Escape") win.webContents.send("embed:escape");
   });
   // A page that blocks unloading (a file pane with unsaved edits, on reload or close) is Electron's to
   // arbitrate: without a handler the reload or close silently does nothing.
@@ -679,6 +694,55 @@ const awayState = new AwayState({ monitor: powerMonitor, onChange: (away) => bro
 
 applyTheme();
 nativeTheme.on("updated", broadcastTheme);
+
+// ---------------------------------------------------------------------------
+// Embedded pages (embeds.ts, DESIGN.md "Embedded pages")
+// ---------------------------------------------------------------------------
+
+// Before ready: a standard, secure scheme gets real relative URLs, fetch() and CORS in the page.
+protocol.registerSchemesAsPrivileged([{ scheme: EMBED_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }]);
+
+/** harness-embed://<id>/<path>: the page's file from the service, fetched with the token the page never sees. */
+async function serveEmbed(req: Request): Promise<Response> {
+  const entry = (status: number, res?: Response) => (target?.path === "" || !target ? embedFailurePage(status) : (res ?? new Response(null, { status })));
+  let conn = await getConnection();
+  if ("error" in conn) return embedFailurePage(503);
+  let target = embedUpstream(req.url, conn.baseUrl);
+  if (!target) return entry(404);
+  if (req.method !== "GET" && req.method !== "HEAD") return new Response(null, { status: 405 });
+  try {
+    let res = await fetch(target.url, { method: req.method, headers: embedRequestHeaders(req.headers, conn.token) });
+    // The token may have been rotated since this connection read it: read it again and try once more.
+    if (res.status === 401) {
+      const next = reloadToken(conn);
+      if (!("error" in next) && next.token !== conn.token) {
+        setConnection(Promise.resolve(next));
+        conn = next;
+        target = embedUpstream(req.url, conn.baseUrl) ?? target;
+        res = await fetch(target.url, { method: req.method, headers: embedRequestHeaders(req.headers, conn.token) });
+      }
+    }
+    if (!res.ok && res.status !== 206) return entry(res.status, new Response(null, { status: res.status, headers: embedResponseHeaders(new Headers()) }));
+    return new Response(req.method === "HEAD" ? null : res.body, { status: res.status, headers: embedResponseHeaders(res.headers) });
+  } catch {
+    return entry(502);
+  }
+}
+
+/**
+ * Permissions (camera, microphone, geolocation, notifications, clipboard, MIDI, USB/serial/HID…)
+ * go only to the app's own pages; an embedded page, or anything else, is denied every one.
+ */
+function lockDownSession(ses: Electron.Session) {
+  ses.setPermissionRequestHandler((_wc, _permission, callback, details) => callback(permissionAllowed(details.requestingUrl)));
+  ses.setPermissionCheckHandler((_wc, _permission, requestingOrigin, details) => permissionAllowed(details.requestingUrl ?? requestingOrigin));
+  ses.setDevicePermissionHandler((details) => permissionAllowed(details.origin));
+}
+
+app.whenReady().then(() => {
+  protocol.handle(EMBED_SCHEME, serveEmbed);
+  lockDownSession(session.defaultSession);
+});
 
 // Presence goes quiet while the person is away (locked, asleep, idle): Chromium reports a window on
 // a sleeping display as still visible, which would hold back every push.

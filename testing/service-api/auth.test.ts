@@ -1,14 +1,19 @@
 import { afterEach, expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { buildRoutes } from "../../service/src/api/http";
+import { QuietBrowser } from "../builders/harness";
 import { boot, stopRigs } from "./boot";
 import { WsClient } from "./ws-client";
 
 afterEach(stopRigs);
 
-/** One route per way the handler authenticates: the router, an attachment file, a file viewer image, the two legacy file routes, a plugin's API. */
+/** One route per way the handler authenticates: the router, an attachment file, an embedded page's file, a file viewer image, the two legacy file routes, a plugin's API. */
 const GUARDED: [string, string][] = [
   ["GET", "/projects"],
   ["POST", "/tickets"],
   ["GET", "/attachments/nope"],
+  ["GET", "/embeds/nope/index.html"],
   ["GET", "/tickets/ACME-1/file/raw?path=a.png"],
   ["GET", "/tickets/ACME-1/prompt-attachments/0"],
   ["GET", "/transcript/nope/attachments/0"],
@@ -95,4 +100,44 @@ test("a rotated token is the one on disk, so a restart of the service on the sam
   const file = readdirSync(rig.harness.paths.home).find((f) => /token/.test(f));
   expect(file).toBeDefined();
   expect(readFileSync(`${rig.harness.paths.home}/${file}`, "utf8").trim()).toBe(token);
+});
+
+/**
+ * Every route matched before the router's bearer check, and how each guards itself. A sandboxed
+ * embed sends `Origin: null`, which allowedOrigin() accepts for the file:// renderer, so the token
+ * is the API's only lock: a route added before the check must be listed here, with its reason.
+ */
+const BEFORE_THE_BEARER_CHECK: [matcher: string, guard: string][] = [
+  [String.raw`/^\/plugins\/([^/]+)\/ui(?:\/(.*))?$/`, "none: static plugin UI bundles, no data"],
+  [`"/health"`, "none: says the service is up"],
+  [String.raw`/^\/mcp\/([^/]+)$/`, "the run token in the path, loopback only"],
+  [`"/ws"`, "?token="],
+  [String.raw`/^\/embeds\/([^/]+)(?:\/(.*))?$/`, "bearer"],
+  [String.raw`/^\/attachments\/([^/]+)$/`, "bearer or ?token="],
+  [String.raw`/^\/(projects|tickets)\/([^/]+)\/file\/raw$/`, "bearer or ?token="],
+  [String.raw`/^\/tickets\/([^/]+)\/prompt-attachments\/([^/]+)$/`, "bearer or ?token="],
+  [String.raw`/^\/transcript\/([^/]+)\/attachments\/([^/]+)$/`, "bearer or ?token="],
+];
+
+test("the routes matched before the bearer check are exactly the audited ones", () => {
+  const src = readFileSync(join(import.meta.dir, "../../service/src/api/http.ts"), "utf8");
+  const start = src.indexOf("async function handle(");
+  const end = src.indexOf("// Every other route needs the bearer token", start);
+  expect(start).toBeGreaterThan(0);
+  expect(end).toBeGreaterThan(start);
+  const section = src.slice(start, end);
+  const found = new Set([...section.matchAll(/(\/\^\\\/\S*?\$\/)\.exec\(|path === ("\/[^"]*")/g)].map((m) => m[1] ?? m[2]!));
+  expect([...found].sort()).toEqual(BEFORE_THE_BEARER_CHECK.map(([m]) => m).sort());
+});
+
+test("every route in the router answers 401 without the token", async () => {
+  const rig = await boot();
+  const routes = buildRoutes(rig.harness.orchestrator, new QuietBrowser(), {});
+  expect(routes.length).toBeGreaterThan(50);
+  for (const r of routes) {
+    // The route's pattern with each :param as "x".
+    const path = r.pattern.source.replace(/^\^/, "").replace(/\/\?\$$/, "").replaceAll("([^/]+)", "x").replaceAll("\\/", "/");
+    const res = await rig.call(r.method, path, r.method === "GET" || r.method === "HEAD" ? undefined : {}, { auth: null });
+    expect([r.method, path, res.status]).toEqual([r.method, path, 401]);
+  }
 });

@@ -10,6 +10,7 @@ import { VERSION } from "../config";
 import type { MacRequests } from "./mac-requests";
 import { createWsHandlers, type WsData } from "./ws";
 import { MAX_UPLOAD_BYTES } from "../attachment-lists";
+import { pageFile, withSizingScript } from "../pages";
 import type { PluginHost } from "../plugins/host";
 import type { NotificationService } from "../notifications/dispatcher";
 import type { PresenceRegistry } from "../notifications/presence";
@@ -558,7 +559,7 @@ export function createHttpHandler(opts: HttpServerOptions): HttpHandler {
       const origin = allowedOrigin(req.headers.get("origin"));
       if (req.method === "OPTIONS") return preflight(origin);
       const res = await handle(req, server);
-      return res ? withCors(res, origin) : undefined;
+      return res ? (res.headers.get("access-control-allow-origin") === "*" ? res : withCors(res, origin)) : undefined;
     },
   };
 
@@ -594,6 +595,39 @@ export function createHttpHandler(opts: HttpServerOptions): HttpHandler {
         if (!tokenMatches(url.searchParams.get("token"), opts.tokens.get())) return json({ error: "Unauthorized" }, 401);
         if (server.upgrade(req, { data: ws.newData() })) return undefined;
         return json({ error: "WebSocket upgrade required" }, 400);
+      }
+
+      // A page attachment's files (DESIGN.md "Embedded pages"), for the apps' harness-embed: URL
+      // scheme handlers. The bearer token only: native code fetches with it, and the web view
+      // showing the page never sees it. Only files the page's manifest lists are served; every
+      // HTML page gets the sizing script. Any origin may read them, since the embed's is opaque.
+      const embed = /^\/embeds\/([^/]+)(?:\/(.*))?$/.exec(url.pathname);
+      if (embed && (req.method === "GET" || req.method === "HEAD")) {
+        if (!tokenMatches(bearer(req), opts.tokens.get())) return json({ error: "Unauthorized" }, 401);
+        const page = opts.orchestrator.pageAttachment(decodeURIComponent(embed[1]!));
+        let rel: string;
+        try {
+          rel = decodeURIComponent(embed[2] ?? "");
+        } catch {
+          return json({ error: "Not found" }, 404);
+        }
+        const file = page && pageFile(page.home, page.manifest, rel);
+        if (!file) return json({ error: "Not found" }, 404);
+        let res: Response;
+        try {
+          if (file.type === "text/html") {
+            const body = withSizingScript(await Bun.file(file.path).text());
+            const bytes = new TextEncoder().encode(body);
+            res = new Response(req.method === "HEAD" ? null : bytes, {
+              headers: { "content-type": "text/html; charset=utf-8", "content-length": String(bytes.byteLength), "cache-control": ATTACHMENT_CACHE },
+            });
+          } else res = await serveFile(req, file.path, file.type);
+        } catch {
+          return json({ error: "Not found" }, 404);
+        }
+        res.headers.set("x-content-type-options", "nosniff");
+        res.headers.set("access-control-allow-origin", "*");
+        return res;
       }
 
       // Any attachment's file (DESIGN.md "Attachments"): the bearer token or ?token=, since <img>

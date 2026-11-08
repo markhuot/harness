@@ -45,6 +45,7 @@ private enum HtmlWriter {
             case let .link(text, url):
                 url.hasPrefix("http:") || url.hasPrefix("https:") ? "<a href=\"\(esc(url))\">\(esc(text))</a>" : esc(text)
             case let .ticket(key, text): esc(text ?? key)
+            case let .attach(text, _): esc(text)
             case let .img(m): m.alt.isEmpty ? "" : "<em>\(esc(m.alt))</em>"
             }
         }.joined()
@@ -89,6 +90,8 @@ private enum HtmlWriter {
         case let .thumbs(items):
             let alts = items.map(\.alt).filter { !$0.isEmpty }
             return alts.isEmpty ? "" : "<p>\(alts.map { "<em>\(esc($0))</em>" }.joined(separator: " "))</p>"
+        case let .attach(text, _):
+            return "<p><em>\(esc(text))</em></p>"
         }
     }
 

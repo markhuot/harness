@@ -16,6 +16,7 @@ import HarnessKit
             case .hr: "hr"
             case .img: "img"
             case .thumbs: "thumbs"
+            case .attach: "attach"
             }
         }
     }

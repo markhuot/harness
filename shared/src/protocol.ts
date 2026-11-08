@@ -707,7 +707,8 @@ export type ToolResultContent =
 
 export type ActivityAuthor = "agent" | "human" | "system";
 
-export type AttachmentKind = "image" | "video" | "file";
+/** "page": an HTML file or folder bundle a spec embeds as a web view (DESIGN.md "Embedded pages"). */
+export type AttachmentKind = "image" | "video" | "file" | "page";
 
 /**
  * Where an attachment's file lives (DESIGN.md "Attachments"):
