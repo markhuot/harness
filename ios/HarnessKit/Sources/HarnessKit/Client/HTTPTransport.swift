@@ -22,10 +22,13 @@ public struct HTTPRequest: Sendable, Equatable {
 public struct HTTPResponse: Sendable, Equatable {
     public var status: Int
     public var body: Data
+    /// Response headers, keys lowercased (an embedded page's content type and range answer).
+    public var headers: [String: String]
 
-    public init(status: Int, body: Data = Data()) {
+    public init(status: Int, body: Data = Data(), headers: [String: String] = [:]) {
         self.status = status
         self.body = body
+        self.headers = headers
     }
 
     public var ok: Bool { (200..<300).contains(status) }
@@ -50,6 +53,11 @@ public struct URLSessionTransport: HTTPTransport {
         for (k, v) in request.headers { r.setValue(v, forHTTPHeaderField: k) }
         if let t = request.timeout { r.timeoutInterval = t }
         let (data, response) = try await session.data(for: r)
-        return HTTPResponse(status: (response as? HTTPURLResponse)?.statusCode ?? 0, body: data)
+        let http = response as? HTTPURLResponse
+        var headers: [String: String] = [:]
+        for (k, v) in http?.allHeaderFields ?? [:] {
+            if let k = k as? String, let v = v as? String { headers[k.lowercased()] = v }
+        }
+        return HTTPResponse(status: http?.statusCode ?? 0, body: data, headers: headers)
     }
 }

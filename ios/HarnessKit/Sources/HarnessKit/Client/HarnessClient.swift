@@ -337,6 +337,16 @@ public final class HarnessClient: Sendable {
     /// Absolute URL of any attachment's file (Attachment.id: spec media, a New session's or a
     /// message's files), token in the query so an image or video view can load it. 404 once the
     /// file is gone.
+    /// One file of an embedded page: `GET <servicePath>` (EmbedPage.servicePath, `/embeds/<id>/<path>`)
+    /// with the token in the header, the page's `range` passed on. Any status comes back as it is, for
+    /// the web view to show; only a transport failure throws.
+    public func embedFile(_ servicePath: String, range: String? = nil) async throws -> HTTPResponse {
+        guard servicePath.hasPrefix("/embeds/"), let url = URL(string: baseUrl + servicePath) else { throw URLError(.badURL) }
+        var headers = ["authorization": "Bearer \(token)"]
+        if let range { headers["range"] = range }
+        return try await transport.send(HTTPRequest(method: "GET", url: url, headers: headers))
+    }
+
     public func attachmentUrl(_ id: String) -> String {
         "\(baseUrl)/attachments/\(URIComponent.encode(id))?token=\(URIComponent.encode(token))"
     }
