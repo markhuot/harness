@@ -334,9 +334,6 @@ public final class HarnessClient: Sendable {
         try await request("GET", "/tickets/\(key)/spec/revisions/\(rev)")
     }
 
-    /// Absolute URL of any attachment's file (Attachment.id: spec media, a New session's or a
-    /// message's files), token in the query so an image or video view can load it. 404 once the
-    /// file is gone.
     /// One file of an embedded page: `GET <servicePath>` (EmbedPage.servicePath, `/embeds/<id>/<path>`)
     /// with the token in the header, the page's `range` passed on. Any status comes back as it is, for
     /// the web view to show; only a transport failure throws.
@@ -347,6 +344,9 @@ public final class HarnessClient: Sendable {
         return try await transport.send(HTTPRequest(method: "GET", url: url, headers: headers))
     }
 
+    /// Absolute URL of any attachment's file (Attachment.id: spec media, a New session's or a
+    /// message's files), token in the query so an image or video view can load it. 404 once the
+    /// file is gone.
     public func attachmentUrl(_ id: String) -> String {
         "\(baseUrl)/attachments/\(URIComponent.encode(id))?token=\(URIComponent.encode(token))"
     }
