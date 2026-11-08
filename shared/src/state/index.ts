@@ -18,6 +18,7 @@ export * from "./runs";
 export * from "./runSections";
 export * from "./markdown";
 export * from "./markdownHtml";
+export * from "./embeds";
 export * from "./specDiff";
 export * from "./icons";
 export * from "./stickToBottom";
