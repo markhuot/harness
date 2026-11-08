@@ -92,7 +92,7 @@ struct MarkdownEmbedView: View {
             guard host == nil, fixedNow == nil, let client = store?.api else { return }
             let h = EmbedWebHost(id: id, client: client)
             h.onHeight = { reported in
-                let after = size.after(reported)
+                let after = size.after(reported, now: ProcessInfo.processInfo.systemUptime)
                 if after != size { size = after }
             }
             host = h
