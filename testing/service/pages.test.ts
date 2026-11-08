@@ -66,7 +66,10 @@ test("storePage copies the listed files beside a manifest; pageFile serves only 
   expect(readFileSync(pageFile(a.path, manifest, "data/points.json")!.path, "utf8")).toBe("[1,2]");
   for (const rel of [".env", "linked.txt", "../manifest.json", "data/../index.html", "nope.js"]) expect([rel, pageFile(a.path, manifest, rel)]).toEqual([rel, null]);
   expect(existsSync(join(a.path, "site/.env"))).toBe(false);
-  removePages([a.path]);
+  // Nothing outside the attachments folder is removed, whatever a record says.
+  removePages(dir, [cwd, join(cwd, "report")]);
+  expect(existsSync(join(cwd, "report/index.html"))).toBe(true);
+  removePages(dir, [a.path]);
   expect(existsSync(a.path)).toBe(false);
 });
 

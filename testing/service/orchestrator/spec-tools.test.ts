@@ -1,4 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
+import { existsSync } from "node:fs";
 import { toolCall, type Step } from "../fake-driver";
 import { makeOrchestrator, stopAll } from "../orchestrator-harness";
 import { pngBytes, writeFile } from "../files";
@@ -96,6 +97,10 @@ test("a link to a local report folder is stored as a page attachment and becomes
   expect(page).toMatchObject({ source: "spec", kind: "page", name: "report", mimeType: "text/html" });
   expect(h.ticket(t.key).spec).toBe(`Status\n[Flame graph](attachment:${page!.id})\nSee [the file](harness://file/report/index.html) and [docs](https://x.dev/a.html).`);
   expect(h.orch.pageAttachment(page!.id)!.manifest.files).toEqual({ "data.json": "application/json", "index.html": "text/html" });
+  // Deleting the ticket removes the stored page's folder.
+  expect(existsSync(page!.path)).toBe(true);
+  await h.orch.deleteTicket(t.key);
+  expect(existsSync(page!.path)).toBe(false);
 });
 
 test("a folder link without index.html refuses the whole write before anything is stored", async () => {

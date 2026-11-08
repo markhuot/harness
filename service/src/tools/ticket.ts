@@ -7,6 +7,9 @@ import { defineTool, schema } from "./util";
 /** What the spec tools say about images: the same files the attachments accept. */
 const IMAGES = `Images and videos: write markdown images of local files, e.g. ![After](shots/after.png) (${ALLOWED_EXTENSIONS.join(", ")}, each up to ${MAX_ATTACHMENT_BYTES / 1024 / 1024} MB). The harness stores each file and rewrites its src to attachment:<id>; leave attachment: and https: srcs as they are. The title "thumb" makes a small thumbnail.`;
 
+/** What the spec tools say about embedded pages (DESIGN.md "Embedded pages"). */
+const PAGES = `Interactive pages (a flame graph, a chart, a small report site): link a local .html file or a folder with an index.html, e.g. [Flame graph of checkout](reports/profile/). The harness stores it (every file in the folder except dotfiles and symlinks, so attach only the report's own folder, not a whole build) and rewrites the link to attachment:<id>. A link alone on its line embeds the page in the spec, sized to its content, with a full-screen button; a link inside a sentence opens it full screen. The page runs sandboxed with full network access; it can't reach the app or the Harness API. One page per line: build a split view inside your own HTML. Load CDN scripts by pinned version (optionally with SRI). https: links stay ordinary links, and harness://file/ links stay file-viewer links.`;
+
 /** The note parameter of the spec tools: the revision's Activity entry. */
 const REVISION_NOTE = (example: string) => `One line on what changed, 400 characters or less, shown as the revision's Activity entry (it must stand on its own, so don't repeat it with post_note), e.g. "${example}".`;
 
@@ -71,7 +74,7 @@ export const editSpec = defineTool<{ base_revision: number; note: string; edits:
   description: `Change parts of the ticket's spec, like Edit: every edit applies or none does, and the result is a new revision. base_revision is the revision you read (read_spec); if the spec has moved on since (a human edited it), the call fails with the current revision, so read it again and redo the edits. Two edit forms:
 * { old_string, new_string, replace_all? }: old_string must match the spec exactly and be unique unless replace_all is true.
 * { start_line, end_line, new_text, expected? }: replace lines start_line-end_line (inclusive, numbered as in base_revision, even after earlier edits in the same call) with new_text; end_line = start_line - 1 inserts before start_line, and new_text "" deletes the lines. expected, when given, must equal those lines' current text.
-Change only what changed: the spec's history keeps the earlier revisions. ${OPEN_QUESTIONS} ${IMAGES}`,
+Change only what changed: the spec's history keeps the earlier revisions. ${OPEN_QUESTIONS} ${IMAGES} ${PAGES}`,
   inputSchema: schema(
     {
       base_revision: { type: "integer", minimum: 1, description: "The revision your edits are based on (from read_spec)." },
@@ -103,7 +106,7 @@ Change only what changed: the spec's history keeps the earlier revisions. ${OPEN
 
 export const updateSpec = defineTool<{ spec: string; note: string; base_revision: number; title?: string }>({
   name: "update_spec",
-  description: `Replace the ticket's whole spec with new markdown, as a new revision: mostly for planning, when you write the spec from the brief. Include everything worth keeping, since it replaces the text. For later changes use edit_spec, which changes only the parts that changed. base_revision is the revision you read (the run's context names the current one); a spec that moved on since fails the call with the current revision. Optionally set a clearer ticket title. ${OPEN_QUESTIONS} ${RESOLVE_QUESTION} ${IMAGES}`,
+  description: `Replace the ticket's whole spec with new markdown, as a new revision: mostly for planning, when you write the spec from the brief. Include everything worth keeping, since it replaces the text. For later changes use edit_spec, which changes only the parts that changed. base_revision is the revision you read (the run's context names the current one); a spec that moved on since fails the call with the current revision. Optionally set a clearer ticket title. ${OPEN_QUESTIONS} ${RESOLVE_QUESTION} ${IMAGES} ${PAGES}`,
   inputSchema: schema(
     {
       spec: { type: "string", minLength: 1, description: "The complete spec in markdown: Goal, Plan, Status, Open questions (a list of `- ( )` question items)." },
