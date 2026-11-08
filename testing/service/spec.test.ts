@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { applySpecEdits, localImageSources, numberLines, rewriteImageSources, SpecEditError, unifiedDiff } from "../../service/src/spec";
+import { applySpecEdits, linkTargets, localImageSources, numberLines, rewriteImageSources, rewriteLinkTargets, SpecEditError, unifiedDiff } from "../../service/src/spec";
 
 const body = "one\ntwo\nthree\nfour";
 
@@ -80,4 +80,16 @@ test("localImageSources lists local images once, in order, skipping attachments 
 test("rewriteImageSources swaps only the srcs it has ids for and keeps alt and title", () => {
   const md = "![a](shots/a.png \"cap\") ![b](other.png)";
   expect(rewriteImageSources(md, new Map([["shots/a.png", "42"]]))).toBe("![a](attachment:42 \"cap\") ![b](other.png)");
+});
+
+test("linkTargets lists link targets once, in order, skipping images and links shown as code", () => {
+  const md = "[a](r/a.html) ![img](shots/a.png) [b](<my page.html>) [a again](r/a.html)\n`[code](c.html)` [c](https://x.dev)\n```\n[fenced](f.html)\n```\n[d](r/d/)";
+  expect(linkTargets(md)).toEqual(["r/a.html", "my page.html", "https://x.dev", "r/d/"]);
+});
+
+test("rewriteLinkTargets points only the links it has ids for at attachment:<id>, leaving images and code alone", () => {
+  const md = "[Graph](r/a.html) ![Graph](r/a.html) `[Graph](r/a.html)` [Other](r/b.html)\n```\n[Graph](r/a.html)\n```";
+  expect(rewriteLinkTargets(md, new Map([["r/a.html", "p1"]]))).toBe(
+    "[Graph](attachment:p1) ![Graph](r/a.html) `[Graph](r/a.html)` [Other](r/b.html)\n```\n[Graph](r/a.html)\n```",
+  );
 });

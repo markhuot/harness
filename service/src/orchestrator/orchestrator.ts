@@ -200,7 +200,8 @@ import {
 import { resolveRunChoice, resolveRunModel } from "./models";
 import { prepareAttachments, removeAttachmentFiles, storeAttachments } from "../attachments";
 import { activityLine } from "../activity";
-import { applySpecEdits, localImageSources, numberLines, rewriteImageSources, SpecEditError, unifiedDiff } from "../spec";
+import { applySpecEdits, linkTargets, localImageSources, numberLines, rewriteImageSources, rewriteLinkTargets, SpecEditError, unifiedDiff } from "../spec";
+import { preparePage, readManifest, removePages, storePage, type PageManifest } from "../pages";
 import { confineOutputPath, readSnapshot, readTaskOutput, snapshotTaskOutput, unavailable } from "../task-output";
 import { ModelCatalog, type ModelCatalogOptions } from "../drivers/models";
 import { CommandCatalog, type CommandCatalogOptions } from "../drivers/commands";
@@ -2162,6 +2163,14 @@ export class Orchestrator {
    * Any registered attachment and its file for GET /attachments/:id (spec media, uploads,
    * registered files, files sent with messages), or null when either is gone.
    */
+  /** A page attachment's stored folder and manifest (GET /embeds/:id/*), or null when `id` isn't a page or its files are gone. */
+  pageAttachment(id: string): { home: string; manifest: PageManifest } | null {
+    const attachment = this.store.attachments.get(id);
+    if (attachment?.kind !== "page") return null;
+    const manifest = readManifest(attachment.path);
+    return manifest ? { home: attachment.path, manifest } : null;
+  }
+
   attachmentFile(id: string): { attachment: Attachment; path: string; mimeType: string } | null {
     const attachment = this.store.attachments.get(id);
     if (!attachment) return null;
@@ -3779,8 +3788,9 @@ ${numberLines(r.body)}`;
   }
 
   /**
-   * An agent's spec write: local images in `body` are validated and stored as the ticket's
-   * attachments (their src becomes attachment:<id>), then the revision is added. Nothing is kept
+   * An agent's spec write: local images in `body`, and links to local HTML pages (a file, or a
+   * folder with an index.html), are validated and stored as the ticket's attachments (their target
+   * becomes attachment:<id>), then the revision is added. Nothing is kept
    * when any of it fails. The spec guard judges the text first (guardSpecWrite).
    */
   private async agentSpecWrite(ctx: ToolContext, t: Ticket, w: { kind: "edit" | "replace"; body: string; baseRevision: number; note: string }): Promise<string> {
@@ -3789,20 +3799,36 @@ ${numberLines(r.body)}`;
     if (w.body !== t.spec) await this.guardSpecWrite(t, { kind: w.kind, before: t.spec, body: w.body });
     const sources = localImageSources(w.body);
     const prepared = prepareAttachments(sources, ctx.cwd);
+    // Links to local HTML files and folders with an index.html become page attachments.
+    const pages = linkTargets(w.body).flatMap((target) => {
+      const page = preparePage(target, ctx.cwd);
+      return page ? [{ target, page }] : [];
+    });
     const stored = storeAttachments(this.paths.attachmentsDir, prepared);
-    const body = rewriteImageSources(w.body, new Map(sources.map((src, i) => [src, stored[i]!.id])));
+    const storedPages: Attachment[] = [];
+    try {
+      for (const { page } of pages) storedPages.push(storePage(this.paths.attachmentsDir, page));
+    } catch (err) {
+      removeAttachmentFiles(stored.map((a) => a.path));
+      removePages(storedPages.map((a) => a.path));
+      throw err;
+    }
+    let body = rewriteImageSources(w.body, new Map(sources.map((src, i) => [src, stored[i]!.id])));
+    body = rewriteLinkTargets(body, new Map(pages.map(({ target }, i) => [target, storedPages[i]!.id])));
+    const all = [...stored, ...storedPages];
     let rev: SpecRevisionInfo | null;
     try {
       rev = this.store.transaction(() => {
-        this.store.attachments.add(t.id, stored);
+        this.store.attachments.add(t.id, all);
         return this.reviseSpec(t, { body, baseRevision: w.baseRevision, note: w.note.trim(), author: "agent", runId: ctx.runId, runKind: ctx.runKind });
       });
     } catch (err) {
       removeAttachmentFiles(stored.map((a) => a.path));
+      removePages(storedPages.map((a) => a.path));
       if (err instanceof HarnessError && err.status === 409) throw new Error(this.staleSpecMessage(this.store.tickets.get(t.id) ?? t, w.baseRevision));
       throw err;
     }
-    const images = stored.length ? ` Stored ${stored.length} attachment${stored.length === 1 ? "" : "s"} (${stored.map((a) => `${a.name} → attachment:${a.id}`).join(", ")}).` : "";
+    const images = all.length ? ` Stored ${all.length} attachment${all.length === 1 ? "" : "s"} (${all.map((a) => `${a.name} → attachment:${a.id}`).join(", ")}).` : "";
     if (!rev) return `The spec already reads that way; it stays at revision ${w.baseRevision}.${images}`;
     return `Spec updated to revision ${rev.rev}.${images}`;
   }

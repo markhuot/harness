@@ -83,6 +83,34 @@ test("an image that doesn't exist refuses the whole write", async () => {
   expect(h.store.attachments.listByTicket(t.id)).toEqual([]);
 });
 
+test("a link to a local report folder is stored as a page attachment and becomes attachment:<id>; links elsewhere stay", async () => {
+  const spec = "Status\n[Flame graph](report)\nSee [the file](harness://file/report/index.html) and [docs](https://x.dev/a.html).";
+  const { h, t, results } = await agentRun([["update_spec", { base_revision: 1, note: "Embedded the report", spec }]], {
+    files: (cwd) => {
+      writeFile(cwd, "report/index.html", "<html><head></head><body>graph</body></html>");
+      writeFile(cwd, "report/data.json", "{}");
+    },
+  });
+  expect(results[0]!.isError).toBe(false);
+  const [page] = h.store.attachments.listByTicket(t.id);
+  expect(page).toMatchObject({ source: "spec", kind: "page", name: "report", mimeType: "text/html" });
+  expect(h.ticket(t.key).spec).toBe(`Status\n[Flame graph](attachment:${page!.id})\nSee [the file](harness://file/report/index.html) and [docs](https://x.dev/a.html).`);
+  expect(h.orch.pageAttachment(page!.id)!.manifest.files).toEqual({ "data.json": "application/json", "index.html": "text/html" });
+});
+
+test("a folder link without index.html refuses the whole write before anything is stored", async () => {
+  const { h, t, results } = await agentRun([["update_spec", { base_revision: 1, note: "n", spec: "![a](a.png)\n[Report](report/)" }]], {
+    files: (cwd) => {
+      writeFile(cwd, "a.png", pngBytes());
+      writeFile(cwd, "report/notes.md", "n");
+    },
+  });
+  expect(results[0]!.isError).toBe(true);
+  expect(results[0]!.text).toContain("has no index.html");
+  expect(h.store.specs.list(t.id)).toHaveLength(1);
+  expect(h.store.attachments.listByTicket(t.id)).toEqual([]);
+});
+
 test("post_note adds one Activity line from the agent; an empty note is an error", async () => {
   const { h, t, results } = await agentRun([["post_note", { note: "Tests pass\nmore detail" }], ["post_note", { note: "  " }]]);
   expect(results[0]!.isError).toBe(false);

@@ -252,3 +252,60 @@ export function rewriteImageSources(body: string, ids: ReadonlyMap<string, strin
     return id ? `![${alt}](attachment:${id}${title ?? ""})` : whole;
   });
 }
+
+// ---------------------------------------------------------------------------
+// Page links
+// ---------------------------------------------------------------------------
+
+/** `[text](target)`, not an image (`![…]`), with an optional <angle-bracketed> target. */
+const LINK = /(?<!!)\[([^\]\n]+)\]\(\s*(<[^>\n]+>|[^)\s]+)\s*\)/g;
+
+/**
+ * `fn` applied to the parts of `body` outside code: fenced blocks and `inline code` stay as they
+ * are, so a link shown as an example isn't stored or rewritten.
+ */
+function outsideCode(body: string, fn: (text: string) => string): string {
+  let fence: string | null = null;
+  return body
+    .split("\n")
+    .map((line) => {
+      const f = /^\s*(```|~~~)/.exec(line);
+      if (fence) {
+        if (f && f[1] === fence) fence = null;
+        return line;
+      }
+      if (f) {
+        fence = f[1]!;
+        return line;
+      }
+      return line
+        .split(/(`[^`]*`)/)
+        .map((part, i) => (i % 2 ? part : fn(part)))
+        .join("");
+    })
+    .join("\n");
+}
+
+/** Link targets in spec markdown outside code (in order, each once), as written; images aren't links. */
+export function linkTargets(body: string): string[] {
+  const out: string[] = [];
+  outsideCode(body, (text) => {
+    for (const m of text.matchAll(LINK)) {
+      const target = unwrap(m[2]!);
+      if (!out.includes(target)) out.push(target);
+    }
+    return text;
+  });
+  return out;
+}
+
+/** Every link whose target is in `ids` pointed at `attachment:<id>` instead, keeping its text. */
+export function rewriteLinkTargets(body: string, ids: ReadonlyMap<string, string>): string {
+  if (ids.size === 0) return body;
+  return outsideCode(body, (text) =>
+    text.replace(LINK, (whole, label: string, raw: string) => {
+      const id = ids.get(unwrap(raw));
+      return id ? `[${label}](attachment:${id})` : whole;
+    }),
+  );
+}

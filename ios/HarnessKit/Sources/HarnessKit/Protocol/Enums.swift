@@ -342,15 +342,18 @@ public enum SpecRevisionAuthor: OpenEnum {
     }
 }
 
+/// Attachment.kind. `page` is an HTML file or folder bundle a spec embeds as a web view
+/// (DESIGN.md "Embedded pages").
 public enum AttachmentKind: OpenEnum {
-    case image, video, file
+    case image, video, file, page
     case unknown(String)
-    public static let allKnown: [Self] = [.image, .video, .file]
+    public static let allKnown: [Self] = [.image, .video, .file, .page]
     public var rawValue: String {
         switch self {
         case .image: "image"
         case .video: "video"
         case .file: "file"
+        case .page: "page"
         case let .unknown(r): r
         }
     }
