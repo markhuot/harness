@@ -2730,11 +2730,14 @@ button.prompt-attachment-row-main:disabled {
   white-space: nowrap;
   text-overflow: ellipsis;
 }
+/* No background of our own: the frame inherits the app's color-scheme, so a page declaring
+   `color-scheme: light dark` draws on the app's surface in either appearance, and Chromium paints a
+   page that declares nothing on an opaque white canvas, as a browser would. */
 .md-embed-frame {
   display: block;
   width: 100%;
   border: 0;
-  background: #fff;
+  background: transparent;
 }
 .md-embed-failed {
   display: flex;
@@ -2782,7 +2785,7 @@ button.prompt-attachment-row-main:disabled {
   min-height: 0;
   width: 100%;
   border: 0;
-  background: #fff;
+  background: transparent;
 }
 .overlay.embed-full .md-embed-failed {
   flex: 1;

@@ -36,8 +36,11 @@ import WebKit
         webView.allowsBackForwardNavigationGestures = false
         webView.allowsLinkPreview = false
         webView.scrollView.contentInsetAdjustmentBehavior = .never
-        webView.isOpaque = false
-        webView.backgroundColor = .clear
+        // Opaque, with no background color of ours: WebKit then draws the canvas by the page's own
+        // color-scheme under the app's appearance (preferredColorScheme), dark for a page declaring
+        // `color-scheme: light dark` in a dark app and white for one declaring nothing, whose black
+        // text a transparent view would leave on the dark app.
+        webView.isOpaque = true
         super.init()
         content.add(EmbedMessageHandler(self), name: EmbedPage.messageHandler)
         webView.navigationDelegate = self

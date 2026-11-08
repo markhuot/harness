@@ -8,7 +8,7 @@ import { defineTool, schema } from "./util";
 const IMAGES = `Images and videos: write markdown images of local files, e.g. ![After](shots/after.png) (${ALLOWED_EXTENSIONS.join(", ")}, each up to ${MAX_ATTACHMENT_BYTES / 1024 / 1024} MB). The harness stores each file and rewrites its src to attachment:<id>; leave attachment: and https: srcs as they are. The title "thumb" makes a small thumbnail.`;
 
 /** What the spec tools say about embedded pages (DESIGN.md "Embedded pages"). */
-const PAGES = `Interactive pages: link a local .html file or a folder with an index.html; the harness stores it (minus dotfiles and symlinks) as attachment:<id>. Alone on its line the link embeds the page, sandboxed and sized to fit; inline it opens full screen.`;
+const PAGES = `Interactive pages: link a local .html file or a folder with an index.html; the harness stores it (minus dotfiles and symlinks) as attachment:<id>. Alone on its line the link embeds the page, sandboxed and sized to fit; inline it opens full screen. It sees the app's light/dark mode: support both (\`color-scheme: light dark\`).`;
 
 /** The note parameter of the spec tools: the revision's Activity entry. */
 const REVISION_NOTE = (example: string) => `One line on what changed, 400 characters or less, shown as the revision's Activity entry (it must stand on its own, so don't repeat it with post_note), e.g. "${example}".`;

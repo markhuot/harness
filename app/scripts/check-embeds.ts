@@ -7,7 +7,10 @@
 //   - inside an embed, window.parent, the API without the token, a climb out of /embeds/<id>/,
 //     every permission (camera, notifications, geolocation, clipboard) and top-level navigation
 //     all fail, and the app window stays on its own page;
-//   - full screen opens over the window, and Escape pressed inside the page's frame closes it.
+//   - full screen opens over the window, and Escape pressed inside the page's frame closes it;
+//   - Settings → Appearance reaches the page: one declaring `color-scheme: light dark` sees the app's
+//     appearance through prefers-color-scheme and draws on the app's surface, and one declaring
+//     nothing stays light (black on white) in a dark app.
 //
 // bun app/scripts/check-embeds.ts [--out=<dir>] [--no-build]
 //   --out     write screenshots there (default: a temp dir, printed at the end)
@@ -116,6 +119,15 @@ if (navigator.clipboard) navigator.clipboard.readText().then(() => set("clipboar
 try { top.location.href = "https://example.com/"; setTimeout(() => results.top ?? set("top", "blocked: no navigation"), 500); } catch (e) { blocked("top")(e); }
 </script></body></html>`;
 
+// A page written for both appearances, as the agent instructions ask: it declares color-scheme and
+// leaves the background to the canvas, and reports what prefers-color-scheme says.
+const THEMED = `<!doctype html><html><head><meta charset="utf-8"><meta name="color-scheme" content="light dark">
+<style>:root{color-scheme:light dark}body{margin:0;padding:16px;font:13px -apple-system,sans-serif}@media (prefers-color-scheme: dark){h1{color:#8ab4ff}}</style></head>
+<body><h1 style="font-size:15px">Light and dark</h1><p>prefers-color-scheme: <b id="s"></b></p>
+<script>const q = matchMedia("(prefers-color-scheme: dark)"); window.__scheme = () => q.matches ? "dark" : "light"; const show = () => document.getElementById("s").textContent = window.__scheme(); show(); q.addEventListener("change", show);</script></body></html>`;
+// A page that declares nothing about color schemes.
+const PLAIN = `<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:16px;font:13px -apple-system,sans-serif"><h1 style="font-size:15px">No color-scheme</h1><p>Black on white in either appearance.</p></body></html>`;
+
 function writePages(project: string, api: string) {
   const w = (path: string, text: string) => {
     mkdirSync(join(project, path, ".."), { recursive: true });
@@ -128,6 +140,8 @@ function writePages(project: string, api: string) {
   w("reports/bundle/data/points.json", JSON.stringify({ points: [1, 4, 3, 7, 6, 9, 8, 10, 7] }));
   w("reports/grow.html", GROW);
   w("reports/probe.html", probePage(api));
+  w("reports/themed.html", THEMED);
+  w("reports/plain.html", PLAIN);
   w("reports/gone.html", "<!doctype html><p>This page's files are removed before the app opens it.</p>");
 }
 
@@ -143,6 +157,10 @@ const SPEC = [
   "[A page that grows](reports/grow.html)",
   "",
   "[Security probe](reports/probe.html)",
+  "",
+  "[Light and dark](reports/themed.html)",
+  "",
+  "[No color scheme](reports/plain.html)",
   "",
   "[Removed report](reports/gone.html)",
   "",
@@ -187,10 +205,10 @@ try {
   const detail = await until("the agent's spec with the pages in it", 60_000, async () => {
     const d = await daemon!.call<TicketDetail>("GET", `/tickets/${ticket.key}`);
     await new Promise((r) => setTimeout(r, 100));
-    return d.ticket.spec.includes("attachment:") && (d.attachments ?? []).filter((a) => a.kind === "page").length >= 5 ? d : null;
+    return d.ticket.spec.includes("attachment:") && (d.attachments ?? []).filter((a) => a.kind === "page").length >= 7 ? d : null;
   });
   const idOf = (caption: string) => new RegExp(`\\[${caption.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\]\\(attachment:([^)]+)\\)`).exec(detail.ticket.spec)?.[1] ?? "";
-  const ids = { flame: idOf("Flame graph"), bundle: idOf("Folder bundle with a relative asset and a CDN script"), grow: idOf("A page that grows"), probe: idOf("Security probe"), gone: idOf("Removed report") };
+  const ids = { flame: idOf("Flame graph"), bundle: idOf("Folder bundle with a relative asset and a CDN script"), grow: idOf("A page that grows"), probe: idOf("Security probe"), themed: idOf("Light and dark"), plain: idOf("No color scheme"), gone: idOf("Removed report") };
   check("the agent's links became page attachments", Object.values(ids).every(Boolean), JSON.stringify(ids));
   rmSync(join(daemon.home, "attachments", ids.gone), { recursive: true, force: true });
 
@@ -198,7 +216,7 @@ try {
   const main = mac.main;
   await main.evaluate(`location.hash = ${JSON.stringify(`#/board/all/ticket/${ticket.key}`)}`);
   await main.click("[data-testid=pane-zoom]");
-  await main.waitFor("the spec with its embeds", `document.querySelectorAll('[data-testid=md-embed]').length === 5`, 60_000);
+  await main.waitFor("the spec with its embeds", `document.querySelectorAll('[data-testid=md-embed]').length === 7`, 60_000);
   const height = (id: string) => main.evaluate<number>(`document.querySelector('[data-embed-id="${id}"] iframe')?.getBoundingClientRect().height ?? 0`);
 
   // The flame graph: loaded through the scheme and sized to its own height (not the 360 default).
@@ -229,18 +247,45 @@ try {
   check("the app window stays on its own page", (await main.evaluate<string>("location.href")).startsWith("file://"));
   console.log(`  screenshot ${await shot(mac, "04-security-probe", `[data-embed-id="${ids.probe}"]`)}`);
 
+  // Appearance: the frame follows Settings → Appearance without the app touching the page.
+  const themed = await frameTarget(mac, ids.themed);
+  await frameTarget(mac, ids.plain);
+  // The color a few pixels inside an embed's top-left corner, from a screenshot of the window.
+  const pixel = async (id: string) => {
+    await main.evaluate(`document.querySelector('[data-embed-id="${id}"]').scrollIntoView({ block: "center" })`);
+    await new Promise((r) => setTimeout(r, 300));
+    const r = await main.evaluate<{ x: number; y: number }>(`(() => { const b = document.querySelector('[data-embed-id="${id}"] iframe').getBoundingClientRect(); return { x: b.x + 4, y: b.y + 4 }; })()`);
+    const { data } = await main.send<{ data: string }>("Page.captureScreenshot", { format: "png", clip: { ...r, width: 2, height: 2, scale: 1 } });
+    // Decoded inside the themed page: it has no CSP, unlike the app's window.
+    return themed.evaluate<number[]>(`(async () => { const bytes = Uint8Array.from(atob(${JSON.stringify(data)}), (c) => c.charCodeAt(0)); const bmp = await createImageBitmap(new Blob([bytes], { type: "image/png" })); const c = new OffscreenCanvas(1, 1).getContext("2d"); c.drawImage(bmp, 0, 0); return [...c.getImageData(0, 0, 1, 1).data.slice(0, 3)]; })()`);
+  };
+  const luma = ([r = 0, g = 0, b = 0]: number[]) => Math.round(0.2126 * r + 0.7152 * g + 0.0722 * b);
+  for (const appearance of ["dark", "light"] as const) {
+    await main.evaluate(`window.harness.setTheme({ preference: "${appearance}" })`);
+    await main.waitFor(`the app in ${appearance}`, `document.documentElement.dataset.theme === "${appearance}"`);
+    await until(`the page to see ${appearance}`, 10_000, async () => (await themed.evaluate<string>("window.__scheme()")) === appearance || null).catch(() => {});
+    const seen = await themed.evaluate<string>("window.__scheme()");
+    check(`in ${appearance}, a light/dark page sees prefers-color-scheme: ${appearance}`, seen === appearance, seen);
+    const surface = await pixel(ids.themed);
+    check(`in ${appearance}, a light/dark page draws on a ${appearance} surface`, appearance === "dark" ? luma(surface) < 90 : luma(surface) > 200, `rgb(${surface})`);
+    const plain = await pixel(ids.plain);
+    check(`in ${appearance}, a page with no color-scheme stays on white`, luma(plain) > 240, `rgb(${plain})`);
+    console.log(`  screenshot ${await shot(mac, `05-appearance-${appearance}`, `[data-embed-id="${ids.themed}"]`)}`);
+  }
+  await main.evaluate(`window.harness.setTheme({ preference: "system" })`);
+
   // The removed page: a placeholder with its caption and full-screen button; the spec goes on.
   await main.waitFor("the removed page's placeholder", `document.querySelector('[data-embed-id="${ids.gone}"] [data-testid=md-embed-failed]')`);
   check("a page that can't load shows the placeholder", true);
   check("the text after the embeds renders", await main.evaluate<boolean>(`document.body.innerText.includes("Text after the embeds still renders.")`));
-  console.log(`  screenshot ${await shot(mac, "05-failed-placeholder", `[data-embed-id="${ids.gone}"]`)}`);
+  console.log(`  screenshot ${await shot(mac, "06-failed-placeholder", `[data-embed-id="${ids.gone}"]`)}`);
 
   // Full screen from the flame graph's button, then Escape pressed inside the page's frame.
   await main.evaluate(`document.querySelector('[data-embed-id="${ids.flame}"]').scrollIntoView({ block: "start" })`);
   await main.click(`[data-embed-id="${ids.flame}"] [data-testid=md-embed-full]`);
   await main.waitFor("the full-screen page", `document.querySelector('.overlay.embed-full iframe')`);
   await frameTarget(mac, ids.flame);
-  console.log(`  screenshot ${await shot(mac, "06-full-screen")}`);
+  console.log(`  screenshot ${await shot(mac, "07-full-screen")}`);
   const { x, y } = await main.evaluate<{ x: number; y: number }>(`(() => { const r = document.querySelector('.overlay.embed-full iframe').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height - 20 }; })()`);
   await main.send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 });
   await main.send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 });

@@ -3043,6 +3043,13 @@ build, the clipboard HTML), the line reads as its link text.
   scrolls inside. Same-height rows added over time keep growing the embed. A frame may open the
   system browser at most 3 times in 10 seconds (`externalOpenAllowed`), so a looping page can't
   open tabs without end. Every embed has a full-screen view.
+- **Appearance.** The app never styles the page; Settings → Appearance reaches it only through
+  `prefers-color-scheme`. The Mac frame has no background of its own and inherits the app's
+  `color-scheme`, so a page declaring `color-scheme: light dark` draws on the app's surface and one
+  declaring nothing gets Chromium's opaque white canvas. iOS's `WKWebView` is opaque and follows the
+  app's `preferredColorScheme`, so WebKit draws its light or dark canvas by the page's own
+  `color-scheme` (a transparent web view would leave an undeclared page's black text on a dark app).
+  The agent instructions ask for pages that support both.
 - **Trust.** Network access is not restricted: an embed can reach any host, local and private
   addresses included, the same trust as a linked page. What it can't reach is the app, the parent
   page, device permissions, or the service API: `allowedOrigin()` accepts `Origin: null` (the
