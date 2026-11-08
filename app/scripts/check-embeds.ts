@@ -122,9 +122,9 @@ try { top.location.href = "https://example.com/"; setTimeout(() => results.top ?
 // A page written for both appearances, as the agent instructions ask: it declares color-scheme and
 // leaves the background to the canvas, and reports what prefers-color-scheme says.
 const THEMED = `<!doctype html><html><head><meta charset="utf-8"><meta name="color-scheme" content="light dark">
-<style>:root{color-scheme:light dark}body{margin:0;padding:16px;font:13px -apple-system,sans-serif}@media (prefers-color-scheme: dark){h1{color:#8ab4ff}}</style></head>
-<body><h1 style="font-size:15px">Light and dark</h1><p>prefers-color-scheme: <b id="s"></b></p>
-<script>const q = matchMedia("(prefers-color-scheme: dark)"); window.__scheme = () => q.matches ? "dark" : "light"; const show = () => document.getElementById("s").textContent = window.__scheme(); show(); q.addEventListener("change", show);</script></body></html>`;
+<style>:root{color-scheme:light dark}body{margin:0;padding:16px;font:13px -apple-system,sans-serif}.dark{display:none}@media (prefers-color-scheme: dark){h1{color:#8ab4ff}.dark{display:inline}.light{display:none}}</style></head>
+<body><h1 style="font-size:15px">Light and dark</h1><p>prefers-color-scheme: <b class="light">light</b><b class="dark">dark</b></p>
+<script>window.__scheme = () => matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";</script></body></html>`;
 // A page that declares nothing about color schemes.
 const PLAIN = `<!doctype html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:16px;font:13px -apple-system,sans-serif"><h1 style="font-size:15px">No color-scheme</h1><p>Black on white in either appearance.</p></body></html>`;
 
