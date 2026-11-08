@@ -3,15 +3,12 @@
 // <service>/embeds/<id>/<path> with the bearer token, so the web view never sees the token or the
 // service's address. Also the rules that keep an embed inside its frame: what may navigate where,
 // which origins get permissions, where popups go. Pure, so the mac tests and
-// scripts/check-security.ts can hold them to account; main.ts wires them up.
+// scripts/check-embeds.ts can hold them to account; main.ts wires them up.
 
 export const EMBED_SCHEME = "harness-embed";
 
 /** An attachment id as the markdown parser accepts it (shared/src/state/markdown.ts ATTACHMENT_SRC), lowercased: the scheme is standard, so its host is. */
 const EMBED_ID = /^[a-z0-9][a-z0-9._-]*$/;
-
-/** The page's entry URL for an attachment id. */
-export const embedUrl = (id: string) => `${EMBED_SCHEME}://${id.toLowerCase()}/`;
 
 /**
  * The service URL a harness-embed: request maps to, or null for one that isn't a page's file (a
@@ -112,3 +109,19 @@ function embedHost(url: string): string | null {
 
 /** A window.open or target=_blank from any frame: http(s) opens in the system browser, and no window opens in the app. */
 export const opensExternally = (url: string) => /^https?:\/\//.test(url);
+
+/** How many pages a frame (an embed, a plugin) may open in the system browser within OPEN_WINDOW_MS. */
+export const MAX_EXTERNAL_OPENS = 3;
+export const OPEN_WINDOW_MS = 10_000;
+
+/**
+ * Whether a frame's popup or navigation may open the system browser now, given when the earlier
+ * ones did (`opened`, kept and pruned in place). A hostile page looping `location = "https://…"`
+ * would otherwise open browser tabs without end; a person following links never hits the limit.
+ */
+export function externalOpenAllowed(opened: number[], now: number): boolean {
+  while (opened.length && now - opened[0]! >= OPEN_WINDOW_MS) opened.shift();
+  if (opened.length >= MAX_EXTERNAL_OPENS) return false;
+  opened.push(now);
+  return true;
+}

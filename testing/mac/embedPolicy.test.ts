@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { embedFailurePage, embedRequestHeaders, embedResponseHeaders, embedUpstream, frameNavigation, opensExternally, permissionAllowed } from "../../app/src/main/embeds";
+import { embedFailurePage, embedRequestHeaders, embedResponseHeaders, embedUpstream, externalOpenAllowed, frameNavigation, MAX_EXTERNAL_OPENS, OPEN_WINDOW_MS, opensExternally, permissionAllowed } from "../../app/src/main/embeds";
 
 const BASE = "http://127.0.0.1:7717";
 const ID = "3f2a9c1e-0000-4000-8000-000000000001";
@@ -69,4 +69,13 @@ describe("embeds stay inside their frame", () => {
     expect(opensExternally("file:///etc/passwd")).toBe(false);
     expect(opensExternally(`harness-embed://${ID}/`)).toBe(false);
   });
+});
+
+test("frames open the system browser at most MAX_EXTERNAL_OPENS times in a window, then again once it passes", () => {
+  const opened: number[] = [];
+  const t0 = 1_000_000;
+  const results = Array.from({ length: MAX_EXTERNAL_OPENS + 2 }, (_, i) => externalOpenAllowed(opened, t0 + i));
+  expect(results).toEqual([...Array(MAX_EXTERNAL_OPENS).fill(true), false, false]);
+  expect(externalOpenAllowed(opened, t0 + OPEN_WINDOW_MS - 1)).toBe(false);
+  expect(externalOpenAllowed(opened, t0 + OPEN_WINDOW_MS)).toBe(true);
 });

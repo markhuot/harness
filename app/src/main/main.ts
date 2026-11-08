@@ -12,7 +12,7 @@ import { apnsEnvironment, loadDeviceId, PushRegistrar, ticketKeyFromDelivered, t
 import { routeForLink, WIDGET_RELOAD_HELPER, widgetGroupDir, widgetHost, WidgetReloader, writeWidgetHost } from "./widgets";
 import { AwayState } from "./awayState";
 import { reloadToken, ServiceManager, type LoginItemAgent } from "./service";
-import { EMBED_SCHEME, embedFailurePage, embedRequestHeaders, embedResponseHeaders, embedUpstream, frameNavigation, opensExternally, permissionAllowed } from "./embeds";
+import { EMBED_SCHEME, embedFailurePage, embedRequestHeaders, embedResponseHeaders, embedUpstream, externalOpenAllowed, frameNavigation, opensExternally, permissionAllowed } from "./embeds";
 import type { ContextMenuItem, ConnectionResult, MenuCommand, PickDirectoryOptions, PopoutOpenOptions, ThemePatch, ThemeState } from "./types";
 import { commandGoesToMain, parsePopoutOptions, POPOUT_MIN, popoutBounds } from "./popouts";
 import { COMMAND_BY_ID, commandAccelerator } from "../renderer/state/keys";
@@ -326,17 +326,22 @@ const webPreferences = (): Electron.WebPreferences => ({
  * an embed's included, so none opens a window in the app.
  */
 function keepInApp(win: BrowserWindow) {
+  // When frames last opened the system browser, so a looping page can't open tabs without end.
+  const opened: number[] = [];
+  const openOutside = (url: string) => {
+    if (opensExternally(url) && externalOpenAllowed(opened, Date.now())) void shell.openExternal(url);
+  };
   win.webContents.setWindowOpenHandler(({ url }) => {
-    if (opensExternally(url)) void shell.openExternal(url);
+    openOutside(url);
     return { action: "deny" };
   });
   win.webContents.on("will-frame-navigate", (e) => {
     const frameUrl = e.frame?.url ?? "";
     if (frameNavigation({ isMainFrame: e.isMainFrame, frameUrl, url: e.url }) === "allow") return;
     e.preventDefault();
-    if (opensExternally(e.url)) void shell.openExternal(e.url);
+    openOutside(e.url);
   });
-  // Escape closes a full-screen embed (EmbedOverlay.tsx), but a key pressed inside the embed's
+  // Escape closes a full-screen embed (Embed.tsx), but a key pressed inside the embed's
   // frame never reaches the app's page; pass it on, and the page decides whether it's its to take.
   win.webContents.on("before-input-event", (_e, input) => {
     if (input.type === "keyDown" && input.key === "Escape") win.webContents.send("embed:escape");

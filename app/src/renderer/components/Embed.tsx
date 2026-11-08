@@ -53,7 +53,7 @@ function useEmbedFrame() {
       const data: unknown = e.data;
       if (!data || typeof data !== "object") return;
       if ("harnessEmbedFailed" in data) setFailed(true);
-      else if ("harnessEmbedHeight" in data) setSize((s) => embedSizeAfter(s, (data as { harnessEmbedHeight: unknown }).harnessEmbedHeight));
+      else if ("harnessEmbedHeight" in data) setSize((s) => embedSizeAfter(s, (data as { harnessEmbedHeight: unknown }).harnessEmbedHeight, performance.now()));
     };
     addEventListener("message", on);
     return () => removeEventListener("message", on);

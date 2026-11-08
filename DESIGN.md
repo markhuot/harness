@@ -3038,8 +3038,11 @@ build, the clipboard HTML), the line reads as its link text.
   `WKWebView` per embed with a non-persistent data store, loaded near the screen and released far
   from it, interactive after a tap. Both size the embed with `embedSizeAfter`
   (`shared/src/state/embeds.ts`, HarnessKit `EmbedSize`): 360 until the page reports, then its
-  height up to 5000, and a page that grows by the same step four times in a row (a `100vh` layout
-  tracking its frame) stops being followed and scrolls inside. Every embed has a full-screen view.
+  height up to 5000, and a page that grows by the same step four times in a row, each within 250 ms
+  of the embed's last resize (a `100vh` layout tracking its frame), stops being followed and
+  scrolls inside. Same-height rows added over time keep growing the embed. A frame may open the
+  system browser at most 3 times in 10 seconds (`externalOpenAllowed`), so a looping page can't
+  open tabs without end. Every embed has a full-screen view.
 - **Trust.** Network access is not restricted: an embed can reach any host, local and private
   addresses included, the same trust as a linked page. What it can't reach is the app, the parent
   page, device permissions, or the service API: `allowedOrigin()` accepts `Origin: null` (the
