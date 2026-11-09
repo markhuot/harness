@@ -65,6 +65,7 @@ interface TicketRow {
   context?: string | null;
   child_count: number;
   has_events?: number;
+  last_active_at?: number;
 }
 
 /**
@@ -110,8 +111,16 @@ const CONTEXT = `(SELECT s.context FROM sessions s WHERE s.id = t.session_id) AS
 const CHILD_COUNT = `(SELECT COUNT(*) FROM tickets c WHERE c.parent_id = t.id) AS child_count`;
 /** Whether the Events tab has anything to show: rows aimed at the ticket, less the ones a coded rule dropped on the way in. */
 const HAS_EVENTS = `EXISTS(SELECT 1 FROM ticket_events e WHERE e.target_id = t.id AND e.verdict <> 'filtered') AS has_events`;
+/**
+ * When the ticket's agent last did anything: the newest transcript entry (the UNIQUE (session_id,
+ * seq) index finds it) or run (queued, started or ended), never before the ticket was created.
+ * Not activity rows: a run that only answers a question writes none.
+ */
+const LAST_ACTIVE = `MAX(t.created_at,
+  COALESCE((SELECT x.created_at FROM transcript x WHERE x.session_id = t.session_id ORDER BY x.seq DESC LIMIT 1), 0),
+  COALESCE((SELECT MAX(COALESCE(r.ended_at, r.started_at, r.created_at)) FROM runs r WHERE r.session_id = t.session_id), 0)) AS last_active_at`;
 /** Columns computed per row on top of `t.*`. */
-const DERIVED = `${BUSY}, ${COMPLETING}, ${COMPACTING}, ${CONTEXT}, ${CHILD_COUNT}, ${HAS_EVENTS}`;
+const DERIVED = `${BUSY}, ${COMPLETING}, ${COMPACTING}, ${CONTEXT}, ${CHILD_COUNT}, ${HAS_EVENTS}, ${LAST_ACTIVE}`;
 const SELECT = `SELECT t.*, ${DERIVED} FROM tickets t`;
 
 type SqlParams = Record<string, string | number | null>;
@@ -369,6 +378,7 @@ export class TicketRepo {
       agentNotes: r.agent_notes ?? null,
       position: r.position,
       completedAt: r.completed_at ?? null,
+      lastActiveAt: r.last_active_at ?? r.created_at,
       createdAt: r.created_at,
       updatedAt: r.updated_at,
       };

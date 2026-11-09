@@ -445,6 +445,14 @@ export interface Ticket {
    * still type-check. The Done column sorts by this, newest first (fall back to updatedAt).
    */
   completedAt?: number | null;
+  /**
+   * When the ticket's agent last did anything (ms): its newest run starting, ending or being
+   * queued, or its newest transcript entry (a message, a tool call, a reply), whichever is latest,
+   * and never before createdAt. The board sorts by it ("Recent activity") and shows it on each card.
+   * Not the Activity tab: a run that only answers a question writes no activity. Optional so older
+   * payloads type-check (fall back to updatedAt).
+   */
+  lastActiveAt?: number;
   createdAt: number;
   updatedAt: number;
 }

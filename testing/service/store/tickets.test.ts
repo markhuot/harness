@@ -301,3 +301,32 @@ test("page and search narrow to a group by id, and a rename doesn't change what 
   expect(ids(store.tickets.page({ status: "planning", groupId: work.id }))).toEqual([a.id]);
   expect(store.tickets.page({ status: "planning", groupId: "no-such" }).tickets).toEqual([]);
 });
+
+test("lastActiveAt is the newest run or transcript entry of the ticket's session, never before creation, and not other edits", () => {
+  const { clock, store, project } = setup();
+  const t = addTicketWith(store, project);
+  const other = addTicketWith(store, project);
+  expect(store.tickets.get(t.id)!.lastActiveAt).toBe(10_000);
+  clock.advance(100);
+  const run = store.runs.create({ sessionId: t.sessionId, kind: "work", driver: "claude-code", prompt: "p" });
+  expect(store.tickets.get(t.id)!.lastActiveAt).toBe(10_100);
+  clock.advance(100);
+  store.runs.markRunning(run.id);
+  expect(store.tickets.get(t.id)!.lastActiveAt).toBe(10_200);
+  clock.advance(100);
+  store.transcript.append(t.sessionId, run.id, "assistant", { type: "text", text: "hi" });
+  expect(store.tickets.get(t.id)!.lastActiveAt).toBe(10_300);
+  clock.advance(100);
+  store.runs.finish(run.id, "succeeded");
+  expect(store.tickets.get(t.id)!.lastActiveAt).toBe(10_400);
+  // A question answered outside a run still counts: it's a transcript entry.
+  clock.advance(100);
+  store.transcript.append(t.sessionId, null, "user", { type: "text", text: "why?" });
+  // Editing the ticket isn't agent activity.
+  clock.advance(100);
+  store.tickets.update(t.id, { title: "Renamed" });
+  const listed = store.tickets.list({ projectId: project.id });
+  expect(listed.find((x) => x.id === t.id)!.lastActiveAt).toBe(10_500);
+  expect(listed.find((x) => x.id === other.id)!.lastActiveAt).toBe(10_000);
+  expect(store.tickets.page({ status: "planning", projectId: project.id }).tickets.find((x) => x.id === t.id)!.lastActiveAt).toBe(10_500);
+});
