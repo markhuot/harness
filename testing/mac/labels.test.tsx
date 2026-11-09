@@ -9,7 +9,7 @@ import { advance, all, click, edited, mount, text, type, type Mounted } from "./
 
 type M = Mounted;
 const cardKeys = (m: M) => all(m.container, ".card").map((c) => c.dataset.key);
-const chips = (m: M, key: string) => all(m.container, `.card[data-key="${key}"] .label-chip`).map((c) => c.dataset.label);
+const chips = (m: M, key: string) => all(m.container, `.card[data-key="${key}"] .label-chip[data-label]`).map((c) => c.dataset.label);
 const sidebarRows = (m: M) => all(m.container, '[data-testid="nav-label"]');
 const input = (m: M, testId: string) => m.container.querySelector<HTMLInputElement>(`[data-testid="${testId}"]`)!;
 const options = (m: M) => all(m.container, '[data-testid="qualifier-option"]').map((o) => o.dataset.value);
@@ -25,8 +25,9 @@ describe("label chips on the board", () => {
     const m = await mount(<BoardPane />);
     await m.until("the board loads", () => cardKeys(m).includes("HARNESS-3"));
     expect(chips(m, "HARNESS-3")).toEqual(["Design", "Settings"]);
+    // HARNESS-5 is unseen: its New pill (seen.test.tsx) isn't a label.
     expect(chips(m, "HARNESS-5")).toEqual(["Performance", "Release 1.2.3"]);
-    expect(all(m.container, `.card[data-key="HARNESS-6"] [data-testid="card-labels"]`)).toHaveLength(0);
+    expect(all(m.container, `.card[data-key="HARNESS-8"] [data-testid="card-labels"]`)).toHaveLength(0);
   });
 
   test("a chip carries the full name as its tooltip and the label's own color", async () => {
