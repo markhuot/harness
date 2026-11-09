@@ -333,6 +333,15 @@ public struct HumanReviewBody: Codable, Sendable, Equatable {
 }
 
 /// POST /tickets/:key/messages
+/// PUT /tickets/:key/seen: true when the ticket's detail has focus, false for "Mark ticket unseen".
+public struct SeenBody: Codable, Sendable, Equatable {
+    public var seen: Bool
+
+    public init(seen: Bool) {
+        self.seen = seen
+    }
+}
+
 /// PUT /tickets/:key/message-draft: the whole draft, replacing the saved one. Empty text and no
 /// attachments clear it.
 public struct MessageDraftBody: Codable, Sendable, Equatable {

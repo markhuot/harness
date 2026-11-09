@@ -1,3 +1,4 @@
+import { useMarkSeen } from "../state/useMarkSeen";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import { LabelPickerModal } from "../components/Labels";
 import { conductorManagedReason, isConductor, keyLabel, managingConductor, MAX_PROMPT_ATTACHMENTS, resolveBaseBranch, type Attachment, type QuestionReply, type RelatedTicket, type RemoteKeyMatches, type Ticket } from "@harness/shared";
@@ -230,16 +231,20 @@ export function TicketDetail({
   ticketKey,
   tab: paneTab,
   zoomed,
+  focused = false,
 }: {
   paneId: string;
   ticketKey: string;
   tab: TicketTab;
   zoomed: boolean;
+  /** The pane the human is in (the workspace's focused one, or a pop-out's): marks the ticket seen. */
+  focused?: boolean;
 }) {
   const { state } = useStore();
   const scope = usePaneScope();
   const boardScope = useBoardScope();
   const { ticket, missing, related, pluginTabs, specAttachments } = useTicketData(ticketKey);
+  useMarkSeen(ticket, focused);
   // Which of its tabs are torn off into panes or windows of their own.
   const torn = useTornOffTabs(ticket?.key ?? ticketKey, boardScope);
 
@@ -686,6 +691,7 @@ const MORE_ICONS: Record<TicketActionId, IconName> = {
   cancelStart: "stop",
   withdrawApproval: "refresh",
   cancelRun: "stop",
+  markUnseen: "eye",
   delete: "trash",
 };
 
@@ -746,6 +752,7 @@ export function useTicketActions(owner: string, ticket: Ticket, onDeleted: () =>
     "ticket.cancelStart": fromPalette("ticket.cancelStart"),
     "ticket.withdrawApproval": fromPalette("ticket.withdrawApproval"),
     "ticket.markDone": fromPalette("ticket.markDone"),
+    "ticket.markUnseen": fromPalette("ticket.markUnseen"),
     "ticket.reopen": fromPalette("ticket.reopen"),
     "ticket.addLabel": labelsEditable && (() => setLabelPicker("add")),
     "ticket.removeLabel": labelsEditable && !!ticket.labels?.length && (() => setLabelPicker("remove")),

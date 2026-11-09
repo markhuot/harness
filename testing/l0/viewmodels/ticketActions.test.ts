@@ -49,7 +49,7 @@ describe("ticketActions", () => {
     const s = ticketActions(review(), ctx());
     expect(ids(s.primary)).toEqual(["approve", "requestChanges"]);
     expect(s.primary[0]).toMatchObject({ label: "Approve and merge", enabled: true });
-    expect(ids(s.more)).toEqual(["rerunReview", "delete"]);
+    expect(ids(s.more)).toEqual(["rerunReview", "markUnseen", "delete"]);
     expect(s.more[0]!.label).toBe("Re-run agent review");
   });
   test("skipped agent review reads 'Run agent review'; a busy ticket can't rerun it", () => {
@@ -89,8 +89,16 @@ describe("ticketActions", () => {
     const planning = ticketActions(makeTicket({ status: "planning", compacting: true }), ctx());
     expect(planning.primary[0]!.enabled).toBe(false);
   });
+  test("Mark ticket unseen: a seen ticket in Blocked or Review only, before Cancel run and Delete", () => {
+    const more = (o: Parameters<typeof makeTicket>[0]) => ids(ticketActions(makeTicket(o), ctx()).more);
+    expect(more({ status: "blocked" })).toEqual(["markDone", "markUnseen", "delete"]);
+    expect(more({ status: "review", busy: true }).slice(-3)).toEqual(["markUnseen", "cancelRun", "delete"]);
+    expect(more({ status: "review", unseen: true })).not.toContain("markUnseen");
+    for (const status of ["planning", "in_progress", "done"] as const) expect(more({ status })).not.toContain("markUnseen");
+    expect(ids(ticketActions(makeTicket({ status: "review" }), ctx()).enabled)).toContain("markUnseen");
+  });
   test("enabled lists primary before more and excludes disabled ones", () => {
-    expect(ids(ticketActions(review(), ctx()).enabled)).toEqual(["approve", "requestChanges", "rerunReview", "delete"]);
+    expect(ids(ticketActions(review(), ctx()).enabled)).toEqual(["approve", "requestChanges", "rerunReview", "markUnseen", "delete"]);
   });
 });
 
@@ -128,6 +136,7 @@ describe("actionMenuItems / pickedAction", () => {
     expect(menu.slice(1)).toEqual([
       { id: "action:requestChanges", label: "Request changes" },
       { id: "action:rerunReview", label: "Re-run agent review" },
+      { id: "action:markUnseen", label: "Mark ticket unseen" },
       { id: "action:delete", label: "Delete ticket" },
     ]);
   });

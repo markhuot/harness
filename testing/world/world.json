@@ -286,6 +286,7 @@
       "status": "review",
       "title": "Speed up the board's first load",
       "hasChanges": true,
+      "unseen": true,
       "lastActiveAt": 1773499500000
     },
     {
@@ -321,6 +322,7 @@
       "projectId": "project-HARNESS",
       "status": "review",
       "title": "Keep the palette open between searches",
+      "unseen": true,
       "lastActiveAt": 1773496200000
     },
     {
@@ -2251,6 +2253,7 @@
         "status": "review",
         "title": "Speed up the board's first load",
         "hasChanges": true,
+        "unseen": true,
         "lastActiveAt": 1773499500000
       },
       "session": {
@@ -2367,6 +2370,7 @@
         "projectId": "project-HARNESS",
         "status": "review",
         "title": "Keep the palette open between searches",
+        "unseen": true,
         "lastActiveAt": 1773496200000
       },
       "session": {

@@ -36,6 +36,7 @@ import {
   ticketByKey,
   type ProjectSection,
   type State,
+  showsUnseen,
 } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
 import { DriverBadge, MenuButton, relativeTime, ReviewMark, STATUS_LABEL, StatusDot, TicketKey } from "../components/bits";
@@ -479,6 +480,7 @@ const TicketCard = memo(function TicketCard({
   const discard = () => onDiscard(t);
   const working = isWorking(state.tickets, t);
   const messageDrafted = hasMessageDraft(t.messageDraft);
+  const unseen = showsUnseen(t);
   const waitingToStart = autoStartWaitingOn(t, deps);
   const planApproved = startState(t, deps) === "approved";
   const restart = restartsAt(t);
@@ -486,7 +488,7 @@ const TicketCard = memo(function TicketCard({
 
   return (
     <article
-      className={`card ${draft ? "draft" : ""} ${selected === "focused" ? "selected" : selected === "open" ? "open" : ""} ${working ? "busy" : ""} ${dim ? "child-dim" : ""} ${related ? "related" : ""} ${isCursor ? "cursor" : ""}`}
+      className={`card ${draft ? "draft" : ""} ${selected === "focused" ? "selected" : selected === "open" ? "open" : ""} ${working ? "busy" : ""} ${dim ? "child-dim" : ""} ${related ? "related" : ""} ${isCursor ? "cursor" : ""} ${unseen ? "unseen" : ""}`}
       data-key={t.key}
       data-parent={parent?.key}
       onMouseEnter={isConductor(t) ? () => onHoverConductor(t.id) : undefined}
@@ -597,9 +599,15 @@ const TicketCard = memo(function TicketCard({
         </div>
       )}
 
-      {!!t.labels?.length && (
+      {(!!t.labels?.length || unseen) && (
         <div className="card-labels" data-testid="card-labels">
-          {t.labels.map((name) => (
+          {/* New (DESIGN.md "Seen and unseen") leads the row, so the trail's review marks never move. */}
+          {unseen && (
+            <span className="label-chip unseen-pill" data-testid="card-unseen" title="Something new since you last looked">
+              New
+            </span>
+          )}
+          {(t.labels ?? []).map((name) => (
             <LabelChip key={name} name={name} color={labelColorOf(state.labels, name)} />
           ))}
         </div>

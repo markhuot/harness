@@ -119,6 +119,7 @@ let codecs: [String: Codec] = [
         "Run": .codable(Run.self),
         "RunKind": .codable(RunKind.self),
         "RunStatus": .codable(RunStatus.self),
+        "SeenBody": .codable(SeenBody.self),
         "ServerMessage": .codable(ServerMessage.self),
         "ServiceStatus": .codable(ServiceStatus.self),
         "Session": .codable(Session.self),

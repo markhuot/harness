@@ -6823,8 +6823,9 @@ ${numberLines(r.body)}`;
   private addActivity(ticket: Pick<Ticket, "id" | "sessionId">, kind: ActivityKind, author: ActivityAuthor, body: string, meta: ActivityMeta = {}): ActivityEntry {
     const actor = this.actorContext.getStore() ?? null;
     const entry = this.store.activity.add({ sessionId: ticket.sessionId, ticketId: ticket.id, kind, author, body, meta, actor });
-    this.bus.emit({ kind: "activity.added", entry });
+    // Before activity.added goes out, so a client whose detail has focus marks it seen after this.
     if (author !== "human") this.markUnseen(ticket.id);
+    this.bus.emit({ kind: "activity.added", entry });
     // A ticket a chief made or moved is a card in its chat: an open chat gets it now, not on its next reload.
     const cosId = actor?.startsWith("cos:") ? actor.slice("cos:".length) : null;
     const card = cosId && this.store.cos.get(cosId) ? chatEntryOf(this.store, cosId, entry) : null;

@@ -203,7 +203,7 @@ export function Pane({
         ) : c.kind === "ticket" && draft?.draft ? (
           <DraftEditor key={draftEditorKey(leaf.id, draft.id)} paneId={leaf.id} ticket={draft} zoomed={zoomed} />
         ) : c.kind === "ticket" ? (
-          <TicketDetail key={c.ticketKey} paneId={leaf.id} ticketKey={c.ticketKey} tab={c.tab} zoomed={zoomed} />
+          <TicketDetail key={c.ticketKey} paneId={leaf.id} ticketKey={c.ticketKey} tab={c.tab} zoomed={zoomed} focused={active && !hidden} />
         ) : c.kind === "cos" ? (
           <CosPane paneId={leaf.id} content={c} zoomed={zoomed} />
         ) : c.kind === "compose" ? (

@@ -249,6 +249,12 @@ public final class HarnessClient: Sendable {
         return try await request("POST", "/tickets/\(key)/messages", body: body)
     }
 
+    /// Mark the ticket seen (its detail has focus) or unseen again (Ticket.unseen); no Activity, no updatedAt change.
+    @discardableResult
+    public func setSeen(_ key: String, _ seen: Bool) async throws -> Ticket {
+        try await request("PUT", "/tickets/\(key)/seen", body: SeenBody(seen: seen))
+    }
+
     /// Save the message being written to the ticket (Ticket.messageDraft); empty clears it.
     public func saveMessageDraft(_ key: String, _ body: MessageDraftBody) async throws -> Ticket {
         try await request("PUT", "/tickets/\(key)/message-draft", body: body)

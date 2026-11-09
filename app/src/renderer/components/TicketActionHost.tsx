@@ -59,6 +59,8 @@ export function useTicketActionRunner(): TicketActionRunner {
         return void act(() => client.withdrawApproval(k), "Waiting on a human review");
       case "cancelRun":
         return void act(() => client.cancelTicket(k), "Run cancelled");
+      case "markUnseen":
+        return void act(() => client.setSeen(k, false));
       case "delete": {
         if (!confirm(`Delete ${label}? Its transcript, spec history and activity are removed too.`)) return;
         void act(() => client.deleteTicket(k), `${label} deleted`).then((ok) => ok && opts?.onDeleted?.());

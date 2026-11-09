@@ -10,7 +10,7 @@ import { conductorManagedReason, managingConductor, reviewPassed, type Ticket } 
 import { autoStartWaitingOn, startLabel, startState, type DepState } from "@harness/shared/state";
 import { landCommands, landMenu, type LandChoice, type LandMenu } from "./approveMenu";
 
-export type TicketActionId = "start" | "approve" | "requestChanges" | "reopen" | "rerunReview" | "markDone" | "cancelRun" | "cancelStart" | "withdrawApproval" | "delete";
+export type TicketActionId = "start" | "approve" | "requestChanges" | "reopen" | "rerunReview" | "markDone" | "cancelRun" | "cancelStart" | "withdrawApproval" | "markUnseen" | "delete";
 
 export interface TicketAction {
   id: TicketActionId;
@@ -80,6 +80,8 @@ export function ticketActions(ticket: Ticket, ctx: TicketActionContext): TicketA
   if ((standing || (ticket.status === "review" && ticket.humanReview === "approved")) && !completing && !conductor) {
     more.push({ id: "withdrawApproval", label: standing ? "Require human review" : "Withdraw approval", enabled: !compacting });
   }
+  // Brings the New marker back (DESIGN.md "Seen and unseen"): only where the board shows it.
+  if ((ticket.status === "blocked" || ticket.status === "review") && !ticket.unseen) more.push({ id: "markUnseen", label: "Mark ticket unseen", enabled: !compacting });
   if (ticket.busy) more.push({ id: "cancelRun", label: "Cancel run", enabled: true, destructive: true });
   more.push({ id: "delete", label: "Delete ticket", enabled: !compacting, destructive: true });
 

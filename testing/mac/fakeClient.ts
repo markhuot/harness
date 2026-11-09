@@ -120,6 +120,15 @@ export class FakeClient extends HarnessClient {
       }
       return live;
     }
+    // Seen and unseen: the flag flips and the service announces the ticket.
+    const seen = method === "PUT" ? p.match(/^\/tickets\/([^/]+)\/seen$/) : null;
+    if (seen) {
+      const t = w.tickets.find((x) => x.key === seen[1]);
+      if (!t) return NO_ROUTE;
+      t.unseen = !(body as { seen: boolean }).seen;
+      queueMicrotask(() => this.push({ kind: "ticket.upserted", ticket: structuredClone(t) }));
+      return t;
+    }
     const recolor = method === "PATCH" ? p.match(/^\/labels\/([^/]+)$/) : null;
     if (recolor) {
       const label = w.labels.find((l) => labelKey(l.name) === labelKey(decodeURIComponent(recolor[1]!)));

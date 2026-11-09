@@ -115,6 +115,9 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
     /// "Message drafts") so it can be finished on another device. null when there is none; sending
     /// a message from an app clears it. Absent from older services.
     public var messageDraft: Patch<MessageDraft>
+    /// Something new happened on the ticket since the human last had its detail focused (DESIGN.md
+    /// "Seen and unseen"). Boards show it in Blocked and Review only. Absent from older services.
+    public var unseen: Bool?
     /// How many of the spec's open questions are unanswered (DESIGN.md "Open questions"): the
     /// open question items (`- ( )`) anywhere in it, derived from the spec. The board card
     /// shows it. Absent from older services.
@@ -166,7 +169,7 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
         branch: String? = nil, requestedBranch: Patch<String> = .absent, baseBranch: Patch<String> = .absent,
         useWorktree: Patch<Bool> = .absent, skipAgentReview: Bool? = nil, skipHumanReview: Bool? = nil,
         completionAction: Patch<CompletionAction> = .absent, completionInstructions: Patch<String> = .absent,
-        pullRequestUrl: Patch<String> = .absent, pullRequests: [PullRequestLink] = [], hasChanges: Patch<Bool> = .absent, draft: Bool? = nil, promptAttachments: [Attachment]? = nil, messageDraft: Patch<MessageDraft> = .absent, openQuestionCount: Int? = nil, blockedReason: String? = nil, resumeAt: Patch<Timestamp> = .absent, busy: Bool = false,
+        pullRequestUrl: Patch<String> = .absent, pullRequests: [PullRequestLink] = [], hasChanges: Patch<Bool> = .absent, draft: Bool? = nil, promptAttachments: [Attachment]? = nil, messageDraft: Patch<MessageDraft> = .absent, unseen: Bool? = nil, openQuestionCount: Int? = nil, blockedReason: String? = nil, resumeAt: Patch<Timestamp> = .absent, busy: Bool = false,
         compacting: Bool? = nil, completing: Bool? = nil, context: Patch<ContextUsage> = .absent,
         pendingApproval: PendingApproval? = nil, allowedTools: [String] = [], permissionMode: PermissionMode? = nil,
         model: String? = nil, position: Double = 0, completedAt: Patch<Timestamp> = .absent, lastActiveAt: Timestamp? = nil,
@@ -210,6 +213,7 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
         self.draft = draft
         self.promptAttachments = promptAttachments
         self.messageDraft = messageDraft
+        self.unseen = unseen
         self.openQuestionCount = openQuestionCount
         self.blockedReason = blockedReason
         self.resumeAt = resumeAt

@@ -132,6 +132,16 @@
 }
 
 /* A draft (not launched yet): dashed, dimmed, with a Draft badge. */
+/* Unseen in Blocked or Review (DESIGN.md "Seen and unseen"): the theme's accent-soft over the card's
+   own background, so it stays opaque and suits every theme. */
+.card.unseen {
+  background: linear-gradient(var(--accent-soft), var(--accent-soft)), var(--bg-elev);
+}
+.unseen-pill {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
 .card.draft {
   border-style: dashed;
   border-color: color-mix(in srgb, var(--accent) 50%, var(--border));

@@ -50,6 +50,8 @@ export const tickets = [
     workdir: "/Users/dev/.harness/worktrees/HARNESS-5",
     branch: "harness/harness-5",
     hasChanges: true,
+    // The agent review passed since the human last looked (DESIGN.md "Seen and unseen").
+    unseen: true,
     position: 1,
     updatedAt: minutesAgo(15),
   }),
@@ -60,6 +62,7 @@ export const tickets = [
     title: "Keep the palette open between searches",
     agentReview: "changes_requested",
     humanReview: "pending",
+    unseen: true,
     position: 2,
     updatedAt: minutesAgo(70),
   }),
