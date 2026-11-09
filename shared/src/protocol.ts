@@ -391,6 +391,12 @@ export interface Ticket {
    */
   messageDraft?: MessageDraft | null;
   /**
+   * Something new happened on the ticket since the human last had its detail focused (DESIGN.md "Seen and
+   * unseen"): agent or system Activity sets it, PUT /tickets/:key/seen clears or sets it. Boards show it
+   * in Blocked and Review only. Optional so older services and fixtures type-check.
+   */
+  unseen?: boolean;
+  /**
    * How many of the spec's open questions are unanswered (DESIGN.md "Open questions"): the open
    * question items (`- ( )`) anywhere in it, derived from the spec. The board card shows it.
    * Optional so older services and fixtures type-check.
@@ -2065,6 +2071,11 @@ export interface MessageDraftBody {
   questionReplies?: QuestionReply[];
   /** An id for the editor saving it, unique per open editor (MessageDraft.origin) */
   origin?: string;
+}
+
+/** PUT /tickets/:key/seen: true when the ticket's detail has focus, false for "Mark ticket unseen". */
+export interface SeenBody {
+  seen: boolean;
 }
 
 /** The `data` of PATCH /tickets/:key's 409 when baseRevision isn't the current spec revision. */

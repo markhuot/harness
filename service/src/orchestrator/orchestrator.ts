@@ -66,7 +66,7 @@ import type {
 import { mapPaneRefs, type PaneArrangeResult, type PaneOp, type TerminalInfo } from "@harness/shared";
 import { LABEL_COLORS, MAX_LABEL_NAME_LENGTH, isLabelColor, labelKey, normalizeLabelName, normalizeLabelNames, type LabelInfo, type UpdateLabelBody } from "@harness/shared";
 import type { MacRequests } from "../api/mac-requests";
-import type { BaseBranchSource, BranchInfo, CompletionAction, PhaseChoice, MessageDraft, MessageDraftBody, PlanUsageReport, PromptEntry, QuestionReply, SessionActionBody } from "@harness/shared";
+import type { BaseBranchSource, BranchInfo, CompletionAction, PhaseChoice, MessageDraft, MessageDraftBody, SeenBody, PlanUsageReport, PromptEntry, QuestionReply, SessionActionBody } from "@harness/shared";
 import {
   checkProjectKey,
   COMPLETION_ACTIONS,
@@ -6824,6 +6824,7 @@ ${numberLines(r.body)}`;
     const actor = this.actorContext.getStore() ?? null;
     const entry = this.store.activity.add({ sessionId: ticket.sessionId, ticketId: ticket.id, kind, author, body, meta, actor });
     this.bus.emit({ kind: "activity.added", entry });
+    if (author !== "human") this.markUnseen(ticket.id);
     // A ticket a chief made or moved is a card in its chat: an open chat gets it now, not on its next reload.
     const cosId = actor?.startsWith("cos:") ? actor.slice("cos:".length) : null;
     const card = cosId && this.store.cos.get(cosId) ? chatEntryOf(this.store, cosId, entry) : null;
@@ -6839,6 +6840,33 @@ ${numberLines(r.body)}`;
   /** ActivityMeta for an entry that records the ticket's move to `to` (none when it's already there). */
   private moveMeta(t: Pick<Ticket, "status">, to: TicketStatus): ActivityMeta {
     return t.status === to ? {} : { from: t.status, to };
+  }
+
+  /**
+   * Agent or system Activity makes the ticket unseen (DESIGN.md "Seen and unseen"). The caller usually
+   * emits its own ticket.upserted right after writing the entry, from a Ticket it read before this, so
+   * the fresh one goes out after the current synchronous step and lands last on every client.
+   */
+  private markUnseen(id: string) {
+    if (!this.store.tickets.setUnseen(id, true)) return;
+    queueMicrotask(() => {
+      const t = this.store.tickets.get(id);
+      if (t) this.bus.emit({ kind: "ticket.upserted", ticket: t });
+    });
+  }
+
+  /**
+   * PUT /tickets/:key/seen (DESIGN.md "Seen and unseen"): a client whose detail of the ticket has focus
+   * marks it seen; "Mark ticket unseen" sets it back. Adds no Activity and leaves updatedAt alone; a
+   * write that changes nothing emits nothing.
+   */
+  setSeen(key: string, body: SeenBody): Ticket {
+    if (!body || typeof body !== "object" || typeof body.seen !== "boolean") throw badRequest("seen must be a boolean");
+    const ticket = this.requireTicket(key);
+    if (!this.store.tickets.setUnseen(ticket.id, !body.seen)) return ticket;
+    const t = this.store.tickets.get(ticket.id)!;
+    this.bus.emit({ kind: "ticket.upserted", ticket: t });
+    return t;
   }
 
   /** addActivity for text that can run long: the body is its first line, the whole text meta.detail. */

@@ -56,6 +56,7 @@ interface TicketRow {
   prompt_attachments?: string;
   resume_at?: number | null;
   message_draft?: string | null;
+  unseen?: number;
   agent_notes?: string | null;
   phase_models?: string | null;
   completed_at: number | null;
@@ -373,6 +374,7 @@ export class TicketRepo {
       promptAttachments: fromJson<Attachment[]>(r.prompt_attachments ?? null, []),
       resumeAt: r.resume_at ?? null,
       messageDraft: messageDraftOf(r.message_draft ?? null),
+      unseen: bool(r.unseen ?? 0),
       // Only a spec with an open question item is parsed: most have none, and every listing maps every row.
       openQuestionCount: /\( \)/.test(r.spec) ? openQuestionCount(r.spec) : 0,
       agentNotes: r.agent_notes ?? null,
@@ -697,6 +699,14 @@ export class TicketRepo {
   setMessageDraft(id: string, draft: MessageDraft | null): Ticket | null {
     this.db.query("UPDATE tickets SET message_draft = $draft WHERE id = $id").run({ id, draft: draft ? toJson(draft) : null });
     return this.get(id);
+  }
+
+  /**
+   * Mark the ticket unseen or seen (DESIGN.md "Seen and unseen"). Not a change to the ticket itself, so
+   * updated_at stays put. Returns whether the flag changed.
+   */
+  setUnseen(id: string, unseen: boolean): boolean {
+    return this.db.query("UPDATE tickets SET unseen = $unseen WHERE id = $id AND unseen != $unseen").run({ id, unseen: unseen ? 1 : 0 }).changes > 0;
   }
 
   /**

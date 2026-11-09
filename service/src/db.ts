@@ -1029,6 +1029,11 @@ export const MIGRATIONS: string[] = [
     DELETE FROM ticket_labels WHERE ticket_id = OLD.id;
   END;
   `,
+  // 60: seen and unseen (DESIGN.md "Seen and unseen"). Agent or system Activity sets unseen; focusing the ticket's
+  //     detail clears it. Existing tickets start seen so the board doesn't light up on upgrade.
+  `
+  ALTER TABLE tickets ADD COLUMN unseen INTEGER NOT NULL DEFAULT 0;
+  `,
 ];
 
 /** Where the files migrations look at live (HarnessPaths); by default next to the database file. */

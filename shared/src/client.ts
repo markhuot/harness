@@ -24,6 +24,7 @@ import type {
   MessageBody,
   QuestionReply,
   MessageDraftBody,
+  SeenBody,
   ReopenBody,
   ApprovalBody,
   BranchInfo,
@@ -288,6 +289,10 @@ export class HarnessClient {
   /** Save the message being written to the ticket (Ticket.messageDraft); empty clears it. */
   saveMessageDraft(key: string, body: MessageDraftBody) {
     return this.request<Ticket>("PUT", `/tickets/${key}/message-draft`, body);
+  }
+  /** Mark the ticket seen (its detail has focus) or unseen again (Ticket.unseen); no Activity, no updatedAt change. */
+  setSeen(key: string, seen: boolean) {
+    return this.request<Ticket>("PUT", `/tickets/${key}/seen`, { seen } satisfies SeenBody);
   }
   /** A chief of staff's memory document and its revision. */
   getCosMemory(key: string) {

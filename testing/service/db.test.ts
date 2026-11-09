@@ -42,10 +42,17 @@ test("a database from a newer service is refused rather than downgraded", () => 
 
 test("a failing migration rolls back whole and leaves the version where it was", () => {
   const db = dbAt(SCHEMA_VERSION - 1);
-  // Break the last migration's target: it creates a table that is already there.
-  db.exec("CREATE TABLE labels (id TEXT)");
+  // Break the last migration's target: it adds a column that is already there.
+  db.exec("ALTER TABLE tickets ADD COLUMN unseen INTEGER");
   expect(() => migrate(db, paths())).toThrow();
   expect(version(db)).toBe(SCHEMA_VERSION - 1);
+});
+
+test("migration 60 starts every existing ticket seen", () => {
+  const db = dbAt(59);
+  migrate(db, paths());
+  const col = (db.query("PRAGMA table_info(tickets)").all() as { name: string; notnull: number; dflt_value: string | null }[]).find((c) => c.name === "unseen");
+  expect(col).toMatchObject({ notnull: 1, dflt_value: "0" });
 });
 
 test("a file database turns on WAL and foreign keys; an in-memory one skips WAL", () => {

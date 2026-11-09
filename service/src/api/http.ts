@@ -326,6 +326,7 @@ export function buildRoutes(o: Orchestrator, browser: BrowserService, extras: Ro
     return o.sendMessage(params.key!, b?.text, { move: b?.move === true, attachments: b?.attachments, questionReplies: b?.questionReplies, fromApp: true });
   });
   add("PUT", "/tickets/:key/message-draft", async ({ params, body }) => o.saveMessageDraft(params.key!, await body()));
+  add("PUT", "/tickets/:key/seen", async ({ params, body }) => o.setSeen(params.key!, await body()));
   add("POST", "/tickets/:key/review", async ({ params, body }) => {
     const b = await body();
     if (b?.decision !== "approve" && b?.decision !== "request_changes") throw new HarnessError(400, "decision must be approve or request_changes");

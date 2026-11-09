@@ -197,3 +197,16 @@ test("DELETE /labels/:name finds a label by its URL-encoded name in any case, dr
   expect((await rig.ok<{ ticket: Ticket }>("GET", `/tickets/${ticket.key}`)).ticket.labels).toEqual(["Keep"]);
   expect(await rig.call("DELETE", path)).toMatchObject({ status: 404, body: { error: expect.stringMatching(/Unknown label/) } });
 });
+
+test("PUT /tickets/:key/seen flips Ticket.unseen both ways; reading the ticket never clears it; a bad body is 400", async () => {
+  const rig = await boot();
+  const project = await rig.project();
+  const t = await rig.ok<Ticket>("POST", "/tickets", { projectId: project.id, spec: "Look at me", start: false });
+  expect(t.unseen).toBe(false);
+
+  expect((await rig.ok<Ticket>("PUT", `/tickets/${t.key}/seen`, { seen: false })).unseen).toBe(true);
+  expect((await rig.ok<{ ticket: Ticket }>("GET", `/tickets/${t.key}`)).ticket.unseen).toBe(true);
+  const seen = await rig.ok<Ticket>("PUT", `/tickets/${t.key}/seen`, { seen: true });
+  expect(seen).toMatchObject({ unseen: false, updatedAt: t.updatedAt });
+  expect(await rig.call("PUT", `/tickets/${t.key}/seen`, { seen: 1 })).toMatchObject({ status: 400, body: { error: "seen must be a boolean" } });
+});
