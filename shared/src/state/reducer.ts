@@ -25,6 +25,7 @@ import type { DepState } from "./conductor";
 import { mergeChat } from "./cos";
 import type { ClientEvent, Cos, CosBadge, CosChatEntry, TicketEvent } from "../cos";
 import { inheritedModel } from "./models";
+import { boardComparator, type BoardSort } from "./boardSort";
 import { ALL_SCOPE, adjustDoneTotals, doneColumn, groupScope, inScope, isHiddenKind, mergeTickets, pagingFromPage, reducePaging, scopeGroup, scopeOf, type DonePaging, type PagingAction, type SearchState } from "./paging";
 
 export interface TranscriptState {
@@ -309,6 +310,22 @@ function clearDelta(deltas: State["deltas"], sessionId: string, runId: string | 
 const TERMINAL_RUN: Run["status"][] = ["succeeded", "failed", "cancelled"];
 
 /**
+ * Moves the lastActiveAt of the session's ticket up to `at` (a run or transcript event of it), the
+ * way the service computes it, so the card's age and the "Recent activity" order follow a working
+ * agent without a ticket.upserted for every line. Under a second's change is skipped: it can't
+ * move a card's "just now", and a streaming run would otherwise re-render the board per entry.
+ */
+function touchSession(tickets: State["tickets"], sessionId: string, at: number): State["tickets"] {
+  for (const t of Object.values(tickets)) {
+    if (t.sessionId !== sessionId) continue;
+    // Negated so a run without timestamps (NaN) changes nothing either.
+    if (!(at - (t.lastActiveAt ?? 0) >= 1000)) return tickets;
+    return { ...tickets, [t.id]: { ...t, lastActiveAt: at } };
+  }
+  return tickets;
+}
+
+/**
  * Drop the deltas a refetch shows are over: those of sessions that aren't busy, and of runs that
  * ended. A client that missed the events that clear a delta (the app was suspended mid-stream, the
  * socket dropped) would otherwise show the half-streamed text under the transcript for good.
@@ -381,7 +398,8 @@ export function applyEvent(state: State, event: ClientEvent): State {
     case "run.upserted": {
       const run = event.run;
       const deltas = TERMINAL_RUN.includes(run.status) ? clearDelta(state.deltas, run.sessionId, run.id) : state.deltas;
-      return { ...state, runs: { ...state.runs, [run.id]: run }, deltas };
+      const tickets = touchSession(state.tickets, run.sessionId, Math.max(run.createdAt, run.startedAt ?? 0, run.endedAt ?? 0));
+      return { ...state, runs: { ...state.runs, [run.id]: run }, deltas, tickets };
     }
     case "transcript.appended": {
       const entry = event.entry;
@@ -392,7 +410,7 @@ export function applyEvent(state: State, event: ClientEvent): State {
         entry.role === "assistant" && entry.content.type === "text" && !entry.subagentId
           ? clearDelta(state.deltas, entry.sessionId, entry.runId)
           : state.deltas;
-      return { ...state, transcripts, deltas };
+      return { ...state, transcripts, deltas, tickets: touchSession(state.tickets, entry.sessionId, entry.createdAt) };
     }
     case "transcript.delta": {
       const forSession = state.deltas[event.sessionId] ?? {};
@@ -579,12 +597,12 @@ export function ticketsForProject(state: State, board: string | null): Ticket[] 
   return Object.values(state.tickets).filter((t) => inScope(state, t, scope));
 }
 
-export function boardColumns(state: State, board: string | null): Record<TicketStatus, Ticket[]> {
+/** The live columns in `sort` order (boardSort.ts; creation order by default), and the paged Done column. */
+export function boardColumns(state: State, board: string | null, sort: BoardSort = "created"): Record<TicketStatus, Ticket[]> {
   const cols: Record<TicketStatus, Ticket[]> = { planning: [], in_progress: [], blocked: [], review: [], done: [] };
   for (const t of ticketsForProject(state, board)) if (t.status !== "done") cols[t.status]?.push(t);
-  for (const list of Object.values(cols)) {
-    list.sort((a, b) => a.position - b.position || a.createdAt - b.createdAt);
-  }
+  const compare = boardComparator(sort);
+  for (const list of Object.values(cols)) list.sort(compare);
   // Done: newest-completed first, only the paged-in prefix (see paging.ts).
   cols.done = doneColumn(state, board);
   return cols;

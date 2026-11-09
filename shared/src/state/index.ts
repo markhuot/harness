@@ -5,6 +5,7 @@ export * from "./reducer";
 export * from "./activity";
 export * from "./conductor";
 export * from "./paging";
+export * from "./boardSort";
 export * from "./models";
 export * from "./projectKey";
 export * from "./pluginBridge";

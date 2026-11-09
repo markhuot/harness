@@ -20,6 +20,7 @@ import type { Ticket, TicketPage, TicketStatus } from "../index";
 import { labelKey, parseSearchQuery } from "../labels";
 import { resolveGroupKey, type ProjectGroup } from "../projectGroups";
 import type { State } from "./reducer";
+import { boardComparator, type BoardSort } from "./boardSort";
 
 export const DONE_PAGE_SIZE = 50;
 export const SEARCH_PAGE_SIZE = 50;
@@ -313,10 +314,11 @@ export function matchesQuery(t: Ticket, q: string, aliases: Record<string, strin
 
 export type Columns = Record<TicketStatus, Ticket[]>;
 const emptyColumns = (): Columns => ({ planning: [], in_progress: [], blocked: [], review: [], done: [] });
-function sortColumns(cols: Columns): Columns {
+function sortColumns(cols: Columns, sort: BoardSort): Columns {
+  const compare = boardComparator(sort);
   for (const [status, list] of Object.entries(cols) as [TicketStatus, Ticket[]][]) {
     if (status === "done") list.sort((a, b) => completedAtOf(b) - completedAtOf(a));
-    else list.sort((a, b) => a.position - b.position || a.createdAt - b.createdAt);
+    else list.sort(compare);
   }
   return cols;
 }
@@ -327,20 +329,20 @@ function sortColumns(cols: Columns): Columns {
  * match locally. Search shows every match, child tickets included: the user is looking for
  * something specific, and hiding a match would read as "not found".
  */
-export function searchColumns(state: State, board: string | null): { columns: Columns; pending: boolean } {
+export function searchColumns(state: State, board: string | null, sort: BoardSort = "created"): { columns: Columns; pending: boolean } {
   const s = state.search;
   const cols = emptyColumns();
   if (!s) return { columns: cols, pending: false };
   if (s.ids === null) {
     const scope = scopeOf(board);
     for (const t of Object.values(state.tickets)) if (inScope(state, t, scope) && matchesQuery(t, s.q, state.keyAliases)) cols[t.status].push(t);
-    return { columns: sortColumns(cols), pending: true };
+    return { columns: sortColumns(cols, sort), pending: true };
   }
   for (const id of s.ids) {
     const t = state.tickets[id];
     if (t) cols[t.status].push(t);
   }
-  return { columns: sortColumns(cols), pending: false };
+  return { columns: sortColumns(cols, sort), pending: false };
 }
 
 /** "Searching…", "No matches", "12 matches", "Showing 50 of 132 matches". */
