@@ -51,13 +51,34 @@ struct LabelChip: View {
     }
 }
 
-/// A ticket's labels, wrapping, in the collection's colors.
+/// The board card's New pill (DESIGN.md "Seen and unseen"), shaped like a label chip, in the theme's
+/// accent-soft and accent.
+struct UnseenPill: View {
+    @Environment(\.palette) private var c
+
+    var body: some View {
+        Text("New")
+            .font(.scaled(size: 11, weight: .semibold))
+            .lineLimit(1)
+            .foregroundStyle(c.accent)
+            .padding(.horizontal, 7)
+            .frame(minHeight: 19)
+            .background(c.accentSoft, in: .capsule)
+            .dynamicTypeSize(...DynamicTypeSize.xLarge)
+            .accessibilityLabel("New since you last looked")
+            .accessibilityIdentifier("card-unseen")
+    }
+}
+
+/// A ticket's labels, wrapping, in the collection's colors. `unseen` leads them with the New pill.
 struct LabelChips: View {
     let names: [String]
+    var unseen = false
     @Environment(BoardStore.self) private var store
 
     var body: some View {
         FlowLayout(spacing: 5) {
+            if unseen { UnseenPill() }
             ForEach(names, id: \.self) { name in
                 LabelChip(name: name, color: LabelList.colorId(name, in: store.state.labels))
             }

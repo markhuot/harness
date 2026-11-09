@@ -26,6 +26,8 @@ public enum TicketAction: Equatable, Sendable {
     /// Take back the human review approval; "Require human review" when only the standing skip is on.
     case withdrawApproval(title: String)
     case cancelRun
+    /// Brings the board's New marker back (DESIGN.md "Seen and unseen").
+    case markUnseen
     case delete
 
     public var title: String {
@@ -39,6 +41,7 @@ public enum TicketAction: Equatable, Sendable {
         case .cancelStart: "Cancel auto start"
         case let .withdrawApproval(title): title
         case .cancelRun: "Cancel run"
+        case .markUnseen: "Mark ticket unseen"
         case .delete: "Delete ticket"
         }
     }
@@ -132,6 +135,10 @@ public enum TicketActions {
         let standing = ticket.status == .inProgress && ticket.skipHumanReview == true
         if standing || (ticket.status == .review && ticket.humanReview == .approved), !completing, !conducted {
             more.append(TicketActionItem(.withdrawApproval(title: standing ? "Require human review" : "Withdraw approval"), enabled: !compacting))
+        }
+        // Only where the board shows the marker: a seen ticket in Blocked or Review.
+        if ticket.status == .blocked || ticket.status == .review, ticket.unseen != true {
+            more.append(TicketActionItem(.markUnseen, enabled: !compacting))
         }
         if ticket.busy {
             more.append(TicketActionItem(.cancelRun))

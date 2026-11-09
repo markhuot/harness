@@ -65,6 +65,7 @@ struct BoardTicketCard: View {
         let t = ticket
         let draft = t.draft == true
         let dim = Conductor.dimOnBoard(t)
+        let unseen = BoardScreenRules.showsUnseen(t)
         let deps = state.dependencyStates(t)
         let progress = t.isConductor ? Conductor.progressOf(state.childrenOf(t.id)) : nil
         let news = state.latestActivity(t.sessionId, kinds: ActivityRows.newsKinds)
@@ -164,7 +165,8 @@ struct BoardTicketCard: View {
                 }
             }
 
-            if let labels = t.labels, !labels.isEmpty { LabelChips(names: labels) }
+            // New leads the label row (not the top-right trail), so the review marks never move.
+            if unseen || !(t.labels ?? []).isEmpty { LabelChips(names: t.labels ?? [], unseen: unseen) }
 
             if customDriver || state.hasCustomModel(t) {
                 FlowLayout(spacing: 5) {
@@ -175,7 +177,11 @@ struct BoardTicketCard: View {
         }
         .padding(.horizontal, 13)
         .padding(.vertical, dim ? 9 : 13)
-        .background(dim || draft ? c.bgColumn : c.bgElev, in: .rect(cornerRadius: 12))
+        .background {
+            // Unseen: the theme's accent-soft over the card's own background, opaque in every theme.
+            RoundedRectangle(cornerRadius: 12).fill(dim || draft ? c.bgColumn : c.bgElev)
+            if unseen { RoundedRectangle(cornerRadius: 12).fill(c.accentSoft) }
+        }
         .overlay {
             RoundedRectangle(cornerRadius: 12)
                 .strokeBorder(draft ? c.text3 : c.border, style: StrokeStyle(lineWidth: draft ? 1 : 1 / 3, dash: draft ? [4, 3] : []))
@@ -286,6 +292,8 @@ private struct BoardCardPreview: View {
         let w = min(width, 500)
         NavigationStack {
             TicketDetailScreen(key: key, initialTab: .spec)
+                // A look, not the open detail: it never marks the ticket seen.
+                .environment(\.sheetFront, false)
         }
         .frame(width: w, height: min(w * 1.45, 640))
         .allowsHitTesting(false)

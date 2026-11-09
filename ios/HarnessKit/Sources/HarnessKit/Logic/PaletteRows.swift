@@ -137,6 +137,7 @@ public enum PaletteCommands {
             case .cancelStart: out.append(row("ticket.cancelStart", "Cancel auto start", a, keywords: ["Stop auto start"]))
             case let .withdrawApproval(title): out.append(row("ticket.withdrawApproval", title, a, keywords: ["Require human review", "Rescind approval"]))
             case .cancelRun: out.append(row("ticket.cancelRun", "Cancel run", a, keywords: ["Stop run"]))
+            case .markUnseen: out.append(row("ticket.markUnseen", "Mark ticket unseen", a, keywords: ["Mark unread", "Mark as new"]))
             case .delete: out.append(row("ticket.delete", "Delete ticket…", a))
             }
         }
@@ -169,6 +170,7 @@ public enum PaletteCommands {
         case .cancelStart: "stop.circle"
         case .withdrawApproval: "arrow.uturn.backward"
         case .cancelRun: "stop.circle"
+        case .markUnseen: "eye"
         case .delete: "trash"
         }
     }

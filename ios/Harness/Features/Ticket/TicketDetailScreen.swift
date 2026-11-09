@@ -69,6 +69,7 @@ struct TicketDetailScreen: View {
             }
         }
         .background(c.bg)
+        .markSeen(ticket?.draft == true ? nil : ticket)
         .fileLinkScope(ticketKey: ticket?.key ?? ticketKey)
         .pluginTabs(for: ticket, into: $pluginTabs)
         // Done tickets page in: an older one may drop out of the store on a refetch; keep it resolved.

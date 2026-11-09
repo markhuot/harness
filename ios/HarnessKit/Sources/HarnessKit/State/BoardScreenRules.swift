@@ -122,6 +122,12 @@ public enum BoardScreenRules {
         case copyKey
     }
 
+    /// Whether the card shows the New pill and tint (DESIGN.md "Seen and unseen"): the flag is kept in
+    /// every column, but only Blocked and Review show it. The Mac's `showsUnseen` is the same rule.
+    public static func showsUnseen(_ t: Ticket) -> Bool {
+        t.unseen == true && t.draft != true && (t.status == .blocked || t.status == .review)
+    }
+
     /// A card's menu: a draft offers Discard and Copy key; any other card the actions its ticket
     /// screen offers right now (the enabled ones: Start work, Approve, Request changes, Re-open,
     /// then the More menu's), its parent and Copy key. It never moves a card by itself: the actions

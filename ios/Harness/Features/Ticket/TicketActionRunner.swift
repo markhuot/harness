@@ -44,6 +44,8 @@ final class TicketActionRunner {
             perform(api, ticket, actions) { try await $0.withdrawApproval($1) }
         case .cancelRun:
             perform(api, ticket, actions) { try await $0.cancelTicket($1) }
+        case .markUnseen:
+            perform(api, ticket, actions) { try await $0.setSeen($1, false) }
         case .delete:
             let key = ticket.key
             confirm = Confirmation(title: "Delete \(Keys.keyLabel(ticket))?", message: "Its transcript, spec history and activity are removed too.", action: "Delete") {
@@ -110,6 +112,7 @@ extension TicketAction {
         case .cancelStart: "stop.circle"
         case .withdrawApproval: "arrow.uturn.backward"
         case .cancelRun: "stop.circle"
+        case .markUnseen: "eye"
         case .delete: "trash"
         }
     }
