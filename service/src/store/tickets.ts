@@ -6,7 +6,7 @@ import { hasSearchIndex } from "../db";
 import { type ParsedSearch, labelKey, parseSearchQuery } from "@harness/shared";
 import { clampLimit, decodeCursor, DEFAULT_PAGE_LIMIT, DEFAULT_SEARCH_LIMIT, encodeCursor, ftsQuery, keyCandidate, likePattern, searchTerms } from "./search";
 import { LabelRepo } from "./labels";
-import { bool, fromJson, int, newId, toJson } from "./util";
+import { bool, fromJson, int, newId, text, toJson } from "./util";
 import { type Clock, systemClock } from "../clock";
 import { toContextUsage, type StoredContext } from "../orchestrator/context-usage";
 
@@ -326,8 +326,8 @@ export class TicketRepo {
       key: r.key,
       projectId: r.project_id,
       kind: r.kind as TicketKind,
-      title: r.title,
-      spec: r.spec,
+      title: text(r.title),
+      spec: text(r.spec),
       labels: labels.get(r.id) ?? [],
       specRevision: r.spec_revision ?? 1,
       specBaselineRevision: r.spec_baseline_revision ?? null,
@@ -374,8 +374,8 @@ export class TicketRepo {
       resumeAt: r.resume_at ?? null,
       messageDraft: messageDraftOf(r.message_draft ?? null),
       // Only a spec with an open question item is parsed: most have none, and every listing maps every row.
-      openQuestionCount: /\( \)/.test(r.spec) ? openQuestionCount(r.spec) : 0,
-      agentNotes: r.agent_notes ?? null,
+      openQuestionCount: /\( \)/.test(text(r.spec)) ? openQuestionCount(text(r.spec)) : 0,
+      agentNotes: r.agent_notes == null ? null : text(r.agent_notes),
       position: r.position,
       completedAt: r.completed_at ?? null,
       lastActiveAt: r.last_active_at ?? r.created_at,

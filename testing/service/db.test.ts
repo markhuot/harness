@@ -6,6 +6,8 @@ import { builtinPhaseModels } from "@harness/shared";
 import { migrate, MIGRATION_CODE, MIGRATIONS, openDb, SCHEMA_VERSION, ensureSearchIndex, hasSearchIndex } from "../../service/src/db";
 import { Store } from "../../service/src/store";
 import { fakeClock } from "../builders/clock";
+import { addProject } from "../builders/store";
+import { addTicketWith } from "../builders/ticket-input";
 import { tempDir } from "../builders/tmp";
 
 /** A database frozen after migration `version`, the way an older install left it. */
@@ -41,11 +43,11 @@ test("a database from a newer service is refused rather than downgraded", () => 
 });
 
 test("a failing migration rolls back whole and leaves the version where it was", () => {
-  const db = dbAt(SCHEMA_VERSION - 1);
-  // Break the last migration's target: it creates a table that is already there.
+  const db = dbAt(58);
+  // Break migration 59's target: it creates a table that is already there.
   db.exec("CREATE TABLE labels (id TEXT)");
   expect(() => migrate(db, paths())).toThrow();
-  expect(version(db)).toBe(SCHEMA_VERSION - 1);
+  expect(version(db)).toBe(58);
 });
 
 test("a file database turns on WAL and foreign keys; an in-memory one skips WAL", () => {
@@ -401,6 +403,19 @@ test("migration 53 drops cos_wakes.reported and keeps the wakes (which migration
   migrate(db, paths());
   expect(columns(db, "event_wakes")).not.toContain("reported");
   expect(db.query("SELECT id, event_count, run_id, outcome FROM event_wakes").all()).toEqual([{ id: "w1", event_count: 2, run_id: "r1", outcome: "spoke" }]);
+});
+
+test("migration 60 turns a ticket's BLOB memory, spec and title back into TEXT and leaves NULL memory alone", () => {
+  const db = openDb(":memory:", paths());
+  const store = new Store(db, fakeClock(7_000));
+  const p = addProject(store);
+  const blob = addTicketWith(store, p);
+  const empty = addTicketWith(store, p);
+  db.query("UPDATE tickets SET agent_notes = CAST($s AS BLOB), spec = CAST($s AS BLOB), title = CAST('Title' AS BLOB) WHERE id = $id").run({ id: blob.id, s: "## Memory ✅" });
+  db.exec(MIGRATIONS[59]!);
+  const types = (id: string) => db.query("SELECT typeof(agent_notes) n, typeof(spec) s, typeof(title) t, agent_notes FROM tickets WHERE id = $id").get({ id });
+  expect(types(blob.id)).toEqual({ n: "text", s: "text", t: "text", agent_notes: "## Memory ✅" });
+  expect(types(empty.id)).toEqual({ n: "null", s: "text", t: "text", agent_notes: null });
 });
 
 test("migration 56 keys the wake log by the ticket woken and keeps every wake, in the chief's cap class", () => {

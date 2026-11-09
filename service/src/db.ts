@@ -1029,6 +1029,13 @@ export const MIGRATIONS: string[] = [
     DELETE FROM ticket_labels WHERE ticket_id = OLD.id;
   END;
   `,
+  // 60: a ticket's free text written from outside the service as a BLOB (sqlite3's readfile() returns one) goes back to
+  //     TEXT. bun:sqlite hands a BLOB back as bytes, and a chief whose memory was bytes failed every wake.
+  `
+  UPDATE tickets SET agent_notes = CAST(agent_notes AS TEXT) WHERE typeof(agent_notes) = 'blob';
+  UPDATE tickets SET spec = CAST(spec AS TEXT) WHERE typeof(spec) = 'blob';
+  UPDATE tickets SET title = CAST(title AS TEXT) WHERE typeof(title) = 'blob';
+  `,
 ];
 
 /** Where the files migrations look at live (HarnessPaths); by default next to the database file. */

@@ -290,7 +290,10 @@ export class EventDelivery {
     const attempts = (typeof e.payload.wakeAttempts === "number" ? e.payload.wakeAttempts : 0) + 1;
     if (attempts >= WAKE_MAX_ATTEMPTS) {
       const run = (e.targetId && this.d.describeRun?.(e.targetId)) || "The run for this ticket";
-      this.patch(e.id, { status: "ignored", reason: `${run} ${runStatus === "cancelled" ? "was cancelled" : "failed"} ${attempts} times, so it isn't woken for this again`, wakeId: null, consumingRunId: null, payload: { ...e.payload, wakeAttempts: attempts } });
+      // The last run's error goes with it: "failed 3 times" alone sends whoever reads it digging through run history.
+      const error = e.consumingRunId ? this.d.store.runs.get(e.consumingRunId)?.error?.trim().split("\n")[0]?.slice(0, 300) : undefined;
+      const reason = `${run} ${runStatus === "cancelled" ? "was cancelled" : "failed"} ${attempts} times, so it isn't woken for this again${error ? `. Last error: ${error}` : ""}`;
+      this.patch(e.id, { status: "ignored", reason, wakeId: null, consumingRunId: null, payload: { ...e.payload, wakeAttempts: attempts } });
     } else this.patch(e.id, { status: "escalated", wakeId: null, consumingRunId: null, payload: { ...e.payload, wakeAttempts: attempts } });
   }
 

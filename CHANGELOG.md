@@ -18,6 +18,11 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 ### Changed
 
 - Tickets from the service carry `lastActiveAt`, the time of their latest run or transcript entry.
+- When an event closes because its run failed 3 times, the reason now ends with that run's error, so the Events list says why without a trip through the run history.
+
+### Fixed
+
+- A chief of staff whose memory was edited straight into the database with `sqlite3 ... readfile()` failed every wake with "notes?.trim is not a function", and each event closed as "The chief's run failed 3 times". The service now reads text stored that way, and an upgrade converts memory, specs and titles stored as bytes back to text.
 
 ## [app-20261109.1229](https://github.com/markhuot/harness/releases/tag/app-20261109.1229) - 2026-11-09
 

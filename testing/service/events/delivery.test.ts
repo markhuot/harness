@@ -157,6 +157,23 @@ test("a run that keeps failing is retried a few times, then its events close wit
   expect(r.wakes).toHaveLength(WAKE_MAX_ATTEMPTS); // closed: no fourth wake
 });
 
+test("the reason an event closes with carries the first line of the last run's error", async () => {
+  const r = rig({ describeRun: () => "The chief's run" });
+  const e = r.ready("T");
+  for (let i = 1; i <= WAKE_MAX_ATTEMPTS; i++) {
+    r.clock.advance(WAKE_RETRY_BACKOFF_MAX_MS);
+    await r.d.tick();
+    r.runs.set(`run-${i}`, "failed");
+    r.store.db
+      .query("INSERT INTO runs (id, session_id, kind, status, driver, prompt, error, created_at) VALUES ($id, 's', 'cos', 'failed', 'fake', 'p', $error, 0)")
+      .run({ id: `run-${i}`, error: `  notes?.trim is not a function (try ${i})\n    at memorySection (prompts.ts:542)` });
+    r.d.runEnded(`run-${i}`, "failed");
+  }
+  expect(r.get(e.id).reason).toBe(
+    `The chief's run failed ${WAKE_MAX_ATTEMPTS} times, so it isn't woken for this again. Last error: notes?.trim is not a function (try ${WAKE_MAX_ATTEMPTS})`,
+  );
+});
+
 test("a target whose run just failed isn't handed the same events again until its backoff passes", async () => {
   const r = rig();
   r.ready("T");
