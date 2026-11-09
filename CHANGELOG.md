@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261109.1229](https://github.com/markhuot/harness/releases/tag/app-20261109.1229) - 2026-11-09
+
 ### Added
 
 - Specs can show interactive pages inline, on the Mac, iPhone and iPad: a flame graph, a chart, a small report site. An agent links a local HTML file or a folder with an `index.html` on its own line, and the spec embeds it as a live web page sized to its content, with a full-screen button; a link to it inside a sentence opens it full screen. The page is stored with the spec, so it still shows after the ticket's worktree is gone. It runs sandboxed with full network access, and can't reach the app, your connection token or the Harness API. The page follows Settings → Appearance through `prefers-color-scheme`, without the app restyling it: a page built for light and dark matches the app, and one that declares nothing shows black on white, as in a browser.
@@ -18,6 +20,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ### Changed
 
+- For people working on Harness: the Mac view tests clean up after every test file, so views and menus from one file no longer leak into the next, and `check:embeds` in `app/` drives the real Mac app through embedded pages (scheme, assets, sizing, placeholder and lockdown probes, full screen with a real Escape).
 - Questions for you in a spec are now written `- ( ) Which database?` (parentheses), and an answered one `- (x)`. Only these get an answer box, count on the board card and show in Needs you. Task lists (`- [ ]`) are back to being ordinary checklists: agents kept using them to track work, which turned plan steps into questions. The apps draw a task item as a plain read-only checkbox again, and a question as the amber circle (a question mark while open, a check once answered). Specs written with `- [ ]` questions show those as checkboxes until an agent rewrites them.
 - Agents are told to write each question as `- ( )` and that `- [ ]` task items are never questions. When you send answers to a spec's questions, the agent also gets a note (not shown in your Transcript) to update the spec right away: move each answer where it belongs, then remove the question, reword it if part is still open, or mark it `- (x)`.
 
