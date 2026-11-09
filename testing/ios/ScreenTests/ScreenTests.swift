@@ -12,6 +12,13 @@ final class ScreenTests: ScreenTestCase {
         try await screen("board") { RootView() }
     }
 
+    /// All projects with "Group by project" on: each column in sections by project name (Harness,
+    /// then Marketing site), newest activity first within each, the cards without project badges.
+    func testBoardGroupedByProject() async throws {
+        world.app.setPref(\.groupByProject, true)
+        try await screen("board-grouped") { RootView() }
+    }
+
     /// Landscape: no title bar, Projects bottom left, search and New session bottom right (the
     /// system's bottom bar, which the Duo moves into its margins), the board running under them.
     func testBoardLandscape() async throws {

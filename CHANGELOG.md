@@ -9,6 +9,16 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+### Added
+
+- Board cards show how long ago their agent last worked ("2m ago", "1d ago"), on the Mac, iPhone and iPad. It counts the ticket's latest run (queued, started or ended) and the latest line in its Transcript, a question you asked included, and follows a working agent live. Activity entries don't count, since a run that only answers a question writes none.
+- The board can sort its columns by Recent activity (the agent that worked last at the top), Created (the order tickets were made, as before) or Title. On the Mac it's under Sort by in the board's options menu (the filter button at the end of the search box); on iPhone and iPad, in the command palette. Recent activity is the default. The Done column keeps its newest-completed order.
+- All projects and a project group's board can group by project: each column in sections by project name, A to Z, sorted within each section by the board's sort. Turn it on with Group by project in the Mac's board options menu or the iPhone and iPad command palette.
+
+### Changed
+
+- Tickets from the service carry `lastActiveAt`, the time of their latest run or transcript entry.
+
 ## [app-20261109.1229](https://github.com/markhuot/harness/releases/tag/app-20261109.1229) - 2026-11-09
 
 ### Added
