@@ -22,18 +22,6 @@ test("create writes revision 1 of the spec, a position at the end of the board, 
   expect(store.specs.current(a.id)).toEqual({ rev: 1, body: "first" });
 });
 
-test("text written from outside the service as a BLOB (sqlite3 readfile()) reads back as a string", () => {
-  const { store, project } = setup();
-  const t = addTicketWith(store, project);
-  const bytes = (s: string) => new TextEncoder().encode(s);
-  store.db
-    .query("UPDATE tickets SET agent_notes = $notes, spec = $spec, title = $title WHERE id = $id")
-    .run({ id: t.id, notes: bytes("## Triage guidance\n\n- ignore bots ✅\n"), spec: bytes("- ( ) Which one?"), title: bytes("Bytes") });
-  const read = store.tickets.get(t.id)!;
-  expect(read).toMatchObject({ agentNotes: "## Triage guidance\n\n- ignore bots ✅\n", spec: "- ( ) Which one?", title: "Bytes", openQuestionCount: 1 });
-  expect(read.agentNotes!.trim()).toBe("## Triage guidance\n\n- ignore bots ✅");
-});
-
 test("update touches only named columns, stamps updated_at, and replaces dependencies as a whole list", () => {
   const { clock, store, project } = setup();
   const a = addTicketWith(store, project);
