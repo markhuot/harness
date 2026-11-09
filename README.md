@@ -146,6 +146,10 @@ instead of showing a stale bar.
   at-a-glance progress, one line per entry: agent notes (at least every 10 minutes on long work),
   each spec revision with its note, submits, questions, review decisions, approvals, and every column change. Messages you send go
   to the agent and the transcript, and the ticket switches to its Transcript once you send one.
+- Cards in **Blocked** and **Review** show a **New** pill and a tinted background when something
+  happened since you last looked: an agent submitted, a review passed, the spec changed, a new
+  question came in. Opening the ticket (or clicking into its pane) clears it on every device, and
+  **Mark ticket unseen** in the ticket's … menu or the card's right-click (long-press) menu brings it back.
 - New session's **Options** hold the same settings as a ticket's Details tab. To have the agent
   work right in the project folder instead of a worktree, pick the branch the folder already has
   checked out.

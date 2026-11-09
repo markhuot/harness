@@ -633,6 +633,31 @@ save in a draft). In a draft the Branch row also decides the worktree: the branc
 directory has checked out (`checkoutBranch`, matched on `BranchInfo.checkedOutAt`) means no
 worktree, any other branch means one (`draftBranchPatch`). Base branch shows only with a worktree.
 
+### Seen and unseen
+
+A ticket is **unseen** when something new happened on it since the human last had its detail in
+focus: `Ticket.unseen`, stored in `tickets.unseen` (migration 60 starts every existing ticket seen).
+Every Activity entry an agent or the system writes sets it, inside the orchestrator's one
+`addActivity` choke point, so moves, submits, review verdicts, spec revisions, notes, questions and
+failures all count; entries the human writes don't. The write leaves `updatedAt` alone and its
+`ticket.upserted` goes out after the current synchronous step, after the ticket the caller emits, so
+it lands last on every client.
+
+`PUT /tickets/:key/seen { seen }` sets it either way without an Activity line or an `updatedAt`
+change (a write that changes nothing emits nothing). Clients call it with `seen: true` when a
+ticket's detail gains focus (the Mac's focused pane or a pop-out in a focused window; the iPhone and
+iPad's front sheet in an active scene, never a docked card or a long-press preview) and again when
+agent or system `activity.added` arrives for it while focused. They react to focus and activity,
+never to the flag itself, so **Mark ticket unseen** (`seen: false`, in the detail's More menu, the
+card's context menu and the palette, for a seen ticket in Blocked or Review) stays unseen until
+focus comes back. Reads, agents and their tools never mark a ticket seen, and `ticketView` leaves the
+field out.
+
+The flag is kept in every column but only Blocked and Review cards show it (`showsUnseen`, and
+`BoardScreenRules.showsUnseen` on iOS): a **New** pill leads the label row (which shows for it alone
+on a card without labels), so the top-right review marks never move, and the card's background
+layers the theme's `accentSoft` over `bgElev`, so it follows every theme in light and dark.
+
 ### Message drafts
 
 The message a human is writing to a ticket's agent is saved on the ticket as `Ticket.messageDraft`
@@ -2427,6 +2452,7 @@ GET    /tickets/:key             PATCH/DELETE /tickets/:key      → TicketDetai
 PATCH  /tickets/:key {spec, baseRevision, specNote?, …}   (baseRevision required with spec outside drafts → 400; stale → 409, data SpecConflict)
 POST   /tickets/:key/start | /messages {text, move?, attachments?} | /review | /reopen | /complete | /cancel | /agent-review | /session {action}
 PUT    /tickets/:key/message-draft {text, attachments?, origin?}   → Ticket (see "Message drafts"; empty clears it)
+PUT    /tickets/:key/seen {seen}  → Ticket (see "Seen and unseen"; no Activity, updatedAt unchanged)
 GET    /tickets/:key/activity    → ActivityEntry[] (oldest first)
 GET    /tickets/:key/spec/revisions        → SpecRevisionInfo[] (oldest first, no bodies)
 GET    /tickets/:key/spec/revisions/:rev?diff=<other>   → SpecRevision, or SpecDiff with diff
