@@ -129,6 +129,14 @@ extension BoardState {
         return byRev.values.sorted { $0.rev < $1.rev }
     }
 
+    /// reducer.ts touchSession: records a run or transcript event of a session in activeAt, so the
+    /// card's age and the Recent activity order follow a working agent. Under a second's change is
+    /// skipped (it can't move "just now", and a streaming run would re-render the board per line).
+    mutating func touchSession(_ sessionId: String, at: Timestamp) {
+        guard at - (activeAt[sessionId] ?? 0) >= 1000 else { return }
+        activeAt[sessionId] = at
+    }
+
     /// Drop a run's streamed text (`runId` nil: every run of the session).
     mutating func clearDelta(_ sessionId: String, _ runId: String?) {
         guard var forSession = deltas[sessionId] else { return }
@@ -187,9 +195,11 @@ extension BoardState {
         case let .runUpserted(run):
             if Self.terminalRun.contains(run.status) { clearDelta(run.sessionId, run.id) }
             runs[run.id] = run
+            touchSession(run.sessionId, at: max(run.createdAt, run.startedAt ?? 0, run.endedAt ?? 0))
         case let .transcriptAppended(entry):
             let subagentId = entry.subagentId.optional
             mergeTranscript(Self.transcriptKey(entry.sessionId, subagentId), [entry], loaded: false)
+            touchSession(entry.sessionId, at: entry.createdAt)
             // The persisted assistant text block replaces the streamed preview of the same run
             // (sub-agents don't stream, so their text leaves the agent's preview alone).
             if entry.role == .assistant, case .text = entry.content, subagentId?.isEmpty ?? true {

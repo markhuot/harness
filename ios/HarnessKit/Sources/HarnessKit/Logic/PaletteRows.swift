@@ -11,6 +11,9 @@ public struct PaletteCommand: PaletteRankable, Identifiable, Equatable, Sendable
         /// A terminal in the project being viewed (All projects when none), opened in a sheet and on the Mac.
         case newTerminal
         case toggleChildren
+        /// The board's "Sort by" (Prefs.boardSort), and "Group by project" on boards that span projects.
+        case sortBoard(BoardSort)
+        case toggleGroupByProject
         case goAllProjects, goSettings
         case goGroup(String)
         case goProject(String)
@@ -50,6 +53,25 @@ public struct PaletteCommand: PaletteRankable, Identifiable, Equatable, Sendable
 public enum PaletteCommands {
     public static let showChildren = "Show child tickets"
     public static let hideChildren = "Hide child tickets"
+    public static let groupByProject = "Group the board by project"
+    public static let stopGrouping = "Stop grouping the board by project"
+
+    /// "Sort the board by recent activity", the one row per sort the board isn't using.
+    public static func sortLabel(_ sort: BoardSort) -> String {
+        switch sort {
+        case .recent: "Sort the board by recent activity"
+        case .created: "Sort the board by created date"
+        case .title: "Sort the board by title"
+        }
+    }
+
+    private static func sortKeywords(_ sort: BoardSort) -> [String] {
+        switch sort {
+        case .recent: ["recent", "recency", "activity", "latest"]
+        case .created: ["created", "oldest", "id"]
+        case .title: ["title", "name", "alphabetical"]
+        }
+    }
 
     /// The commands for now: the focused ticket's actions first (as on the Mac), then the general
     /// ones, then the "Go to" rows. Left out because they mean nothing on a phone: panes, pop out,
@@ -69,6 +91,17 @@ public enum PaletteCommands {
             id: "board.children", label: prefs.hideChildren ? showChildren : hideChildren, group: "General",
             keywords: ["children", "child tickets", "hide", "show", prefs.hideChildren ? hideChildren : showChildren],
             symbol: "arrow.turn.down.right", action: .toggleChildren))
+        for sort in BoardSort.allCases where sort != prefs.sort {
+            out.append(PaletteCommand(
+                id: "board.sort.\(sort.rawValue)", label: sortLabel(sort), group: "General",
+                keywords: ["sort", "order", "board"] + sortKeywords(sort), symbol: "arrow.up.arrow.down", action: .sortBoard(sort)))
+        }
+        // Only a board that spans projects groups (All projects, a group's board).
+        if state.boardFilter(prefs.boardProject).flatMap({ state.projects[$0] }) == nil {
+            out.append(PaletteCommand(
+                id: "board.groupByProject", label: prefs.groupByProject == true ? stopGrouping : groupByProject, group: "General",
+                keywords: ["group", "projects", "sections", "board"], symbol: "rectangle.3.group", action: .toggleGroupByProject))
+        }
         out.append(PaletteCommand(id: "board", label: "Go to All Projects", group: "Go to", keywords: ["Board: All Projects"], symbol: "square.grid.2x2", action: .goAllProjects))
         for g in state.projectGroups() {
             out.append(PaletteCommand(id: "group:\(g.id)", label: "Board: \(g.name)", group: "Go to", keywords: ["group"], symbol: "folder", action: .goGroup(g.id)))

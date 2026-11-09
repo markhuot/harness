@@ -260,10 +260,15 @@ public enum Paging {
     /// paging.ts sortColumns. TS sorts without an id tie-break, so equal keys keep their input
     /// order: server order for search results (kept here, Swift's sort is stable), dictionary order
     /// for local matches (broken by id here, see BoardState.swift).
-    static func sortColumns(_ cols: inout Columns, tieById: Bool) {
+    static func sortColumns(_ cols: inout Columns, tieById: Bool, sort: BoardSort, activeAt: [String: Timestamp]) {
+        let compare = sort.comparator(activeAt)
         for status in TicketStatus.allKnown {
+            if status != .done {
+                cols[status].sort(by: compare)
+                continue
+            }
             cols[status].sort { a, b in
-                let d = status == .done ? completedAtOf(b) - completedAtOf(a) : (a.position != b.position ? a.position - b.position : a.createdAt - b.createdAt)
+                let d = completedAtOf(b) - completedAtOf(a)
                 if d != 0 { return d < 0 }
                 return tieById && JSString.less(a.id, b.id)
             }
@@ -274,7 +279,7 @@ public enum Paging {
     /// column of its current status, so live moves still apply); until then, the loaded tickets
     /// that match locally. Search shows every match, child tickets included: the user is looking
     /// for something specific, and hiding a match would read as "not found".
-    public static func searchColumns(_ state: BoardState, _ board: String?) -> (columns: Columns, pending: Bool) {
+    public static func searchColumns(_ state: BoardState, _ board: String?, sort: BoardSort = .created) -> (columns: Columns, pending: Bool) {
         var cols = Columns()
         guard let s = state.search else { return (cols, false) }
         guard let ids = s.ids else {
@@ -282,13 +287,13 @@ public enum Paging {
             for t in state.tickets.values where inScope(state.projects, t, scope) && matchesQuery(t, s.q, aliases: state.keyAliases, projects: state.projects) {
                 cols[t.status].append(t)
             }
-            sortColumns(&cols, tieById: true)
+            sortColumns(&cols, tieById: true, sort: sort, activeAt: state.activeAt)
             return (cols, true)
         }
         for id in ids {
             if let t = state.tickets[id] { cols[t.status].append(t) }
         }
-        sortColumns(&cols, tieById: false)
+        sortColumns(&cols, tieById: false, sort: sort, activeAt: state.activeAt)
         return (cols, false)
     }
 

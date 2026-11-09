@@ -11,15 +11,16 @@ extension BoardState {
         return tickets.values.filter { Paging.inScope(projects, $0, scope) }.sorted { JSString.less($0.id, $1.id) }
     }
 
-    /// The board: live columns by position then age, Done newest-completed first and only the
-    /// paged-in prefix (Paging.doneColumn).
-    public func boardColumns(_ board: String?) -> Columns {
+    /// The board: live columns in `sort` order (BoardSort.swift; creation order by default), Done
+    /// newest-completed first and only the paged-in prefix (Paging.doneColumn).
+    public func boardColumns(_ board: String?, sort: BoardSort = .created) -> Columns {
         let scope = Paging.scopeOf(board)
         var cols = Columns()
         for t in tickets.values where t.status != .done && Paging.inScope(projects, t, scope) {
             cols[t.status].append(t)
         }
-        for status in Paging.liveStatuses { cols[status].sort(by: Paging.boardOrder) }
+        let compare = sort.comparator(activeAt)
+        for status in Paging.liveStatuses { cols[status].sort(by: compare) }
         cols.done = Paging.doneColumn(self, board)
         return cols
     }

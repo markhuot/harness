@@ -202,9 +202,22 @@ struct BoardColumnView: View {
         let cards = ctx.shown[status]
         ScrollView {
             LazyVStack(spacing: 10) {
-                ForEach(Array(cards.enumerated()), id: \.element.id) { i, t in
-                    BoardTicketCard(ticket: t, showProject: ctx.project == nil, onDiscard: onDiscard)
-                        .onAppear { if i >= cards.count - Self.endThreshold { onEnd() } }
+                if ctx.grouped {
+                    // shown is already in section order, so the indexes run on across sections.
+                    let start = Dictionary(uniqueKeysWithValues: cards.enumerated().map { ($1.id, $0) })
+                    ForEach(BoardOrder.sectionsByProject(ctx.state.projects, cards)) { section in
+                        ProjectSectionHeader(section: section)
+                        ForEach(section.tickets) { t in
+                            // The header names the project, so the card leaves its badge out.
+                            BoardTicketCard(ticket: t, showProject: false, onDiscard: onDiscard)
+                                .onAppear { if (start[t.id] ?? 0) >= cards.count - Self.endThreshold { onEnd() } }
+                        }
+                    }
+                } else {
+                    ForEach(Array(cards.enumerated()), id: \.element.id) { i, t in
+                        BoardTicketCard(ticket: t, showProject: ctx.project == nil, onDiscard: onDiscard)
+                            .onAppear { if i >= cards.count - Self.endThreshold { onEnd() } }
+                    }
                 }
                 if cards.isEmpty { empty }
                 footer
@@ -261,5 +274,31 @@ struct BoardColumnView: View {
                     .accessibilityLabel("Loading older tickets")
             }
         }
+    }
+}
+
+/// "Group by project": a project's badge, name and card count over its cards in a column.
+struct ProjectSectionHeader: View {
+    let section: ProjectSection
+
+    @Environment(\.palette) private var c
+
+    var body: some View {
+        HStack(spacing: 6) {
+            if let p = section.project { ProjectKeyBadge(p.key, color: p.color, size: .sm) }
+            Text(section.project?.name ?? "Unknown project")
+                .font(.scaled(size: 13, weight: .semibold))
+                .foregroundStyle(c.text2)
+                .lineLimit(1)
+            Text("\(section.tickets.count)")
+                .font(.scaled(size: 12, weight: .medium))
+                .monospacedDigit()
+                .foregroundStyle(c.text3)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 2)
+        .padding(.top, 4)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isHeader)
     }
 }

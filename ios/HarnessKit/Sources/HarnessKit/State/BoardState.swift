@@ -99,6 +99,10 @@ public struct BoardState: Codable, Sendable, Equatable {
     public var ready: Bool
     public var projects: [String: Project]
     public var tickets: [String: Ticket]
+    /// sessionId → the newest run or transcript event heard live (ms), newer than its ticket's
+    /// lastActiveAt. Apart from the ticket so a working agent doesn't replace the ticket per
+    /// transcript line. BoardOrder.lastActive reads both.
+    public var activeAt: [String: Timestamp] = [:]
     public var sessions: [String: Session]
     public var runs: [String: Run]
     /// Activity per sessionId, sorted by createdAt, unique by id

@@ -87,6 +87,14 @@ struct BoardTicketCard: View {
                         .fixedSize(horizontal: true, vertical: false)
                 }
                 Spacer(minLength: 0)
+                // When its agent last ran or wrote to its transcript (Ticket.lastActiveAt).
+                RelativeTimeText(ms: BoardOrder.lastActive(t, state.activeAt))
+                    .font(.scaled(size: 11.5))
+                    .monospacedDigit()
+                    .foregroundStyle(c.text3)
+                    .lineLimit(1)
+                    .fixedSize()
+                    .accessibilityIdentifier("card-age")
                 if draft { Badge("Draft", icon: "edit") }
                 // The spec's open questions waiting on the human (Ticket.openQuestionCount).
                 if let n = t.openQuestionCount, n > 0 {

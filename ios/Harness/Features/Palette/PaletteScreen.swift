@@ -395,6 +395,12 @@ struct PaletteScreen: View {
         case .toggleChildren:
             app.setPref(\.hideChildren, !app.prefs.hideChildren)
             close()
+        case let .sortBoard(sort):
+            app.setPref(\.boardSort, sort)
+            close()
+        case .toggleGroupByProject:
+            app.setPref(\.groupByProject, app.prefs.groupByProject != true)
+            close()
         case .goAllProjects: router.select(.allProjects, app: app)
         case let .goGroup(g): router.select(.group(g), app: app)
         case let .goProject(id): router.select(.project(id), app: app)

@@ -150,6 +150,10 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
     /// leaves. The service always sends it; it's optional here only so older fixtures and payloads
     /// still type-check. The Done column sorts by this, newest first (fall back to updatedAt).
     public var completedAt: Patch<Timestamp>
+    /// When the ticket's agent last did anything (ms): its newest run starting, ending or being
+    /// queued, or its newest transcript entry, never before createdAt. The board sorts by it
+    /// ("Recent activity") and shows it on each card. Optional for older payloads (fall back to updatedAt).
+    public var lastActiveAt: Timestamp?
     public var createdAt: Timestamp
     public var updatedAt: Timestamp
 
@@ -165,7 +169,7 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
         pullRequestUrl: Patch<String> = .absent, pullRequests: [PullRequestLink] = [], hasChanges: Patch<Bool> = .absent, draft: Bool? = nil, promptAttachments: [Attachment]? = nil, messageDraft: Patch<MessageDraft> = .absent, openQuestionCount: Int? = nil, blockedReason: String? = nil, resumeAt: Patch<Timestamp> = .absent, busy: Bool = false,
         compacting: Bool? = nil, completing: Bool? = nil, context: Patch<ContextUsage> = .absent,
         pendingApproval: PendingApproval? = nil, allowedTools: [String] = [], permissionMode: PermissionMode? = nil,
-        model: String? = nil, position: Double = 0, completedAt: Patch<Timestamp> = .absent,
+        model: String? = nil, position: Double = 0, completedAt: Patch<Timestamp> = .absent, lastActiveAt: Timestamp? = nil,
         createdAt: Timestamp, updatedAt: Timestamp
     ) {
         self.id = id
@@ -219,6 +223,7 @@ public struct Ticket: Codable, Sendable, Equatable, Identifiable {
         self.model = model
         self.position = position
         self.completedAt = completedAt
+        self.lastActiveAt = lastActiveAt
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }

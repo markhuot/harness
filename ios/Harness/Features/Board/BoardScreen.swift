@@ -307,8 +307,11 @@ struct BoardContext {
     let group: String?
     let board: Columns
     let pending: Bool
-    /// The columns as shown: the board with children hidden per the pref.
+    /// The columns as shown: the board with children hidden per the pref, in project sections'
+    /// order when grouped.
     let shown: Columns
+    /// "Group by project" is on and this board spans projects: each column draws in sections.
+    let grouped: Bool
     /// Every ticket on the board, Done counted by the server's total.
     let total: Int
     let paging: DonePaging?
@@ -324,9 +327,12 @@ struct BoardContext {
         filter = id
         group = id.flatMap(Paging.scopeGroup).map { gid in state.projectGroups().first { $0.id == gid }?.name ?? "Group" }
         project = id.flatMap { state.projects[$0] }
-        board = state.boardColumns(id)
+        board = state.boardColumns(id, sort: prefs.sort)
         // The same columns presence reports (BoardColumns.shownKeys).
-        (shown, pending) = BoardColumns.shownColumns(state, filter: id, board: board, hideChildren: prefs.hideChildren)
+        let (cols, pending) = BoardColumns.shownColumns(state, filter: id, board: board, hideChildren: prefs.hideChildren, sort: prefs.sort)
+        self.pending = pending
+        grouped = BoardColumns.groupsByProject(state, filter: id, prefs: prefs)
+        shown = grouped ? BoardColumns.grouped(cols, projects: state.projects) : cols
         let b = board
         total = TicketStatus.allKnown.reduce(0) { n, s in n + (s == .done ? Paging.doneCount(state, id, loaded: b.done.count) : b[s].count) }
         paging = state.donePaging[Paging.scopeOf(id)]
