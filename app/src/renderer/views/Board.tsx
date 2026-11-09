@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { groupNameOf, isConductor, keyLabel, resolveBaseBranch, TICKET_STATUSES, type Ticket } from "@harness/shared";
 import { useAction, useStore } from "../state/store";
 import { cardPropsEqual, type CardSelection } from "../state/boardCard";
@@ -7,6 +7,7 @@ import {
   APPROVED_TITLE,
   autoStartWaitingOn,
   boardColumns,
+  BOARD_SORTS,
   canLoadMoreSearch,
   childrenOf,
   COLUMN_EMPTY_TEXT,
@@ -20,6 +21,7 @@ import {
   hasCustomModel,
   hasMessageDraft,
   hideOnBoard,
+  lastActiveOf,
   latestActivity,
   NEWS_KINDS,
   plainText,
@@ -30,11 +32,13 @@ import {
   scopeGroup,
   searchColumns,
   searchStatusText,
+  sectionsByProject,
   ticketByKey,
+  type ProjectSection,
   type State,
 } from "@harness/shared/state";
 import { Icon } from "../components/Icon";
-import { DriverBadge, MenuButton, ReviewMark, STATUS_LABEL, StatusDot, TicketKey } from "../components/bits";
+import { DriverBadge, MenuButton, relativeTime, ReviewMark, STATUS_LABEL, StatusDot, TicketKey } from "../components/bits";
 import { ModelBadge } from "../components/ModelSelect";
 import { ConductorRollup, useHideChildren } from "../components/Conductor";
 import { boardCosScope, CosCallout } from "./Cos";
@@ -53,6 +57,8 @@ import { completeQualifier, labelKey, removeLabelFromSearch } from "@harness/sha
 import { QualifierPickerList } from "../components/QualifierPicker";
 import { qualifierOptions, type QualifierOption } from "../state/qualifierPicker";
 import { reportBoardFilter, useBoardFilterRequests } from "../state/boardFilter";
+import { useBoardOrder } from "../state/boardOrder";
+import { useSharedNow } from "../state/sharedNow";
 import "./board.css";
 
 /** The board: pane content in the workspace (components/PaneWorkspace.tsx). */
@@ -74,6 +80,7 @@ export function BoardPane() {
   const runAction = useCallback((t: Ticket, { action, choice }: ActionPick) => runnerRef.current.run(t, action, { choice }), []);
   const [filter, setFilter] = useState("");
   const [hideChildren, toggleHideChildren] = useHideChildren();
+  const { sort, setSort, groupByProject, toggleGroupByProject } = useBoardOrder();
   // The filter box searches the service (debounced in the store); a scope change re-runs it.
   useEffect(() => setSearch(filter), [filter, boardScope, setSearch]);
   useEffect(() => () => setSearch(""), [setSearch]);
@@ -109,11 +116,18 @@ export function BoardPane() {
   // user is looking for something specific, and hiding a hit would read as "not found").
   const search = state.search && state.search.q === filter.trim() && state.search.scope === boardScope ? state.search : null;
   const searching = !!filter.trim();
-  const columns = searching ? searchColumns(state, boardScope).columns : boardColumns(state, boardScope);
+  const columns = searching ? searchColumns(state, boardScope, sort).columns : boardColumns(state, boardScope, sort);
   const visible = (t: Ticket) => searching || !hideOnBoard(t, hideChildren);
   const doneTotal = searching ? columns.done.length : doneCount(state, boardScope, columns.done.length);
   const paging = searching ? undefined : state.donePaging[boardScope];
-  const shown = TICKET_STATUSES.map((status) => columns[status].filter(visible));
+  // "Group by project" on a board that spans projects: each column in sections, projects by name,
+  // the sort applying within each. The cursor walks the cards in that order.
+  const grouped = groupByProject && !project;
+  const sections: (ProjectSection[] | null)[] = TICKET_STATUSES.map((status) => {
+    const list = columns[status].filter(visible);
+    return grouped ? sectionsByProject(state.projects, list) : null;
+  });
+  const shown = TICKET_STATUSES.map((status, i) => sections[i]?.flatMap((g) => g.tickets) ?? columns[status].filter(visible));
 
   // The keyboard cursor (state/boardNav.ts): a card key, and the spot it was last seen at so a card
   // that leaves (moves column, filtered out) hands the cursor to whatever's now nearest there. With
@@ -170,6 +184,11 @@ export function BoardPane() {
     },
     "board.search": () => searchRef.current?.focus(),
     "board.children": { run: toggleHideChildren, label: hideChildren ? "Show child tickets" : "Hide child tickets" },
+    "board.sortRecent": () => setSort("recent"),
+    "board.sortCreated": () => setSort("created"),
+    "board.sortTitle": () => setSort("title"),
+    // Only a board that spans projects groups.
+    "board.groupByProject": project ? null : { run: toggleGroupByProject, label: groupByProject ? "Stop grouping the board by project" : "Group the board by project" },
   });
   // While the last word is `label:` / `project:`, a picker offers what exists; choosing finishes the qualifier.
   const picker = qualifierOptions(filter, state.labels, Object.values(state.projects));
@@ -281,10 +300,24 @@ export function BoardPane() {
             )}
           >
             {() => (
-              // Stays open on toggle so the board visibly updates underneath.
-              <MenuCheckbox checked={!hideChildren} onToggle={toggleHideChildren} testId="show-children" title="Child tickets that need you always show">
-                Show child tickets
-              </MenuCheckbox>
+              // Stays open on a change so the board visibly updates underneath.
+              <>
+                <MenuCheckbox checked={!hideChildren} onToggle={toggleHideChildren} testId="show-children" title="Child tickets that need you always show">
+                  Show child tickets
+                </MenuCheckbox>
+                {!project && (
+                  <MenuCheckbox checked={groupByProject} onToggle={toggleGroupByProject} testId="group-by-project" title="Each column in sections by project, A to Z">
+                    Group by project
+                  </MenuCheckbox>
+                )}
+                <div className="menu-sep" role="separator" />
+                <div className="menu-heading">Sort by</div>
+                {BOARD_SORTS.map((o) => (
+                  <MenuCheckbox key={o.value} radio checked={sort === o.value} onToggle={() => setSort(o.value)} testId={`sort-${o.value}`} title={o.title}>
+                    {o.label}
+                  </MenuCheckbox>
+                ))}
+              </>
             )}
           </MenuButton>
         </div>
@@ -316,20 +349,32 @@ export function BoardPane() {
                 <span className="column-count" data-testid={`count-${status}`}>{status === "done" && !searching ? doneTotal : tickets.length}</span>
               </div>
               <div className="column-body">
-                {tickets.map((t) => (
-                  <TicketCard
-                    key={t.id}
-                    ticket={t}
-                    state={state}
-                    selected={selection(t.key)}
-                    isCursor={t.key === cursor}
-                    showProject={!project}
-                    related={!!hoverConductor && t.parentId === hoverConductor}
-                    onHoverConductor={setHoverConductor}
-                    onOpen={openCard}
-                    onDiscard={discardDraft}
-                    onAction={runAction}
-                  />
+                {(sections[i] ?? [{ project: null, projectId: "", tickets }]).map((section) => (
+                  <Fragment key={section.projectId}>
+                    {sections[i] && (
+                      <div className="column-group" data-testid="column-group" data-project={section.project?.key ?? section.projectId}>
+                        {section.project && <ProjectKey project={section.project} size="sm" />}
+                        <span className="column-group-name truncate">{section.project?.name ?? "Unknown project"}</span>
+                        <span className="column-count">{section.tickets.length}</span>
+                      </div>
+                    )}
+                    {section.tickets.map((t) => (
+                      <TicketCard
+                        key={t.id}
+                        ticket={t}
+                        state={state}
+                        selected={selection(t.key)}
+                        isCursor={t.key === cursor}
+                        // A section's header already names the project.
+                        showProject={!project && !grouped}
+                        related={!!hoverConductor && t.parentId === hoverConductor}
+                        onHoverConductor={setHoverConductor}
+                        onOpen={openCard}
+                        onDiscard={discardDraft}
+                        onAction={runAction}
+                      />
+                    ))}
+                  </Fragment>
                 ))}
                 {tickets.length === 0 && !(status === "done" && paging?.nextCursor) && (
                   <div className="column-empty">{searching ? (search?.ids ? "No matches" : "Searching…") : COLUMN_EMPTY_TEXT[status]}</div>
@@ -347,10 +392,10 @@ export function BoardPane() {
   );
 }
 
-/** A checkable menu row (the check sits in a fixed gutter so labels line up). */
-function MenuCheckbox({ checked, onToggle, testId, title, children }: { checked: boolean; onToggle: () => void; testId?: string; title?: string; children: ReactNode }) {
+/** A checkable menu row (the check sits in a fixed gutter so labels line up); `radio` for one of a set. */
+function MenuCheckbox({ checked, onToggle, testId, title, radio, children }: { checked: boolean; onToggle: () => void; testId?: string; title?: string; radio?: boolean; children: ReactNode }) {
   return (
-    <button type="button" role="menuitemcheckbox" aria-checked={checked} className="menu-item" data-testid={testId} title={title} onClick={onToggle}>
+    <button type="button" role={radio ? "menuitemradio" : "menuitemcheckbox"} aria-checked={checked} className="menu-item" data-testid={testId} title={title} onClick={onToggle}>
       <span className="menu-check">{checked && <Icon name="check" size={12} strokeWidth={2.25} />}</span>
       <span className="menu-label">{children}</span>
     </button>
@@ -480,6 +525,7 @@ const TicketCard = memo(function TicketCard({
           </span>
         )}
         <div className="grow" />
+        <CardAge at={lastActiveOf(t, state.activeAt)} />
         {!!t.openQuestionCount && (
           <span
             className="badge card-questions"
@@ -568,6 +614,16 @@ const TicketCard = memo(function TicketCard({
     </article>
   );
 }, cardPropsEqual);
+
+/** "2m ago": when the ticket's agent last ran or wrote to its transcript (Ticket.lastActiveAt). Ticks on its own, so the memoized card doesn't re-render for it. */
+function CardAge({ at }: { at: number }) {
+  const now = useSharedNow();
+  return (
+    <span className="card-age" data-testid="card-age" title={`Last active ${new Date(at).toLocaleString()}`}>
+      {relativeTime(at, Math.max(now, at))}
+    </span>
+  );
+}
 
 export function useTicket(key: string) {
   const { state } = useStore();

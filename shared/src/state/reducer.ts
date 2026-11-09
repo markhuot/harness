@@ -40,6 +40,12 @@ export interface State {
   ready: boolean;
   projects: Record<string, Project>;
   tickets: Record<string, Ticket>;
+  /**
+   * sessionId → the newest run or transcript event heard live (ms), newer than its ticket's
+   * lastActiveAt. Apart from the ticket so a working agent doesn't replace the ticket object (and
+   * re-render everything showing it) per transcript line. boardSort.ts lastActiveOf reads both.
+   */
+  activeAt: Record<string, number>;
   sessions: Record<string, Session>;
   runs: Record<string, Run>;
   /** Activity per sessionId, sorted by createdAt, unique by id */
@@ -96,6 +102,7 @@ export const initialState: State = {
   ready: false,
   projects: {},
   tickets: {},
+  activeAt: {},
   sessions: {},
   runs: {},
   activity: {},
@@ -310,19 +317,16 @@ function clearDelta(deltas: State["deltas"], sessionId: string, runId: string | 
 const TERMINAL_RUN: Run["status"][] = ["succeeded", "failed", "cancelled"];
 
 /**
- * Moves the lastActiveAt of the session's ticket up to `at` (a run or transcript event of it), the
- * way the service computes it, so the card's age and the "Recent activity" order follow a working
+ * Records a run or transcript event of a session at `at` in activeAt, the way the service computes
+ * a ticket's lastActiveAt, so the card's age and the "Recent activity" order follow a working
  * agent without a ticket.upserted for every line. Under a second's change is skipped: it can't
  * move a card's "just now", and a streaming run would otherwise re-render the board per entry.
  */
-function touchSession(tickets: State["tickets"], sessionId: string, at: number): State["tickets"] {
-  for (const t of Object.values(tickets)) {
-    if (t.sessionId !== sessionId) continue;
-    // Negated so a run without timestamps (NaN) changes nothing either.
-    if (!(at - (t.lastActiveAt ?? 0) >= 1000)) return tickets;
-    return { ...tickets, [t.id]: { ...t, lastActiveAt: at } };
-  }
-  return tickets;
+function touchSession(state: State, sessionId: string, at: number): State["activeAt"] {
+  const known = state.activeAt[sessionId] ?? 0;
+  // Negated so a run without timestamps (NaN) changes nothing either.
+  if (!(at - known >= 1000)) return state.activeAt;
+  return { ...state.activeAt, [sessionId]: at };
 }
 
 /**
@@ -398,8 +402,8 @@ export function applyEvent(state: State, event: ClientEvent): State {
     case "run.upserted": {
       const run = event.run;
       const deltas = TERMINAL_RUN.includes(run.status) ? clearDelta(state.deltas, run.sessionId, run.id) : state.deltas;
-      const tickets = touchSession(state.tickets, run.sessionId, Math.max(run.createdAt, run.startedAt ?? 0, run.endedAt ?? 0));
-      return { ...state, runs: { ...state.runs, [run.id]: run }, deltas, tickets };
+      const activeAt = touchSession(state, run.sessionId, Math.max(run.createdAt, run.startedAt ?? 0, run.endedAt ?? 0));
+      return { ...state, runs: { ...state.runs, [run.id]: run }, deltas, activeAt };
     }
     case "transcript.appended": {
       const entry = event.entry;
@@ -410,7 +414,7 @@ export function applyEvent(state: State, event: ClientEvent): State {
         entry.role === "assistant" && entry.content.type === "text" && !entry.subagentId
           ? clearDelta(state.deltas, entry.sessionId, entry.runId)
           : state.deltas;
-      return { ...state, transcripts, deltas, tickets: touchSession(state.tickets, entry.sessionId, entry.createdAt) };
+      return { ...state, transcripts, deltas, activeAt: touchSession(state, entry.sessionId, entry.createdAt) };
     }
     case "transcript.delta": {
       const forSession = state.deltas[event.sessionId] ?? {};
@@ -601,7 +605,7 @@ export function ticketsForProject(state: State, board: string | null): Ticket[] 
 export function boardColumns(state: State, board: string | null, sort: BoardSort = "created"): Record<TicketStatus, Ticket[]> {
   const cols: Record<TicketStatus, Ticket[]> = { planning: [], in_progress: [], blocked: [], review: [], done: [] };
   for (const t of ticketsForProject(state, board)) if (t.status !== "done") cols[t.status]?.push(t);
-  const compare = boardComparator(sort);
+  const compare = boardComparator(sort, state.activeAt);
   for (const list of Object.values(cols)) list.sort(compare);
   // Done: newest-completed first, only the paged-in prefix (see paging.ts).
   cols.done = doneColumn(state, board);

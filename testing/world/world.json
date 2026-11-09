@@ -117,7 +117,8 @@
       ],
       "projectId": "project-HARNESS",
       "status": "planning",
-      "title": "Draft the release notes"
+      "title": "Draft the release notes",
+      "lastActiveAt": 1773497400000
     },
     {
       "id": "ticket-HARNESS-2",
@@ -165,7 +166,8 @@
         "estimated": false,
         "misses": 0,
         "missTokens": 0
-      }
+      },
+      "lastActiveAt": 1773500280000
     },
     {
       "id": "ticket-HARNESS-3",
@@ -205,7 +207,8 @@
       ],
       "projectId": "project-HARNESS",
       "status": "in_progress",
-      "title": "Add a dark theme to Settings"
+      "title": "Add a dark theme to Settings",
+      "lastActiveAt": 1773498000000
     },
     {
       "id": "ticket-HARNESS-4",
@@ -242,7 +245,8 @@
       ],
       "projectId": "project-HARNESS",
       "status": "blocked",
-      "title": "Choose a storage backend"
+      "title": "Choose a storage backend",
+      "lastActiveAt": 1773498900000
     },
     {
       "id": "ticket-HARNESS-5",
@@ -281,7 +285,8 @@
       "projectId": "project-HARNESS",
       "status": "review",
       "title": "Speed up the board's first load",
-      "hasChanges": true
+      "hasChanges": true,
+      "lastActiveAt": 1773499500000
     },
     {
       "id": "ticket-HARNESS-6",
@@ -315,7 +320,8 @@
       "key": "HARNESS-6",
       "projectId": "project-HARNESS",
       "status": "review",
-      "title": "Keep the palette open between searches"
+      "title": "Keep the palette open between searches",
+      "lastActiveAt": 1773496200000
     },
     {
       "id": "ticket-HARNESS-7",
@@ -352,7 +358,8 @@
       ],
       "projectId": "project-HARNESS",
       "status": "done",
-      "title": "Rename project keys without losing links"
+      "title": "Rename project keys without losing links",
+      "lastActiveAt": 1773482400000
     },
     {
       "id": "ticket-HARNESS-8",
@@ -386,7 +393,8 @@
       "key": "HARNESS-8",
       "projectId": "project-HARNESS",
       "status": "in_progress",
-      "title": "Ship the iPad layout"
+      "title": "Ship the iPad layout",
+      "lastActiveAt": 1773499800000
     },
     {
       "id": "ticket-HARNESS-9",
@@ -420,7 +428,8 @@
       "key": "HARNESS-9",
       "projectId": "project-HARNESS",
       "status": "review",
-      "title": "iPad: two-column board"
+      "title": "iPad: two-column board",
+      "lastActiveAt": 1773499680000
     },
     {
       "id": "ticket-HARNESS-10",
@@ -456,7 +465,8 @@
       "key": "HARNESS-10",
       "projectId": "project-HARNESS",
       "status": "planning",
-      "title": "iPad: sidebar navigation"
+      "title": "iPad: sidebar navigation",
+      "lastActiveAt": 1773499740000
     },
     {
       "id": "ticket-WEB-1",
@@ -491,7 +501,8 @@
       "projectId": "project-WEB",
       "status": "planning",
       "title": "Refresh the pricing page",
-      "draft": true
+      "draft": true,
+      "lastActiveAt": 1773499920000
     },
     {
       "id": "ticket-WEB-2",
@@ -540,7 +551,8 @@
       ],
       "projectId": "project-WEB",
       "status": "in_progress",
-      "title": "Compress hero images"
+      "title": "Compress hero images",
+      "lastActiveAt": 1773500340000
     },
     {
       "id": "ticket-WEB-3",
@@ -584,7 +596,8 @@
       "key": "WEB-3",
       "projectId": "project-WEB",
       "status": "done",
-      "title": "Fix broken footer links"
+      "title": "Fix broken footer links",
+      "lastActiveAt": 1773406800000
     },
     {
       "id": "ticket-NOTES-1",
@@ -621,7 +634,8 @@
       ],
       "projectId": "project-NOTES",
       "status": "blocked",
-      "title": "Sort the reading list"
+      "title": "Sort the reading list",
+      "lastActiveAt": 1773493200000
     },
     {
       "id": "ticket-NOTES-2",
@@ -656,7 +670,8 @@
       "projectId": "project-NOTES",
       "status": "done",
       "title": "Merge duplicate notes",
-      "skipAgentReview": true
+      "skipAgentReview": true,
+      "lastActiveAt": 1773392400000
     }
   ],
   "labels": [
@@ -1912,7 +1927,8 @@
         ],
         "projectId": "project-HARNESS",
         "status": "planning",
-        "title": "Draft the release notes"
+        "title": "Draft the release notes",
+        "lastActiveAt": 1773497400000
       },
       "session": {
         "id": "session-HARNESS-1",
@@ -1984,7 +2000,8 @@
           "estimated": false,
           "misses": 0,
           "missTokens": 0
-        }
+        },
+        "lastActiveAt": 1773500280000
       },
       "session": {
         "id": "session-HARNESS-2",
@@ -2094,7 +2111,8 @@
         ],
         "projectId": "project-HARNESS",
         "status": "in_progress",
-        "title": "Add a dark theme to Settings"
+        "title": "Add a dark theme to Settings",
+        "lastActiveAt": 1773498000000
       },
       "session": {
         "id": "session-HARNESS-3",
@@ -2155,7 +2173,8 @@
         ],
         "projectId": "project-HARNESS",
         "status": "blocked",
-        "title": "Choose a storage backend"
+        "title": "Choose a storage backend",
+        "lastActiveAt": 1773498900000
       },
       "session": {
         "id": "session-HARNESS-4",
@@ -2231,7 +2250,8 @@
         "projectId": "project-HARNESS",
         "status": "review",
         "title": "Speed up the board's first load",
-        "hasChanges": true
+        "hasChanges": true,
+        "lastActiveAt": 1773499500000
       },
       "session": {
         "id": "session-HARNESS-5",
@@ -2346,7 +2366,8 @@
         "key": "HARNESS-6",
         "projectId": "project-HARNESS",
         "status": "review",
-        "title": "Keep the palette open between searches"
+        "title": "Keep the palette open between searches",
+        "lastActiveAt": 1773496200000
       },
       "session": {
         "id": "session-HARNESS-6",
@@ -2435,7 +2456,8 @@
         ],
         "projectId": "project-HARNESS",
         "status": "done",
-        "title": "Rename project keys without losing links"
+        "title": "Rename project keys without losing links",
+        "lastActiveAt": 1773482400000
       },
       "session": {
         "id": "session-HARNESS-7",
@@ -2506,7 +2528,8 @@
         "key": "HARNESS-8",
         "projectId": "project-HARNESS",
         "status": "in_progress",
-        "title": "Ship the iPad layout"
+        "title": "Ship the iPad layout",
+        "lastActiveAt": 1773499800000
       },
       "session": {
         "id": "session-HARNESS-8",
@@ -2558,7 +2581,8 @@
           "key": "HARNESS-9",
           "projectId": "project-HARNESS",
           "status": "review",
-          "title": "iPad: two-column board"
+          "title": "iPad: two-column board",
+          "lastActiveAt": 1773499680000
         },
         {
           "id": "ticket-HARNESS-10",
@@ -2594,7 +2618,8 @@
           "key": "HARNESS-10",
           "projectId": "project-HARNESS",
           "status": "planning",
-          "title": "iPad: sidebar navigation"
+          "title": "iPad: sidebar navigation",
+          "lastActiveAt": 1773499740000
         }
       ],
       "parent": null,
@@ -2635,7 +2660,8 @@
         "key": "HARNESS-9",
         "projectId": "project-HARNESS",
         "status": "review",
-        "title": "iPad: two-column board"
+        "title": "iPad: two-column board",
+        "lastActiveAt": 1773499680000
       },
       "session": {
         "id": "session-HARNESS-9",
@@ -2689,7 +2715,8 @@
         "key": "HARNESS-8",
         "projectId": "project-HARNESS",
         "status": "in_progress",
-        "title": "Ship the iPad layout"
+        "title": "Ship the iPad layout",
+        "lastActiveAt": 1773499800000
       },
       "subagents": [],
       "relatedTickets": [],
@@ -2730,7 +2757,8 @@
         "key": "HARNESS-10",
         "projectId": "project-HARNESS",
         "status": "planning",
-        "title": "iPad: sidebar navigation"
+        "title": "iPad: sidebar navigation",
+        "lastActiveAt": 1773499740000
       },
       "session": {
         "id": "session-HARNESS-10",
@@ -2782,7 +2810,8 @@
         "key": "HARNESS-8",
         "projectId": "project-HARNESS",
         "status": "in_progress",
-        "title": "Ship the iPad layout"
+        "title": "Ship the iPad layout",
+        "lastActiveAt": 1773499800000
       },
       "subagents": [],
       "relatedTickets": [],
@@ -2822,7 +2851,8 @@
         "projectId": "project-WEB",
         "status": "planning",
         "title": "Refresh the pricing page",
-        "draft": true
+        "draft": true,
+        "lastActiveAt": 1773499920000
       },
       "session": {
         "id": "session-WEB-1",
@@ -2895,7 +2925,8 @@
         ],
         "projectId": "project-WEB",
         "status": "in_progress",
-        "title": "Compress hero images"
+        "title": "Compress hero images",
+        "lastActiveAt": 1773500340000
       },
       "session": {
         "id": "session-WEB-2",
@@ -2980,7 +3011,8 @@
         "key": "WEB-3",
         "projectId": "project-WEB",
         "status": "done",
-        "title": "Fix broken footer links"
+        "title": "Fix broken footer links",
+        "lastActiveAt": 1773406800000
       },
       "session": {
         "id": "session-WEB-3",
@@ -3041,7 +3073,8 @@
         ],
         "projectId": "project-NOTES",
         "status": "blocked",
-        "title": "Sort the reading list"
+        "title": "Sort the reading list",
+        "lastActiveAt": 1773493200000
       },
       "session": {
         "id": "session-NOTES-1",
@@ -3100,7 +3133,8 @@
         "projectId": "project-NOTES",
         "status": "done",
         "title": "Merge duplicate notes",
-        "skipAgentReview": true
+        "skipAgentReview": true,
+        "lastActiveAt": 1773392400000
       },
       "session": {
         "id": "session-NOTES-2",

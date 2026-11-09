@@ -99,6 +99,11 @@ export const COMMANDS: CommandSpec[] = [
   { id: "board.search", label: "Search tickets", group: "Board", scope: "board", keys: [k("Slash")] },
   // Palette only; the handler's label follows the setting ("Show child tickets" / "Hide child tickets").
   { id: "board.children", label: "Show child tickets", group: "Board", scope: "board", keys: [], keywords: ["children", "hide", "show", "child tickets"] },
+  { id: "board.sortRecent", label: "Sort the board by recent activity", group: "Board", scope: "board", keys: [], keywords: ["sort", "order", "recent", "recency", "activity", "latest"] },
+  { id: "board.sortCreated", label: "Sort the board by created date", group: "Board", scope: "board", keys: [], keywords: ["sort", "order", "created", "oldest", "id"] },
+  { id: "board.sortTitle", label: "Sort the board by title", group: "Board", scope: "board", keys: [], keywords: ["sort", "order", "title", "name", "alphabetical"] },
+  // All projects and group boards only; the handler's label follows the setting.
+  { id: "board.groupByProject", label: "Group the board by project", group: "Board", scope: "board", keys: [], keywords: ["group", "projects", "sections"] },
 
   // Lists (the sidebar, a conductor's Tickets tab)
   { id: "list.next", label: "Next item", group: "Lists", scope: "list", keys: [k("KeyJ"), k("ArrowDown")], palette: false },

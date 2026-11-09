@@ -59,8 +59,11 @@ export function writeGroupByProject(value: boolean, storage: KV | undefined = de
   }
 }
 
-/** When the ticket's agent last did anything (protocol.ts Ticket.lastActiveAt); updatedAt from an older service. */
-export const lastActiveOf = (t: Ticket): number => t.lastActiveAt ?? t.updatedAt;
+/**
+ * When the ticket's agent last did anything: protocol.ts Ticket.lastActiveAt (updatedAt from an
+ * older service), or a newer run or transcript event heard live since (State.activeAt).
+ */
+export const lastActiveOf = (t: Ticket, activeAt: Record<string, number> = {}): number => Math.max(t.lastActiveAt ?? t.updatedAt, activeAt[t.sessionId] ?? 0);
 
 /** Creation order: the column's stored position, then age, then id (the order before sorting existed). */
 export function compareCreated(a: Ticket, b: Ticket): number {
@@ -70,10 +73,10 @@ export function compareCreated(a: Ticket, b: Ticket): number {
 const titleOf = (t: Ticket) => t.title.trim() || "Untitled";
 
 /** The comparator for a live column under `sort`; ties fall back to creation order. */
-export function boardComparator(sort: BoardSort): (a: Ticket, b: Ticket) => number {
+export function boardComparator(sort: BoardSort, activeAt: Record<string, number> = {}): (a: Ticket, b: Ticket) => number {
   switch (sort) {
     case "recent":
-      return (a, b) => lastActiveOf(b) - lastActiveOf(a) || compareCreated(a, b);
+      return (a, b) => lastActiveOf(b, activeAt) - lastActiveOf(a, activeAt) || compareCreated(a, b);
     case "title":
       return (a, b) => titleOf(a).localeCompare(titleOf(b), undefined, { numeric: true, sensitivity: "base" }) || compareCreated(a, b);
     case "created":

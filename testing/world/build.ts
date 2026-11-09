@@ -56,6 +56,8 @@ export function ticket(o: Pick<Ticket, "key" | "projectId" | "title" | "status">
     createdAt: minutesAgo(60 * 48),
     updatedAt: minutesAgo(60),
     ...o,
+    // The agent last worked when the ticket last changed, unless the world says otherwise.
+    lastActiveAt: o.lastActiveAt ?? o.updatedAt ?? minutesAgo(60),
   };
 }
 

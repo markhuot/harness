@@ -86,21 +86,26 @@ describe("live activity moves lastActiveAt", () => {
   const entry = (createdAt: number): TranscriptEntry =>
     ({ id: `e${createdAt}`, sessionId: t.sessionId, runId: null, subagentId: null, seq: 1, role: "user", content: { type: "text", text: "?" }, createdAt }) as TranscriptEntry;
 
-  test("a transcript entry of the ticket's session brings it to the top of Recent activity", () => {
+  test("a transcript entry of the ticket's session brings it to the top of Recent activity, leaving the ticket object alone", () => {
     const next = applyEvent(st, { kind: "transcript.appended", entry: entry(9_000) });
-    expect(next.tickets[t.id]!.lastActiveAt).toBe(9_000);
+    expect(lastActiveOf(next.tickets[t.id]!, next.activeAt)).toBe(9_000);
+    expect(next.tickets[t.id]).toBe(t);
     expect(keys(boardColumns(next, null, "recent").planning)).toEqual(["A-1", "A-2"]);
   });
 
   test("a run starting or ending counts at its latest timestamp", () => {
     const run = { id: "r", sessionId: t.sessionId, status: "succeeded", createdAt: 2_000, startedAt: 3_000, endedAt: 8_000 } as Run;
-    expect(applyEvent(st, { kind: "run.upserted", run }).tickets[t.id]!.lastActiveAt).toBe(8_000);
+    expect(applyEvent(st, { kind: "run.upserted", run }).activeAt[t.sessionId]).toBe(8_000);
   });
 
-  test("under a second's change, an older entry or another session's leaves the tickets map alone", () => {
-    expect(applyEvent(st, { kind: "transcript.appended", entry: entry(1_500) }).tickets).toBe(st.tickets);
-    expect(applyEvent(st, { kind: "transcript.appended", entry: entry(500) }).tickets).toBe(st.tickets);
-    expect(applyEvent(st, { kind: "transcript.appended", entry: { ...entry(9_000), sessionId: "nobody" } }).tickets).toBe(st.tickets);
+  test("an event under a second after the last one heard keeps activeAt as it was", () => {
+    const once = applyEvent(st, { kind: "transcript.appended", entry: entry(9_000) });
+    expect(applyEvent(once, { kind: "transcript.appended", entry: entry(9_500) }).activeAt).toBe(once.activeAt);
+    expect(applyEvent(once, { kind: "transcript.appended", entry: entry(10_000) }).activeAt[t.sessionId]).toBe(10_000);
+  });
+
+  test("a live time older than the ticket's own lastActiveAt doesn't pull it back", () => {
+    expect(lastActiveOf(ticket("A-9", { lastActiveAt: 5_000 }), { "s-A-9": 3_000 })).toBe(5_000);
   });
 });
 

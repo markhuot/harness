@@ -314,8 +314,8 @@ export function matchesQuery(t: Ticket, q: string, aliases: Record<string, strin
 
 export type Columns = Record<TicketStatus, Ticket[]>;
 const emptyColumns = (): Columns => ({ planning: [], in_progress: [], blocked: [], review: [], done: [] });
-function sortColumns(cols: Columns, sort: BoardSort): Columns {
-  const compare = boardComparator(sort);
+function sortColumns(cols: Columns, sort: BoardSort, activeAt: State["activeAt"]): Columns {
+  const compare = boardComparator(sort, activeAt);
   for (const [status, list] of Object.entries(cols) as [TicketStatus, Ticket[]][]) {
     if (status === "done") list.sort((a, b) => completedAtOf(b) - completedAtOf(a));
     else list.sort(compare);
@@ -336,13 +336,13 @@ export function searchColumns(state: State, board: string | null, sort: BoardSor
   if (s.ids === null) {
     const scope = scopeOf(board);
     for (const t of Object.values(state.tickets)) if (inScope(state, t, scope) && matchesQuery(t, s.q, state.keyAliases)) cols[t.status].push(t);
-    return { columns: sortColumns(cols, sort), pending: true };
+    return { columns: sortColumns(cols, sort, state.activeAt), pending: true };
   }
   for (const id of s.ids) {
     const t = state.tickets[id];
     if (t) cols[t.status].push(t);
   }
-  return { columns: sortColumns(cols, sort), pending: false };
+  return { columns: sortColumns(cols, sort, state.activeAt), pending: false };
 }
 
 /** "Searching…", "No matches", "12 matches", "Showing 50 of 132 matches". */
