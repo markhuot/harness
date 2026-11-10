@@ -9,6 +9,8 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 ## [Unreleased]
 
+## [app-20261110.0059](https://github.com/markhuot/harness/releases/tag/app-20261110.0059) - 2026-11-10
+
 ### Added
 
 - Board cards show how long ago their agent last worked ("2m ago", "1d ago"), on the Mac, iPhone and iPad. It counts the ticket's latest run (queued, started or ended) and the latest line in its Transcript, a question you asked included, and follows a working agent live. Activity entries don't count, since a run that only answers a question writes none.
@@ -20,6 +22,7 @@ Removed. `bun run release:prepare` moves them into a section for the next tag.
 
 - Tickets from the service carry `lastActiveAt`, the time of their latest run or transcript entry.
 - When an event closes because its run failed 3 times, the reason now ends with that run's error, so the Events list says why without a trip through the run history.
+- For people working on Harness: README.md and DESIGN.md describe seen and unseen tickets (the New pill and Mark ticket unseen), and the iOS board references show the New pill on unseen cards. The labels test now checks a ticket's labels, not the New pill.
 
 ## [app-20261109.1229](https://github.com/markhuot/harness/releases/tag/app-20261109.1229) - 2026-11-09
 
